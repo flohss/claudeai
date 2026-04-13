@@ -76,6 +76,8 @@ class Sim:
         }
         self.mood_history = []
         self.last_event = None   # dernier événement aléatoire
+        self.weather = Weather()
+        self.pet = None
 
     # ---- Humeur globale ----
     @property
@@ -104,6 +106,8 @@ class Sim:
         }
         for need, delta in decay.items():
             self.needs[need] = max(0, min(100, self.needs[need] + delta))
+        if self.pet:
+            self.pet.tick(hours)
 
     def modify(self, **kwargs):
         for need, delta in kwargs.items():
@@ -117,6 +121,67 @@ class Sim:
     def is_alive(self):
         # Mort si faim ou énergie à 0 trop longtemps → simplifié ici
         return self.needs["faim"] > 0 or self.needs["energie"] > 5
+
+
+# --- Météo ---
+# (emoji, nom, effets quotidiens sur besoins, modificateurs activités extérieures)
+WEATHER_TYPES = [
+    ("🌞", "Ensoleillé", {"fun": +5,  "energie": +3},  {"sortir": +15, "jardiner": +10}),
+    ("⛅", "Nuageux",    {},                             {"sortir":  0,  "jardiner":  0}),
+    ("🌧", "Pluvieux",  {"hygiene": -5},                {"sortir": -15, "jardiner": -10}),
+    ("⛈", "Orageux",   {"fun": -5, "energie": -5},     {"sortir": -30, "jardiner": -25}),
+    ("🌨", "Enneigé",   {"energie": -5},                {"sortir": +5,  "jardiner": -20}),
+]
+
+class Weather:
+    def __init__(self):
+        self._data = random.choice(WEATHER_TYPES)
+
+    def new_day(self):
+        self._data = random.choice(WEATHER_TYPES)
+
+    @property
+    def emoji(self):  return self._data[0]
+    @property
+    def name(self):   return self._data[1]
+    @property
+    def daily_effects(self): return self._data[2]
+    @property
+    def outdoor_mods(self):  return self._data[3]
+
+
+# --- Animal de compagnie ---
+PET_SPECIES = {
+    "Chien":   {"emoji": "🐶", "hunger_per_h": 4, "happy_per_h": 3},
+    "Chat":    {"emoji": "🐱", "hunger_per_h": 2, "happy_per_h": 2},
+    "Lapin":   {"emoji": "🐰", "hunger_per_h": 3, "happy_per_h": 2},
+    "Poisson": {"emoji": "🐟", "hunger_per_h": 1, "happy_per_h": 1},
+}
+
+class Pet:
+    def __init__(self, name, species):
+        self.name      = name
+        self.species   = species
+        self.hunger    = 80
+        self.happiness = 80
+
+    @property
+    def emoji(self):
+        return PET_SPECIES[self.species]["emoji"]
+
+    def tick(self, hours=1):
+        info = PET_SPECIES[self.species]
+        self.hunger    = max(0, self.hunger    - info["hunger_per_h"] * hours)
+        self.happiness = max(0, self.happiness - info["happy_per_h"]  * hours)
+
+    def feed(self):
+        self.hunger = min(100, self.hunger + 45)
+
+    def play(self):
+        self.happiness = min(100, self.happiness + 40)
+
+    def is_neglected(self):
+        return self.hunger <= 20 or self.happiness <= 20
 
 
 # --- Événements aléatoires ---
@@ -232,9 +297,30 @@ def show_status(sim):
           f"{C.BOLD}Humeur :{C.RESET} {sim.mood_label()}")
 
     if sim.job:
-        print(f"  {C.BOLD}Travail :{C.RESET} {sim.job}  ({sim.job_days} jour(s))\n")
+        print(f"  {C.BOLD}Travail :{C.RESET} {sim.job}  ({sim.job_days} jour(s))")
     else:
-        print(f"  {C.BOLD}Travail :{C.RESET} {C.GRAY}Chômeur(se){C.RESET}\n")
+        print(f"  {C.BOLD}Travail :{C.RESET} {C.GRAY}Chômeur(se){C.RESET}")
+
+    # Météo
+    w = sim.weather
+    print(f"  {C.BOLD}Météo   :{C.RESET} {w.emoji}  {w.name}", end="")
+    if w.daily_effects:
+        parts = []
+        for need, delta in w.daily_effects.items():
+            label = Sim.NEED_LABELS[need][0]
+            sign  = "+" if delta >= 0 else ""
+            color = C.GREEN if delta > 0 else C.RED
+            parts.append(f"{color}{sign}{delta} {label}{C.RESET}")
+        print(f"  ({', '.join(parts)})", end="")
+    print()
+
+    # Animal de compagnie
+    if sim.pet:
+        p = sim.pet
+        warn = f" {C.RED}⚠ BESOIN D'ATTENTION !{C.RESET}" if p.is_neglected() else ""
+        print(f"  {C.BOLD}Animal  :{C.RESET} {p.emoji}  {p.name} ({p.species})"
+              f"  Faim {bar(p.hunger, length=10)}  Humeur {bar(p.happiness, length=10)}{warn}")
+    print()
 
     if sim.last_event:
         print(sim.last_event)
@@ -277,6 +363,9 @@ ACTIONS = [
     ("jardiner",  "Jardiner (2h)",            None),
     ("jeux",      "Jouer aux jeux vidéo (2h)",None),
     ("gastronomie","Cuisiner un plat spécial",None),
+    ("adopter",   "Adopter un animal",        None),
+    ("nourrir",   "Nourrir l'animal",         None),
+    ("jouer_pet", "Jouer avec l'animal",      None),
 ]
 
 
@@ -297,6 +386,8 @@ def action_dormir(sim):
     sim.modify(energie=+60, hygiene=-10, faim=-20)
     sim.tick(8)
     sim.age += 1
+    sim.weather.new_day()
+    slow_print(f"  {C.CYAN}Nouveau jour ! Météo : {sim.weather.emoji}  {sim.weather.name}{C.RESET}", 0.02)
     input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
 
 def action_sieste(sim):
@@ -335,9 +426,14 @@ def action_sortir(sim):
         print(f"\n  {C.RED}Tu n'as pas assez d'argent pour sortir ! (${cost} nécessaires){C.RESET}")
         input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
         return
+    meteo_mod = sim.weather.outdoor_mods.get("sortir", 0)
     slow_print(f"\n  {C.MAGENTA}Tu passes la soirée avec des amis ! 🎉{C.RESET}", 0.02)
+    if meteo_mod > 0:
+        slow_print(f"  {C.GREEN}La météo est parfaite pour sortir ! +{meteo_mod} Fun{C.RESET}", 0.02)
+    elif meteo_mod < 0:
+        slow_print(f"  {C.RED}La météo n'est pas idéale... {meteo_mod} Fun{C.RESET}", 0.02)
     sim.money -= cost
-    sim.modify(fun=+40, social=+50, energie=-20, faim=-15, hygiene=-5)
+    sim.modify(fun=40+meteo_mod, social=+50, energie=-20, faim=-15, hygiene=-5)
     sim.tick(4)
     input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
 
@@ -367,7 +463,9 @@ def action_travailler(sim):
     sim.modify(energie=-30, faim=-25, social=+10, hygiene=-10, fun=-15)
     sim.tick(8)
     sim.age += 1
+    sim.weather.new_day()
     slow_print(f"  {C.GREEN}+${salary} gagnés ! Total : ${sim.money}{C.RESET}", 0.02)
+    slow_print(f"  {C.CYAN}Demain : {sim.weather.emoji}  {sim.weather.name}{C.RESET}", 0.02)
     input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
 
 def action_postuler(sim):
@@ -408,8 +506,13 @@ def action_mediter(sim):
     input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
 
 def action_jardiner(sim):
+    meteo_mod = sim.weather.outdoor_mods.get("jardiner", 0)
     slow_print(f"\n  {C.GREEN}Tu jardines pendant 2 heures... 🌱{C.RESET}", 0.02)
-    sim.modify(fun=+25, energie=-15, hygiene=-15, faim=-10, social=+5)
+    if meteo_mod > 0:
+        slow_print(f"  {C.GREEN}Le temps est parfait pour jardiner ! +{meteo_mod} Fun{C.RESET}", 0.02)
+    elif meteo_mod < 0:
+        slow_print(f"  {C.RED}La météo complique le jardinage... {meteo_mod} Fun{C.RESET}", 0.02)
+    sim.modify(fun=25+meteo_mod, energie=-15, hygiene=-15, faim=-10, social=+5)
     sim.tick(2)
     input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
 
@@ -433,6 +536,53 @@ def action_gastronomie(sim):
     input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
 
 
+def action_adopter(sim):
+    if sim.pet:
+        print(f"\n  {C.YELLOW}Tu as déjà un animal : {sim.pet.emoji}  {sim.pet.name} !{C.RESET}")
+        input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+        return
+    print(f"\n  {C.BOLD}Choisir un animal à adopter :{C.RESET}")
+    species_list = list(PET_SPECIES.keys())
+    for i, (sp, info) in enumerate(PET_SPECIES.items(), 1):
+        print(f"  {C.CYAN}[{i}]{C.RESET} {info['emoji']}  {sp}")
+    print(f"  {C.CYAN}[0]{C.RESET} Annuler")
+    try:
+        choice = int(input("\n  Choix : ").strip())
+        if 1 <= choice <= len(species_list):
+            sp = species_list[choice - 1]
+            pet_name = input(f"  Quel prénom pour ton {sp} ? ").strip()
+            if not pet_name:
+                pet_name = sp
+            sim.pet = Pet(pet_name, sp)
+            slow_print(f"\n  {C.GREEN}Félicitations ! {sim.pet.emoji}  {pet_name} rejoint ta famille ! 🎊{C.RESET}", 0.02)
+    except ValueError:
+        pass
+    input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+
+def action_nourrir(sim):
+    if not sim.pet:
+        print(f"\n  {C.YELLOW}Tu n'as pas d'animal. Adoptes-en un d'abord !{C.RESET}")
+        input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+        return
+    slow_print(f"\n  {C.YELLOW}Tu nourris {sim.pet.name}... {sim.pet.emoji}{C.RESET}", 0.02)
+    sim.pet.feed()
+    sim.modify(fun=+5, social=+5)
+    slow_print(f"  {C.GREEN}{sim.pet.name} est rassasié(e) ! (Faim : {sim.pet.hunger}%){C.RESET}", 0.02)
+    input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+
+def action_jouer_pet(sim):
+    if not sim.pet:
+        print(f"\n  {C.YELLOW}Tu n'as pas d'animal. Adoptes-en un d'abord !{C.RESET}")
+        input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+        return
+    slow_print(f"\n  {C.MAGENTA}Tu joues avec {sim.pet.name}... {sim.pet.emoji}{C.RESET}", 0.02)
+    sim.pet.play()
+    sim.modify(fun=+20, social=+10, energie=-5)
+    sim.tick(1)
+    slow_print(f"  {C.GREEN}{sim.pet.name} est ravi(e) ! (Humeur : {sim.pet.happiness}%){C.RESET}", 0.02)
+    input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+
+
 ACTION_FNS = {
     "manger":    action_manger,
     "snack":     action_snack,
@@ -452,6 +602,9 @@ ACTION_FNS = {
     "jardiner":    action_jardiner,
     "jeux":        action_jeux,
     "gastronomie": action_gastronomie,
+    "adopter":     action_adopter,
+    "nourrir":     action_nourrir,
+    "jouer_pet":   action_jouer_pet,
 }
 
 
@@ -464,7 +617,11 @@ def game_loop(sim):
         crit = sim.critical_needs()
         if crit:
             labels = [Sim.NEED_LABELS[n][0] for n in crit]
-            print(f"  {C.RED}{C.BOLD}⚠  ATTENTION : {', '.join(labels)} en état critique !{C.RESET}\n")
+            print(f"  {C.RED}{C.BOLD}⚠  ATTENTION : {', '.join(labels)} en état critique !{C.RESET}")
+        if sim.pet and sim.pet.is_neglected():
+            print(f"  {C.RED}{C.BOLD}⚠  {sim.pet.name} a besoin de toi ! Faim:{sim.pet.hunger}% Humeur:{sim.pet.happiness}%{C.RESET}")
+        if crit or (sim.pet and sim.pet.is_neglected()):
+            print()
 
         # Mort par famine / épuisement
         if sim.needs["faim"] == 0 and sim.needs["energie"] == 0:
@@ -528,6 +685,8 @@ def main():
     print(f"  Jours   : {sim.age}")
     print(f"  Argent  : ${sim.money}")
     print(f"  Métier  : {sim.job or 'Jamais travaillé'}")
+    if sim.pet:
+        print(f"  Animal  : {sim.pet.emoji}  {sim.pet.name} ({sim.pet.species})")
     print(f"  Humeur  : {sim.mood_label()}\n")
 
 
