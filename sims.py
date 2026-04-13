@@ -46,13 +46,19 @@ def slow_print(text, delay=0.03):
     print()
 
 # --- Stades de vie ---
-# (jour_min, nom, emoji, mods_decay_par_heure, restrictions, description)
+# (jour_min, nom, emoji, mods_decay/h, bloquées, autorisation_parentale, description)
 LIFE_STAGES = [
-    (0,  "Enfant",       "🧒", {"energie": +2, "fun": -2},          ["travailler", "postuler", "sortir", "gastronomie"], "Tu découvres le monde !"),
-    (5,  "Adolescent",   "🧑", {"social": -2, "fun": -1},           ["travailler", "postuler"],                          "Tu cherches ta voie dans la vie."),
-    (10, "Jeune adulte", "💪", {},                                   [],                                                  "Tu es dans la fleur de l'âge !"),
-    (20, "Adulte",       "👔", {"energie": -1},                     [],                                                  "L'expérience guide tes choix."),
-    (35, "Senior",       "🎩", {"energie": -3, "hygiene": -1},      [],                                                  "La sagesse et la liberté bien méritées !"),
+    (0,  "Enfant",       "🧒", {"energie": +2, "fun": -2},
+     ["travailler", "postuler"],
+     ["sortir", "gastronomie", "sport", "jardiner"],
+     "Tu découvres le monde !"),
+    (5,  "Adolescent",   "🧑", {"social": -2, "fun": -1},
+     ["travailler", "postuler"],
+     ["sortir"],
+     "Tu cherches ta voie dans la vie."),
+    (10, "Jeune adulte", "💪", {},                          [], [], "Tu es dans la fleur de l'âge !"),
+    (20, "Adulte",       "👔", {"energie": -1},             [], [], "L'expérience guide tes choix."),
+    (35, "Senior",       "🎩", {"energie": -3, "hygiene": -1}, [], [], "La sagesse et la liberté bien méritées !"),
 ]
 
 def get_stage(age):
@@ -62,6 +68,30 @@ def get_stage(age):
         if age >= min_day:
             idx = i
     return idx, LIFE_STAGES[idx]
+
+
+def ask_parental_auth(sim, stage_name):
+    """Demande l'autorisation parentale. Retourne True si accordée.
+    La chance dépend de l'humeur du Sim (enfant sage = parents plus souples)."""
+    if stage_name == "Enfant":
+        base_prob = 55
+    else:  # Adolescent
+        base_prob = 70
+    # Bonus/malus selon l'humeur : jusqu'à ±15%
+    mood_bonus = int((sim.mood - 50) * 0.3)
+    prob = max(20, min(90, base_prob + mood_bonus))
+
+    slow_print(f"\n  Tu demandes la permission à tes parents... 👨‍👩‍👦", 0.03)
+    time.sleep(0.6)
+    if random.randint(1, 100) <= prob:
+        slow_print(f"  {C.GREEN}Tes parents acceptent ! ✓{C.RESET}", 0.03)
+        return True
+    else:
+        slow_print(f"  {C.RED}Tes parents refusent. ✗{C.RESET}", 0.03)
+        slow_print(f"  {C.GRAY}Tu ravales ta déception...{C.RESET}", 0.02)
+        sim.modify(fun=-10, social=-5)
+        input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+        return False
 
 
 # --- Personnage ---
@@ -320,7 +350,7 @@ def show_status(sim):
           f"{C.BOLD}Jour :{C.RESET} {sim.age}  |  "
           f"{C.BOLD}Argent :{C.RESET} {C.GREEN}${sim.money}{C.RESET}  |  "
           f"{C.BOLD}Humeur :{C.RESET} {sim.mood_label()}")
-    print(f"  {C.BOLD}Stade   :{C.RESET} {stage[2]}  {C.YELLOW}{stage[1]}{C.RESET}  —  {C.GRAY}{stage[5]}{C.RESET}")
+    print(f"  {C.BOLD}Stade   :{C.RESET} {stage[2]}  {C.YELLOW}{stage[1]}{C.RESET}  —  {C.GRAY}{stage[6]}{C.RESET}")
 
     if sim.job:
         print(f"  {C.BOLD}Travail :{C.RESET} {sim.job}  ({sim.job_days} jour(s))")
@@ -645,10 +675,13 @@ def game_loop(sim):
             clear()
             print(f"\n  {C.BOLD}{C.YELLOW}{'═' * 40}{C.RESET}")
             slow_print(f"  {cur_stage[2]}  Nouveau stade de vie : {C.BOLD}{cur_stage[1]}{C.RESET} !", 0.03)
-            slow_print(f"  {C.GRAY}{cur_stage[5]}{C.RESET}", 0.03)
+            slow_print(f"  {C.GRAY}{cur_stage[6]}{C.RESET}", 0.03)
             if cur_stage[4]:
                 blocked = ", ".join(cur_stage[4])
-                slow_print(f"  {C.RED}Actions désormais limitées : {blocked}{C.RESET}", 0.02)
+                slow_print(f"  {C.RED}Interdit : {blocked}{C.RESET}", 0.02)
+            if cur_stage[5]:
+                auth = ", ".join(cur_stage[5])
+                slow_print(f"  {C.YELLOW}Autorisation parentale requise : {auth}{C.RESET}", 0.02)
             print(f"  {C.BOLD}{C.YELLOW}{'═' * 40}{C.RESET}\n")
             input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
             prev_stage_idx = cur_stage_idx
@@ -686,11 +719,18 @@ def game_loop(sim):
             idx = int(choice) - 1
             if 0 <= idx < len(ACTIONS):
                 action_key = ACTIONS[idx][0]
-                # Vérifier les restrictions du stade de vie
                 _, stage = get_stage(sim.age)
                 if action_key in stage[4]:
+                    # Action complètement bloquée par le stade de vie
                     print(f"\n  {C.RED}Cette action n'est pas disponible à ton stade de vie ({stage[1]}).{C.RESET}")
                     time.sleep(1.5)
+                elif action_key in stage[5]:
+                    # Action nécessitant une autorisation parentale
+                    if ask_parental_auth(sim, stage[1]):
+                        ACTION_FNS[action_key](sim)
+                        sim.last_event = trigger_random_event(sim)
+                    else:
+                        sim.last_event = None
                 else:
                     ACTION_FNS[action_key](sim)
                     sim.last_event = trigger_random_event(sim)
