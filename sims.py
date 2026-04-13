@@ -49,12 +49,12 @@ def slow_print(text, delay=0.03):
 # (jour_min, nom, emoji, mods_decay/h, bloquées, autorisation_parentale, description)
 LIFE_STAGES = [
     (0,  "Enfant",       "🧒", {"energie": +2, "fun": -2},
-     ["travailler", "postuler"],
+     ["travailler", "postuler", "flirter", "rendezvous", "intimite", "proposer", "marier", "rupture"],
      ["sortir", "gastronomie", "sport", "jardiner"],
      "Tu découvres le monde !"),
     (5,  "Adolescent",   "🧑", {"social": -2, "fun": -1},
-     ["travailler", "postuler"],
-     ["sortir"],
+     ["travailler", "postuler", "intimite", "proposer", "marier"],
+     ["sortir", "rendezvous"],
      "Tu cherches ta voie dans la vie."),
     (10, "Jeune adulte", "💪", {},                          [], [], "Tu es dans la fleur de l'âge !"),
     (20, "Adulte",       "👔", {"energie": -1},             [], [], "L'expérience guide tes choix."),
@@ -127,6 +127,8 @@ class Sim:
         self.last_event = None   # dernier événement aléatoire
         self.weather = Weather()
         self.pet = None
+        self.orientation  = "Bisexuel(le)"  # défini dans main()
+        self.relationship = Relationship()
 
     # ---- Humeur globale ----
     @property
@@ -236,6 +238,54 @@ class Pet:
 
     def is_neglected(self):
         return self.hunger <= 20 or self.happiness <= 20
+
+
+# --- Relations & Orientation ---
+PARTNER_NAMES = ["Alex", "Sam", "Jordan", "Morgan", "Taylor", "Casey", "Robin", "Jamie", "Charlie", "River", "Noa", "Lou"]
+
+class Relationship:
+    STAGES = [
+        (0, "Célibataire",   "💔"),
+        (1, "Connaissance",  "👋"),
+        (2, "Ami(e) proche", "🤝"),
+        (3, "Coup de coeur", "💙"),
+        (4, "En couple",     "💑"),
+        (5, "Fiancé(e)",     "💍"),
+        (6, "Marié(e)",      "💒"),
+    ]
+    # Seuil d'affection minimum pour passer au stade suivant
+    THRESHOLDS = {1: 25, 2: 45, 3: 62, 4: 78, 5: 88, 6: 95}
+
+    def __init__(self):
+        self.level        = 0
+        self.partner_name = None
+        self.affection    = 0
+
+    @property
+    def label(self): return self.STAGES[self.level][1]
+    @property
+    def emoji(self): return self.STAGES[self.level][2]
+
+    def is_single(self): return self.level == 0
+    def has_partner(self): return self.level >= 1
+    def is_couple(self):   return self.level >= 4
+
+    def gain_affection(self, amount):
+        self.affection = min(100, self.affection + amount)
+
+    def try_advance(self):
+        """Tente de passer au stade suivant. Retourne le nouveau label ou None."""
+        threshold = self.THRESHOLDS.get(self.level + 1, 999)
+        if self.level < 6 and self.affection >= threshold:
+            self.level += 1
+            self.affection = max(40, self.affection - 20)
+            return self.STAGES[self.level][1]
+        return None
+
+    def breakup(self):
+        self.level        = 0
+        self.partner_name = None
+        self.affection    = 0
 
 
 # --- Événements aléatoires ---
@@ -370,6 +420,14 @@ def show_status(sim):
         print(f"  ({', '.join(parts)})", end="")
     print()
 
+    # Relation amoureuse
+    rel = sim.relationship
+    if rel.is_single():
+        print(f"  {C.BOLD}Relation :{C.RESET} {rel.emoji}  {rel.label}  {C.GRAY}({sim.orientation}){C.RESET}")
+    else:
+        print(f"  {C.BOLD}Relation :{C.RESET} {rel.emoji}  {rel.label} avec {C.MAGENTA}{rel.partner_name}{C.RESET}"
+              f"  Affection {bar(rel.affection, length=10)}")
+
     # Animal de compagnie
     if sim.pet:
         p = sim.pet
@@ -422,6 +480,12 @@ ACTIONS = [
     ("adopter",   "Adopter un animal",        None),
     ("nourrir",   "Nourrir l'animal",         None),
     ("jouer_pet", "Jouer avec l'animal",      None),
+    ("flirter",   "Flirter / Faire des rencontres", None),
+    ("rendezvous","Rendez-vous romantique",   None),
+    ("intimite",  "Moment d'intimité",        None),
+    ("proposer",  "Demander en mariage",      None),
+    ("marier",    "Se marier",                None),
+    ("rupture",   "Rompre",                   None),
 ]
 
 
@@ -638,6 +702,118 @@ def action_jouer_pet(sim):
     slow_print(f"  {C.GREEN}{sim.pet.name} est ravi(e) ! (Humeur : {sim.pet.happiness}%){C.RESET}", 0.02)
     input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
 
+def action_flirter(sim):
+    rel = sim.relationship
+    if rel.is_couple():
+        print(f"\n  {C.RED}Tu es déjà en couple avec {rel.partner_name} !{C.RESET}")
+        input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+        return
+    slow_print(f"\n  {C.MAGENTA}Tu flirtes et cherches une connexion... 😏{C.RESET}", 0.02)
+    sim.modify(social=+20, fun=+15, energie=-5)
+    if rel.is_single():
+        if random.randint(1, 100) <= 60:
+            name = random.choice(PARTNER_NAMES)
+            rel.partner_name = name
+            rel.level = 1
+            rel.affection = 25
+            slow_print(f"  {C.GREEN}Tu fais la connaissance de {name} ! 👋{C.RESET}", 0.02)
+        else:
+            slow_print(f"  {C.YELLOW}Pas de coup de foudre cette fois...{C.RESET}", 0.02)
+    else:
+        rel.gain_affection(15)
+        new_stage = rel.try_advance()
+        if new_stage:
+            slow_print(f"  {C.GREEN}Ta relation avec {rel.partner_name} évolue : {new_stage} ! 💫{C.RESET}", 0.02)
+        else:
+            slow_print(f"  {C.CYAN}Bonne ambiance avec {rel.partner_name} ! (Affection {rel.affection}%){C.RESET}", 0.02)
+    sim.tick(1)
+    input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+
+def action_rendezvous(sim):
+    rel = sim.relationship
+    if not rel.has_partner():
+        print(f"\n  {C.RED}Tu n'as personne à inviter ! Flirte d'abord.{C.RESET}")
+        input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+        return
+    cost = 35
+    if sim.money < cost:
+        print(f"\n  {C.RED}Pas assez d'argent pour le rendez-vous (${cost} nécessaires).{C.RESET}")
+        input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+        return
+    slow_print(f"\n  {C.MAGENTA}Tu passes une soirée romantique avec {rel.partner_name}... 🌹{C.RESET}", 0.02)
+    sim.money -= cost
+    sim.modify(fun=+35, social=+35, energie=-15, faim=-10)
+    rel.gain_affection(25)
+    new_stage = rel.try_advance()
+    if new_stage:
+        slow_print(f"  {C.GREEN}Ta relation évolue : {new_stage} ! 💫{C.RESET}", 0.02)
+    else:
+        slow_print(f"  {C.CYAN}Belle soirée ! (Affection {rel.affection}%){C.RESET}", 0.02)
+    sim.tick(3)
+    input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+
+def action_intimite(sim):
+    rel = sim.relationship
+    if not rel.is_couple():
+        print(f"\n  {C.RED}Tu dois être en couple pour partager ce moment.{C.RESET}")
+        input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+        return
+    slow_print(f"\n  {C.MAGENTA}Tu partages un moment d'intimité avec {rel.partner_name}... 💕{C.RESET}", 0.02)
+    sim.modify(fun=+25, social=+20, energie=-15, faim=-5)
+    rel.gain_affection(12)
+    sim.tick(2)
+    input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+
+def action_proposer(sim):
+    rel = sim.relationship
+    if rel.level != 4:
+        print(f"\n  {C.RED}Tu dois être en couple avant de te fiancer !{C.RESET}")
+        input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+        return
+    if rel.affection < 75:
+        print(f"\n  {C.YELLOW}Votre relation n'est pas encore assez solide... (Affection {rel.affection}% — 75% requise){C.RESET}")
+        input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+        return
+    slow_print(f"\n  {C.MAGENTA}Tu demandes {rel.partner_name} en mariage... 💍{C.RESET}", 0.02)
+    if random.randint(1, 100) <= 85:
+        rel.level = 5
+        rel.affection = 80
+        slow_print(f"  {C.GREEN}{rel.partner_name} accepte ! Vous êtes fiancé(e)s ! 💍{C.RESET}", 0.02)
+        sim.modify(fun=+40, social=+30)
+    else:
+        slow_print(f"  {C.RED}{rel.partner_name} hésite encore... Pas encore prêt(e). 😔{C.RESET}", 0.02)
+        sim.modify(fun=-10, social=-5)
+    input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+
+def action_marier(sim):
+    rel = sim.relationship
+    if rel.level != 5:
+        print(f"\n  {C.RED}Tu dois être fiancé(e) avant de te marier !{C.RESET}")
+        input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+        return
+    cost = 200
+    slow_print(f"\n  {C.MAGENTA}La cérémonie de mariage avec {rel.partner_name}... 💒{C.RESET}", 0.02)
+    sim.money -= min(cost, sim.money)
+    rel.level = 6
+    rel.affection = 90
+    sim.modify(fun=+50, social=+40, energie=-10)
+    slow_print(f"  {C.GREEN}Félicitations ! Vous êtes marié(e)s avec {rel.partner_name} ! 🎊{C.RESET}", 0.02)
+    slow_print(f"  {C.GRAY}Coût de la cérémonie : ${cost}{C.RESET}", 0.02)
+    input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+
+def action_rupture(sim):
+    rel = sim.relationship
+    if rel.is_single():
+        print(f"\n  {C.YELLOW}Tu es déjà célibataire.{C.RESET}")
+        input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+        return
+    partner = rel.partner_name
+    slow_print(f"\n  {C.RED}Tu mets fin à ta relation avec {partner}... 💔{C.RESET}", 0.02)
+    rel.breakup()
+    sim.modify(fun=-25, social=-20, energie=-10)
+    slow_print(f"  {C.GRAY}C'est douloureux, mais la vie continue.{C.RESET}", 0.02)
+    input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+
 
 ACTION_FNS = {
     "manger":    action_manger,
@@ -661,6 +837,12 @@ ACTION_FNS = {
     "adopter":     action_adopter,
     "nourrir":     action_nourrir,
     "jouer_pet":   action_jouer_pet,
+    "flirter":     action_flirter,
+    "rendezvous":  action_rendezvous,
+    "intimite":    action_intimite,
+    "proposer":    action_proposer,
+    "marier":      action_marier,
+    "rupture":     action_rupture,
 }
 
 
@@ -762,6 +944,19 @@ def main():
         name = "Alex"
 
     sim = Sim(name)
+
+    # Orientation sexuelle
+    orientations = ["Hétérosexuel(le)", "Homosexuel(le)", "Bisexuel(le)", "Je préfère ne pas préciser"]
+    print(f"\n  {C.BOLD}Quelle est l'orientation sexuelle de {name} ?{C.RESET}")
+    for i, o in enumerate(orientations, 1):
+        print(f"  {C.CYAN}[{i}]{C.RESET} {o}")
+    try:
+        o_choice = int(input("\n  Choix : ").strip())
+        if 1 <= o_choice <= len(orientations):
+            sim.orientation = orientations[o_choice - 1]
+    except ValueError:
+        pass
+
     slow_print(f"\n  {C.GREEN}Bienvenue {sim.name} ! Ta vie commence maintenant...{C.RESET}\n", 0.03)
     time.sleep(1)
 
@@ -777,6 +972,11 @@ def main():
     print(f"  Métier  : {sim.job or 'Jamais travaillé'}")
     if sim.pet:
         print(f"  Animal  : {sim.pet.emoji}  {sim.pet.name} ({sim.pet.species})")
+    rel = sim.relationship
+    if rel.is_single():
+        print(f"  Relation : {rel.emoji}  Célibataire")
+    else:
+        print(f"  Relation : {rel.emoji}  {rel.label} avec {rel.partner_name}")
     print(f"  Humeur  : {sim.mood_label()}\n")
 
 
