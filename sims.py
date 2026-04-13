@@ -158,6 +158,32 @@ RANDOM_EVENTS = [
      {"energie": -15, "fun": -10},             0),
     (5,  "💳", "Tu t'es fait(e) arnaquer en ligne.",
      {"fun": -20, "social": -10},              -50),
+    # Nouveaux positifs
+    (5,  "🌟", "Ton patron te félicite pour ton excellent travail !",
+     {"fun": +20, "social": +15},              +50),
+    (4,  "🍀", "Tu trouves un bon de réduction dans ta boîte aux lettres.",
+     {"fun": +10},                             +30),
+    (6,  "🐶", "Un chien adorable croise ton chemin et égaie ta journée.",
+     {"fun": +15, "social": +10},              0),
+    (5,  "☕", "Ton café préféré t'offre un verre pour ta fidélité.",
+     {"fun": +10, "energie": +10},             +10),
+    (4,  "🎶", "Tu composes une petite mélodie spontanée qui te rend heureux(se).",
+     {"fun": +25, "energie": +5},              0),
+    (5,  "📦", "Une livraison surprise d'un(e) ami(e) arrive à ta porte.",
+     {"fun": +20, "social": +20},              0),
+    # Nouveaux négatifs
+    (6,  "🚗", "Tu es bloqué(e) dans les embouteillages pendant 1h.",
+     {"fun": -20, "energie": -10},             0),
+    (5,  "📵", "Coupure internet pendant plusieurs heures.",
+     {"fun": -25, "social": -15},              0),
+    (4,  "👜", "Tu perds ton portefeuille... heureusement vide.",
+     {"fun": -20, "social": -10},              -20),
+    (5,  "🤧", "Tu attrapes un petit rhume.",
+     {"energie": -20, "hygiene": -15, "fun": -10}, 0),
+    (4,  "🔑", "Tu t'enfermes dehors et dois appeler un serrurier.",
+     {"fun": -15, "social": -5},               -60),
+    (5,  "😬", "Tu renverses ton café sur toi au bureau... gênant.",
+     {"hygiene": -20, "fun": -15, "social": -10}, 0),
 ]
 
 
@@ -246,6 +272,11 @@ ACTIONS = [
     ("travailler","Aller travailler",         None),
     ("postuler",  "Chercher un emploi",       None),
     ("passer",    "Passer le temps (1h)",     None),
+    ("sport",     "Faire du sport (1h)",      None),
+    ("mediter",   "Méditer (30 min)",         None),
+    ("jardiner",  "Jardiner (2h)",            None),
+    ("jeux",      "Jouer aux jeux vidéo (2h)",None),
+    ("gastronomie","Cuisiner un plat spécial",None),
 ]
 
 
@@ -364,6 +395,43 @@ def action_passer(sim):
     sim.tick(1)
     input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
 
+def action_sport(sim):
+    slow_print(f"\n  {C.GREEN}Tu fais du sport pendant 1 heure... 🏃{C.RESET}", 0.02)
+    sim.modify(fun=+20, energie=-25, hygiene=-20, faim=-15, social=+5)
+    sim.tick(1)
+    input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+
+def action_mediter(sim):
+    slow_print(f"\n  {C.CYAN}Tu médites tranquillement... 🧘{C.RESET}", 0.02)
+    sim.modify(energie=+15, fun=+15, social=-5)
+    sim.tick(0)
+    input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+
+def action_jardiner(sim):
+    slow_print(f"\n  {C.GREEN}Tu jardines pendant 2 heures... 🌱{C.RESET}", 0.02)
+    sim.modify(fun=+25, energie=-15, hygiene=-15, faim=-10, social=+5)
+    sim.tick(2)
+    input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+
+def action_jeux(sim):
+    slow_print(f"\n  {C.MAGENTA}Tu joues aux jeux vidéo pendant 2h... 🎮{C.RESET}", 0.02)
+    sim.modify(fun=+35, social=-10, energie=-10, faim=-10)
+    sim.tick(2)
+    input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+
+def action_gastronomie(sim):
+    cost = 20
+    if sim.money < cost:
+        print(f"\n  {C.RED}Tu n'as pas assez d'argent pour les ingrédients ! (${cost} nécessaires){C.RESET}")
+        input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+        return
+    slow_print(f"\n  {C.YELLOW}Tu prépares un plat gastronomique... 👨‍🍳{C.RESET}", 0.02)
+    sim.money -= cost
+    sim.modify(faim=+60, fun=+30, hygiene=-5, social=+10)
+    sim.tick(2)
+    slow_print(f"  {C.GREEN}Quel délice ! -${cost} pour les ingrédients.{C.RESET}", 0.02)
+    input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+
 
 ACTION_FNS = {
     "manger":    action_manger,
@@ -376,9 +444,14 @@ ACTION_FNS = {
     "lire":      action_lire,
     "sortir":    action_sortir,
     "appel":     action_appel,
-    "travailler":action_travailler,
-    "postuler":  action_postuler,
-    "passer":    action_passer,
+    "travailler":  action_travailler,
+    "postuler":    action_postuler,
+    "passer":      action_passer,
+    "sport":       action_sport,
+    "mediter":     action_mediter,
+    "jardiner":    action_jardiner,
+    "jeux":        action_jeux,
+    "gastronomie": action_gastronomie,
 }
 
 
