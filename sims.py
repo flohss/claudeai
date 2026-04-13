@@ -8,6 +8,7 @@ import time
 import sys
 import os
 import random
+import json
 
 # --- Couleurs ANSI ---
 class C:
@@ -129,6 +130,8 @@ class Sim:
         self.pet = None
         self.orientation  = "Bisexuel(le)"  # défini dans main()
         self.relationship = Relationship()
+        self.skills   = Skills()
+        self.children = []
 
     # ---- Humeur globale ----
     @property
@@ -288,6 +291,61 @@ class Relationship:
         self.affection    = 0
 
 
+# --- Compétences ---
+SKILLS_DEF = {
+    "cuisine":   ("Cuisine",   "🍳"),
+    "sport":     ("Sport",     "🏃"),
+    "social":    ("Social",    "🗣"),
+    "jardinage": ("Jardinage", "🌱"),
+    "jeux":      ("Jeux",      "🎮"),
+    "travail":   ("Travail",   "💼"),
+}
+
+class Skills:
+    XP_TO_LEVEL = 80
+    MAX_LEVEL   = 10
+
+    def __init__(self):
+        self.levels = {k: 0 for k in SKILLS_DEF}
+        self.xp     = {k: 0 for k in SKILLS_DEF}
+
+    def gain(self, skill, xp_amount):
+        """Ajoute de l'XP. Retourne le nouveau niveau si montée de niveau, sinon None."""
+        if skill not in self.levels or self.levels[skill] >= self.MAX_LEVEL:
+            return None
+        self.xp[skill] += xp_amount
+        if self.xp[skill] >= self.XP_TO_LEVEL:
+            self.levels[skill] += 1
+            self.xp[skill] = 0
+            return self.levels[skill]
+        return None
+
+    def bonus(self, skill):
+        """Retourne le bonus multiplicatif : +10 % par niveau."""
+        return self.levels.get(skill, 0) * 0.1
+
+
+# --- Famille ---
+class Child:
+    def __init__(self, name):
+        self.name = name
+        self.days = 0
+
+    def tick_day(self):
+        self.days += 1
+
+    @property
+    def age_label(self):
+        if self.days < 3:  return "Bébé 👶"
+        if self.days < 8:  return "Enfant 🧒"
+        if self.days < 15: return "Ado 🧑"
+        return "Adulte 💪"
+
+
+# --- Sauvegarde ---
+SAVE_FILE = "savegame.json"
+
+
 # --- Événements aléatoires ---
 # (probabilité 0-100, emoji, description, effets sur besoins, delta argent)
 RANDOM_EVENTS = [
@@ -440,12 +498,26 @@ def show_status(sim):
         print(sim.last_event)
         print()
 
-    print(f"  {C.BOLD}── Besoins ────────────────────────────{C.RESET}")
+    # Enfants
+    if sim.children:
+        kids_str = "  ".join(f"{c.name} ({c.age_label})" for c in sim.children)
+        print(f"  {C.BOLD}Famille  :{C.RESET} {kids_str}")
+
+    print(f"\n  {C.BOLD}── Besoins ────────────────────────────{C.RESET}")
     for need in Sim.NEEDS:
         label, emoji = Sim.NEED_LABELS[need]
         val = sim.needs[need]
         warn = f" {C.RED}⚠ CRITIQUE{C.RESET}" if val <= 10 else ""
         print(f"  {emoji} {label:<9}{bar(val)}{warn}")
+
+    # Compétences (afficher seulement si au moins une > 0)
+    active = [(k, v) for k, v in sim.skills.levels.items() if v > 0 or sim.skills.xp[k] > 0]
+    if active:
+        print(f"\n  {C.BOLD}── Compétences ────────────────────────{C.RESET}")
+        for skill_id, lv in active:
+            label, emoji = SKILLS_DEF[skill_id]
+            xp  = sim.skills.xp[skill_id]
+            print(f"  {emoji} {label:<10} Niv.{lv:2d}  {bar(xp, max_value=Skills.XP_TO_LEVEL, length=12)}")
     print()
 
 
@@ -485,14 +557,20 @@ ACTIONS = [
     ("intimite",  "Moment d'intimité",        None),
     ("proposer",  "Demander en mariage",      None),
     ("marier",    "Se marier",                None),
-    ("rupture",   "Rompre",                   None),
+    ("rupture",        "Rompre",                    None),
+    ("avoir_enfant",   "Avoir un enfant",           None),
+    ("famille",        "Temps en famille",          None),
+    ("sauvegarder",    "Sauvegarder la partie",     None),
 ]
 
 
 def action_manger(sim):
+    gain = int(40 * (1 + sim.skills.bonus('cuisine')))
     slow_print(f"\n  {C.YELLOW}Tu cuisines un bon repas...{C.RESET}", 0.02)
-    sim.modify(faim=+40, hygiene=-5, fun=+5)
+    sim.modify(faim=gain, hygiene=-5, fun=+5)
     sim.tick(1)
+    lvl = sim.skills.gain('cuisine', 8)
+    if lvl: slow_print(f"  {C.GREEN}Compétence Cuisine → Niv. {lvl} ! 🍳{C.RESET}", 0.02)
     input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
 
 def action_snack(sim):
@@ -508,6 +586,8 @@ def action_dormir(sim):
     sim.age += 1
     sim.weather.new_day()
     slow_print(f"  {C.CYAN}Nouveau jour ! Météo : {sim.weather.emoji}  {sim.weather.name}{C.RESET}", 0.02)
+    for child in sim.children:
+        child.tick_day()
     input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
 
 def action_sieste(sim):
@@ -547,20 +627,26 @@ def action_sortir(sim):
         input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
         return
     meteo_mod = sim.weather.outdoor_mods.get("sortir", 0)
+    soc_gain  = int(50 * (1 + sim.skills.bonus('social')))
     slow_print(f"\n  {C.MAGENTA}Tu passes la soirée avec des amis ! 🎉{C.RESET}", 0.02)
     if meteo_mod > 0:
         slow_print(f"  {C.GREEN}La météo est parfaite pour sortir ! +{meteo_mod} Fun{C.RESET}", 0.02)
     elif meteo_mod < 0:
         slow_print(f"  {C.RED}La météo n'est pas idéale... {meteo_mod} Fun{C.RESET}", 0.02)
     sim.money -= cost
-    sim.modify(fun=40+meteo_mod, social=+50, energie=-20, faim=-15, hygiene=-5)
+    sim.modify(fun=40+meteo_mod, social=soc_gain, energie=-20, faim=-15, hygiene=-5)
     sim.tick(4)
+    lvl = sim.skills.gain('social', 8)
+    if lvl: slow_print(f"  {C.GREEN}Compétence Social → Niv. {lvl} ! 🗣{C.RESET}", 0.02)
     input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
 
 def action_appel(sim):
+    soc_gain = int(25 * (1 + sim.skills.bonus('social')))
     slow_print(f"\n  {C.MAGENTA}Tu appelles un(e) ami(e) pour discuter... 📞{C.RESET}", 0.02)
-    sim.modify(social=+25, fun=+10, energie=-5)
+    sim.modify(social=soc_gain, fun=+10, energie=-5)
     sim.tick(1)
+    lvl = sim.skills.gain('social', 5)
+    if lvl: slow_print(f"  {C.GREEN}Compétence Social → Niv. {lvl} ! 🗣{C.RESET}", 0.02)
     input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
 
 JOBS = [
@@ -576,7 +662,8 @@ def action_travailler(sim):
         print(f"\n  {C.RED}Tu n'as pas de travail ! Postule d'abord.{C.RESET}")
         input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
         return
-    salary = next(s for j, s in JOBS if j == sim.job)
+    base_salary = next(s for j, s in JOBS if j == sim.job)
+    salary = int(base_salary * (1 + sim.skills.bonus('travail')))
     slow_print(f"\n  {C.YELLOW}Tu travailles toute la journée comme {sim.job}... 💼{C.RESET}", 0.02)
     sim.money += salary
     sim.job_days += 1
@@ -586,6 +673,11 @@ def action_travailler(sim):
     sim.weather.new_day()
     slow_print(f"  {C.GREEN}+${salary} gagnés ! Total : ${sim.money}{C.RESET}", 0.02)
     slow_print(f"  {C.CYAN}Demain : {sim.weather.emoji}  {sim.weather.name}{C.RESET}", 0.02)
+    lvl = sim.skills.gain('travail', 10)
+    if lvl: slow_print(f"  {C.GREEN}Compétence Travail → Niv. {lvl} ! 💼{C.RESET}", 0.02)
+    # Faire grandir les enfants
+    for child in sim.children:
+        child.tick_day()
     input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
 
 def action_postuler(sim):
@@ -614,9 +706,13 @@ def action_passer(sim):
     input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
 
 def action_sport(sim):
+    fun_gain = int(20 * (1 + sim.skills.bonus('sport')))
+    energie_cost = max(10, int(25 * (1 - sim.skills.bonus('sport') * 0.5)))
     slow_print(f"\n  {C.GREEN}Tu fais du sport pendant 1 heure... 🏃{C.RESET}", 0.02)
-    sim.modify(fun=+20, energie=-25, hygiene=-20, faim=-15, social=+5)
+    sim.modify(fun=fun_gain, energie=-energie_cost, hygiene=-20, faim=-15, social=+5)
     sim.tick(1)
+    lvl = sim.skills.gain('sport', 10)
+    if lvl: slow_print(f"  {C.GREEN}Compétence Sport → Niv. {lvl} ! 🏃{C.RESET}", 0.02)
     input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
 
 def action_mediter(sim):
@@ -627,19 +723,25 @@ def action_mediter(sim):
 
 def action_jardiner(sim):
     meteo_mod = sim.weather.outdoor_mods.get("jardiner", 0)
+    fun_gain  = int(25 * (1 + sim.skills.bonus('jardinage')))
     slow_print(f"\n  {C.GREEN}Tu jardines pendant 2 heures... 🌱{C.RESET}", 0.02)
     if meteo_mod > 0:
         slow_print(f"  {C.GREEN}Le temps est parfait pour jardiner ! +{meteo_mod} Fun{C.RESET}", 0.02)
     elif meteo_mod < 0:
         slow_print(f"  {C.RED}La météo complique le jardinage... {meteo_mod} Fun{C.RESET}", 0.02)
-    sim.modify(fun=25+meteo_mod, energie=-15, hygiene=-15, faim=-10, social=+5)
+    sim.modify(fun=fun_gain+meteo_mod, energie=-15, hygiene=-15, faim=-10, social=+5)
     sim.tick(2)
+    lvl = sim.skills.gain('jardinage', 8)
+    if lvl: slow_print(f"  {C.GREEN}Compétence Jardinage → Niv. {lvl} ! 🌱{C.RESET}", 0.02)
     input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
 
 def action_jeux(sim):
+    fun_gain = int(35 * (1 + sim.skills.bonus('jeux')))
     slow_print(f"\n  {C.MAGENTA}Tu joues aux jeux vidéo pendant 2h... 🎮{C.RESET}", 0.02)
-    sim.modify(fun=+35, social=-10, energie=-10, faim=-10)
+    sim.modify(fun=fun_gain, social=-10, energie=-10, faim=-10)
     sim.tick(2)
+    lvl = sim.skills.gain('jeux', 8)
+    if lvl: slow_print(f"  {C.GREEN}Compétence Jeux → Niv. {lvl} ! 🎮{C.RESET}", 0.02)
     input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
 
 def action_gastronomie(sim):
@@ -648,11 +750,15 @@ def action_gastronomie(sim):
         print(f"\n  {C.RED}Tu n'as pas assez d'argent pour les ingrédients ! (${cost} nécessaires){C.RESET}")
         input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
         return
+    faim_gain = int(60 * (1 + sim.skills.bonus('cuisine')))
+    fun_gain  = int(30 * (1 + sim.skills.bonus('cuisine')))
     slow_print(f"\n  {C.YELLOW}Tu prépares un plat gastronomique... 👨‍🍳{C.RESET}", 0.02)
     sim.money -= cost
-    sim.modify(faim=+60, fun=+30, hygiene=-5, social=+10)
+    sim.modify(faim=faim_gain, fun=fun_gain, hygiene=-5, social=+10)
     sim.tick(2)
     slow_print(f"  {C.GREEN}Quel délice ! -${cost} pour les ingrédients.{C.RESET}", 0.02)
+    lvl = sim.skills.gain('cuisine', 12)
+    if lvl: slow_print(f"  {C.GREEN}Compétence Cuisine → Niv. {lvl} ! 🍳{C.RESET}", 0.02)
     input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
 
 
@@ -701,6 +807,59 @@ def action_jouer_pet(sim):
     sim.tick(1)
     slow_print(f"  {C.GREEN}{sim.pet.name} est ravi(e) ! (Humeur : {sim.pet.happiness}%){C.RESET}", 0.02)
     input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+
+CHILD_NAMES = ["Emma", "Léo", "Jade", "Noah", "Inès", "Lucas", "Chloé", "Tom", "Manon", "Hugo"]
+
+def action_avoir_enfant(sim):
+    if sim.relationship.level < 6:
+        print(f"\n  {C.RED}Tu dois être marié(e) pour avoir un enfant.{C.RESET}")
+        input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+        return
+    if len(sim.children) >= 4:
+        print(f"\n  {C.YELLOW}Vous avez déjà une grande famille ({len(sim.children)} enfants) !{C.RESET}")
+        input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+        return
+    slow_print(f"\n  {C.MAGENTA}Vous attendez un heureux événement... 🍼{C.RESET}", 0.02)
+    name = random.choice([n for n in CHILD_NAMES if not any(c.name == n for c in sim.children)])
+    child = Child(name)
+    sim.children.append(child)
+    sim.modify(fun=+30, social=+20, energie=-20)
+    slow_print(f"  {C.GREEN}Bienvenue petit(e) {name} ! 👶{C.RESET}", 0.02)
+    input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+
+def action_famille(sim):
+    if not sim.children:
+        print(f"\n  {C.YELLOW}Tu n'as pas encore d'enfants.{C.RESET}")
+        input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+        return
+    kids = ", ".join(c.name for c in sim.children)
+    slow_print(f"\n  {C.GREEN}Tu passes du temps en famille avec {kids}... 👨‍👩‍👧‍👦{C.RESET}", 0.02)
+    sim.modify(fun=+25, social=+30, energie=-10)
+    sim.tick(2)
+    input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+
+def action_sauvegarder(sim):
+    data = {
+        "name": sim.name, "age": sim.age, "money": sim.money,
+        "job": sim.job, "job_days": sim.job_days, "needs": sim.needs,
+        "orientation": sim.orientation,
+        "relationship": {
+            "level": sim.relationship.level,
+            "partner_name": sim.relationship.partner_name,
+            "affection": sim.relationship.affection,
+        },
+        "pet": {"name": sim.pet.name, "species": sim.pet.species,
+                "hunger": sim.pet.hunger, "happiness": sim.pet.happiness
+                } if sim.pet else None,
+        "weather_idx": WEATHER_TYPES.index(sim.weather._data),
+        "skills": {"levels": sim.skills.levels, "xp": sim.skills.xp},
+        "children": [{"name": c.name, "days": c.days} for c in sim.children],
+    }
+    with open(SAVE_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    slow_print(f"\n  {C.GREEN}Partie sauvegardée dans {SAVE_FILE} ! 💾{C.RESET}", 0.02)
+    input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+
 
 def action_flirter(sim):
     rel = sim.relationship
@@ -842,7 +1001,10 @@ ACTION_FNS = {
     "intimite":    action_intimite,
     "proposer":    action_proposer,
     "marier":      action_marier,
-    "rupture":     action_rupture,
+    "rupture":       action_rupture,
+    "avoir_enfant":  action_avoir_enfant,
+    "famille":       action_famille,
+    "sauvegarder":   action_sauvegarder,
 }
 
 
@@ -924,6 +1086,44 @@ def game_loop(sim):
             time.sleep(1)
 
 
+# --- Chargement ---
+def load_game():
+    with open(SAVE_FILE, "r", encoding="utf-8") as f:
+        d = json.load(f)
+    sim = Sim(d["name"])
+    sim.age      = d["age"]
+    sim.money    = d["money"]
+    sim.job      = d["job"]
+    sim.job_days = d["job_days"]
+    sim.needs    = d["needs"]
+    sim.orientation = d.get("orientation", "Bisexuel(le)")
+
+    rel = d.get("relationship", {})
+    sim.relationship.level        = rel.get("level", 0)
+    sim.relationship.partner_name = rel.get("partner_name")
+    sim.relationship.affection    = rel.get("affection", 0)
+
+    if d.get("pet"):
+        p = d["pet"]
+        sim.pet = Pet(p["name"], p["species"])
+        sim.pet.hunger    = p["hunger"]
+        sim.pet.happiness = p["happiness"]
+
+    widx = d.get("weather_idx", 0)
+    sim.weather._data = WEATHER_TYPES[min(widx, len(WEATHER_TYPES) - 1)]
+
+    sk = d.get("skills", {})
+    sim.skills.levels = sk.get("levels", sim.skills.levels)
+    sim.skills.xp     = sk.get("xp",     sim.skills.xp)
+
+    for cd in d.get("children", []):
+        c = Child(cd["name"])
+        c.days = cd["days"]
+        sim.children.append(c)
+
+    return sim
+
+
 # --- Démarrage ---
 def main():
     clear()
@@ -939,7 +1139,23 @@ def main():
     slow_print("  Bienvenue dans Les Sims en mode terminal !", 0.03)
     slow_print("  Prends soin de ton Sim et gère ses besoins.\n", 0.03)
 
-    name = input(f"  {C.BOLD}Quel est le prénom de ton Sim ? {C.RESET}").strip()
+    # Menu démarrage
+    print(f"  {C.CYAN}[1]{C.RESET} Nouvelle partie")
+    if os.path.exists(SAVE_FILE):
+        print(f"  {C.CYAN}[2]{C.RESET} Charger la partie sauvegardée")
+    try:
+        start = input(f"\n  {C.BOLD}Choix : {C.RESET}").strip()
+    except (EOFError, KeyboardInterrupt):
+        start = "1"
+
+    if start == "2" and os.path.exists(SAVE_FILE):
+        sim = load_game()
+        slow_print(f"\n  {C.GREEN}Partie chargée ! Bon retour {sim.name} ! 💾{C.RESET}\n", 0.03)
+        time.sleep(1)
+        game_loop(sim)
+        return
+
+    name = input(f"\n  {C.BOLD}Quel est le prénom de ton Sim ? {C.RESET}").strip()
     if not name:
         name = "Alex"
 
