@@ -45,6 +45,25 @@ def slow_print(text, delay=0.03):
         time.sleep(delay)
     print()
 
+# --- Stades de vie ---
+# (jour_min, nom, emoji, mods_decay_par_heure, restrictions, description)
+LIFE_STAGES = [
+    (0,  "Enfant",       "🧒", {"energie": +2, "fun": -2},          ["travailler", "postuler", "sortir", "gastronomie"], "Tu découvres le monde !"),
+    (5,  "Adolescent",   "🧑", {"social": -2, "fun": -1},           ["travailler", "postuler"],                          "Tu cherches ta voie dans la vie."),
+    (10, "Jeune adulte", "💪", {},                                   [],                                                  "Tu es dans la fleur de l'âge !"),
+    (20, "Adulte",       "👔", {"energie": -1},                     [],                                                  "L'expérience guide tes choix."),
+    (35, "Senior",       "🎩", {"energie": -3, "hygiene": -1},      [],                                                  "La sagesse et la liberté bien méritées !"),
+]
+
+def get_stage(age):
+    """Retourne le stade de vie selon le nombre de jours."""
+    idx = 0
+    for i, (min_day, *_) in enumerate(LIFE_STAGES):
+        if age >= min_day:
+            idx = i
+    return idx, LIFE_STAGES[idx]
+
+
 # --- Personnage ---
 class Sim:
     NEEDS = ["faim", "energie", "hygiene", "fun", "social", "vessie"]
@@ -104,6 +123,11 @@ class Sim:
             "social":  -3  * hours,
             "vessie":  -7  * hours,
         }
+        # Appliquer les modificateurs du stade de vie
+        _, stage = get_stage(self.age)
+        for need, mod in stage[3].items():
+            if need in decay:
+                decay[need] += mod * hours
         for need, delta in decay.items():
             self.needs[need] = max(0, min(100, self.needs[need] + delta))
         if self.pet:
@@ -291,10 +315,12 @@ def show_status(sim):
     print(f"{C.BOLD}{C.CYAN}║   LES SIMS - LIGNE DE COMMANDE       ║{C.RESET}")
     print(f"{C.BOLD}{C.CYAN}╚══════════════════════════════════════╝{C.RESET}\n")
 
+    _, stage = get_stage(sim.age)
     print(f"  {C.BOLD}Sim :{C.RESET} {sim.name}  |  "
           f"{C.BOLD}Jour :{C.RESET} {sim.age}  |  "
           f"{C.BOLD}Argent :{C.RESET} {C.GREEN}${sim.money}{C.RESET}  |  "
           f"{C.BOLD}Humeur :{C.RESET} {sim.mood_label()}")
+    print(f"  {C.BOLD}Stade   :{C.RESET} {stage[2]}  {C.YELLOW}{stage[1]}{C.RESET}  —  {C.GRAY}{stage[5]}{C.RESET}")
 
     if sim.job:
         print(f"  {C.BOLD}Travail :{C.RESET} {sim.job}  ({sim.job_days} jour(s))")
@@ -610,7 +636,23 @@ ACTION_FNS = {
 
 # --- Boucle principale ---
 def game_loop(sim):
+    prev_stage_idx, _ = get_stage(sim.age)
+
     while True:
+        # Détecter un changement de stade de vie
+        cur_stage_idx, cur_stage = get_stage(sim.age)
+        if cur_stage_idx != prev_stage_idx:
+            clear()
+            print(f"\n  {C.BOLD}{C.YELLOW}{'═' * 40}{C.RESET}")
+            slow_print(f"  {cur_stage[2]}  Nouveau stade de vie : {C.BOLD}{cur_stage[1]}{C.RESET} !", 0.03)
+            slow_print(f"  {C.GRAY}{cur_stage[5]}{C.RESET}", 0.03)
+            if cur_stage[4]:
+                blocked = ", ".join(cur_stage[4])
+                slow_print(f"  {C.RED}Actions désormais limitées : {blocked}{C.RESET}", 0.02)
+            print(f"  {C.BOLD}{C.YELLOW}{'═' * 40}{C.RESET}\n")
+            input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+            prev_stage_idx = cur_stage_idx
+
         show_status(sim)
 
         # Avertissements critiques
@@ -644,8 +686,14 @@ def game_loop(sim):
             idx = int(choice) - 1
             if 0 <= idx < len(ACTIONS):
                 action_key = ACTIONS[idx][0]
-                ACTION_FNS[action_key](sim)
-                sim.last_event = trigger_random_event(sim)
+                # Vérifier les restrictions du stade de vie
+                _, stage = get_stage(sim.age)
+                if action_key in stage[4]:
+                    print(f"\n  {C.RED}Cette action n'est pas disponible à ton stade de vie ({stage[1]}).{C.RESET}")
+                    time.sleep(1.5)
+                else:
+                    ACTION_FNS[action_key](sim)
+                    sim.last_event = trigger_random_event(sim)
             else:
                 print(f"  {C.RED}Choix invalide.{C.RESET}")
                 time.sleep(1)
@@ -680,8 +728,10 @@ def main():
     game_loop(sim)
 
     # Score final
+    _, final_stage = get_stage(sim.age)
     print(f"\n  {C.BOLD}── Résultats ──────────────────────────{C.RESET}")
     print(f"  Nom     : {sim.name}")
+    print(f"  Stade   : {final_stage[2]}  {final_stage[1]}")
     print(f"  Jours   : {sim.age}")
     print(f"  Argent  : ${sim.money}")
     print(f"  Métier  : {sim.job or 'Jamais travaillé'}")
