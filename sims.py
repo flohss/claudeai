@@ -51,7 +51,7 @@ class Sim:
 
     NEED_LABELS = {
         "faim":    ("Faim",    "🍔"),
-        "energie": ("Énergie", "⚡"),
+        "energie": ("Énergie", "💡"),
         "hygiene": ("Hygiène", "🚿"),
         "fun":     ("Fun",     "🎮"),
         "social":  ("Social",  "💬"),
@@ -245,7 +245,7 @@ def show_status(sim):
         label, emoji = Sim.NEED_LABELS[need]
         val = sim.needs[need]
         warn = f" {C.RED}⚠ CRITIQUE{C.RESET}" if val <= 10 else ""
-        print(f"  {emoji} {label:<9} {bar(val)}{warn}")
+        print(f"  {emoji} {label:<9}{bar(val)}{warn}")
     print()
 
 
