@@ -75,6 +75,7 @@ class Sim:
             "vessie":  80,
         }
         self.mood_history = []
+        self.last_event = None   # dernier événement aléatoire
 
     # ---- Humeur globale ----
     @property
@@ -118,6 +119,80 @@ class Sim:
         return self.needs["faim"] > 0 or self.needs["energie"] > 5
 
 
+# --- Événements aléatoires ---
+# (probabilité 0-100, emoji, description, effets sur besoins, delta argent)
+RANDOM_EVENTS = [
+    # Positifs
+    (8,  "💸", "Tu trouves un billet par terre !",
+     {},                                      +40),
+    (6,  "🎰", "Tu gagnes un ticket à gratter !",
+     {"fun": +15},                             +random.randint(10, 80) if False else 0),  # calculé dynamiquement
+    (7,  "🤝", "Un voisin t'apporte un repas cuisiné.",
+     {"faim": +30, "social": +20},             0),
+    (6,  "🎁", "Tu reçois un colis surprise d'un(e) ami(e) !",
+     {"fun": +25, "social": +15},              0),
+    (5,  "💼", "Ton patron t'accorde une prime surprise !",
+     {"fun": +10},                             +100),
+    (8,  "📻", "Tu tombes sur ta chanson préférée à la radio.",
+     {"fun": +20, "energie": +5},              0),
+    (6,  "🌞", "La météo est magnifique, tu te sens plein(e) d'énergie !",
+     {"energie": +20, "fun": +10},             0),
+    (5,  "👫", "Un(e) ami(e) débarque à l'improviste pour papoter.",
+     {"social": +35, "fun": +20},              0),
+    # Négatifs
+    (8,  "🤒", "Tu tombes légèrement malade.",
+     {"energie": -25, "hygiene": -20},         0),
+    (6,  "🚨", "Tu reçois une facture inattendue !",
+     {"fun": -15},                             -75),
+    (7,  "🥴", "La nourriture était avariée... Tu te sens mal.",
+     {"faim": -20, "energie": -15},            0),
+    (5,  "😤", "Grosse dispute avec ton voisin.",
+     {"social": -30, "fun": -15},              0),
+    (6,  "⚡", "Panne de courant ! Soirée dans le noir.",
+     {"fun": -20, "energie": -10},             0),
+    (7,  "🌧", "Tu t'es fait(e) tremper sous la pluie.",
+     {"hygiene": -25, "energie": -10},         0),
+    (5,  "😱", "Un cauchemar t'a réveillé(e) en pleine nuit !",
+     {"energie": -20, "fun": -10},             0),
+    (4,  "🦟", "Nuit infernale à cause des moustiques.",
+     {"energie": -15, "fun": -10},             0),
+    (5,  "💳", "Tu t'es fait(e) arnaquer en ligne.",
+     {"fun": -20, "social": -10},              -50),
+]
+
+
+def trigger_random_event(sim):
+    """Lance un dé et déclenche éventuellement un événement. Retourne le message ou None."""
+    for prob, emoji, desc, effects, money in RANDOM_EVENTS:
+        # Chaque événement a sa propre probabilité indépendante
+        if random.randint(1, 100) <= prob:
+            # Argent : calcul dynamique pour le ticket à gratter
+            actual_money = money
+            if emoji == "🎰":
+                actual_money = random.randint(10, 80)
+
+            sim.modify(**effects)
+            sim.money = max(0, sim.money + actual_money)
+
+            lines = [f"\n  {C.BOLD}━━ ÉVÉNEMENT ALÉATOIRE ━━{C.RESET}",
+                     f"  {emoji}  {desc}"]
+            if effects:
+                parts = []
+                for need, delta in effects.items():
+                    label = Sim.NEED_LABELS[need][0]
+                    sign = "+" if delta >= 0 else ""
+                    color = C.GREEN if delta > 0 else C.RED
+                    parts.append(f"{color}{sign}{delta} {label}{C.RESET}")
+                lines.append(f"  Effets : {', '.join(parts)}")
+            if actual_money != 0:
+                sign = "+" if actual_money >= 0 else ""
+                color = C.GREEN if actual_money > 0 else C.RED
+                lines.append(f"  Argent : {color}{sign}${actual_money}{C.RESET}")
+
+            return "\n".join(lines)
+    return None
+
+
 # --- Affichage ---
 def show_status(sim):
     clear()
@@ -134,6 +209,10 @@ def show_status(sim):
         print(f"  {C.BOLD}Travail :{C.RESET} {sim.job}  ({sim.job_days} jour(s))\n")
     else:
         print(f"  {C.BOLD}Travail :{C.RESET} {C.GRAY}Chômeur(se){C.RESET}\n")
+
+    if sim.last_event:
+        print(sim.last_event)
+        print()
 
     print(f"  {C.BOLD}── Besoins ────────────────────────────{C.RESET}")
     for need in Sim.NEEDS:
@@ -336,6 +415,7 @@ def game_loop(sim):
             if 0 <= idx < len(ACTIONS):
                 action_key = ACTIONS[idx][0]
                 ACTION_FNS[action_key](sim)
+                sim.last_event = trigger_random_event(sim)
             else:
                 print(f"  {C.RED}Choix invalide.{C.RESET}")
                 time.sleep(1)
