@@ -416,13 +416,19 @@ class Health:
 # --- Éducation ---
 # (label, emoji, sessions_requises, coût_par_session)
 STUDY_DOMAINS = {
-    "gastronomie": ("Gastronomie",        "🍳",  4, 150),
-    "commerce":    ("Commerce & Gestion", "💼",  4, 150),
-    "arts":        ("Arts & Lettres",     "🎨",  6, 200),
-    "informatique":("Informatique",       "💻",  6, 250),
-    "sciences":    ("Sciences",           "🔬",  6, 250),
-    "droit":       ("Droit",              "⚖",   10, 350),
-    "medecine":    ("Médecine",           "🏥", 10, 400),
+    "gastronomie":  ("Gastronomie",           "🍳",  4, 150),
+    "commerce":     ("Commerce & Gestion",    "💼",  4, 150),
+    "arts":         ("Arts & Lettres",        "🎨",  6, 200),
+    "informatique": ("Informatique",          "💻",  6, 250),
+    "sciences":     ("Sciences",              "🔬",  6, 250),
+    "droit":        ("Droit",                 "⚖",  10, 350),
+    "medecine":     ("Médecine",              "🏥", 10, 400),
+    "psychologie":  ("Psychologie",           "🧠",  8, 280),
+    "architecture": ("Architecture",          "🏛",   8, 280),
+    "communication":("Communication",         "📡",  4, 150),
+    "finance":      ("Finance & Économie",    "📈",  6, 250),
+    "enseignement": ("Sciences de l'éduc.",   "📚",  6, 200),
+    "sport_science":("Sciences du Sport",     "🏅",  4, 150),
 }
 
 GRADE_ORDER = [None, "Passable", "Bien", "Très bien", "Félicitations du jury"]
@@ -813,17 +819,67 @@ def action_appel(sim):
 
 # (label, salaire, domaine_requis, mention_minimale)
 JOBS = [
-    ("Livreur",          150, None,            None),
-    ("Artiste",          120, None,            None),
-    ("Cuisinier",        220, "gastronomie",   "Passable"),
-    ("Chef étoilé",      350, "gastronomie",   "Très bien"),
-    ("Manager",          280, "commerce",      "Passable"),
-    ("Développeur",      300, "informatique",  "Bien"),
-    ("Ingénieur",        400, "informatique",  "Très bien"),
-    ("Chercheur",        360, "sciences",      "Bien"),
-    ("Médecin",          450, "medecine",      "Bien"),
-    ("Chirurgien",       580, "medecine",      "Félicitations du jury"),
-    ("Avocat",           430, "droit",         "Très bien"),
+    # ── Sans diplôme ────────────────────────────────────
+    ("Caissier(ère)",    100, None,             None),
+    ("Livreur",          150, None,             None),
+    ("Serveur(se)",      130, None,             None),
+    ("Plombier",         180, None,             None),
+    ("Artiste",          120, None,             None),
+    # ── Gastronomie ─────────────────────────────────────
+    ("Cuisinier",        220, "gastronomie",    "Passable"),
+    ("Chef de cuisine",  320, "gastronomie",    "Bien"),
+    ("Chef étoilé",      500, "gastronomie",    "Très bien"),
+    # ── Commerce ────────────────────────────────────────
+    ("Comptable",        240, "commerce",       "Bien"),
+    ("Manager",          280, "commerce",       "Passable"),
+    ("Dir. commercial",  400, "commerce",       "Très bien"),
+    # ── Arts ────────────────────────────────────────────
+    ("Graphiste",        190, "arts",           "Passable"),
+    ("Illustrateur",     250, "arts",           "Bien"),
+    ("Réalisateur",      420, "arts",           "Très bien"),
+    # ── Informatique ────────────────────────────────────
+    ("Développeur",      300, "informatique",   "Bien"),
+    ("Ingénieur",        430, "informatique",   "Très bien"),
+    ("Data Scientist",   480, "informatique",   "Très bien"),
+    ("CTO",              700, "informatique",   "Félicitations du jury"),
+    # ── Sciences ────────────────────────────────────────
+    ("Technicien labo",  250, "sciences",       "Passable"),
+    ("Chercheur",        360, "sciences",       "Bien"),
+    ("Biologiste",       420, "sciences",       "Très bien"),
+    # ── Droit ───────────────────────────────────────────
+    ("Juriste",          310, "droit",          "Bien"),
+    ("Avocat",           430, "droit",          "Très bien"),
+    ("Notaire",          480, "droit",          "Très bien"),
+    ("Juge",             560, "droit",          "Félicitations du jury"),
+    # ── Médecine ────────────────────────────────────────
+    ("Infirmier(ère)",   220, "medecine",       "Passable"),
+    ("Médecin",          450, "medecine",       "Bien"),
+    ("Chirurgien",       620, "medecine",       "Félicitations du jury"),
+    # ── Psychologie ─────────────────────────────────────
+    ("Conseiller(ère)",  250, "psychologie",    "Passable"),
+    ("Psychologue",      370, "psychologie",    "Bien"),
+    ("Psychiatre",       540, "psychologie",    "Félicitations du jury"),
+    # ── Architecture ────────────────────────────────────
+    ("Dessinateur",      240, "architecture",   "Passable"),
+    ("Architecte",       440, "architecture",   "Bien"),
+    ("Architecte en chef",590, "architecture",  "Très bien"),
+    # ── Communication ───────────────────────────────────
+    ("Chargé(e) commu",  180, "communication",  "Passable"),
+    ("Journaliste",      260, "communication",  "Bien"),
+    ("Chef de presse",   380, "communication",  "Très bien"),
+    # ── Finance ─────────────────────────────────────────
+    ("Conseiller financ.",270, "finance",       "Passable"),
+    ("Analyste financier",380, "finance",       "Bien"),
+    ("Banquier",         490, "finance",        "Très bien"),
+    ("Dir. financier",   680, "finance",        "Félicitations du jury"),
+    # ── Enseignement ────────────────────────────────────
+    ("Assistant(e) péda.",180, "enseignement",  "Passable"),
+    ("Enseignant(e)",     230, "enseignement",  "Bien"),
+    ("Proviseur",        380, "enseignement",   "Très bien"),
+    # ── Sciences du sport ───────────────────────────────
+    ("Animateur sportif",170, "sport_science",  "Passable"),
+    ("Coach sportif",    240, "sport_science",  "Bien"),
+    ("Préparateur physique",360,"sport_science", "Très bien"),
 ]
 
 def jobs_available(edu):
