@@ -1194,11 +1194,11 @@ def action_inscrire(sim):
     edu = sim.education
     if edu.is_enrolled():
         lbl, emoji, sessions, cost = STUDY_DOMAINS[edu.enrolled_domain]
-        print(f"\n {C.YELLOW}Tu es déjà inscrit(e) en {lbl} ({edu.sessions_done}/{sessions} sessions).{C_RESET}")
+        print(f"\n {C.YELLOW}Tu es déjà inscrit(e) en {lbl} ({edu.sessions_done}/{sessions} sessions).{C.RESET}")
         _cont()
         return
     if edu.has_diploma():
-        print(f"\n {C.GREEN}Tu as déjà un diplôme : {edu.domain_label} (Mention : {edu.grade}){C_RESET}")
+        print(f"\n {C.GREEN}Tu as déjà un diplôme : {edu.domain_label} (Mention : {edu.grade}){C.RESET}")
         print(f" Veux-tu faire un autre cursus ? (o/n) ", end="")
         if input().strip().lower() != "o":
             return
@@ -1213,16 +1213,16 @@ def action_inscrire(sim):
         if 1 <= choice <= len(domains):
             key, (lbl, emoji, sessions, cost) = domains[choice - 1]
             if sim.money < cost:
-                print(f"\n {C.RED}Pas assez d'argent pour la première session ! (${cost} nécessaires){C_RESET}")
+                print(f"\n {C.RED}Pas assez d'argent pour la première session ! (${cost} nécessaires){C.RESET}")
                 _cont()
                 return
             sim.money -= cost
             edu.enrolled_domain = key
             edu.sessions_done = 1
             edu.total_score = _study_session_score(sim)
-            slow_print(f"\n {C.GREEN}Tu t'inscris en {lbl} ! Première session effectuée. {emoji}{C_RESET}", 0.02)
-            slow_print(f" {C.GRAY}{sessions} sessions au total, ${cost}/session{C_RESET}", 0.02)
-            slow_print(f" {C.CYAN}Progression : {edu.sessions_done}/{sessions}{C_RESET}", 0.02)
+            slow_print(f"\n {C.GREEN}Tu t'inscris en {lbl} ! Première session effectuée. {emoji}{C.RESET}", 0.02)
+            slow_print(f" {C.GRAY}{sessions} sessions au total, ${cost}/session{C.RESET}", 0.02)
+            slow_print(f" {C.CYAN}Progression : {edu.sessions_done}/{sessions}{C.RESET}", 0.02)
             sim.tick(4)
     except ValueError:
         pass
@@ -1231,15 +1231,15 @@ def action_inscrire(sim):
 def action_etudier(sim):
     edu = sim.education
     if not edu.is_enrolled():
-        print(f"\n {C.YELLOW}Tu n'es pas inscrit(e) à l'université. Inscris-toi d'abord !{C_RESET}")
+        print(f"\n {C.YELLOW}Tu n'es pas inscrit(e) à l'université. Inscris-toi d'abord !{C.RESET}")
         _cont()
         return
     lbl, emoji, sessions, cost = STUDY_DOMAINS[edu.enrolled_domain]
     if sim.money < cost:
-        print(f"\n {C.RED}Pas assez d'argent pour cette session (${cost} nécessaires).{C_RESET}")
+        print(f"\n {C.RED}Pas assez d'argent pour cette session (${cost} nécessaires).{C.RESET}")
         _cont()
         return
-    slow_print(f"\n {C.CYAN}Tu étudies en {lbl}... {emoji}{C_RESET}", 0.02)
+    slow_print(f"\n {C.CYAN}Tu étudies en {lbl}... {emoji}{C.RESET}", 0.02)
     sim.money -= cost
     score = _study_session_score(sim)
     edu.sessions_done += 1
@@ -1250,7 +1250,7 @@ def action_etudier(sim):
                f"(Moy. courante : {edu.total_score // edu.sessions_done}/100)", 0.02)
     lvl = sim.skills.gain('travail', 5)
     if lvl:
-        slow_print(f" {C.GREEN}Compétence Travail → Niv. {lvl} ! 💼{C_RESET}", 0.02)
+        slow_print(f" {C.GREEN}Compétence Travail → Niv. {lvl} ! 💼{C.RESET}", 0.02)
 
     if edu.sessions_done >= sessions:
         avg = edu.total_score / sessions
@@ -1260,16 +1260,16 @@ def action_etudier(sim):
             edu.diploma_domain = edu.enrolled_domain
             edu.grade = grade
             edu.enrolled_domain = None
-            slow_print(f" {C.BOLD}{C.YELLOW}🎓 Félicitations ! Tu obtiens ton diplôme en {lbl} !{C_RESET}", 0.03)
-            slow_print(f" {C.GREEN}Mention : {grade} (Moyenne : {avg:.0f}/100){C_RESET}", 0.03)
-            slow_print(f" {C.CYAN}De nouveaux emplois s'ouvrent à toi !{C_RESET}", 0.02)
+            slow_print(f" {C.BOLD}{C.YELLOW}🎓 Félicitations ! Tu obtiens ton diplôme en {lbl} !{C.RESET}", 0.03)
+            slow_print(f" {C.GREEN}Mention : {grade} (Moyenne : {avg:.0f}/100){C.RESET}", 0.03)
+            slow_print(f" {C.CYAN}De nouveaux emplois s'ouvrent à toi !{C.RESET}", 0.02)
             sim.modify(fun=+20, social=+10)
         else:
             edu.enrolled_domain = None
             edu.sessions_done = 0
             edu.total_score = 0
-            slow_print(f" {C.RED}Tu n'as pas obtenu le diplôme en {lbl}. (Moyenne : {avg:.0f}/100 — minimum 35){C_RESET}", 0.03)
-            slow_print(f" {C.YELLOW}Tu peux te réinscrire et réessayer.{C_RESET}", 0.02)
+            slow_print(f" {C.RED}Tu n'as pas obtenu le diplôme en {lbl}. (Moyenne : {avg:.0f}/100 — minimum 35){C.RESET}", 0.03)
+            slow_print(f" {C.YELLOW}Tu peux te réinscrire et réessayer.{C.RESET}", 0.02)
             sim.modify(fun=-15)
     _cont()
 
@@ -1442,7 +1442,7 @@ def ai_auto_postuler(sim):
     best = max(available, key=lambda x: x[1])
     sim.job = best[0]
     sim.job_days = 0
-    slow_print(f" {C.GREEN}[IA] Embauché(e) comme {sim.job} (${best[1]}/j) 💼{C_RESET}", 0.02)
+    slow_print(f" {C.GREEN}[IA] Embauché(e) comme {sim.job} (${best[1]}/j) 💼{C.RESET}", 0.02)
 
 def ai_auto_inscrire(sim):
     """Choisit automatiquement le domaine d'études le plus rentable accessible."""
@@ -1466,7 +1466,7 @@ def ai_auto_inscrire(sim):
     sim.education.enrolled_domain = best_domain
     sim.education.sessions_done = 1
     sim.education.total_score = _study_session_score(sim)
-    slow_print(f" {C.GREEN}[IA] Inscrit(e) en {lbl} {emoji} ({sessions} sessions){C_RESET}", 0.02)
+    slow_print(f" {C.GREEN}[IA] Inscrit(e) en {lbl} {emoji} ({sessions} sessions){C.RESET}", 0.02)
     sim.tick(4)
 
 def autopilot_loop(sim, speed=0.8):
@@ -1492,7 +1492,7 @@ def autopilot_loop(sim, speed=0.8):
             cur_stage_idx, cur_stage = get_stage(sim.age)
             if cur_stage_idx != prev_stage_idx:
                 clear()
-                slow_print(f"\n {cur_stage[2]} {sim.name} entre dans le stade : {C.BOLD}{cur_stage[1]}{C_RESET}", 0.03)
+                slow_print(f"\n {cur_stage[2]} {sim.name} entre dans le stade : {C.BOLD}{cur_stage[1]}{C.RESET}", 0.03)
                 prev_stage_idx = cur_stage_idx
                 time.sleep(speed)
 
@@ -1500,10 +1500,10 @@ def autopilot_loop(sim, speed=0.8):
 
             # — Morts par besoins / santé —
             if sim.needs["faim"] == 0 and sim.needs["energie"] == 0:
-                slow_print(f"\n {C.RED}💀 {sim.name} est mort(e) d'épuisement après {sim.age} jour(s).{C_RESET}", 0.02)
+                slow_print(f"\n {C.RED}💀 {sim.name} est mort(e) d'épuisement après {sim.age} jour(s).{C.RESET}", 0.02)
                 return "famine"
             if sim.health.hp <= 0:
-                slow_print(f"\n {C.RED}💀 {sim.name} est décédé(e) des suites de sa santé.{C_RESET}", 0.02)
+                slow_print(f"\n {C.RED}💀 {sim.name} est décédé(e) des suites de sa santé.{C.RESET}", 0.02)
                 return "santé"
 
             # — Décision IA —
@@ -1528,7 +1528,7 @@ def autopilot_loop(sim, speed=0.8):
 
             # Afficher la décision
             label = next((lb for k, lb, *_ in ACTIONS if k == action_key), action_key)
-            print(f"\n {C.CYAN}[IA]{C_RESET} → {label}")
+            print(f"\n {C.CYAN}[IA]{C.RESET} → {label}")
 
             ACTION_FNS[action_key](sim)
             sim.last_event = trigger_random_event(sim)
@@ -1550,17 +1550,17 @@ def ai_offer_legacy(sim):
     for sk in heir.skills.levels:
         heir.skills.levels[sk] = sim.skills.levels[sk] // 2
     heir.children = [c for c in sim.children if c.name != chosen.name]
-    slow_print(f"\n {C.YELLOW}[IA] La vie continue avec {chosen.name} — génération suivante !{C_RESET}", 0.03)
-    slow_print(f" {C.GRAY}Héritage : ${heir.money} | Compétences héritées à 50 %{C_RESET}", 0.02)
+    slow_print(f"\n {C.YELLOW}[IA] La vie continue avec {chosen.name} — génération suivante !{C.RESET}", 0.03)
+    slow_print(f" {C.GRAY}Héritage : ${heir.money} | Compétences héritées à 50 %{C.RESET}", 0.02)
     time.sleep(1)
     return heir
 
 # --- Résultats ---
 def show_results(sim, cause=""):
     _, final_stage = get_stage(sim.age)
-    print(f"\n {C.BOLD}── Résultats ──────────────────────────{C_RESET}")
+    print(f"\n {C.BOLD}── Résultats ──────────────────────────{C.RESET}")
     if cause:
-        print(f" {C.RED}{cause}{C_RESET}")
+        print(f" {C.RED}{cause}{C.RESET}")
     print(f" Nom : {sim.name}")
     print(f" Stade : {final_stage[2]} {final_stage[1]}")
     print(f" Jours : {sim.age}")
@@ -1585,14 +1585,14 @@ def offer_legacy(sim):
     if not adult_children:
         return None
 
-    print(f" {C.BOLD}{C.YELLOW}{'═' * 42}{C_RESET}")
+    print(f" {C.BOLD}{C.YELLOW}{'═' * 42}{C.RESET}")
     slow_print(f" {sim.name} laisse derrière lui/elle une famille.", 0.03)
     slow_print(f" Veux-tu continuer l'aventure avec un(e) de ses enfants ?", 0.03)
     print()
     for i, child in enumerate(adult_children, 1):
-        print(f" {C.CYAN}[{i}]{C_RESET} {child.name}")
-    print(f" {C.CYAN}[0]{C_RESET} Non, terminer la partie")
-    print(f" {C.BOLD}{C.YELLOW}{'═' * 42}{C_RESET}\n")
+        print(f" {C.CYAN}[{i}]{C.RESET} {child.name}")
+    print(f" {C.CYAN}[0]{C.RESET} Non, terminer la partie")
+    print(f" {C.BOLD}{C.YELLOW}{'═' * 42}{C.RESET}\n")
 
     try:
         choice = int(input(" Choix : ").strip())
@@ -1605,8 +1605,8 @@ def offer_legacy(sim):
             for sk in heir.skills.levels:
                 heir.skills.levels[sk] = sim.skills.levels[sk] // 2
             heir.children = [c for c in sim.children if c.name != chosen.name]
-            slow_print(f"\n {C.GREEN}Bienvenue {chosen.name} ! Tu prends le relais de {sim.name}.{C_RESET}", 0.03)
-            slow_print(f" {C.GRAY}Héritage : ${heir.money} | Compétences héritées à 50 %{C_RESET}", 0.02)
+            slow_print(f"\n {C.GREEN}Bienvenue {chosen.name} ! Tu prends le relais de {sim.name}.{C.RESET}", 0.03)
+            slow_print(f" {C.GRAY}Héritage : ${heir.money} | Compétences héritées à 50 %{C.RESET}", 0.02)
             time.sleep(1)
             return heir
     except (ValueError, EOFError, KeyboardInterrupt):
@@ -1625,26 +1625,26 @@ def game_loop(sim):
             death_prob = min(35, (sim.age - 43) * 3)
             if random.randint(1, 100) <= death_prob:
                 clear()
-                print(f"\n {C.GRAY}{'─' * 42}{C_RESET}")
+                print(f"\n {C.GRAY}{'─' * 42}{C.RESET}")
                 slow_print(f"\n 🕯 {sim.name} s'est endormi(e) paisiblement...", 0.03)
                 slow_print(f" Une belle vie de {sim.age} jours s'achève.", 0.03)
-                print(f" {C.GRAY}{'─' * 42}{C_RESET}\n")
+                print(f" {C.GRAY}{'─' * 42}{C.RESET}\n")
                 return "vieillesse"
 
         # Détecter un changement de stade de vie
         cur_stage_idx, cur_stage = get_stage(sim.age)
         if cur_stage_idx != prev_stage_idx:
             clear()
-            print(f"\n {C.BOLD}{C.YELLOW}{'═' * 40}{C_RESET}")
-            slow_print(f" {cur_stage[2]} Nouveau stade de vie : {C.BOLD}{cur_stage[1]}{C_RESET} !", 0.03)
-            slow_print(f" {C.GRAY}{cur_stage[6]}{C_RESET}", 0.03)
+            print(f"\n {C.BOLD}{C.YELLOW}{'═' * 40}{C.RESET}")
+            slow_print(f" {cur_stage[2]} Nouveau stade de vie : {C.BOLD}{cur_stage[1]}{C.RESET} !", 0.03)
+            slow_print(f" {C.GRAY}{cur_stage[6]}{C.RESET}", 0.03)
             if cur_stage[4]:
                 blocked = ", ".join(cur_stage[4])
-                slow_print(f" {C.RED}Interdit : {blocked}{C_RESET}", 0.02)
+                slow_print(f" {C.RED}Interdit : {blocked}{C.RESET}", 0.02)
             if cur_stage[5]:
                 auth = ", ".join(cur_stage[5])
-                slow_print(f" {C.YELLOW}Autorisation parentale requise : {auth}{C_RESET}", 0.02)
-            print(f" {C.BOLD}{C.YELLOW}{'═' * 40}{C_RESET}\n")
+                slow_print(f" {C.YELLOW}Autorisation parentale requise : {auth}{C.RESET}", 0.02)
+            print(f" {C.BOLD}{C.YELLOW}{'═' * 40}{C.RESET}\n")
             _cont()
             prev_stage_idx = cur_stage_idx
 
@@ -1654,25 +1654,25 @@ def game_loop(sim):
         crit = sim.critical_needs()
         if crit:
             labels = [Sim.NEED_LABELS[n][0] for n in crit]
-            print(f" {C.RED}{C.BOLD}⚠ ATTENTION : {', '.join(labels)} en état critique !{C_RESET}")
+            print(f" {C.RED}{C.BOLD}⚠ ATTENTION : {', '.join(labels)} en état critique !{C.RESET}")
         if sim.pet and sim.pet.is_neglected():
-            print(f" {C.RED}{C.BOLD}⚠ {sim.pet.name} a besoin de toi ! Faim:{sim.pet.hunger}% Humeur:{sim.pet.happiness}%{C_RESET}")
+            print(f" {C.RED}{C.BOLD}⚠ {sim.pet.name} a besoin de toi ! Faim:{sim.pet.hunger}% Humeur:{sim.pet.happiness}%{C.RESET}")
         if sim.health.hp <= 30:
-            print(f" {C.RED}{C.BOLD}⚠ Santé physique critique ({sim.health.hp}%) — consulte un médecin !{C_RESET}")
+            print(f" {C.RED}{C.BOLD}⚠ Santé physique critique ({sim.health.hp}%) — consulte un médecin !{C.RESET}")
         if sim.health.mental <= 25:
-            print(f" {C.RED}{C.BOLD}⚠ Santé mentale critique ({sim.health.mental}%) — vois un psy !{C_RESET}")
+            print(f" {C.RED}{C.BOLD}⚠ Santé mentale critique ({sim.health.mental}%) — vois un psy !{C.RESET}")
         if crit or sim.health.hp <= 30 or sim.health.mental <= 25 or (sim.pet and sim.pet.is_neglected()):
             print()
 
         # Mort par famine / épuisement
         if sim.needs["faim"] == 0 and sim.needs["energie"] == 0:
-            slow_print(f"\n {C.RED}💀 {sim.name} est épuisé(e) et mort(e) de faim après {sim.age} jour(s)...{C_RESET}")
-            slow_print(f" {C.GRAY}Prends soin de tes Sims la prochaine fois !{C_RESET}")
+            slow_print(f"\n {C.RED}💀 {sim.name} est épuisé(e) et mort(e) de faim après {sim.age} jour(s)...{C.RESET}")
+            slow_print(f" {C.GRAY}Prends soin de tes Sims la prochaine fois !{C.RESET}")
             return "famine"
         # Mort par mauvaise santé
         if sim.health.hp <= 0:
-            slow_print(f"\n {C.RED}💀 {sim.name} est décédé(e) des suites de problèmes de santé...{C_RESET}")
-            slow_print(f" {C.GRAY}Pense à consulter un médecin régulièrement !{C_RESET}")
+            slow_print(f"\n {C.RED}💀 {sim.name} est décédé(e) des suites de problèmes de santé...{C.RESET}")
+            slow_print(f" {C.GRAY}Pense à consulter un médecin régulièrement !{C.RESET}")
             return "santé"
 
         show_menu(ACTIONS)
@@ -1683,7 +1683,7 @@ def game_loop(sim):
             choice = "0"
 
         if choice == "0":
-            slow_print(f"\n {C.CYAN}Au revoir {sim.name} ! Merci d'avoir joué. 👋{C_RESET}")
+            slow_print(f"\n {C.CYAN}Au revoir {sim.name} ! Merci d'avoir joué. 👋{C.RESET}")
             return None
 
         try:
@@ -1692,7 +1692,7 @@ def game_loop(sim):
                 action_key = ACTIONS[idx][0]
                 _, stage = get_stage(sim.age)
                 if action_key in stage[4]:
-                    print(f"\n {C.RED}Cette action n'est pas disponible à ton stade de vie ({stage[1]}).{C_RESET}")
+                    print(f"\n {C.RED}Cette action n'est pas disponible à ton stade de vie ({stage[1]}).{C.RESET}")
                     time.sleep(1.5)
                 elif action_key in stage[5]:
                     if ask_parental_auth(sim, stage[1]):
@@ -1704,10 +1704,10 @@ def game_loop(sim):
                     ACTION_FNS[action_key](sim)
                     sim.last_event = trigger_random_event(sim)
             else:
-                print(f" {C.RED}Choix invalide.{C_RESET}")
+                print(f" {C.RED}Choix invalide.{C.RESET}")
                 time.sleep(1)
         except ValueError:
-            print(f" {C.RED}Choix invalide.{C_RESET}")
+            print(f" {C.RED}Choix invalide.{C.RESET}")
             time.sleep(1)
 
 # --- Chargement ---
@@ -1774,28 +1774,28 @@ def main():
     slow_print(" Bienvenue dans Les Sims en mode terminal !", 0.03)
     slow_print(" Prends soin de ton Sim et gère ses besoins.\n", 0.03)
 
-    print(f" {C.CYAN}[1]{C_RESET} Nouvelle partie")
+    print(f" {C.CYAN}[1]{C.RESET} Nouvelle partie")
     if os.path.exists(SAVE_FILE):
-        print(f" {C.CYAN}[2]{C_RESET} Charger la partie sauvegardée")
-    print(f" {C.CYAN}[3]{C_RESET} 🤖 Mode Autopilote — l'IA joue à ta place")
+        print(f" {C.CYAN}[2]{C.RESET} Charger la partie sauvegardée")
+    print(f" {C.CYAN}[3]{C.RESET} 🤖 Mode Autopilote — l'IA joue à ta place")
     try:
-        start = input(f"\n {C.BOLD}Choix : {C_RESET}").strip()
+        start = input(f"\n {C.BOLD}Choix : {C.RESET}").strip()
     except (EOFError, KeyboardInterrupt):
         start = "1"
 
     # ── Mode Autopilote ──────────────────────────────────────────────
     if start == "3":
         clear()
-        print(f"\n {C.BOLD}{C.YELLOW}🤖 MODE AUTOPILOTE{C_RESET}\n")
+        print(f"\n {C.BOLD}{C.YELLOW}🤖 MODE AUTOPILOTE{C.RESET}\n")
         slow_print(" L'IA va simuler une vie entière à ta place.", 0.03)
         slow_print(" Elle gèrera les besoins, la carrière, les relations et la lignée.\n", 0.03)
 
         print(f" Vitesse de simulation :")
-        print(f" {C.CYAN}[1]{C_RESET} Rapide (0.3 s/action)")
-        print(f" {C.CYAN}[2]{C_RESET} Normale (0.8 s/action)")
-        print(f" {C.CYAN}[3]{C_RESET} Lente (1.5 s/action)")
+        print(f" {C.CYAN}[1]{C.RESET} Rapide (0.3 s/action)")
+        print(f" {C.CYAN}[2]{C.RESET} Normale (0.8 s/action)")
+        print(f" {C.CYAN}[3]{C.RESET} Lente (1.5 s/action)")
         try:
-            spd_choice = input(f"\n {C.BOLD}Vitesse : {C_RESET}").strip()
+            spd_choice = input(f"\n {C.BOLD}Vitesse : {C.RESET}").strip()
         except (EOFError, KeyboardInterrupt):
             spd_choice = "2"
         speed_map = {"1": 0.3, "2": 0.8, "3": 1.5}
@@ -1805,7 +1805,7 @@ def main():
         auto_orient = random.choice(["Hétérosexuel(le)", "Homosexuel(le)", "Bisexuel(le)"])
         sim = Sim(auto_name)
         sim.orientation = auto_orient
-        slow_print(f"\n {C.GREEN}Simulation de la vie de {auto_name} ({auto_orient})...{C_RESET}\n", 0.03)
+        slow_print(f"\n {C.GREEN}Simulation de la vie de {auto_name} ({auto_orient})...{C.RESET}\n", 0.03)
         time.sleep(1)
 
         current = sim
@@ -1813,7 +1813,7 @@ def main():
         max_gen = 5
         while current is not None and generation <= max_gen:
             if generation > 1:
-                slow_print(f"\n {C.BOLD}{C.YELLOW}🤖 Génération {generation} — {current.name}{C_RESET}\n", 0.03)
+                slow_print(f"\n {C.BOLD}{C.YELLOW}🤖 Génération {generation} — {current.name}{C.RESET}\n", 0.03)
                 time.sleep(speed)
             cause = autopilot_loop(current, speed=speed)
             show_results(current, cause or "")
@@ -1821,13 +1821,13 @@ def main():
             current = ai_offer_legacy(current)
             generation += 1
 
-        slow_print(f"\n {C.GRAY}🤖 Simulation terminée après {generation - 1} génération(s). Merci !{C_RESET}\n")
+        slow_print(f"\n {C.GRAY}🤖 Simulation terminée après {generation - 1} génération(s). Merci !{C.RESET}\n")
         return
 
     # ── Charger une partie ────────────────────────────────────────────
     if start == "2" and os.path.exists(SAVE_FILE):
         sim = load_game()
-        slow_print(f"\n {C.GREEN}Partie chargée ! Bon retour {sim.name} ! 💾{C_RESET}\n", 0.03)
+        slow_print(f"\n {C.GREEN}Partie chargée ! Bon retour {sim.name} ! 💾{C.RESET}\n", 0.03)
         time.sleep(1)
         current = sim
         generation = 1
@@ -1836,20 +1836,20 @@ def main():
             show_results(current, cause or "")
             current = offer_legacy(current)
             generation += 1
-        slow_print(f" {C.GRAY}Fin de la lignée. Merci d'avoir joué !{C_RESET}\n")
+        slow_print(f" {C.GRAY}Fin de la lignée. Merci d'avoir joué !{C.RESET}\n")
         return
 
     # ── Nouvelle partie ───────────────────────────────────────────────
-    name = input(f"\n {C.BOLD}Quel est le prénom de ton Sim ? {C_RESET}").strip()
+    name = input(f"\n {C.BOLD}Quel est le prénom de ton Sim ? {C.RESET}").strip()
     if not name:
         name = "Alex"
 
     sim = Sim(name)
 
     orientations = ["Hétérosexuel(le)", "Homosexuel(le)", "Bisexuel(le)", "Je préfère ne pas préciser"]
-    print(f"\n {C.BOLD}Quelle est l'orientation sexuelle de {name} ?{C_RESET}")
+    print(f"\n {C.BOLD}Quelle est l'orientation sexuelle de {name} ?{C.RESET}")
     for i, o in enumerate(orientations, 1):
-        print(f" {C.CYAN}[{i}]{C_RESET} {o}")
+        print(f" {C.CYAN}[{i}]{C.RESET} {o}")
     try:
         o_choice = int(input("\n Choix : ").strip())
         if 1 <= o_choice <= len(orientations):
@@ -1857,21 +1857,21 @@ def main():
     except ValueError:
         pass
 
-    slow_print(f"\n {C.GREEN}Bienvenue {sim.name} ! Ta vie commence maintenant...{C_RESET}\n", 0.03)
+    slow_print(f"\n {C.GREEN}Bienvenue {sim.name} ! Ta vie commence maintenant...{C.RESET}\n", 0.03)
     time.sleep(1)
 
     current = sim
     generation = 1
     while current is not None:
         if generation > 1:
-            slow_print(f"\n {C.BOLD}{C.YELLOW}Génération {generation} — {current.name}{C_RESET}\n", 0.03)
+            slow_print(f"\n {C.BOLD}{C.YELLOW}Génération {generation} — {current.name}{C.RESET}\n", 0.03)
             time.sleep(1)
         cause = game_loop(current)
         show_results(current, cause or "")
         current = offer_legacy(current)
         generation += 1
 
-    slow_print(f" {C.GRAY}Fin de la lignée. Merci d'avoir joué !{C_RESET}\n")
+    slow_print(f" {C.GRAY}Fin de la lignée. Merci d'avoir joué !{C.RESET}\n")
 
 if __name__ == "__main__":
     main()
