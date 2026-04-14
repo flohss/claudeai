@@ -132,6 +132,7 @@ class Sim:
         self.relationship = Relationship()
         self.skills   = Skills()
         self.children = []
+        self.health   = Health()
 
     # ---- Humeur globale ----
     @property
@@ -158,15 +159,29 @@ class Sim:
             "social":  -3  * hours,
             "vessie":  -7  * hours,
         }
-        # Appliquer les modificateurs du stade de vie
+        # Modificateurs du stade de vie
         _, stage = get_stage(self.age)
         for need, mod in stage[3].items():
+            if need in decay:
+                decay[need] += mod * hours
+        # Modificateurs des maladies actives
+        for need, mod in self.health.decay_mods().items():
             if need in decay:
                 decay[need] += mod * hours
         for need, delta in decay.items():
             self.needs[need] = max(0, min(100, self.needs[need] + delta))
         if self.pet:
             self.pet.tick(hours)
+        # Santé physique : se dégrade lentement si hygiène ou énergie basses
+        if self.needs["hygiene"] < 20 or self.needs["energie"] < 15:
+            self.health.hp = max(0, self.health.hp - hours)
+        # Santé mentale : suit le fun et le social
+        mental_delta = 0
+        if self.needs["fun"] < 25:    mental_delta -= 2 * hours
+        if self.needs["social"] < 25: mental_delta -= 2 * hours
+        if self.needs["fun"] > 70:    mental_delta += 1 * hours
+        if self.needs["social"] > 70: mental_delta += 1 * hours
+        self.health.mental = max(0, min(100, self.health.mental + mental_delta))
 
     def modify(self, **kwargs):
         for need, delta in kwargs.items():
@@ -342,6 +357,59 @@ class Child:
         return "Adulte 💪"
 
 
+# --- Santé ---
+# (label, emoji, effets_horaires, durée_jours, coût_soin)
+DISEASES = {
+    "rhume":    ("Rhume",    "🤧", {"energie": -1, "hygiene": -1},            3,  50),
+    "grippe":   ("Grippe",   "🤒", {"energie": -3, "hygiene": -2, "fun": -2}, 5,  80),
+    "burnout":  ("Burn-out", "😵", {"energie": -4, "fun": -3, "social": -2},  7, 120),
+    "fracture": ("Fracture", "🦴", {"energie": -2, "fun": -2},                6, 150),
+}
+
+class Health:
+    def __init__(self):
+        self.hp       = 100   # santé physique 0-100
+        self.mental   = 80    # santé mentale  0-100
+        self.diseases = {}    # {disease_id: remaining_days}
+
+    def get_sick(self, disease_id):
+        if disease_id not in self.diseases:
+            _, _, _, duration, _ = DISEASES[disease_id]
+            self.diseases[disease_id] = duration
+
+    def tick_day(self):
+        """Fait diminuer les jours de maladie et retire les guérisons."""
+        recovered = [k for k, v in self.diseases.items() if v <= 1]
+        for k in recovered:
+            del self.diseases[k]
+        for k in self.diseases:
+            self.diseases[k] -= 1
+
+    def cure_all(self):
+        self.diseases.clear()
+
+    def decay_mods(self):
+        """Retourne les modificateurs de besoins cumulés de toutes les maladies actives."""
+        mods = {}
+        for did in self.diseases:
+            for need, delta in DISEASES[did][2].items():
+                mods[need] = mods.get(need, 0) + delta
+        return mods
+
+    def is_sick(self):
+        return bool(self.diseases)
+
+    def hp_color(self):
+        if self.hp > 60: return C.GREEN
+        if self.hp > 30: return C.YELLOW
+        return C.RED
+
+    def mental_color(self):
+        if self.mental > 60: return C.GREEN
+        if self.mental > 30: return C.YELLOW
+        return C.RED
+
+
 # --- Sauvegarde ---
 SAVE_FILE = "savegame.json"
 
@@ -426,6 +494,12 @@ def trigger_random_event(sim):
 
             sim.modify(**effects)
             sim.money = max(0, sim.money + actual_money)
+            # Déclencher une vraie maladie si l'événement le justifie
+            if emoji == "🤒":
+                sim.health.get_sick("grippe")
+                sim.health.hp = max(0, sim.health.hp - 15)
+            elif emoji == "🤧":
+                sim.health.get_sick("rhume")
 
             lines = [f"\n  {C.BOLD}━━ ÉVÉNEMENT ALÉATOIRE ━━{C.RESET}",
                      f"  {emoji}  {desc}"]
@@ -498,6 +572,16 @@ def show_status(sim):
         print(sim.last_event)
         print()
 
+    # Santé
+    h = sim.health
+    hp_bar  = bar(h.hp,     length=12)
+    men_bar = bar(h.mental, length=12)
+    print(f"  {C.BOLD}Santé    :{C.RESET} {h.hp_color()}Physique{C.RESET} {hp_bar}  "
+          f"{h.mental_color()}Mentale{C.RESET} {men_bar}")
+    if h.is_sick():
+        sick_str = "  ".join(f"{DISEASES[d][1]} {DISEASES[d][0]} ({v}j)" for d, v in h.diseases.items())
+        print(f"  {C.RED}{C.BOLD}  Maladies actives : {sick_str}{C.RESET}")
+
     # Enfants
     if sim.children:
         kids_str = "  ".join(f"{c.name} ({c.age_label})" for c in sim.children)
@@ -561,6 +645,9 @@ ACTIONS = [
     ("avoir_enfant",   "Avoir un enfant",           None),
     ("famille",        "Temps en famille",          None),
     ("sauvegarder",    "Sauvegarder la partie",     None),
+    ("medecin",        "Consulter un médecin",      None),
+    ("medicament",     "Prendre des médicaments",   None),
+    ("psy",            "Voir un psy",               None),
 ]
 
 
@@ -586,6 +673,7 @@ def action_dormir(sim):
     sim.age += 1
     sim.weather.new_day()
     slow_print(f"  {C.CYAN}Nouveau jour ! Météo : {sim.weather.emoji}  {sim.weather.name}{C.RESET}", 0.02)
+    sim.health.tick_day()
     for child in sim.children:
         child.tick_day()
     input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
@@ -675,7 +763,11 @@ def action_travailler(sim):
     slow_print(f"  {C.CYAN}Demain : {sim.weather.emoji}  {sim.weather.name}{C.RESET}", 0.02)
     lvl = sim.skills.gain('travail', 10)
     if lvl: slow_print(f"  {C.GREEN}Compétence Travail → Niv. {lvl} ! 💼{C.RESET}", 0.02)
-    # Faire grandir les enfants
+    # Burn-out si énergie ET fun très bas
+    if sim.needs["energie"] < 15 and sim.needs["fun"] < 15:
+        sim.health.get_sick("burnout")
+        slow_print(f"  {C.RED}Tu fais un burn-out... 😵 Repose-toi !{C.RESET}", 0.02)
+    sim.health.tick_day()
     for child in sim.children:
         child.tick_day()
     input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
@@ -713,6 +805,12 @@ def action_sport(sim):
     sim.tick(1)
     lvl = sim.skills.gain('sport', 10)
     if lvl: slow_print(f"  {C.GREEN}Compétence Sport → Niv. {lvl} ! 🏃{C.RESET}", 0.02)
+    # Risque de fracture si Senior ou trop fatigué
+    _, stage = get_stage(sim.age)
+    fracture_risk = 20 if stage[1] == "Senior" else (10 if sim.needs["energie"] < 20 else 0)
+    if fracture_risk and random.randint(1, 100) <= fracture_risk:
+        sim.health.get_sick("fracture")
+        slow_print(f"  {C.RED}Aïe ! Tu t'es blessé(e)... 🦴 Fracture !{C.RESET}", 0.02)
     input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
 
 def action_mediter(sim):
@@ -808,6 +906,51 @@ def action_jouer_pet(sim):
     slow_print(f"  {C.GREEN}{sim.pet.name} est ravi(e) ! (Humeur : {sim.pet.happiness}%){C.RESET}", 0.02)
     input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
 
+def action_medecin(sim):
+    cost = 80
+    if sim.money < cost:
+        print(f"\n  {C.RED}Pas assez d'argent pour le médecin (${cost}).{C.RESET}")
+        input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+        return
+    slow_print(f"\n  {C.CYAN}Tu consultes un médecin... 👨‍⚕️{C.RESET}", 0.02)
+    sim.money -= cost
+    sim.health.hp     = min(100, sim.health.hp + 30)
+    sim.health.cure_all()
+    sim.modify(energie=+10)
+    slow_print(f"  {C.GREEN}Toutes tes maladies sont soignées ! Santé +30. (-${cost}){C.RESET}", 0.02)
+    sim.tick(1)
+    input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+
+def action_medicament(sim):
+    cost = 20
+    if sim.money < cost:
+        print(f"\n  {C.RED}Pas assez d'argent pour les médicaments (${cost}).{C.RESET}")
+        input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+        return
+    slow_print(f"\n  {C.YELLOW}Tu prends des médicaments... 💊{C.RESET}", 0.02)
+    sim.money -= cost
+    sim.health.hp = min(100, sim.health.hp + 10)
+    # Réduit la durée des maladies de 1 jour
+    for d in sim.health.diseases:
+        sim.health.diseases[d] = max(1, sim.health.diseases[d] - 1)
+    slow_print(f"  {C.GREEN}Santé +10, maladies accélérées. (-${cost}){C.RESET}", 0.02)
+    input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+
+def action_psy(sim):
+    cost = 60
+    if sim.money < cost:
+        print(f"\n  {C.RED}Pas assez d'argent pour la séance (${cost}).{C.RESET}")
+        input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+        return
+    slow_print(f"\n  {C.MAGENTA}Tu parles avec ton psy... 🛋{C.RESET}", 0.02)
+    sim.money -= cost
+    sim.health.mental = min(100, sim.health.mental + 35)
+    sim.modify(fun=+15, social=+10)
+    slow_print(f"  {C.GREEN}Santé mentale +35. Tu te sens mieux. (-${cost}){C.RESET}", 0.02)
+    sim.tick(1)
+    input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+
+
 CHILD_NAMES = ["Emma", "Léo", "Jade", "Noah", "Inès", "Lucas", "Chloé", "Tom", "Manon", "Hugo"]
 
 def action_avoir_enfant(sim):
@@ -854,6 +997,7 @@ def action_sauvegarder(sim):
         "weather_idx": WEATHER_TYPES.index(sim.weather._data),
         "skills": {"levels": sim.skills.levels, "xp": sim.skills.xp},
         "children": [{"name": c.name, "days": c.days} for c in sim.children],
+        "health": {"hp": sim.health.hp, "mental": sim.health.mental, "diseases": sim.health.diseases},
     }
     with open(SAVE_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
@@ -1005,6 +1149,9 @@ ACTION_FNS = {
     "avoir_enfant":  action_avoir_enfant,
     "famille":       action_famille,
     "sauvegarder":   action_sauvegarder,
+    "medecin":       action_medecin,
+    "medicament":    action_medicament,
+    "psy":           action_psy,
 }
 
 
@@ -1112,7 +1259,11 @@ def game_loop(sim):
             print(f"  {C.RED}{C.BOLD}⚠  ATTENTION : {', '.join(labels)} en état critique !{C.RESET}")
         if sim.pet and sim.pet.is_neglected():
             print(f"  {C.RED}{C.BOLD}⚠  {sim.pet.name} a besoin de toi ! Faim:{sim.pet.hunger}% Humeur:{sim.pet.happiness}%{C.RESET}")
-        if crit or (sim.pet and sim.pet.is_neglected()):
+        if sim.health.hp <= 30:
+            print(f"  {C.RED}{C.BOLD}⚠  Santé physique critique ({sim.health.hp}%) — consulte un médecin !{C.RESET}")
+        if sim.health.mental <= 25:
+            print(f"  {C.RED}{C.BOLD}⚠  Santé mentale critique ({sim.health.mental}%) — vois un psy !{C.RESET}")
+        if crit or sim.health.hp <= 30 or sim.health.mental <= 25 or (sim.pet and sim.pet.is_neglected()):
             print()
 
         # Mort par famine / épuisement
@@ -1120,6 +1271,11 @@ def game_loop(sim):
             slow_print(f"\n  {C.RED}💀 {sim.name} est épuisé(e) et mort(e) de faim après {sim.age} jour(s)...{C.RESET}")
             slow_print(f"  {C.GRAY}Prends soin de tes Sims la prochaine fois !{C.RESET}")
             return "famine"
+        # Mort par mauvaise santé
+        if sim.health.hp <= 0:
+            slow_print(f"\n  {C.RED}💀 {sim.name} est décédé(e) des suites de problèmes de santé...{C.RESET}")
+            slow_print(f"  {C.GRAY}Pense à consulter un médecin régulièrement !{C.RESET}")
+            return "santé"
 
         show_menu(ACTIONS)
 
@@ -1193,6 +1349,11 @@ def load_game():
         c = Child(cd["name"])
         c.days = cd["days"]
         sim.children.append(c)
+
+    hd = d.get("health", {})
+    sim.health.hp       = hd.get("hp", 100)
+    sim.health.mental   = hd.get("mental", 80)
+    sim.health.diseases = hd.get("diseases", {})
 
     return sim
 
