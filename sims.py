@@ -1443,46 +1443,85 @@ _AUTO_NAMES = ["Camille", "Alex", "Jordan", "Morgan", "Sam", "Robin",
 def ai_choose_action(sim):
     """Retourne la clé d'action que l'IA choisit selon les priorités du Sim."""
     _, stage = get_stage(sim.age)
-    blocked = set(stage[4])   # actions complètement bloquées
+    blocked = set(stage[4])  # actions complètement bloquées
     n = sim.needs
 
     # — Priorité 1 : besoins critiques —
-    if n["vessie"]  < 20:                          return "toilettes"
-    if n["faim"]    < 25 and "manger" not in blocked:
+    if n["vessie"] < 20: 
+        return "toilettes"
+    if n["faim"] < 25 and "manger" not in blocked:
         return "snack" if sim.money < 20 else "manger"
-    if n["energie"] < 20:                          return "dormir"
-    if n["hygiene"] < 25:                          return "douche"
+    # CORRECTION: Seuil augmenté à 30% (était 20%) pour dormir avant le crash
+    if n["energie"] < 30: 
+        return "dormir"
+    if n["hygiene"] < 25: 
+        return "douche"
 
     # — Priorité 2 : santé —
     h = sim.health
-    if h.hp < 30 and sim.money >= 80:             return "medecin"
-    if h.mental < 25 and sim.money >= 60:          return "psy"
-    if h.is_sick() and sim.money >= 20:            return "medicament"
+    if h.hp < 30 and sim.money >= 80: 
+        return "medecin"
+    if h.mental < 25 and sim.money >= 60: 
+        return "psy"
+    if h.is_sick() and sim.money >= 20: 
+        return "medicament"
 
     # — Priorité 3 : animal —
-    if sim.pet and sim.pet.hunger < 30:            return "nourrir"
-    if sim.pet and sim.pet.happiness < 30:         return "jouer_pet"
+    if sim.pet and sim.pet.hunger < 30: 
+        return "nourrir"
+    if sim.pet and sim.pet.happiness < 30: 
+        return "jouer_pet"
 
-    # — Priorité 4 : carrière / études —
+    # — Priorité 4 : PRÉVENTION DU BURN-OUT —
+    # Si énergie faible mais pas critique, sieste rapide
+    if 30 <= n["energie"] < 50 and "sieste" not in blocked:
+        return "sieste"
+    
+    # Si fun très bas, récupération obligatoire avant toute activité stressante
+    if n["fun"] < 35:
+        if "mediter" not in blocked:
+            return "mediter"
+        if "tv" not in blocked:
+            return "tv"
+        if "jeux" not in blocked:
+            return "jeux"
+
+    # — Priorité 5 : carrière / études (avec vérification sécurité) —
     if "travailler" not in blocked:
         edu = sim.education
-        # S'inscrire si pas inscrit, pas de diplôme, argent suffisant (30 % de chance)
-        if (not edu.is_enrolled() and not edu.has_diploma()
+        
+        # CORRECTION: Calcul prédictif pour éviter le burn-out
+        # Le travail coûte ~54 énergie (-30 fixe -24 decay) et ~47 fun (-15 fixe -32 decay)
+        energie_apres_travail = n["energie"] - 54
+        fun_apres_travail = n["fun"] - 47
+        
+        # On ne travaille QUE si on reste au-dessus des seuils critiques (20% marge de sécurité)
+        peut_travailler = (energie_apres_travail > 20 and fun_apres_travail > 20)
+        
+        if peut_travailler:
+            # S'inscrire si pas inscrit, pas de diplôme, argent suffisant (30 % de chance)
+            if (not edu.is_enrolled() and not edu.has_diploma()
                 and sim.money > 600 and random.random() < 0.30):
-            return "inscrire"
-        # Étudier si inscrit et argent OK
-        if edu.is_enrolled():
-            cost = STUDY_DOMAINS[edu.enrolled_domain][3]
-            if sim.money >= cost:
-                return "etudier"
-        # Postuler si pas de job et emplois disponibles
-        if not sim.job and jobs_available(edu):
-            return "postuler"
-        # Travailler si a un job
-        if sim.job:
-            return "travailler"
+                return "inscrire"
+            # Étudier si inscrit et argent OK (moins fatigant que travailler)
+            if edu.is_enrolled():
+                cost = STUDY_DOMAINS[edu.enrolled_domain][3]
+                if sim.money >= cost:
+                    return "etudier"
+            # Postuler si pas de job
+            if not sim.job and jobs_available(edu):
+                return "postuler"
+            # Travailler seulement si c'est sûr
+            if sim.job:
+                return "travailler"
+        else:
+            # Trop risqué de travailler: on récupère selon le besoin le plus critique
+            if n["energie"] < 60:
+                return "sieste" if n["energie"] > 25 else "dormir"
+            if n["fun"] < 50:
+                return "mediter" if "mediter" not in blocked else "tv"
 
-    # — Priorité 5 : vie amoureuse —
+    # — Priorité 6 : vie amoureuse —
     if "flirter" not in blocked:
         rel = sim.relationship
         if rel.is_single() and random.random() < 0.25:
@@ -1496,40 +1535,29 @@ def ai_choose_action(sim):
         if rel.level == 5 and sim.money >= 200 and random.random() < 0.50:
             return "marier"
 
-    # — Priorité 6 : famille —
+    # — Priorité 7 : famille —
     if ("avoir_enfant" not in blocked
-            and sim.relationship.level == 6
-            and len(sim.children) < 3
-            and random.random() < 0.15):
+        and sim.relationship.level == 6
+        and len(sim.children) < 3
+        and random.random() < 0.15):
         return "avoir_enfant"
     if sim.children and random.random() < 0.20:
         return "famille"
 
-    # — Priorité 7 : loisirs selon besoins —
+    # — Priorité 8 : loisirs selon besoins (équilibrage quotidien) —
     pool = []
-    if n["energie"] > 40:
+    if n["energie"] > 50:  # CORRECTION: Seuil augmenté pour garder réserve d'énergie
         pool += ["sport", "jardiner"]
-    if n["fun"] < 50:
+    if n["fun"] < 60:  # CORRECTION: Maintenir fun à 60+ pour marge de sécurité
         pool += ["jeux", "tv", "lire", "mediter"]
     if n["social"] < 50:
         pool += ["appel"]
-        if sim.money >= 30:
-            pool += ["sortir"]
+    if sim.money >= 30 and n["fun"] < 70:  # Sortir seulement si besoin de fun
+        pool += ["sortir"]
     if not pool:
-        pool = ["tv", "lire", "mediter", "passer"]
+        pool = ["mediter", "passer", "lire"]  # Activités douces par défaut
     pool = [a for a in pool if a not in blocked]
     return random.choice(pool) if pool else "passer"
-
-
-def ai_auto_postuler(sim):
-    """Choisit automatiquement le meilleur job disponible."""
-    available = jobs_available(sim.education)
-    if not available:
-        return
-    best = max(available, key=lambda x: x[1])
-    sim.job = best[0]
-    sim.job_days = 0
-    slow_print(f"  {C.GREEN}[IA] Embauché(e) comme {sim.job} (${best[1]}/j) 💼{C.RESET}", 0.02)
 
 
 def ai_auto_inscrire(sim):
