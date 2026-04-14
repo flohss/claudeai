@@ -684,50 +684,64 @@ def show_status(sim):
 
 
 def show_menu(actions):
-    print(f"  {C.BOLD}── Actions disponibles ────────────────{C.RESET}")
-    for i, (key, label, _) in enumerate(actions, 1):
-        print(f"  {C.CYAN}[{i}]{C.RESET} {label}")
-    print(f"  {C.CYAN}[0]{C.RESET} Quitter\n")
+    current_cat = None
+    for i, entry in enumerate(actions, 1):
+        key, label, _, cat = entry
+        if cat != current_cat:
+            current_cat = cat
+            print(f"\n  {C.BOLD}{C.YELLOW}{cat}{C.RESET}")
+        print(f"  {C.CYAN}[{i:2d}]{C.RESET} {label}")
+    print(f"\n  {C.CYAN}[ 0]{C.RESET} Quitter\n")
 
 
 # --- Actions ---
 ACTIONS = [
-    # (id, label, fonction)
-    ("manger",    "Manger (cuisiner)",        None),
-    ("snack",     "Grignoter (rapide)",       None),
-    ("dormir",    "Dormir (8h)",              None),
-    ("sieste",    "Faire une sieste (2h)",    None),
-    ("douche",    "Prendre une douche",       None),
-    ("toilettes", "Aller aux toilettes",      None),
-    ("tv",        "Regarder la TV",           None),
-    ("lire",      "Lire un livre",            None),
-    ("sortir",    "Sortir avec des amis",     None),
-    ("appel",     "Appeler quelqu'un",        None),
-    ("travailler","Aller travailler",         None),
-    ("postuler",  "Chercher un emploi",       None),
-    ("passer",    "Passer le temps (1h)",     None),
-    ("sport",     "Faire du sport (1h)",      None),
-    ("mediter",   "Méditer (30 min)",         None),
-    ("jardiner",  "Jardiner (2h)",            None),
-    ("jeux",      "Jouer aux jeux vidéo (2h)",None),
-    ("gastronomie","Cuisiner un plat spécial",None),
-    ("adopter",   "Adopter un animal",        None),
-    ("nourrir",   "Nourrir l'animal",         None),
-    ("jouer_pet", "Jouer avec l'animal",      None),
-    ("flirter",   "Flirter / Faire des rencontres", None),
-    ("rendezvous","Rendez-vous romantique",   None),
-    ("intimite",  "Moment d'intimité",        None),
-    ("proposer",  "Demander en mariage",      None),
-    ("marier",    "Se marier",                None),
-    ("rupture",        "Rompre",                    None),
-    ("avoir_enfant",   "Avoir un enfant",           None),
-    ("famille",        "Temps en famille",          None),
-    ("sauvegarder",    "Sauvegarder la partie",              None),
-    ("medecin",        "Consulter un médecin",              None),
-    ("medicament",     "Prendre des médicaments",           None),
-    ("psy",            "Voir un psy",                       None),
-    ("inscrire",       "S'inscrire à l'université",         None),
-    ("etudier",        "Étudier (session universitaire)",   None),
+    # (id, label, fonction, categorie)
+    # ── 🍔 Besoins ──────────────────────────────────────
+    ("manger",       "Manger (cuisiner)",          None, "🍔 Besoins"),
+    ("snack",        "Grignoter (rapide)",         None, "🍔 Besoins"),
+    ("dormir",       "Dormir (8h)",                None, "🍔 Besoins"),
+    ("sieste",       "Faire une sieste (2h)",      None, "🍔 Besoins"),
+    ("douche",       "Prendre une douche",         None, "🍔 Besoins"),
+    ("toilettes",    "Aller aux toilettes",        None, "🍔 Besoins"),
+    # ── 🎮 Loisirs ──────────────────────────────────────
+    ("tv",           "Regarder la TV",             None, "🎮 Loisirs"),
+    ("lire",         "Lire un livre",              None, "🎮 Loisirs"),
+    ("sport",        "Faire du sport (1h)",        None, "🎮 Loisirs"),
+    ("mediter",      "Méditer (30 min)",           None, "🎮 Loisirs"),
+    ("jardiner",     "Jardiner (2h)",              None, "🎮 Loisirs"),
+    ("jeux",         "Jouer aux jeux vidéo (2h)",  None, "🎮 Loisirs"),
+    ("gastronomie",  "Cuisiner un plat spécial",   None, "🎮 Loisirs"),
+    ("passer",       "Passer le temps (1h)",       None, "🎮 Loisirs"),
+    # ── 💬 Social ───────────────────────────────────────
+    ("sortir",       "Sortir avec des amis",       None, "💬 Social"),
+    ("appel",        "Appeler quelqu'un",          None, "💬 Social"),
+    # ── 💼 Travail & Carrière ────────────────────────────
+    ("travailler",   "Aller travailler",           None, "💼 Travail & Carrière"),
+    ("postuler",     "Chercher un emploi",         None, "💼 Travail & Carrière"),
+    # ── 🎓 Études ───────────────────────────────────────
+    ("inscrire",     "S'inscrire à l'université",  None, "🎓 Études"),
+    ("etudier",      "Étudier (session univ.)",    None, "🎓 Études"),
+    # ── 🏥 Santé ────────────────────────────────────────
+    ("medecin",      "Consulter un médecin",       None, "🏥 Santé"),
+    ("medicament",   "Prendre des médicaments",    None, "🏥 Santé"),
+    ("psy",          "Voir un psy",                None, "🏥 Santé"),
+    # ── 🐾 Animal ───────────────────────────────────────
+    ("adopter",      "Adopter un animal",          None, "🐾 Animal"),
+    ("nourrir",      "Nourrir l'animal",           None, "🐾 Animal"),
+    ("jouer_pet",    "Jouer avec l'animal",        None, "🐾 Animal"),
+    # ── 💕 Vie amoureuse ────────────────────────────────
+    ("flirter",      "Flirter / Faire des rencontres", None, "💕 Vie amoureuse"),
+    ("rendezvous",   "Rendez-vous romantique",     None, "💕 Vie amoureuse"),
+    ("intimite",     "Moment d'intimité",          None, "💕 Vie amoureuse"),
+    ("proposer",     "Demander en mariage",        None, "💕 Vie amoureuse"),
+    ("marier",       "Se marier",                  None, "💕 Vie amoureuse"),
+    ("rupture",      "Rompre",                     None, "💕 Vie amoureuse"),
+    # ── 👨‍👩‍👧 Famille ─────────────────────────────────────
+    ("avoir_enfant", "Avoir un enfant",            None, "👨‍👩‍👧 Famille"),
+    ("famille",      "Temps en famille",           None, "👨‍👩‍👧 Famille"),
+    # ── 💾 Système ──────────────────────────────────────
+    ("sauvegarder",  "Sauvegarder la partie",      None, "💾 Système"),
 ]
 
 
