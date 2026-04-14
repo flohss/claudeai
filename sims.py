@@ -1332,20 +1332,18 @@ def ai_choose_action(sim):
     if n["hygiene"] < 25: 
         return "douche"
 
-    # — Priorité 2 : santé —
+    # — Priorité 2 : santé (préventive et curative) —
     h = sim.health
-    if h.hp < 30 and sim.money >= 80: 
-        return "medecin"
-    if h.mental < 25 and sim.money >= 60: 
-        return "psy"
-    if h.is_sick() and sim.money >= 20: 
-        return "medicament"
+    if h.hp < 30 and sim.money >= 80:                                 return "medecin"
+    if h.hp < 55 and sim.money >= 20:                                 return "medicament"
+    if h.mental < 50 and sim.money >= 60 and random.random() < 0.35: return "psy"
+    if h.is_sick() and sim.money >= 20:                               return "medicament"
 
     # — Priorité 3 : animal —
-    if sim.pet and sim.pet.hunger < 30: 
-        return "nourrir"
-    if sim.pet and sim.pet.happiness < 30: 
-        return "jouer_pet"
+    if sim.pet and sim.pet.hunger    < 30:                            return "nourrir"
+    if sim.pet and sim.pet.happiness < 30:                            return "jouer_pet"
+    if (not sim.pet and "adopter" not in blocked
+            and sim.money > 200 and random.random() < 0.05):          return "adopter"
 
     # — Priorité 4 : PRÉVENTION DU BURN-OUT —
     # Si énergie faible mais pas critique, sieste rapide
@@ -1374,15 +1372,28 @@ def ai_choose_action(sim):
         peut_travailler = (energie_apres_travail > 20 and fun_apres_travail > 20)
         
         if peut_travailler:
-            # S'inscrire si pas inscrit, pas de diplôme, argent suffisant (30 % de chance)
+            # Réévaluer le job si un meilleur poste est accessible (10 % / tour)
+            if sim.job and random.random() < 0.10:
+                best = max(jobs_available(edu), key=lambda x: x[1], default=None)
+                if best:
+                    cur_sal = next((s for lb, s, *_ in JOBS if lb == sim.job), 0)
+                    if best[1] > cur_sal:
+                        return "postuler"
+            # S'inscrire (premier diplôme)
             if (not edu.is_enrolled() and not edu.has_diploma()
-                and sim.money > 600 and random.random() < 0.30):
+                    and sim.money > 600 and random.random() < 0.30):
                 return "inscrire"
-            # Étudier si inscrit et argent OK (moins fatigant que travailler)
+            # Second diplôme si argent > 800
+            if (not edu.is_enrolled() and edu.has_diploma()
+                    and sim.money > 800 and random.random() < 0.15):
+                return "inscrire"
+            # Étudier — travailler d'abord si argent insuffisant pour la session
             if edu.is_enrolled():
                 cost = STUDY_DOMAINS[edu.enrolled_domain][3]
                 if sim.money >= cost:
                     return "etudier"
+                elif sim.job:
+                    return "travailler"
             # Postuler si pas de job
             if not sim.job and jobs_available(edu):
                 return "postuler"
@@ -1405,6 +1416,8 @@ def ai_choose_action(sim):
             if sim.money >= 35 and random.random() < 0.40:
                 return "rendezvous"
             return "flirter"
+        if rel.is_couple() and rel.affection < 90 and random.random() < 0.30:
+            return "intimite"
         if rel.level == 4 and rel.affection >= 75 and random.random() < 0.50:
             return "proposer"
         if rel.level == 5 and sim.money >= 200 and random.random() < 0.50:
@@ -1423,8 +1436,10 @@ def ai_choose_action(sim):
     pool = []
     if n["energie"] > 50:  # CORRECTION: Seuil augmenté pour garder réserve d'énergie
         pool += ["sport", "jardiner"]
-    if n["fun"] < 60:  # CORRECTION: Maintenir fun à 60+ pour marge de sécurité
+    if n["fun"] < 60:
         pool += ["jeux", "tv", "lire", "mediter"]
+        if sim.money >= 20 and sim.skills.levels.get("cuisine", 0) > 0:
+            pool += ["gastronomie"]
     if n["social"] < 50:
         pool += ["appel"]
     if sim.money >= 30 and n["fun"] < 70:  # Sortir seulement si besoin de fun
@@ -1434,15 +1449,29 @@ def ai_choose_action(sim):
     pool = [a for a in pool if a not in blocked]
     return random.choice(pool) if pool else "passer"
 
+_AUTO_PET_NAMES = ["Fido", "Minou", "Noisette", "Caramel", "Bulle", "Pixel", "Grizou", "Luna"]
+
 def ai_auto_postuler(sim):
-    """Choisit automatiquement le meilleur job disponible."""
+    """Choisit automatiquement le meilleur job disponible (ou change si mieux payé)."""
     available = jobs_available(sim.education)
     if not available:
         return
     best = max(available, key=lambda x: x[1])
+    if sim.job == best[0]:
+        return
     sim.job = best[0]
     sim.job_days = 0
-    slow_print(f" {C.GREEN}[IA] Embauché(e) comme {sim.job} (${best[1]}/j) 💼{C.RESET}", 0.02)
+    slow_print(f"  {C.GREEN}[IA] Embauché(e) comme {sim.job} (${best[1]}/j) 💼{C.RESET}", 0.02)
+
+
+def ai_auto_adopter(sim):
+    """Adopte automatiquement un animal aléatoire."""
+    if sim.pet:
+        return
+    species  = random.choice(list(PET_SPECIES.keys()))
+    pet_name = random.choice(_AUTO_PET_NAMES)
+    sim.pet  = Pet(pet_name, species)
+    slow_print(f"  {C.GREEN}[IA] {sim.pet.emoji} {pet_name} le {species} rejoint la famille !{C.RESET}", 0.02)
 
 def ai_auto_inscrire(sim):
     """Choisit automatiquement le domaine d'études le plus rentable accessible."""
@@ -1514,7 +1543,7 @@ def autopilot_loop(sim, speed=0.8):
             if action_key in stage[4]:
                 action_key = "dormir"
 
-            # Remplacer postuler / inscrire par leurs variantes IA
+            # Remplacer les actions interactives par leurs variantes IA
             if action_key == "postuler":
                 ai_auto_postuler(sim)
                 sim.last_event = trigger_random_event(sim)
@@ -1522,6 +1551,11 @@ def autopilot_loop(sim, speed=0.8):
                 continue
             if action_key == "inscrire":
                 ai_auto_inscrire(sim)
+                sim.last_event = trigger_random_event(sim)
+                time.sleep(speed)
+                continue
+            if action_key == "adopter":
+                ai_auto_adopter(sim)
                 sim.last_event = trigger_random_event(sim)
                 time.sleep(speed)
                 continue
@@ -1538,11 +1572,11 @@ def autopilot_loop(sim, speed=0.8):
         AUTOPILOT = False
 
 def ai_offer_legacy(sim):
-    """Choisit automatiquement le premier enfant adulte comme héritier."""
+    """Choisit l'héritier adulte le plus âgé (le plus expérimenté)."""
     adult_children = [c for c in sim.children if c.days >= 15]
     if not adult_children:
         return None
-    chosen = adult_children[0]
+    chosen = max(adult_children, key=lambda c: c.days)
     heir = Sim(chosen.name)
     heir.age = 10
     heir.money = sim.money // 2
