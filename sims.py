@@ -1769,7 +1769,7 @@ def main():
     print(" ╚════██║██║██║╚██╔╝██║╚════██║")
     print(" ███████║██║██║ ╚═╝ ██║███████║")
     print(" ╚══════╝╚═╝╚═╝     ╚═╝╚══════╝")
-    print(f" LES SIMS — LIGNE DE COMMANDE{C_RESET}\n")
+    print(f" LES SIMS — LIGNE DE COMMANDE{C.RESET}\n")
 
     slow_print(" Bienvenue dans Les Sims en mode terminal !", 0.03)
     slow_print(" Prends soin de ton Sim et gère ses besoins.\n", 0.03)
