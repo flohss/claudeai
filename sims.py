@@ -50,11 +50,13 @@ def slow_print(text, delay=0.03):
 # (jour_min, nom, emoji, mods_decay/h, bloquées, autorisation_parentale, description)
 LIFE_STAGES = [
     (0,  "Enfant",       "🧒", {"energie": +2, "fun": -2},
-     ["travailler", "postuler", "flirter", "rendezvous", "intimite", "proposer", "marier", "rupture"],
+     ["travailler", "postuler", "flirter", "rendezvous", "intimite", "proposer", "marier", "rupture",
+      "inscrire", "etudier"],
      ["sortir", "gastronomie", "sport", "jardiner"],
      "Tu découvres le monde !"),
     (5,  "Adolescent",   "🧑", {"social": -2, "fun": -1},
-     ["travailler", "postuler", "intimite", "proposer", "marier"],
+     ["travailler", "postuler", "intimite", "proposer", "marier",
+      "inscrire", "etudier"],
      ["sortir", "rendezvous"],
      "Tu cherches ta voie dans la vie."),
     (10, "Jeune adulte", "💪", {},                          [], [], "Tu es dans la fleur de l'âge !"),
@@ -133,6 +135,7 @@ class Sim:
         self.skills   = Skills()
         self.children = []
         self.health   = Health()
+        self.education = Education()
 
     # ---- Humeur globale ----
     @property
@@ -410,6 +413,65 @@ class Health:
         return C.RED
 
 
+# --- Éducation ---
+# (label, emoji, sessions_requises, coût_par_session)
+STUDY_DOMAINS = {
+    "gastronomie": ("Gastronomie",        "🍳",  4, 150),
+    "commerce":    ("Commerce & Gestion", "💼",  4, 150),
+    "arts":        ("Arts & Lettres",     "🎨",  6, 200),
+    "informatique":("Informatique",       "💻",  6, 250),
+    "sciences":    ("Sciences",           "🔬",  6, 250),
+    "droit":       ("Droit",              "⚖",   10, 350),
+    "medecine":    ("Médecine",           "🏥", 10, 400),
+}
+
+GRADE_ORDER = [None, "Passable", "Bien", "Très bien", "Félicitations du jury"]
+
+def grade_from_avg(avg):
+    if avg >= 80: return "Félicitations du jury"
+    if avg >= 65: return "Très bien"
+    if avg >= 50: return "Bien"
+    if avg >= 35: return "Passable"
+    return None  # échec
+
+class Education:
+    def __init__(self):
+        self.enrolled_domain = None   # domaine en cours
+        self.sessions_done   = 0
+        self.total_score     = 0
+        self.diploma_domain  = None   # domaine obtenu
+        self.grade           = None   # mention
+
+    def is_enrolled(self):
+        return self.enrolled_domain is not None
+
+    def has_diploma(self, domain=None):
+        if domain:
+            return self.diploma_domain == domain
+        return self.diploma_domain is not None
+
+    def sessions_required(self):
+        if not self.enrolled_domain:
+            return 0
+        return STUDY_DOMAINS[self.enrolled_domain][2]
+
+    def grade_ok(self, min_grade):
+        """Vérifie si la mention est suffisante."""
+        if min_grade is None:
+            return True
+        return GRADE_ORDER.index(self.grade) >= GRADE_ORDER.index(min_grade)
+
+    @property
+    def domain_label(self):
+        if self.diploma_domain:
+            lbl, emoji, _, _ = STUDY_DOMAINS[self.diploma_domain]
+            return f"{emoji} {lbl}"
+        if self.enrolled_domain:
+            lbl, emoji, _, _ = STUDY_DOMAINS[self.enrolled_domain]
+            return f"{emoji} {lbl} (en cours)"
+        return "Aucune"
+
+
 # --- Sauvegarde ---
 SAVE_FILE = "savegame.json"
 
@@ -534,6 +596,16 @@ def show_status(sim):
           f"{C.BOLD}Humeur :{C.RESET} {sim.mood_label()}")
     print(f"  {C.BOLD}Stade   :{C.RESET} {stage[2]}  {C.YELLOW}{stage[1]}{C.RESET}  —  {C.GRAY}{stage[6]}{C.RESET}")
 
+    # Éducation
+    edu = sim.education
+    if edu.has_diploma():
+        print(f"  {C.BOLD}Diplôme  :{C.RESET} {C.GREEN}{edu.domain_label}{C.RESET}  Mention : {C.YELLOW}{edu.grade}{C.RESET}")
+    elif edu.is_enrolled():
+        lbl, emoji, sessions, _ = STUDY_DOMAINS[edu.enrolled_domain]
+        print(f"  {C.BOLD}Études   :{C.RESET} {emoji} {lbl}  "
+              f"Session {edu.sessions_done}/{sessions}  "
+              f"Moy. {edu.total_score // max(1, edu.sessions_done)}/100")
+
     if sim.job:
         print(f"  {C.BOLD}Travail :{C.RESET} {sim.job}  ({sim.job_days} jour(s))")
     else:
@@ -644,10 +716,12 @@ ACTIONS = [
     ("rupture",        "Rompre",                    None),
     ("avoir_enfant",   "Avoir un enfant",           None),
     ("famille",        "Temps en famille",          None),
-    ("sauvegarder",    "Sauvegarder la partie",     None),
-    ("medecin",        "Consulter un médecin",      None),
-    ("medicament",     "Prendre des médicaments",   None),
-    ("psy",            "Voir un psy",               None),
+    ("sauvegarder",    "Sauvegarder la partie",              None),
+    ("medecin",        "Consulter un médecin",              None),
+    ("medicament",     "Prendre des médicaments",           None),
+    ("psy",            "Voir un psy",                       None),
+    ("inscrire",       "S'inscrire à l'université",         None),
+    ("etudier",        "Étudier (session universitaire)",   None),
 ]
 
 
@@ -737,20 +811,34 @@ def action_appel(sim):
     if lvl: slow_print(f"  {C.GREEN}Compétence Social → Niv. {lvl} ! 🗣{C.RESET}", 0.02)
     input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
 
+# (label, salaire, domaine_requis, mention_minimale)
 JOBS = [
-    ("Livreur",      150),
-    ("Cuisinier",    200),
-    ("Développeur",  300),
-    ("Médecin",      400),
-    ("Artiste",      120),
+    ("Livreur",          150, None,            None),
+    ("Artiste",          120, None,            None),
+    ("Cuisinier",        220, "gastronomie",   "Passable"),
+    ("Chef étoilé",      350, "gastronomie",   "Très bien"),
+    ("Manager",          280, "commerce",      "Passable"),
+    ("Développeur",      300, "informatique",  "Bien"),
+    ("Ingénieur",        400, "informatique",  "Très bien"),
+    ("Chercheur",        360, "sciences",      "Bien"),
+    ("Médecin",          450, "medecine",      "Bien"),
+    ("Chirurgien",       580, "medecine",      "Félicitations du jury"),
+    ("Avocat",           430, "droit",         "Très bien"),
 ]
+
+def jobs_available(edu):
+    """Retourne les jobs accessibles selon le niveau d'études."""
+    return [
+        (lbl, sal) for lbl, sal, dom, grade in JOBS
+        if (dom is None) or (edu.has_diploma(dom) and edu.grade_ok(grade))
+    ]
 
 def action_travailler(sim):
     if not sim.job:
         print(f"\n  {C.RED}Tu n'as pas de travail ! Postule d'abord.{C.RESET}")
         input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
         return
-    base_salary = next(s for j, s in JOBS if j == sim.job)
+    base_salary = next(sal for lbl, sal, *_ in JOBS if lbl == sim.job)
     salary = int(base_salary * (1 + sim.skills.bonus('travail')))
     slow_print(f"\n  {C.YELLOW}Tu travailles toute la journée comme {sim.job}... 💼{C.RESET}", 0.02)
     sim.money += salary
@@ -778,14 +866,23 @@ def action_postuler(sim):
         print(f"  Veux-tu en changer ? (o/n) ", end="")
         if input().strip().lower() != "o":
             return
+    available = jobs_available(sim.education)
     print(f"\n  {C.BOLD}Offres d'emploi disponibles :{C.RESET}")
-    for i, (name, salary) in enumerate(JOBS, 1):
+    for i, (name, salary) in enumerate(available, 1):
         print(f"  {C.CYAN}[{i}]{C.RESET} {name} — ${salary}/jour")
-    print(f"  {C.CYAN}[0]{C.RESET} Annuler")
+    # Afficher les emplois verrouillés avec leurs conditions
+    locked = [(lbl, sal, dom, grade) for lbl, sal, dom, grade in JOBS
+              if dom is not None and not (sim.education.has_diploma(dom) and sim.education.grade_ok(grade))]
+    if locked:
+        print(f"\n  {C.GRAY}Emplois nécessitant un diplôme :{C.RESET}")
+        for lbl, sal, dom, grade in locked:
+            d_lbl, d_emoji, _, _ = STUDY_DOMAINS[dom]
+            print(f"  {C.GRAY}  {d_emoji} {lbl} (${sal}/j) — {d_lbl}, mention {grade}{C.RESET}")
+    print(f"\n  {C.CYAN}[0]{C.RESET} Annuler")
     try:
         choice = int(input("\n  Choix : ").strip())
-        if 1 <= choice <= len(JOBS):
-            sim.job = JOBS[choice - 1][0]
+        if 1 <= choice <= len(available):
+            sim.job = available[choice - 1][0]
             sim.job_days = 0
             slow_print(f"\n  {C.GREEN}Félicitations ! Tu es maintenant {sim.job} ! 🎊{C.RESET}", 0.02)
     except ValueError:
@@ -998,6 +1095,13 @@ def action_sauvegarder(sim):
         "skills": {"levels": sim.skills.levels, "xp": sim.skills.xp},
         "children": [{"name": c.name, "days": c.days} for c in sim.children],
         "health": {"hp": sim.health.hp, "mental": sim.health.mental, "diseases": sim.health.diseases},
+        "education": {
+            "enrolled_domain": sim.education.enrolled_domain,
+            "sessions_done":   sim.education.sessions_done,
+            "total_score":     sim.education.total_score,
+            "diploma_domain":  sim.education.diploma_domain,
+            "grade":           sim.education.grade,
+        },
     }
     with open(SAVE_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
@@ -1118,6 +1222,102 @@ def action_rupture(sim):
     input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
 
 
+def _study_session_score(sim):
+    """Calcule le score d'une session d'études (0-100)."""
+    base = 50
+    base += (sim.needs["fun"]    - 50) * 0.2
+    base += (sim.needs["energie"] - 50) * 0.3
+    base += sim.skills.levels.get("travail", 0) * 2
+    base += sim.skills.levels.get("social",  0) * 1
+    base += random.randint(-15, 15)
+    return max(0, min(100, int(base)))
+
+
+def action_inscrire(sim):
+    edu = sim.education
+    if edu.is_enrolled():
+        lbl, emoji, sessions, cost = STUDY_DOMAINS[edu.enrolled_domain]
+        print(f"\n  {C.YELLOW}Tu es déjà inscrit(e) en {lbl} ({edu.sessions_done}/{sessions} sessions).{C.RESET}")
+        input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+        return
+    if edu.has_diploma():
+        print(f"\n  {C.GREEN}Tu as déjà un diplôme : {edu.domain_label} (Mention : {edu.grade}){C.RESET}")
+        print(f"  Veux-tu faire un autre cursus ? (o/n) ", end="")
+        if input().strip().lower() != "o":
+            return
+
+    print(f"\n  {C.BOLD}Choisir un domaine d'études :{C.RESET}")
+    domains = list(STUDY_DOMAINS.items())
+    for i, (key, (lbl, emoji, sessions, cost)) in enumerate(domains, 1):
+        print(f"  {C.CYAN}[{i}]{C.RESET} {emoji} {lbl:<22} {sessions} sessions  ${cost}/session")
+    print(f"  {C.CYAN}[0]{C.RESET} Annuler")
+    try:
+        choice = int(input("\n  Choix : ").strip())
+        if 1 <= choice <= len(domains):
+            key, (lbl, emoji, sessions, cost) = domains[choice - 1]
+            if sim.money < cost:
+                print(f"\n  {C.RED}Pas assez d'argent pour la première session ! (${cost} nécessaires){C.RESET}")
+                input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+                return
+            sim.money -= cost
+            edu.enrolled_domain = key
+            edu.sessions_done   = 1
+            edu.total_score     = _study_session_score(sim)
+            slow_print(f"\n  {C.GREEN}Tu t'inscris en {lbl} ! Première session effectuée. {emoji}{C.RESET}", 0.02)
+            slow_print(f"  {C.GRAY}{sessions} sessions au total, ${cost}/session{C.RESET}", 0.02)
+            slow_print(f"  {C.CYAN}Progression : {edu.sessions_done}/{sessions}{C.RESET}", 0.02)
+            sim.tick(4)
+    except ValueError:
+        pass
+    input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+
+
+def action_etudier(sim):
+    edu = sim.education
+    if not edu.is_enrolled():
+        print(f"\n  {C.YELLOW}Tu n'es pas inscrit(e) à l'université. Inscris-toi d'abord !{C.RESET}")
+        input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+        return
+    lbl, emoji, sessions, cost = STUDY_DOMAINS[edu.enrolled_domain]
+    if sim.money < cost:
+        print(f"\n  {C.RED}Pas assez d'argent pour cette session (${cost} nécessaires).{C.RESET}")
+        input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+        return
+    slow_print(f"\n  {C.CYAN}Tu étudies en {lbl}... {emoji}{C.RESET}", 0.02)
+    sim.money -= cost
+    score = _study_session_score(sim)
+    edu.sessions_done += 1
+    edu.total_score   += score
+    sim.modify(energie=-20, fun=-10, faim=-15, social=-5)
+    sim.tick(6)
+    slow_print(f"  Session {edu.sessions_done}/{sessions} terminée ! Score : {score}/100  "
+               f"(Moy. courante : {edu.total_score // edu.sessions_done}/100)", 0.02)
+    lvl = sim.skills.gain('travail', 5)
+    if lvl:
+        slow_print(f"  {C.GREEN}Compétence Travail → Niv. {lvl} ! 💼{C.RESET}", 0.02)
+
+    if edu.sessions_done >= sessions:
+        avg   = edu.total_score / sessions
+        grade = grade_from_avg(avg)
+        print()
+        if grade:
+            edu.diploma_domain  = edu.enrolled_domain
+            edu.grade           = grade
+            edu.enrolled_domain = None
+            slow_print(f"  {C.BOLD}{C.YELLOW}🎓 Félicitations ! Tu obtiens ton diplôme en {lbl} !{C.RESET}", 0.03)
+            slow_print(f"  {C.GREEN}Mention : {grade}  (Moyenne : {avg:.0f}/100){C.RESET}", 0.03)
+            slow_print(f"  {C.CYAN}De nouveaux emplois s'ouvrent à toi !{C.RESET}", 0.02)
+            sim.modify(fun=+20, social=+10)
+        else:
+            edu.enrolled_domain = None
+            edu.sessions_done   = 0
+            edu.total_score     = 0
+            slow_print(f"  {C.RED}Tu n'as pas obtenu le diplôme en {lbl}. (Moyenne : {avg:.0f}/100 — minimum 35){C.RESET}", 0.03)
+            slow_print(f"  {C.YELLOW}Tu peux te réinscrire et réessayer.{C.RESET}", 0.02)
+            sim.modify(fun=-15)
+    input(f"  {C.GRAY}[Entrée pour continuer]{C.RESET}")
+
+
 ACTION_FNS = {
     "manger":    action_manger,
     "snack":     action_snack,
@@ -1152,6 +1352,8 @@ ACTION_FNS = {
     "medecin":       action_medecin,
     "medicament":    action_medicament,
     "psy":           action_psy,
+    "inscrire":      action_inscrire,
+    "etudier":       action_etudier,
 }
 
 
@@ -1166,6 +1368,8 @@ def show_results(sim, cause=""):
     print(f"  Jours   : {sim.age}")
     print(f"  Argent  : ${sim.money}")
     print(f"  Métier  : {sim.job or 'Jamais travaillé'}")
+    if sim.education.has_diploma():
+        print(f"  Diplôme : {sim.education.domain_label}  Mention : {sim.education.grade}")
     if sim.children:
         kids = ", ".join(f"{c.name} ({c.age_label})" for c in sim.children)
         print(f"  Famille : {kids}")
@@ -1354,6 +1558,13 @@ def load_game():
     sim.health.hp       = hd.get("hp", 100)
     sim.health.mental   = hd.get("mental", 80)
     sim.health.diseases = hd.get("diseases", {})
+
+    ed = d.get("education", {})
+    sim.education.enrolled_domain = ed.get("enrolled_domain")
+    sim.education.sessions_done   = ed.get("sessions_done", 0)
+    sim.education.total_score     = ed.get("total_score", 0)
+    sim.education.diploma_domain  = ed.get("diploma_domain")
+    sim.education.grade           = ed.get("grade")
 
     return sim
 
