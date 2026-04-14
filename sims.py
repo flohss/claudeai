@@ -110,7 +110,7 @@ class Sim:
 
     def __init__(self, name):
         self.name = name
-        self.age  = 0          # jours écoulés
+        self.age  = 10         # démarre en Jeune adulte
         self.money = 500
         self.job   = None
         self.job_days = 0
@@ -1008,11 +1008,84 @@ ACTION_FNS = {
 }
 
 
+# --- Résultats ---
+def show_results(sim, cause=""):
+    _, final_stage = get_stage(sim.age)
+    print(f"\n  {C.BOLD}── Résultats ──────────────────────────{C.RESET}")
+    if cause:
+        print(f"  {C.RED}{cause}{C.RESET}")
+    print(f"  Nom     : {sim.name}")
+    print(f"  Stade   : {final_stage[2]}  {final_stage[1]}")
+    print(f"  Jours   : {sim.age}")
+    print(f"  Argent  : ${sim.money}")
+    print(f"  Métier  : {sim.job or 'Jamais travaillé'}")
+    if sim.children:
+        kids = ", ".join(f"{c.name} ({c.age_label})" for c in sim.children)
+        print(f"  Famille : {kids}")
+    if sim.pet:
+        print(f"  Animal  : {sim.pet.emoji}  {sim.pet.name} ({sim.pet.species})")
+    rel = sim.relationship
+    if not rel.is_single():
+        print(f"  Relation : {rel.emoji}  {rel.label} avec {rel.partner_name}")
+    print(f"  Humeur  : {sim.mood_label()}\n")
+
+
+# --- Lignée ---
+def offer_legacy(sim):
+    """Propose de continuer avec un enfant adulte. Retourne un nouveau Sim ou None."""
+    adult_children = [c for c in sim.children if c.days >= 15]
+    if not adult_children:
+        return None
+
+    print(f"  {C.BOLD}{C.YELLOW}{'═' * 42}{C.RESET}")
+    slow_print(f"  {sim.name} laisse derrière lui/elle une famille.", 0.03)
+    slow_print(f"  Veux-tu continuer l'aventure avec un(e) de ses enfants ?", 0.03)
+    print()
+    for i, child in enumerate(adult_children, 1):
+        print(f"  {C.CYAN}[{i}]{C.RESET} {child.name}")
+    print(f"  {C.CYAN}[0]{C.RESET} Non, terminer la partie")
+    print(f"  {C.BOLD}{C.YELLOW}{'═' * 42}{C.RESET}\n")
+
+    try:
+        choice = int(input("  Choix : ").strip())
+        if 1 <= choice <= len(adult_children):
+            chosen = adult_children[choice - 1]
+            heir = Sim(chosen.name)
+            heir.age    = 10                        # repart Jeune adulte
+            heir.money  = sim.money // 2            # héritage
+            heir.orientation = sim.orientation
+            # Compétences partiellement héritées (50 %)
+            for sk in heir.skills.levels:
+                heir.skills.levels[sk] = sim.skills.levels[sk] // 2
+            # Les autres enfants deviennent ses frères/sœurs (si adultes) ou ses propres enfants
+            heir.children = [c for c in sim.children if c.name != chosen.name]
+            slow_print(f"\n  {C.GREEN}Bienvenue {chosen.name} ! Tu prends le relais de {sim.name}.{C.RESET}", 0.03)
+            slow_print(f"  {C.GRAY}Héritage : ${heir.money}  |  Compétences héritées à 50 %{C.RESET}", 0.02)
+            time.sleep(1)
+            return heir
+    except (ValueError, EOFError, KeyboardInterrupt):
+        pass
+    return None
+
+
 # --- Boucle principale ---
 def game_loop(sim):
     prev_stage_idx, _ = get_stage(sim.age)
+    last_age_checked  = sim.age - 1   # pour la mort naturelle
 
     while True:
+        # Mort naturelle (vieillesse) — vérifiée une seule fois par jour
+        if sim.age > last_age_checked and sim.age >= 45:
+            last_age_checked = sim.age
+            death_prob = min(35, (sim.age - 43) * 3)
+            if random.randint(1, 100) <= death_prob:
+                clear()
+                print(f"\n  {C.GRAY}{'─' * 42}{C.RESET}")
+                slow_print(f"\n  🕯  {sim.name} s'est endormi(e) paisiblement...", 0.03)
+                slow_print(f"  Une belle vie de {sim.age} jours s'achève.", 0.03)
+                print(f"  {C.GRAY}{'─' * 42}{C.RESET}\n")
+                return "vieillesse"
+
         # Détecter un changement de stade de vie
         cur_stage_idx, cur_stage = get_stage(sim.age)
         if cur_stage_idx != prev_stage_idx:
@@ -1046,7 +1119,7 @@ def game_loop(sim):
         if sim.needs["faim"] == 0 and sim.needs["energie"] == 0:
             slow_print(f"\n  {C.RED}💀 {sim.name} est épuisé(e) et mort(e) de faim après {sim.age} jour(s)...{C.RESET}")
             slow_print(f"  {C.GRAY}Prends soin de tes Sims la prochaine fois !{C.RESET}")
-            break
+            return "famine"
 
         show_menu(ACTIONS)
 
@@ -1057,7 +1130,7 @@ def game_loop(sim):
 
         if choice == "0":
             slow_print(f"\n  {C.CYAN}Au revoir {sim.name} ! Merci d'avoir joué. 👋{C.RESET}")
-            break
+            return None
 
         try:
             idx = int(choice) - 1
@@ -1152,7 +1225,14 @@ def main():
         sim = load_game()
         slow_print(f"\n  {C.GREEN}Partie chargée ! Bon retour {sim.name} ! 💾{C.RESET}\n", 0.03)
         time.sleep(1)
-        game_loop(sim)
+        current = sim
+        generation = 1
+        while current is not None:
+            cause = game_loop(current)
+            show_results(current, cause or "")
+            current = offer_legacy(current)
+            generation += 1
+        slow_print(f"  {C.GRAY}Fin de la lignée. Merci d'avoir joué !{C.RESET}\n")
         return
 
     name = input(f"\n  {C.BOLD}Quel est le prénom de ton Sim ? {C.RESET}").strip()
@@ -1176,24 +1256,19 @@ def main():
     slow_print(f"\n  {C.GREEN}Bienvenue {sim.name} ! Ta vie commence maintenant...{C.RESET}\n", 0.03)
     time.sleep(1)
 
-    game_loop(sim)
+    # Boucle de lignée : permet de continuer avec les enfants adultes
+    current = sim
+    generation = 1
+    while current is not None:
+        if generation > 1:
+            slow_print(f"\n  {C.BOLD}{C.YELLOW}Génération {generation} — {current.name}{C.RESET}\n", 0.03)
+            time.sleep(1)
+        cause = game_loop(current)
+        show_results(current, cause or "")
+        current = offer_legacy(current)
+        generation += 1
 
-    # Score final
-    _, final_stage = get_stage(sim.age)
-    print(f"\n  {C.BOLD}── Résultats ──────────────────────────{C.RESET}")
-    print(f"  Nom     : {sim.name}")
-    print(f"  Stade   : {final_stage[2]}  {final_stage[1]}")
-    print(f"  Jours   : {sim.age}")
-    print(f"  Argent  : ${sim.money}")
-    print(f"  Métier  : {sim.job or 'Jamais travaillé'}")
-    if sim.pet:
-        print(f"  Animal  : {sim.pet.emoji}  {sim.pet.name} ({sim.pet.species})")
-    rel = sim.relationship
-    if rel.is_single():
-        print(f"  Relation : {rel.emoji}  Célibataire")
-    else:
-        print(f"  Relation : {rel.emoji}  {rel.label} avec {rel.partner_name}")
-    print(f"  Humeur  : {sim.mood_label()}\n")
+    slow_print(f"  {C.GRAY}Fin de la lignée. Merci d'avoir joué !{C.RESET}\n")
 
 
 if __name__ == "__main__":
