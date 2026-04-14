@@ -1359,52 +1359,43 @@ def ai_choose_action(sim):
         if "jeux" not in blocked:
             return "jeux"
 
-    # — Priorité 5 : carrière / études (avec vérification sécurité) —
+    # — Priorité 5 : carrière / études —
     if "travailler" not in blocked:
         edu = sim.education
-        
-        # CORRECTION: Calcul prédictif pour éviter le burn-out
-        # Le travail coûte ~54 énergie (-30 fixe -24 decay) et ~47 fun (-15 fixe -32 decay)
-        energie_apres_travail = n["energie"] - 54
-        fun_apres_travail = n["fun"] - 47
-        
-        # On ne travaille QUE si on reste au-dessus des seuils critiques (20% marge de sécurité)
-        peut_travailler = (energie_apres_travail > 20 and fun_apres_travail > 20)
-        
-        if peut_travailler:
-            # Réévaluer le job si un meilleur poste est accessible (10 % / tour)
-            if sim.job and random.random() < 0.10:
-                best = max(jobs_available(edu), key=lambda x: x[1], default=None)
-                if best:
-                    cur_sal = next((s for lb, s, *_ in JOBS if lb == sim.job), 0)
-                    if best[1] > cur_sal:
-                        return "postuler"
-            # S'inscrire (premier diplôme)
-            if (not edu.is_enrolled() and not edu.has_diploma()
-                    and sim.money > 600 and random.random() < 0.30):
-                return "inscrire"
-            # Second diplôme si argent > 800
-            if (not edu.is_enrolled() and edu.has_diploma()
-                    and sim.money > 800 and random.random() < 0.15):
-                return "inscrire"
-            # Étudier — travailler d'abord si argent insuffisant pour la session
+
+        # Postuler / inscrire ne coûtent pas d'énergie → toujours autorisés
+        if sim.job and random.random() < 0.10:
+            best = max(jobs_available(edu), key=lambda x: x[1], default=None)
+            if best:
+                cur_sal = next((s for lb, s, *_ in JOBS if lb == sim.job), 0)
+                if best[1] > cur_sal:
+                    return "postuler"
+        if not sim.job and jobs_available(edu):
+            return "postuler"
+        if (not edu.is_enrolled() and not edu.has_diploma()
+                and sim.money > 600 and random.random() < 0.30):
+            return "inscrire"
+        if (not edu.is_enrolled() and edu.has_diploma()
+                and sim.money > 800 and random.random() < 0.15):
+            return "inscrire"
+
+        # Travailler / étudier nécessitent un minimum d'énergie et de fun
+        # Seuils réalistes : énergie ≥ 45, fun ≥ 25
+        peut_bosser = n["energie"] >= 45 and n["fun"] >= 25
+        if peut_bosser:
             if edu.is_enrolled():
                 cost = STUDY_DOMAINS[edu.enrolled_domain][3]
                 if sim.money >= cost:
                     return "etudier"
                 elif sim.job:
                     return "travailler"
-            # Postuler si pas de job
-            if not sim.job and jobs_available(edu):
-                return "postuler"
-            # Travailler seulement si c'est sûr
             if sim.job:
                 return "travailler"
         else:
-            # Trop risqué de travailler: on récupère selon le besoin le plus critique
-            if n["energie"] < 60:
+            # Récupération prioritaire avant de travailler
+            if n["energie"] < 45:
                 return "sieste" if n["energie"] > 25 else "dormir"
-            if n["fun"] < 50:
+            if n["fun"] < 25:
                 return "mediter" if "mediter" not in blocked else "tv"
 
     # — Priorité 6 : vie amoureuse —
