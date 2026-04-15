@@ -1322,13 +1322,10 @@ def ai_choose_action(sim):
     n = sim.needs
 
     # — Priorité 1 : besoins critiques —
-    if n["vessie"] < 20: 
-        return "toilettes"
-    if n["faim"] < 25 and "manger" not in blocked:
+    if n["vessie"]  < 20:                                             return "toilettes"
+    if n["faim"]    < 40 and "manger" not in blocked:                 # seuil relevé 25→40
         return "snack" if sim.money < 20 else "manger"
-    # CORRECTION: Seuil augmenté à 30% (était 20%) pour dormir avant le crash
-    if n["energie"] < 30: 
-        return "dormir"
+    if n["energie"] < 35:                                             return "dormir"
     if n["hygiene"] < 25: 
         return "douche"
 
@@ -1346,8 +1343,8 @@ def ai_choose_action(sim):
             and sim.money > 200 and random.random() < 0.05):          return "adopter"
 
     # — Priorité 4 : PRÉVENTION DU BURN-OUT —
-    # Si énergie faible mais pas critique, sieste rapide
-    if 30 <= n["energie"] < 50 and "sieste" not in blocked:
+    # Sieste si énergie insuffisante pour travailler (seuil travail = 55)
+    if 35 <= n["energie"] < 55 and "sieste" not in blocked:
         return "sieste"
     
     # Si fun très bas, récupération obligatoire avant toute activité stressante
@@ -1380,8 +1377,8 @@ def ai_choose_action(sim):
             return "inscrire"
 
         # Travailler / étudier nécessitent un minimum d'énergie et de fun
-        # Seuils réalistes : énergie ≥ 45, fun ≥ 25
-        peut_bosser = n["energie"] >= 45 and n["fun"] >= 25
+        # énergie ≥ 55 : marge pour ne pas tomber à 0 pendant le travail (coût ~54)
+        peut_bosser = n["energie"] >= 55 and n["fun"] >= 25
         if peut_bosser:
             if edu.is_enrolled():
                 cost = STUDY_DOMAINS[edu.enrolled_domain][3]
@@ -1496,6 +1493,7 @@ def autopilot_loop(sim, speed=0.8):
 
     prev_stage_idx, _ = get_stage(sim.age)
     last_age_checked = sim.age - 1
+    danger_turns = 0   # compteur de tours en état critique
 
     try:
         while True:
@@ -1518,10 +1516,14 @@ def autopilot_loop(sim, speed=0.8):
 
             show_status(sim)
 
-            # — Morts par besoins / santé —
+            # — Morts par besoins / santé (avec période de grâce de 2 tours) —
             if sim.needs["faim"] == 0 and sim.needs["energie"] == 0:
-                slow_print(f"\n {C.RED}💀 {sim.name} est mort(e) d'épuisement après {sim.age} jour(s).{C.RESET}", 0.02)
-                return "famine"
+                danger_turns += 1
+                if danger_turns >= 2:
+                    slow_print(f"\n {C.RED}💀 {sim.name} est mort(e) d'épuisement après {sim.age} jour(s).{C.RESET}", 0.02)
+                    return "famine"
+            else:
+                danger_turns = 0
             if sim.health.hp <= 0:
                 slow_print(f"\n {C.RED}💀 {sim.name} est décédé(e) des suites de sa santé.{C.RESET}", 0.02)
                 return "santé"
@@ -1642,6 +1644,7 @@ def offer_legacy(sim):
 def game_loop(sim):
     prev_stage_idx, _ = get_stage(sim.age)
     last_age_checked = sim.age - 1
+    danger_turns = 0   # compteur de tours en état critique
 
     while True:
         # Mort naturelle (vieillesse)
@@ -1689,11 +1692,15 @@ def game_loop(sim):
         if crit or sim.health.hp <= 30 or sim.health.mental <= 25 or (sim.pet and sim.pet.is_neglected()):
             print()
 
-        # Mort par famine / épuisement
+        # Mort par famine / épuisement (période de grâce : 2 tours consécutifs à 0)
         if sim.needs["faim"] == 0 and sim.needs["energie"] == 0:
-            slow_print(f"\n {C.RED}💀 {sim.name} est épuisé(e) et mort(e) de faim après {sim.age} jour(s)...{C.RESET}")
-            slow_print(f" {C.GRAY}Prends soin de tes Sims la prochaine fois !{C.RESET}")
-            return "famine"
+            danger_turns += 1
+            if danger_turns >= 2:
+                slow_print(f"\n {C.RED}💀 {sim.name} est épuisé(e) et mort(e) de faim après {sim.age} jour(s)...{C.RESET}")
+                slow_print(f" {C.GRAY}Prends soin de tes Sims la prochaine fois !{C.RESET}")
+                return "famine"
+        else:
+            danger_turns = 0
         # Mort par mauvaise santé
         if sim.health.hp <= 0:
             slow_print(f"\n {C.RED}💀 {sim.name} est décédé(e) des suites de problèmes de santé...{C.RESET}")
