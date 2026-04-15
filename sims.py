@@ -9,9 +9,13 @@ import sys
 import os
 import random
 import json
+import contextlib
+import io
+from datetime import datetime
 
 # --- Mode Autopilote ---
 AUTOPILOT = False # True quand l'IA joue à la place du joueur
+DEBUG_MODE = False # True pendant les simulations batch (supprime clear + affichage)
 
 # --- Couleurs ANSI ---
 class C:
@@ -27,7 +31,8 @@ class C:
     GRAY = "\033[90m"
 
 def clear():
-    os.system("cls" if os.name == "nt" else "clear")
+    if not DEBUG_MODE:
+        os.system("cls" if os.name == "nt" else "clear")
 
 def _cont():
     """Pause conditionnelle : rien en autopilote, sinon attend Entrée."""
@@ -1564,7 +1569,6 @@ def ai_choose_action(sim):
         pool = ["mediter", "passer", "lire"]
     pool = [a for a in pool if a not in blocked]
     return random.choice(pool) if pool else "passer"
-    return random.choice(pool) if pool else "passer"
 
 _AUTO_PET_NAMES = ["Fido", "Minou", "Noisette", "Caramel", "Bulle", "Pixel", "Grizou", "Luna"]
 
@@ -1743,6 +1747,145 @@ def show_results(sim, cause=""):
     if not rel.is_single():
         print(f" Relation : {rel.emoji} {rel.label} avec {rel.partner_name}")
     print(f" Humeur : {sim.mood_label()}\n")
+
+# --- Mode Débogage / Batch ---
+DEBUG_REPORT_FILE = "debug_report.txt"
+
+def _format_debug_report(results):
+    """Formate les résultats de simulation en rapport texte lisible."""
+    lines = []
+    sep = "=" * 62
+    lines += [sep,
+              "  RAPPORT DÉBOGAGE — MODE AUTOPILOTE",
+              f"  Date       : {datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}",
+              f"  Simulations: {len(results)}",
+              sep]
+
+    for r in results:
+        lines.append(f"\n── Simulation #{r['sim']} : {r['name']} ──────────────────────")
+        cause_str = {"famine": "💀 Famine", "santé": "💀 Santé",
+                     "vieillesse": "🕯 Vieillesse", "timeout": "⏱ Limite atteinte",
+                     None: "✅ En vie"}.get(r['cause'], r['cause'])
+        lines.append(f"  Survie     : {r['age']} jours  |  Fin : {cause_str}  |  {r['generations']} génération(s)")
+        lines.append(f"  Travail    : {r['job'] or 'Aucun'} ({r['job_days']} j)  |  Diplôme : {r['diploma'] or 'Aucun'}")
+        lines.append(f"  Argent     : ${r['money']}  |  HP : {r['hp']}  |  Mental : {r['mental']}")
+        rel_str = r['relationship']
+        if r['partner']:
+            rel_str += f" avec {r['partner']}"
+        lines.append(f"  Relation   : {rel_str}  |  Enfants : {r['children']}  |  Animal : {r['pet'] or 'Aucun'}")
+        if r['diseases']:
+            lines.append(f"  ⚠ Maladies : {', '.join(r['diseases'])}")
+        n = r['needs']
+        lines.append(f"  Besoins    : faim={n['faim']:3d}  énergie={n['energie']:3d}  "
+                     f"hygiene={n['hygiene']:3d}  fun={n['fun']:3d}  "
+                     f"social={n['social']:3d}  vessie={n['vessie']:3d}")
+
+    # ── Statistiques globales ──────────────────────────────────
+    lines += ["", sep, "  STATISTIQUES GLOBALES", sep]
+    ages = [r['age'] for r in results]
+    lines.append(f"  Survie moyenne : {sum(ages)/len(ages):.1f} jours")
+    lines.append(f"  Survie max     : {max(ages)} jours  (sim #{results[ages.index(max(ages))]['sim']})")
+    lines.append(f"  Survie min     : {min(ages)} jours  (sim #{results[ages.index(min(ages))]['sim']})")
+
+    from collections import Counter
+    causes = Counter(r['cause'] for r in results)
+    causes_str = "  ".join(f"{k or 'en vie'} ×{v}" for k, v in causes.most_common())
+    lines.append(f"  Causes de fin  : {causes_str}")
+
+    jobs = [r['job'] for r in results if r['job']]
+    if jobs:
+        top = Counter(jobs).most_common(5)
+        lines.append(f"  Top jobs       : " + "  |  ".join(f"{j} ×{c}" for j, c in top))
+
+    dips = [r['diploma'].split(' (')[0] for r in results if r['diploma']]
+    if dips:
+        top = Counter(dips).most_common(5)
+        lines.append(f"  Top diplômes   : " + "  |  ".join(f"{d} ×{c}" for d, c in top))
+    else:
+        lines.append(f"  Diplômes       : aucun obtenu")
+
+    avg_money = sum(r['money'] for r in results) / len(results)
+    lines.append(f"  Argent moyen   : ${avg_money:.0f}")
+
+    married = sum(1 for r in results if "Marié" in r['relationship'])
+    burnout_count = sum(1 for r in results if 'burnout' in r['diseases'])
+    lines.append(f"  Mariés à fin   : {married}/{len(results)}")
+    lines.append(f"  Burnout actif  : {burnout_count}/{len(results)}")
+
+    all_diseases = []
+    for r in results:
+        all_diseases.extend(r['diseases'])
+    if all_diseases:
+        top_d = Counter(all_diseases).most_common()
+        lines.append(f"  Maladies finales: " + "  ".join(f"{d} ×{c}" for d, c in top_d))
+
+    lines.append(sep)
+    return "\n".join(lines)
+
+def debug_batch_run(n_sims=10, max_gen=5):
+    """Lance n_sims simulations autopilote en batch et sauvegarde le rapport."""
+    global DEBUG_MODE
+    DEBUG_MODE = True
+
+    results = []
+    orientations = ["Hétérosexuel(le)", "Homosexuel(le)", "Bisexuel(le)"]
+
+    for sim_num in range(1, n_sims + 1):
+        print(f"\r  ▶ Simulation {sim_num:3d}/{n_sims}...", end="", flush=True)
+
+        name   = random.choice(_AUTO_NAMES)
+        orient = random.choice(orientations)
+        sim    = Sim(name)
+        sim.orientation = orient
+
+        gen         = 1
+        final_cause = None
+
+        # Rediriger stdout pour supprimer tout affichage pendant la simulation
+        with contextlib.redirect_stdout(io.StringIO()):
+            while gen <= max_gen:
+                cause = autopilot_loop(sim, speed=0)
+                final_cause = cause
+                if cause is None:
+                    break
+                heir = ai_offer_legacy(sim)
+                if heir is None:
+                    break
+                sim = heir
+                gen += 1
+
+        results.append({
+            "sim":          sim_num,
+            "name":         name,
+            "age":          sim.age,
+            "generations":  gen,
+            "cause":        final_cause,
+            "job":          sim.job,
+            "job_days":     sim.job_days,
+            "diploma":      (f"{sim.education.diploma_domain} ({sim.education.grade})"
+                             if sim.education.has_diploma() else None),
+            "money":        sim.money,
+            "hp":           sim.health.hp,
+            "mental":       sim.health.mental,
+            "relationship": sim.relationship.label,
+            "partner":      sim.relationship.partner_name,
+            "children":     len(sim.children),
+            "pet":          (f"{sim.pet.name} ({sim.pet.species})" if sim.pet else None),
+            "diseases":     list(sim.health.diseases.keys()),
+            "needs":        dict(sim.needs),
+        })
+
+    DEBUG_MODE = False
+    print(f"\r  ✓ {n_sims} simulations terminées.{' ' * 20}")
+
+    report = _format_debug_report(results)
+
+    with open(DEBUG_REPORT_FILE, "w", encoding="utf-8") as f:
+        f.write(report)
+
+    print(report)
+    print(f"\n {C.GREEN}Rapport sauvegardé → {DEBUG_REPORT_FILE}{C.RESET}")
+    input(f"\n{C.GRAY}Appuie sur Entrée pour revenir au menu...{C.RESET}")
 
 # --- Lignée ---
 def offer_legacy(sim):
@@ -1954,10 +2097,32 @@ def main():
     if os.path.exists(SAVE_FILE):
         print(f" {C.CYAN}[2]{C.RESET} Charger la partie sauvegardée")
     print(f" {C.CYAN}[3]{C.RESET} 🤖 Mode Autopilote — l'IA joue à ta place")
+    print(f" {C.CYAN}[4]{C.RESET} 🔧 Mode Débogage — Simuler plusieurs parties en batch")
     try:
         start = input(f"\n {C.BOLD}Choix : {C.RESET}").strip()
     except (EOFError, KeyboardInterrupt):
         start = "1"
+
+    # ── Mode Débogage / Batch ────────────────────────────────────────
+    if start == "4":
+        clear()
+        print(f"\n {C.BOLD}{C.YELLOW}🔧 MODE DÉBOGAGE — SIMULATIONS EN BATCH{C.RESET}\n")
+        slow_print(" Ce mode lance plusieurs parties autopilote en silence,", 0.03)
+        slow_print(" condense les résultats et les sauvegarde dans un fichier.", 0.03)
+        slow_print(f" {C.GRAY}(Le fichier {DEBUG_REPORT_FILE} peut être partagé pour analyse){C.RESET}\n", 0.02)
+        try:
+            n_input = input(f" {C.BOLD}Nombre de simulations (défaut 10) : {C.RESET}").strip()
+            n_sims = int(n_input) if n_input.isdigit() and int(n_input) > 0 else 10
+        except (EOFError, KeyboardInterrupt):
+            n_sims = 10
+        try:
+            g_input = input(f" {C.BOLD}Générations max par simulation (défaut 5) : {C.RESET}").strip()
+            max_gen = int(g_input) if g_input.isdigit() and int(g_input) > 0 else 5
+        except (EOFError, KeyboardInterrupt):
+            max_gen = 5
+        print()
+        debug_batch_run(n_sims=n_sims, max_gen=max_gen)
+        return
 
     # ── Mode Autopilote ──────────────────────────────────────────────
     if start == "3":
