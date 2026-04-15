@@ -526,21 +526,22 @@ def trigger_random_event(sim):
 # --- Affichage ---
 def show_status(sim):
     clear()
+    _h = int(sim.hour)
+    _m = int((sim.hour % 1) * 60)
+    _day = JOURS_SEMAINE[sim.age % 7]
+    _we_tag = " [WE]" if (sim.age % 7) >= 5 else ""
+    _time_line = f"   {_h:02d}h{_m:02d}  ·  {_day}{_we_tag}  ·  Jour {sim.age}"
     print(f"\n{C.BOLD}{C.CYAN}╔══════════════════════════════════════╗{C.RESET}")
     print(f"{C.BOLD}{C.CYAN}║   LES SIMS - LIGNE DE COMMANDE       ║{C.RESET}")
+    _we_color = C.YELLOW if (sim.age % 7) >= 5 else C.CYAN
+    print(f"{C.BOLD}{C.CYAN}║{C.RESET}{_we_color}{_time_line:<38}{C.BOLD}{C.CYAN}║{C.RESET}")
     print(f"{C.BOLD}{C.CYAN}╚══════════════════════════════════════╝{C.RESET}\n")
 
     _, stage = get_stage(sim.age)
     print(f" {C.BOLD}Sim :{C.RESET} {sim.name} | "
-          f"{C.BOLD}Jour :{C.RESET} {sim.age} | "
           f"{C.BOLD}Argent :{C.RESET} {C.GREEN}${sim.money}{C.RESET} | "
           f"{C.BOLD}Humeur :{C.RESET} {sim.mood_label()}")
     print(f" {C.BOLD}Stade :{C.RESET} {stage[2]} {C.YELLOW}{stage[1]}{C.RESET} — {C.GRAY}{stage[6]}{C.RESET}")
-    _h = int(sim.hour)
-    _m = int((sim.hour % 1) * 60)
-    _day = JOURS_SEMAINE[sim.age % 7]
-    _we = f"  {C.YELLOW}🎉 Week-end{C.RESET}" if (sim.age % 7) >= 5 else ""
-    print(f" {C.BOLD}Heure :{C.RESET} {C.CYAN}🕐 {_h:02d}h{_m:02d}{C.RESET}  {C.BOLD}Jour :{C.RESET} {_day}{_we}")
 
     edu = sim.education
     if edu.has_diploma():
