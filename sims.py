@@ -1474,9 +1474,8 @@ def ai_choose_action(sim):
             return "inscrire"
 
         # ── Calcul prédictif ──────────────────────────────────────
-        # Travail (8h) : costs energie -54, faim -65, fun -47
-        # Seuils post-travail : énergie > 20 (hors burnout), faim > 8, fun > 12
-        # fun > 12 ET énergie > 20 → condition burnout (energie<15 ET fun<15) évitée
+        # Travail (8h) : costs énergie -54, faim -65, fun -47
+        # fun > 12 ET énergie > 20 → condition burnout (énergie<15 ET fun<15) évitée
         energie_post_t = n["energie"] - 54
         faim_post_t    = n["faim"]    - 65
         fun_post_t     = n["fun"]     - 47
@@ -1488,16 +1487,19 @@ def ai_choose_action(sim):
         fun_post_e     = n["fun"]     - 42
         peut_etudier = (energie_post_e > 18 and faim_post_e > 12 and fun_post_e > 8)
 
+        # ── TRAVAIL OBLIGATOIRE en semaine (pas de gate probabiliste) ──
+        # Le Sim DOIT travailler/étudier chaque jour ouvrable dès que possible.
+        # La session se fait une fois par jour (8h) ; le reste du temps est libre.
         if edu.is_enrolled():
             cost = STUDY_DOMAINS[edu.enrolled_domain][3]
-            if sim.money >= cost and peut_etudier and random.random() < 0.80:
+            if sim.money >= cost and peut_etudier:
                 return "etudier"
-            elif sim.job and peut_travailler and random.random() < 0.80:
+            elif sim.job and peut_travailler:
                 return "travailler"
-        elif sim.job and peut_travailler and random.random() < 0.80:
+        elif sim.job and peut_travailler:
             return "travailler"
 
-        # Impossible de travailler → récupérer intelligemment
+        # Impossible de travailler aujourd'hui → récupérer (report au prochain tour)
         if not peut_travailler:
             if n["energie"] < 74:
                 return "sieste" if n["energie"] >= 42 else "dormir"
