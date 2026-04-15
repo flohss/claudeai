@@ -1379,7 +1379,14 @@ def ai_choose_action(sim):
         # Travailler / étudier nécessitent un minimum d'énergie et de fun
         # énergie ≥ 55 : marge pour ne pas tomber à 0 pendant le travail (coût ~54)
         peut_bosser = n["energie"] >= 55 and n["fun"] >= 25
-        if peut_bosser:
+        if not peut_bosser:
+            # Récupération prioritaire avant de travailler
+            if n["energie"] < 55:
+                return "sieste" if n["energie"] > 25 else "dormir"
+            if n["fun"] < 25:
+                return "mediter" if "mediter" not in blocked else "tv"
+        elif random.random() < 0.75:
+            # 75 % du temps : travailler/étudier
             if edu.is_enrolled():
                 cost = STUDY_DOMAINS[edu.enrolled_domain][3]
                 if sim.money >= cost:
@@ -1388,27 +1395,25 @@ def ai_choose_action(sim):
                     return "travailler"
             if sim.job:
                 return "travailler"
-        else:
-            # Récupération prioritaire avant de travailler
-            if n["energie"] < 45:
-                return "sieste" if n["energie"] > 25 else "dormir"
-            if n["fun"] < 25:
-                return "mediter" if "mediter" not in blocked else "tv"
+        # 25 % du temps : laisser passer vers vie amoureuse / famille / loisirs
 
     # — Priorité 6 : vie amoureuse —
     if "flirter" not in blocked:
         rel = sim.relationship
-        if rel.is_single() and random.random() < 0.25:
+        # Célibataire : flirte souvent (60 % du temps disponible)
+        if rel.is_single() and random.random() < 0.60:
             return "flirter"
+        # Relation naissante : rendez-vous ou flirter pour faire monter l'affection
         if rel.has_partner() and not rel.is_couple():
-            if sim.money >= 35 and random.random() < 0.40:
+            if sim.money >= 35 and random.random() < 0.65:
                 return "rendezvous"
             return "flirter"
-        if rel.is_couple() and rel.affection < 90 and random.random() < 0.30:
+        # En couple : entretenir la relation régulièrement
+        if rel.is_couple() and rel.affection < 90 and random.random() < 0.50:
             return "intimite"
-        if rel.level == 4 and rel.affection >= 75 and random.random() < 0.50:
+        if rel.level == 4 and rel.affection >= 75 and random.random() < 0.65:
             return "proposer"
-        if rel.level == 5 and sim.money >= 200 and random.random() < 0.50:
+        if rel.level == 5 and sim.money >= 200 and random.random() < 0.65:
             return "marier"
 
     # — Priorité 7 : famille —
