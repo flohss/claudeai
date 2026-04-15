@@ -1372,135 +1372,196 @@ _AUTO_NAMES = ["Camille", "Alex", "Jordan", "Morgan", "Sam", "Robin",
                "Léa", "Noah", "Inès", "Lucas", "Jade", "Tom"]
 
 def ai_choose_action(sim):
-    """CORRIGÉ - Retourne la clé d'action que l'IA choisit selon les priorités du Sim."""
+    """IA survie optimisée — priorise la survie à long terme avec calcul prédictif."""
     _, stage = get_stage(sim.age)
     blocked = set(stage[4])
     n = sim.needs
+    h = sim.health
 
     # — Heure et jour de la semaine —
     if sim.hour >= 22:
         return "dormir"
     is_weekend = (sim.age % 7) >= 5
 
-    # — Priorité 1 : besoins critiques —
-    if n["vessie"]  < 20:                                             return "toilettes"
-    if n["faim"]    < 40 and "manger" not in blocked:                 # seuil relevé 25→40
-        return "snack" if sim.money < 20 else "manger"
-    if n["energie"] < 35:                                             return "dormir"
-    if n["hygiene"] < 25: 
-        return "douche"
+    # ═══════════════════════════════════════════════════════════════
+    # URGENCE BURNOUT : si burnout actif, repos TOTAL obligatoire.
+    # Avec burnout : énergie decay = -7/h (×2.3 normal).
+    # Travailler avec burnout actif = mort certaine en quelques tours.
+    # ═══════════════════════════════════════════════════════════════
+    has_burnout = "burnout" in h.diseases
+    if has_burnout:
+        if n["vessie"]  < 35:                        return "toilettes"
+        if n["faim"]    < 55:                        return "snack" if sim.money < 5 else "manger"
+        if n["energie"] < 45:                        return "dormir"
+        if n["hygiene"] < 40:                        return "douche"
+        if h.hp < 60 and sim.money >= 80:            return "medecin"
+        if sim.money >= 20:                          return "medicament"
+        # Récupération douce uniquement
+        if n["energie"] < 72 and "sieste" not in blocked: return "sieste"
+        if n["fun"]     < 60 and "mediter" not in blocked: return "mediter"
+        return "lire" if "lire" not in blocked else "passer"
 
-    # — Priorité 2 : santé (préventive et curative) —
-    h = sim.health
-    if h.hp < 30 and sim.money >= 80:                                 return "medecin"
-    if h.hp < 55 and sim.money >= 20:                                 return "medicament"
-    if h.mental < 50 and sim.money >= 60 and random.random() < 0.35: return "psy"
-    if h.is_sick() and sim.money >= 20:                               return "medicament"
+    # ═══════════════════════════════════════════════════════════════
+    # PRIORITÉ 1 : besoins critiques (seuils relevés pour plus de marge)
+    # ═══════════════════════════════════════════════════════════════
+    if n["vessie"]  < 35:                                                 return "toilettes"
+    if n["faim"]    < 52 and "manger" not in blocked:
+        return "snack" if sim.money < 5 else "manger"
+    if n["energie"] < 42:                                                 return "dormir"
+    if n["hygiene"] < 38:                                                 return "douche"
 
-    # — Priorité 3 : animal —
-    if sim.pet and sim.pet.hunger    < 30:                            return "nourrir"
-    if sim.pet and sim.pet.happiness < 30:                            return "jouer_pet"
+    # ═══════════════════════════════════════════════════════════════
+    # PRIORITÉ 2 : santé proactive (traiter tôt, pas tard)
+    # HP drains à -1/h si hygiene<20 OU energie<15 → 8 HP perdus par nuit
+    # ═══════════════════════════════════════════════════════════════
+    if h.hp < 55 and sim.money >= 80:                                     return "medecin"
+    if h.hp < 75 and h.is_sick() and sim.money >= 20:                     return "medicament"
+    if h.mental < 42 and sim.money >= 60:                                 return "psy"
+    if h.is_sick() and sim.money >= 20:                                   return "medicament"
+
+    # ═══════════════════════════════════════════════════════════════
+    # PRIORITÉ 3 : animal
+    # ═══════════════════════════════════════════════════════════════
+    if sim.pet and sim.pet.hunger    < 35:                                return "nourrir"
+    if sim.pet and sim.pet.happiness < 30:                                return "jouer_pet"
     if (not sim.pet and "adopter" not in blocked
-            and sim.money > 200 and random.random() < 0.05):          return "adopter"
+            and sim.money > 350 and random.random() < 0.03):              return "adopter"
 
-    # — Priorité 4 : PRÉVENTION DU BURN-OUT —
-    # Sieste si énergie insuffisante pour travailler (seuil travail = 55)
-    if 35 <= n["energie"] < 55 and "sieste" not in blocked:
+    # ═══════════════════════════════════════════════════════════════
+    # PRIORITÉ 4 : récupération préventive
+    # • Sieste : donne +14 énergie NETTE, coûte seulement -15 faim
+    # • Méditer : coût tick=0 ! Donne +15 énergie +15 fun GRATUITEMENT
+    # ═══════════════════════════════════════════════════════════════
+    # Sieste proactive si énergie entre 45 et 72 (recharge avant seuil travail)
+    if 45 <= n["energie"] < 72 and n["faim"] >= 28 and "sieste" not in blocked:
         return "sieste"
-    
-    # Si fun très bas, récupération obligatoire avant toute activité stressante
-    if n["fun"] < 35:
-        if "mediter" not in blocked:
-            return "mediter"
+
+    # Méditation : presque gratuite, priorité haute pour fun
+    if n["fun"] < 45 and "mediter" not in blocked:
+        return "mediter"
+
+    # Fun encore bas + ressources suffisantes → TV
+    if n["fun"] < 35 and n["energie"] > 58 and n["faim"] > 48:
         if "tv" not in blocked:
             return "tv"
-        if "jeux" not in blocked:
-            return "jeux"
 
-    # — Priorité 5 : carrière / études —
+    # ═══════════════════════════════════════════════════════════════
+    # PRIORITÉ 5 : carrière / études — avec calcul prédictif de survie
+    # Coûts réels de travailler : énergie -54, faim -65, fun -47
+    # Coûts réels d'étudier     : énergie -38, faim -45, fun -42
+    # L'IA vérifie que les niveaux POST-action seront viables
+    # ═══════════════════════════════════════════════════════════════
     if "travailler" not in blocked and not is_weekend:
         edu = sim.education
 
-        # Postuler / inscrire ne coûtent pas d'énergie → toujours autorisés
+        # Postuler si pas de job (prioritaire)
+        if not sim.job and jobs_available(edu):
+            return "postuler"
+        # Upgrade : chercher un meilleur poste (10 % de chance)
         if sim.job and random.random() < 0.10:
             best = max(jobs_available(edu), key=lambda x: x[1], default=None)
             if best:
                 cur_sal = next((s for lb, s, *_ in JOBS if lb == sim.job), 0)
                 if best[1] > cur_sal:
                     return "postuler"
-        if not sim.job and jobs_available(edu):
-            return "postuler"
+
+        # S'inscrire (argent suffisant + buffer de sécurité)
         if (not edu.is_enrolled() and not edu.has_diploma()
-                and sim.money > 600 and random.random() < 0.30):
+                and sim.money > 750 and random.random() < 0.30):
             return "inscrire"
         if (not edu.is_enrolled() and edu.has_diploma()
-                and sim.money > 800 and random.random() < 0.15):
+                and sim.money > 950 and random.random() < 0.15):
             return "inscrire"
 
-        # Travailler / étudier nécessitent un minimum d'énergie et de fun
-        # énergie ≥ 55 : marge pour ne pas tomber à 0 pendant le travail (coût ~54)
-        peut_bosser = n["energie"] >= 55 and n["fun"] >= 25
-        if not peut_bosser:
-            # Récupération prioritaire avant de travailler
-            if n["energie"] < 55:
-                return "sieste" if n["energie"] > 25 else "dormir"
-            if n["fun"] < 25:
-                return "mediter" if "mediter" not in blocked else "tv"
-        elif random.random() < 0.75:
-            # 75 % du temps : travailler/étudier
-            if edu.is_enrolled():
-                cost = STUDY_DOMAINS[edu.enrolled_domain][3]
-                if sim.money >= cost:
-                    return "etudier"
-                elif sim.job:
-                    return "travailler"
-            if sim.job:
-                return "travailler"
-        # 25 % du temps : laisser passer vers vie amoureuse / famille / loisirs
+        # ── Calcul prédictif ──────────────────────────────────────
+        # Travail (8h) : costs energie -54, faim -65, fun -47
+        # Seuils post-travail : énergie > 20 (hors burnout), faim > 8, fun > 12
+        # fun > 12 ET énergie > 20 → condition burnout (energie<15 ET fun<15) évitée
+        energie_post_t = n["energie"] - 54
+        faim_post_t    = n["faim"]    - 65
+        fun_post_t     = n["fun"]     - 47
+        peut_travailler = (energie_post_t > 20 and faim_post_t > 0 and fun_post_t > 12)
 
-    # — Priorité 6 : vie amoureuse —
+        # Études (6h) : costs énergie -38, faim -45, fun -42
+        energie_post_e = n["energie"] - 38
+        faim_post_e    = n["faim"]    - 45
+        fun_post_e     = n["fun"]     - 42
+        peut_etudier = (energie_post_e > 18 and faim_post_e > 12 and fun_post_e > 8)
+
+        if edu.is_enrolled():
+            cost = STUDY_DOMAINS[edu.enrolled_domain][3]
+            if sim.money >= cost and peut_etudier and random.random() < 0.80:
+                return "etudier"
+            elif sim.job and peut_travailler and random.random() < 0.80:
+                return "travailler"
+        elif sim.job and peut_travailler and random.random() < 0.80:
+            return "travailler"
+
+        # Impossible de travailler → récupérer intelligemment
+        if not peut_travailler:
+            if n["energie"] < 74:
+                return "sieste" if n["energie"] >= 42 else "dormir"
+            if n["faim"] < 68:
+                return "manger"
+            if n["fun"] < 60:
+                return "mediter"
+
+    # ═══════════════════════════════════════════════════════════════
+    # PRIORITÉ 6 : vie amoureuse (avec garde-fous financiers)
+    # ═══════════════════════════════════════════════════════════════
     if "flirter" not in blocked:
         rel = sim.relationship
-        # Célibataire : flirte souvent (60 % du temps disponible)
-        if rel.is_single() and random.random() < 0.60:
+        if rel.is_single() and random.random() < 0.55:
             return "flirter"
-        # Relation naissante : rendez-vous ou flirter pour faire monter l'affection
         if rel.has_partner() and not rel.is_couple():
-            if sim.money >= 35 and random.random() < 0.65:
+            # Rendez-vous seulement si argent confortable (garde buffer santé)
+            if sim.money >= 35 and sim.money > 160 and random.random() < 0.60:
                 return "rendezvous"
             return "flirter"
-        # En couple : entretenir la relation régulièrement
-        if rel.is_couple() and rel.affection < 90 and random.random() < 0.50:
+        if rel.is_couple() and rel.affection < 90 and random.random() < 0.45:
             return "intimite"
-        if rel.level == 4 and rel.affection >= 75 and random.random() < 0.65:
+        if rel.level == 4 and rel.affection >= 75 and random.random() < 0.60:
             return "proposer"
-        if rel.level == 5 and sim.money >= 200 and random.random() < 0.65:
+        if rel.level == 5 and sim.money >= 200 and random.random() < 0.60:
             return "marier"
 
-    # — Priorité 7 : famille —
+    # ═══════════════════════════════════════════════════════════════
+    # PRIORITÉ 7 : famille
+    # ═══════════════════════════════════════════════════════════════
     if ("avoir_enfant" not in blocked
         and sim.relationship.level == 6
         and len(sim.children) < 3
-        and random.random() < 0.15):
+        and random.random() < 0.12):
         return "avoir_enfant"
-    if sim.children and random.random() < 0.20:
+    if sim.children and random.random() < 0.18:
         return "famille"
 
-    # — Priorité 8 : loisirs selon besoins (équilibrage quotidien) —
+    # ═══════════════════════════════════════════════════════════════
+    # PRIORITÉ 8 : loisirs sécurisés (vérifier que les besoins supportent l'activité)
+    # ═══════════════════════════════════════════════════════════════
     pool = []
-    if n["energie"] > 50:  # CORRECTION: Seuil augmenté pour garder réserve d'énergie
-        pool += ["sport", "jardiner"]
-    if n["fun"] < 60:
-        pool += ["jeux", "tv", "lire", "mediter"]
+    # Sport (1h) : énergie -38, faim -18 → seulement si réserves suffisantes
+    if n["energie"] > 72 and n["faim"] > 58:
+        pool += ["sport"]
+    # Jardiner (2h) : énergie -18, faim -14
+    if n["energie"] > 62 and n["faim"] > 52:
+        pool += ["jardiner"]
+    # Loisirs légers
+    if n["fun"] < 72:
+        pool += ["lire", "mediter"]
+        if n["energie"] > 55 and n["faim"] > 45:
+            pool += ["tv", "jeux"]
         if sim.money >= 20 and sim.skills.levels.get("cuisine", 0) > 0:
             pool += ["gastronomie"]
-    if n["social"] < 50:
-        pool += ["appel"]
-    if sim.money >= 30 and n["fun"] < 70:  # Sortir seulement si besoin de fun
+    # Sortir : buffer argent ($100) + besoins ok
+    if sim.money >= 100 and n["fun"] < 65 and n["energie"] > 62 and n["faim"] > 52:
         pool += ["sortir"]
+    if n["social"] < 55:
+        pool += ["appel"]
     if not pool:
-        pool = ["mediter", "passer", "lire"]  # Activités douces par défaut
+        pool = ["mediter", "passer", "lire"]
     pool = [a for a in pool if a not in blocked]
+    return random.choice(pool) if pool else "passer"
     return random.choice(pool) if pool else "passer"
 
 _AUTO_PET_NAMES = ["Fido", "Minou", "Noisette", "Caramel", "Bulle", "Pixel", "Grizou", "Luna"]
@@ -1528,11 +1589,14 @@ def ai_auto_adopter(sim):
     slow_print(f"  {C.GREEN}[IA] {sim.pet.emoji} {pet_name} le {species} rejoint la famille !{C.RESET}", 0.02)
 
 def ai_auto_inscrire(sim):
-    """Choisit automatiquement le domaine d'études le plus rentable accessible."""
+    """Choisit automatiquement le domaine d'études le plus rentable accessible.
+    Garde un buffer financier (400$) pour les soins médicaux et dépenses courantes."""
+    MONEY_BUFFER = 400   # réserve à ne pas entamer pour les urgences
     best_domain = None
     best_salary = 0
     for key, (lbl, emoji, sessions, cost) in STUDY_DOMAINS.items():
-        if sim.money < cost:
+        # Doit pouvoir payer la session ET garder le buffer
+        if sim.money < cost + MONEY_BUFFER:
             continue
         for jlbl, jsal, dom, grade in JOBS:
             if dom == key and grade in (None, "Passable", "Bien"):
@@ -1540,7 +1604,8 @@ def ai_auto_inscrire(sim):
                     best_salary = jsal
                     best_domain = key
     if best_domain is None:
-        affordable = [(k, v) for k, v in STUDY_DOMAINS.items() if sim.money >= v[3]]
+        affordable = [(k, v) for k, v in STUDY_DOMAINS.items()
+                      if sim.money >= v[3] + MONEY_BUFFER]
         if not affordable:
             return
         best_domain = min(affordable, key=lambda x: x[1][3])[0]
