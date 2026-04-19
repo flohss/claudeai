@@ -1494,8 +1494,8 @@ def ai_choose_action(sim):
     # Méditer (0.5h): +15 fun +15 energie GRATUITEMENT (quasi nul)
     # ═══════════════════════════════════════════════════════════════
     # Sieste proactive — recharger avant seuil de travail
-    energie_work_min = 54 + extra_e * 8 + 22  # niveau requis pour travailler + marge
-    if n["energie"] < min(78, energie_work_min) and n["faim"] >= 25 and "sieste" not in blocked:
+    energie_work_min = 54 + extra_e * 8 + 15  # seuil minimal pour travailler
+    if n["energie"] < min(72, energie_work_min) and n["faim"] >= 25 and "sieste" not in blocked:
         return "sieste"
 
     # Social préventif : si social bas, mental drain imminent (fun<25 ET social<25 → -4/h)
@@ -1539,10 +1539,10 @@ def ai_choose_action(sim):
         fun_post_t      = n["fun"]     - f_cost_t
         hygiene_post_t  = n["hygiene"] - hyg_cost_t
         peut_travailler = (
-            energie_post_t  > 20 and
+            energie_post_t  > 15 and
             faim_post_t     > 5  and
-            fun_post_t      > 12 and
-            hygiene_post_t  > 22   # rester au-dessus du seuil HP drain
+            fun_post_t      > 8  and
+            hygiene_post_t  > 22
         )
 
         e_cost_e = 8 + 6 * (3 + extra_e)
