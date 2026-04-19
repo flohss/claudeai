@@ -52,7 +52,10 @@ def bar(value, max_value=100, length=20):
     return f"{color}{'█' * filled}{'░' * empty}{C.RESET} {value:3d}%"
 
 def slow_print(text, delay=0.03):
-    """Affiche du texte lettre par lettre."""
+    """Affiche du texte lettre par lettre (instantané en mode autopilote/debug)."""
+    if AUTOPILOT or DEBUG_MODE:
+        print(text)
+        return
     for ch in text:
         sys.stdout.write(ch)
         sys.stdout.flush()
@@ -1377,92 +1380,142 @@ _AUTO_NAMES = ["Camille", "Alex", "Jordan", "Morgan", "Sam", "Robin",
                "Léa", "Noah", "Inès", "Lucas", "Jade", "Tom"]
 
 def ai_choose_action(sim):
-    """IA survie optimisée — priorise la survie à long terme avec calcul prédictif."""
+    """IA survie optimisée — seuils dynamiques tenant compte des maladies actives."""
     _, stage = get_stage(sim.age)
     blocked = set(stage[4])
     n = sim.needs
     h = sim.health
 
-    # — Heure et jour de la semaine —
-    if sim.hour >= 22:
-        return "dormir"
     is_weekend = (sim.age % 7) >= 5
 
-    # ═══════════════════════════════════════════════════════════════
-    # URGENCE BURNOUT : si burnout actif, repos TOTAL obligatoire.
-    # Avec burnout : énergie decay = -7/h (×2.3 normal).
-    # Travailler avec burnout actif = mort certaine en quelques tours.
-    # ═══════════════════════════════════════════════════════════════
-    has_burnout = "burnout" in h.diseases
-    if has_burnout:
-        if n["vessie"]  < 35:                        return "toilettes"
-        if n["faim"]    < 55:                        return "snack" if sim.money < 5 else "manger"
-        if n["energie"] < 45:                        return "dormir"
-        if n["hygiene"] < 40:                        return "douche"
-        if h.hp < 60 and sim.money >= 80:            return "medecin"
-        if sim.money >= 20:                          return "medicament"
-        # Récupération douce uniquement
-        if n["energie"] < 72 and "sieste" not in blocked: return "sieste"
-        if n["fun"]     < 60 and "mediter" not in blocked: return "mediter"
-        return "lire" if "lire" not in blocked else "passer"
+    # ── Taux de decay extra causés par les maladies actives ──────────
+    # IMPORTANT : les valeurs dans DISEASES sont NÉGATIVES (ex: grippe hygiene=-2/h).
+    # On prend la valeur absolue pour obtenir le taux de decay supplémentaire.
+    extra_e = -sum(DISEASES[d][2].get("energie", 0) for d in h.diseases if d in DISEASES)
+    extra_h = -sum(DISEASES[d][2].get("hygiene", 0) for d in h.diseases if d in DISEASES)
+    extra_f = -sum(DISEASES[d][2].get("fun",     0) for d in h.diseases if d in DISEASES)
 
-    # ═══════════════════════════════════════════════════════════════
-    # PRIORITÉ 1 : besoins critiques (seuils relevés pour plus de marge)
-    # ═══════════════════════════════════════════════════════════════
-    if n["vessie"]  < 35:                                                 return "toilettes"
-    if n["faim"]    < 52 and "manger" not in blocked:
+    # Seuils dynamiques : garantissent de rester >22 hygiene / >15 energie après action 8h
+    hygiene_thresh = 22 + 10 + 8 * (2 + extra_h)  # 48 sain | 72 grippe+rhume
+    energie_thresh = 42 + extra_e * 6              # 42 sain | 66 grippe+rhume
+    fun_thresh     = 48 + extra_f * 4              # 48 sain | 56 grippe+rhume
+
+    # Coûts d'un sleep (pour la préparation pré-bedtime)
+    _sleep_hyg_cost = 10 + 8 * (2 + extra_h)       # 26 sain | 50 grippe+rhume
+    _faim_safe      = 15 + 60                       # 75 — survive sleep
+    _hygiene_safe   = 22 + _sleep_hyg_cost          # 48 sain | 72 grippe+rhume
+
+    # Urgence absolue : faim=0 → manger avant tout (sinon danger_turns → famine)
+    if n["faim"] == 0:
         return "snack" if sim.money < 5 else "manger"
-    if n["energie"] < 42:                                                 return "dormir"
-    if n["hygiene"] < 38:                                                 return "douche"
+
+    if sim.hour >= 22:
+        # Préparation pré-sleep : éviter famine/HP drain pendant le sleep
+        if n["faim"]    < _faim_safe:    return "snack" if sim.money < 5 else "manger"
+        if n["hygiene"] < _hygiene_safe: return "douche"
+        return "dormir"
 
     # ═══════════════════════════════════════════════════════════════
-    # PRIORITÉ 2 : santé proactive (traiter tôt, pas tard)
-    # HP drains à -1/h si hygiene<20 OU energie<15 → 8 HP perdus par nuit
+    # MODE MALADIE : GUÉRIR en priorité (médicament réduit durée de 1j/prise).
+    # 4 médicaments + 1 sleep cure grippe (5→1→tick_day=0) pour $80.
+    # COÛTS SLEEP : faim −60, hygiene −(10+8×(2+extra_h)), énergie net +4 (grippe+rhume)
+    # PIÈGE : douche coûte tick(1) → énergie −7 avec maladies.
+    #   → Séparer "pré-sleep" (préparer les reserves) de "éveillé" (médicaments).
     # ═══════════════════════════════════════════════════════════════
-    if h.hp < 55 and sim.money >= 80:                                     return "medecin"
-    if h.hp < 75 and h.is_sick() and sim.money >= 20:                     return "medicament"
-    if h.mental < 42 and sim.money >= 60:                                 return "psy"
-    if h.is_sick() and sim.money >= 20:                                   return "medicament"
+    if h.is_sick():
+        sleep_faim_cost = 60                          # modify -20 + tick 8×5
+        sleep_hyg_cost  = 10 + 8 * (2 + extra_h)     # 26 sain | 50 grippe+rhume
+        faim_safe    = 15 + sleep_faim_cost           # 75 — survive sleep
+        hygiene_safe = 22 + sleep_hyg_cost            # 48 sain | 72 grippe+rhume
+
+        about_to_sleep = n["energie"] < 22
+
+        if about_to_sleep:
+            # Urgence : energie ≈ 0 + maladies multiples → sleep ne restaure PAS l'énergie.
+            # ex: grippe+rhume: gain=60, coût=8×9=72, net=-12 → energie=0 pour toujours sans cure.
+            # Médecin SEULEMENT si energie < 10 pour limiter les ticks de faim (1 appel max).
+            if n["energie"] < 10 and sim.money >= 80:    return "medecin"
+            needs_meds_now = any(v > 1 for v in h.diseases.values())
+            if n["energie"] < 10 and needs_meds_now and sim.money >= 20: return "medicament"
+            # Préparer le sleep AVANT de dormir (ordre : faim → hygiene → sleep)
+            if n["faim"]    < faim_safe:             return "snack" if sim.money < 5 else "manger"
+            if n["hygiene"] < hygiene_safe:          return "douche"
+            return "dormir"
+
+        # Éveillé et malade → GUÉRIR
+        if n["faim"]    < 45:                        return "snack" if sim.money < 5 else "manger"
+        if n["hygiene"] < 45:                        return "douche"
+        # Médecin : cure_all() + HP+30 pour $80
+        if sim.money >= 80:                          return "medecin"
+        # Médicament pour réduire durée de maladie si durée > 1
+        needs_meds = any(v > 1 for v in h.diseases.values())
+        if needs_meds and sim.money >= 20:           return "medicament"
+        # Maladies toutes à 1j → attendre le prochain sleep pour guérir ; récupérer
+        if n["energie"] < 60 and "sieste" not in blocked: return "sieste"
+        if n["faim"]    < 60:                        return "manger"
+        return "mediter" if "mediter" not in blocked else "lire"
 
     # ═══════════════════════════════════════════════════════════════
-    # PRIORITÉ 3 : animal
+    # PRIORITÉ 1 : besoins critiques (sim sain — seuils dynamiques)
+    # HYGIENE AVANT ENERGIE : douche doit précéder le sleep pour éviter hygiene < 20
+    # après tick(8). Sans ce guard, energie < 20 force le sleep avec hygiene trop basse.
+    # Douche saine : energie +5 (modify) puis tick -3 = net +2 → ne nuit pas à l'énergie.
+    # ═══════════════════════════════════════════════════════════════
+    if n["vessie"]  < 30:                                                 return "toilettes"
+    if n["faim"]    < 50 and "manger" not in blocked:
+        return "snack" if sim.money < 5 else "manger"
+    if n["hygiene"] < hygiene_thresh:                                     return "douche"
+    if n["energie"] < energie_thresh:
+        # Vérifier faim avant de dormir (sleep coûte 60 faim; dormir avec faim<75 → réveil à ~15)
+        if n["faim"] < _faim_safe:   return "snack" if sim.money < 5 else "manger"
+        return "dormir"
+
+    # ═══════════════════════════════════════════════════════════════
+    # PRIORITÉ 2 : santé proactive
+    # ═══════════════════════════════════════════════════════════════
+    if h.hp < 85 and sim.money >= 80:                                     return "medecin"
+    if h.mental < 45 and sim.money >= 60:                                 return "psy"
+    # Mental critique sans argent → fun/social
+    if h.mental < 30:
+        if n["fun"] < 80 and "mediter" not in blocked:                    return "mediter"
+        return "appel"
+
+    # ═══════════════════════════════════════════════════════════════
+    # PRIORITÉ 3 : animal de compagnie
     # ═══════════════════════════════════════════════════════════════
     if sim.pet and sim.pet.hunger    < 35:                                return "nourrir"
     if sim.pet and sim.pet.happiness < 30:                                return "jouer_pet"
     if (not sim.pet and "adopter" not in blocked
-            and sim.money > 350 and random.random() < 0.03):              return "adopter"
+            and sim.money > 400 and random.random() < 0.03):              return "adopter"
 
     # ═══════════════════════════════════════════════════════════════
     # PRIORITÉ 4 : récupération préventive
-    # • Sieste : donne +14 énergie NETTE, coûte seulement -15 faim
-    # • Méditer : coût tick=0 ! Donne +15 énergie +15 fun GRATUITEMENT
+    # Sieste (2h): +30 énergie (modify) + tick(2) → net ~+22 énergie, coûte -15 faim
+    # Méditer (0.5h): +15 fun +15 energie GRATUITEMENT (quasi nul)
     # ═══════════════════════════════════════════════════════════════
-    # Sieste proactive si énergie entre 45 et 72 (recharge avant seuil travail)
-    if 45 <= n["energie"] < 72 and n["faim"] >= 28 and "sieste" not in blocked:
+    # Sieste proactive — recharger avant seuil de travail
+    energie_work_min = 54 + extra_e * 8 + 22  # niveau requis pour travailler + marge
+    if n["energie"] < min(78, energie_work_min) and n["faim"] >= 25 and "sieste" not in blocked:
         return "sieste"
 
-    # Méditation : presque gratuite, priorité haute pour fun
-    if n["fun"] < 45 and "mediter" not in blocked:
-        return "mediter"
+    # Social préventif : si social bas, mental drain imminent (fun<25 ET social<25 → -4/h)
+    if n["social"] < 42:                                                   return "appel"
 
-    # Fun encore bas + ressources suffisantes → TV
-    if n["fun"] < 35 and n["energie"] > 58 and n["faim"] > 48:
-        if "tv" not in blocked:
-            return "tv"
+    # Fun préventif
+    if n["fun"] < fun_thresh and "mediter" not in blocked:                return "mediter"
+    if n["fun"] < fun_thresh - 10 and n["energie"] > 55 and n["faim"] > 45:
+        if "tv" not in blocked:                                            return "tv"
 
     # ═══════════════════════════════════════════════════════════════
-    # PRIORITÉ 5 : carrière / études — avec calcul prédictif de survie
-    # Coûts réels de travailler : énergie -54, faim -65, fun -47
-    # Coûts réels d'étudier     : énergie -38, faim -45, fun -42
-    # L'IA vérifie que les niveaux POST-action seront viables
+    # PRIORITÉ 5 : carrière — avec calcul prédictif tenant compte des maladies
+    # Coûts réels travailler = modify + tick(8) avec decay maladies
+    # énergie: -30(mod) - 8×(3+extra_e) | hygiene: -10(mod) - 8×(2+extra_h) | fun: -15(mod) - 8×(4+extra_f)
     # ═══════════════════════════════════════════════════════════════
     if "travailler" not in blocked and not is_weekend:
         edu = sim.education
 
-        # Postuler si pas de job (prioritaire)
         if not sim.job and jobs_available(edu):
             return "postuler"
-        # Upgrade : chercher un meilleur poste (10 % de chance)
         if sim.job and random.random() < 0.10:
             best = max(jobs_available(edu), key=lambda x: x[1], default=None)
             if best:
@@ -1470,7 +1523,6 @@ def ai_choose_action(sim):
                 if best[1] > cur_sal:
                     return "postuler"
 
-        # S'inscrire (argent suffisant + buffer de sécurité)
         if (not edu.is_enrolled() and not edu.has_diploma()
                 and sim.money > 750 and random.random() < 0.30):
             return "inscrire"
@@ -1478,23 +1530,28 @@ def ai_choose_action(sim):
                 and sim.money > 950 and random.random() < 0.15):
             return "inscrire"
 
-        # ── Calcul prédictif ──────────────────────────────────────
-        # Travail (8h) : costs énergie -54, faim -65, fun -47
-        # fun > 12 ET énergie > 20 → condition burnout (énergie<15 ET fun<15) évitée
-        energie_post_t = n["energie"] - 54
-        faim_post_t    = n["faim"]    - 65
-        fun_post_t     = n["fun"]     - 47
-        peut_travailler = (energie_post_t > 20 and faim_post_t > 0 and fun_post_t > 12)
+        # Coûts prédictifs ajustés pour les maladies actives
+        e_cost_t = 30 + 8 * (3 + extra_e)   # modify + tick avec maladies
+        f_cost_t = 15 + 8 * (4 + extra_f)
+        hyg_cost_t = 10 + 8 * (2 + extra_h)
+        energie_post_t  = n["energie"] - e_cost_t
+        faim_post_t     = n["faim"]    - 65
+        fun_post_t      = n["fun"]     - f_cost_t
+        hygiene_post_t  = n["hygiene"] - hyg_cost_t
+        peut_travailler = (
+            energie_post_t  > 20 and
+            faim_post_t     > 5  and
+            fun_post_t      > 12 and
+            hygiene_post_t  > 22   # rester au-dessus du seuil HP drain
+        )
 
-        # Études (6h) : costs énergie -38, faim -45, fun -42
-        energie_post_e = n["energie"] - 38
+        e_cost_e = 8 + 6 * (3 + extra_e)
+        f_cost_e = 12 + 6 * (4 + extra_f)
+        energie_post_e = n["energie"] - e_cost_e
         faim_post_e    = n["faim"]    - 45
-        fun_post_e     = n["fun"]     - 42
+        fun_post_e     = n["fun"]     - f_cost_e
         peut_etudier = (energie_post_e > 18 and faim_post_e > 12 and fun_post_e > 8)
 
-        # ── TRAVAIL OBLIGATOIRE en semaine (pas de gate probabiliste) ──
-        # Le Sim DOIT travailler/étudier chaque jour ouvrable dès que possible.
-        # La session se fait une fois par jour (8h) ; le reste du temps est libre.
         if edu.is_enrolled():
             cost = STUDY_DOMAINS[edu.enrolled_domain][3]
             if sim.money >= cost and peut_etudier:
@@ -1504,25 +1561,26 @@ def ai_choose_action(sim):
         elif sim.job and peut_travailler:
             return "travailler"
 
-        # Impossible de travailler aujourd'hui → récupérer (report au prochain tour)
+        # Conditions non réunies → récupération active (report au prochain tick)
         if not peut_travailler:
-            if n["energie"] < 74:
+            if n["energie"] < energie_work_min:
                 return "sieste" if n["energie"] >= 42 else "dormir"
-            if n["faim"] < 68:
+            if n["faim"] < 70:
                 return "manger"
-            if n["fun"] < 60:
+            if n["fun"] < fun_thresh + 10:
                 return "mediter"
+            if n["hygiene"] < hygiene_thresh + 15:
+                return "douche"
 
     # ═══════════════════════════════════════════════════════════════
-    # PRIORITÉ 6 : vie amoureuse (avec garde-fous financiers)
+    # PRIORITÉ 6 : vie amoureuse (buffer financier pour la santé)
     # ═══════════════════════════════════════════════════════════════
     if "flirter" not in blocked:
         rel = sim.relationship
         if rel.is_single() and random.random() < 0.55:
             return "flirter"
         if rel.has_partner() and not rel.is_couple():
-            # Rendez-vous seulement si argent confortable (garde buffer santé)
-            if sim.money >= 35 and sim.money > 160 and random.random() < 0.60:
+            if sim.money > 160 and random.random() < 0.60:
                 return "rendezvous"
             return "flirter"
         if rel.is_couple() and rel.affection < 90 and random.random() < 0.45:
@@ -1544,31 +1602,27 @@ def ai_choose_action(sim):
         return "famille"
 
     # ═══════════════════════════════════════════════════════════════
-    # PRIORITÉ 8 : loisirs sécurisés (vérifier que les besoins supportent l'activité)
+    # PRIORITÉ 8 : loisirs sécurisés
     # ═══════════════════════════════════════════════════════════════
     pool = []
-    # Sport (1h) : énergie -38, faim -18 → seulement si réserves suffisantes
-    if n["energie"] > 72 and n["faim"] > 58:
+    if n["energie"] > 75 and n["faim"] > 60 and not h.is_sick():
         pool += ["sport"]
-    # Jardiner (2h) : énergie -18, faim -14
-    if n["energie"] > 62 and n["faim"] > 52:
+    if n["energie"] > 65 and n["faim"] > 55 and not h.is_sick():
         pool += ["jardiner"]
-    # Loisirs légers
-    if n["fun"] < 72:
+    if n["fun"] < 75:
         pool += ["lire", "mediter"]
         if n["energie"] > 55 and n["faim"] > 45:
             pool += ["tv", "jeux"]
         if sim.money >= 20 and sim.skills.levels.get("cuisine", 0) > 0:
             pool += ["gastronomie"]
-    # Sortir : buffer argent ($100) + besoins ok
-    if sim.money >= 100 and n["fun"] < 65 and n["energie"] > 62 and n["faim"] > 52:
+    if sim.money >= 100 and n["fun"] < 68 and n["energie"] > 65 and n["faim"] > 55 and not h.is_sick():
         pool += ["sortir"]
-    if n["social"] < 55:
+    if n["social"] < 60:
         pool += ["appel"]
     if not pool:
-        pool = ["mediter", "passer", "lire"]
+        pool = ["mediter", "lire", "appel"]
     pool = [a for a in pool if a not in blocked]
-    return random.choice(pool) if pool else "passer"
+    return random.choice(pool) if pool else "mediter"
 
 _AUTO_PET_NAMES = ["Fido", "Minou", "Noisette", "Caramel", "Bulle", "Pixel", "Grizou", "Luna"]
 
