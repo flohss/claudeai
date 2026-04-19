@@ -1573,22 +1573,39 @@ def ai_choose_action(sim):
                 return "douche"
 
     # ═══════════════════════════════════════════════════════════════
-    # PRIORITÉ 6 : vie amoureuse (buffer financier pour la santé)
+    # PRIORITÉ 6 : vie amoureuse — progression déterministe
     # ═══════════════════════════════════════════════════════════════
     if "flirter" not in blocked:
         rel = sim.relationship
-        if rel.is_single() and random.random() < 0.55:
+
+        # Célibataire → chercher une rencontre (avec garde sur les stats)
+        if rel.is_single() and n["energie"] > 50 and n["faim"] > 45:
             return "flirter"
+
+        # Lvl 1-3 : faire avancer la relation (rendezvous +25 aff/$35, flirt +15 aff/gratuit)
         if rel.has_partner() and not rel.is_couple():
-            if sim.money > 160 and random.random() < 0.60:
-                return "rendezvous"
-            return "flirter"
-        if rel.is_couple() and rel.affection < 90 and random.random() < 0.45:
-            return "intimite"
-        if rel.level == 4 and rel.affection >= 75 and random.random() < 0.60:
-            return "proposer"
-        if rel.level == 5 and sim.money >= 200 and random.random() < 0.60:
-            return "marier"
+            if sim.money >= 115 and n["energie"] > 55 and n["faim"] > 50 and random.random() < 0.75:
+                return "rendezvous"  # 115 = 35 coût + 80 buffer médecin
+            elif n["energie"] > 45 and random.random() < 0.75:
+                return "flirter"
+
+        # Lvl 4 (couple) : monter l'affection puis demander en mariage
+        if rel.level == 4:
+            if rel.affection >= 75 and "proposer" not in blocked:
+                return "proposer"
+            if "intimite" not in blocked:
+                return "intimite"
+
+    # Lvl 5 (fiancé(e)) : se marier quand finances et santé le permettent
+    if ("marier" not in blocked and sim.relationship.level == 5
+            and sim.money >= 360 and h.hp >= 70 and not h.is_sick()):
+        return "marier"
+
+    # Lvl 6 (marié(e)) : entretenir l'affection
+    if (sim.relationship.level == 6
+            and "intimite" not in blocked
+            and sim.relationship.affection < 88):
+        return "intimite"
 
     # ═══════════════════════════════════════════════════════════════
     # PRIORITÉ 7 : famille
@@ -1596,9 +1613,9 @@ def ai_choose_action(sim):
     if ("avoir_enfant" not in blocked
         and sim.relationship.level == 6
         and len(sim.children) < 3
-        and random.random() < 0.12):
+        and random.random() < 0.35):
         return "avoir_enfant"
-    if sim.children and random.random() < 0.18:
+    if sim.children and random.random() < 0.40:
         return "famille"
 
     # ═══════════════════════════════════════════════════════════════
