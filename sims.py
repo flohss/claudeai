@@ -1509,63 +1509,62 @@ def ai_choose_action(sim):
         if "tv" not in blocked:                                            return "tv"
 
     # ═══════════════════════════════════════════════════════════════
-    # PRIORITÉ 5 : carrière — avec calcul prédictif tenant compte des maladies
-    # Coûts réels travailler = modify + tick(8) avec decay maladies
-    # énergie: -30(mod) - 8×(3+extra_e) | hygiene: -10(mod) - 8×(2+extra_h) | fun: -15(mod) - 8×(4+extra_f)
+    # PRIORITÉ 5 : carrière & études
     # ═══════════════════════════════════════════════════════════════
-    if "travailler" not in blocked and not is_weekend:
+    if "travailler" not in blocked:
         edu = sim.education
 
+        # A) Pas de job → postuler immédiatement
         if not sim.job and jobs_available(edu):
             return "postuler"
-        if sim.job and random.random() < 0.10:
+
+        # B) Diplôme obtenu → changer de poste sans délai
+        if edu.has_diploma():
             best = max(jobs_available(edu), key=lambda x: x[1], default=None)
             if best:
                 cur_sal = next((s for lb, s, *_ in JOBS if lb == sim.job), 0)
                 if best[1] > cur_sal:
                     return "postuler"
 
-        if (not edu.is_enrolled() and not edu.has_diploma()
-                and sim.money > 750 and random.random() < 0.30):
-            return "inscrire"
-        if (not edu.is_enrolled() and edu.has_diploma()
-                and sim.money > 950 and random.random() < 0.15):
-            return "inscrire"
-
-        # Coûts prédictifs (tick énergie=-2/h, fun=-3/h ; work modify énergie=-25, fun=+5)
-        e_cost_t   = 25 + 8 * (2 + extra_e)   # 41 sain | 65 grippe+rhume
-        f_cost_t   = -5 + 8 * (3 + extra_f)   # 19 sain | 35 grippe+rhume (fun+5 modify inclus)
-        hyg_cost_t = 10 + 8 * (2 + extra_h)
-        faim_cost_t = 20 + 8 * 5               # 60 (modify -20 + tick 8×5)
-        energie_post_t  = n["energie"] - e_cost_t
-        faim_post_t     = n["faim"]    - faim_cost_t
-        fun_post_t      = n["fun"]     - f_cost_t
-        hygiene_post_t  = n["hygiene"] - hyg_cost_t
+        # Calcul prédictif (tick énergie=-2/h, fun=-3/h)
+        e_cost_t    = 25 + 8 * (2 + extra_e)   # 41 sain | 65 grippe
+        f_cost_t    = -5 + 8 * (3 + extra_f)   # 19 sain | 35 grippe
+        hyg_cost_t  = 10 + 8 * (2 + extra_h)
+        faim_cost_t = 20 + 8 * 5               # 60
         peut_travailler = (
-            energie_post_t  > 3  and
-            faim_post_t     > 5  and
-            fun_post_t      > -20 and
-            hygiene_post_t  > 20
+            n["energie"] - e_cost_t  > 3   and
+            n["faim"]    - faim_cost_t > 5  and
+            n["fun"]     - f_cost_t  > -20  and
+            n["hygiene"] - hyg_cost_t > 20
         )
-
         e_cost_e = 8 + 6 * (2 + extra_e)
         f_cost_e = 0 + 6 * (3 + extra_f)
-        energie_post_e = n["energie"] - e_cost_e
-        faim_post_e    = n["faim"]    - 45
-        fun_post_e     = n["fun"]     - f_cost_e
-        peut_etudier = (energie_post_e > 12 and faim_post_e > 10 and fun_post_e > -10)
+        peut_etudier = (
+            n["energie"] - e_cost_e > 12 and
+            n["faim"]    - 45       > 10 and
+            n["fun"]     - f_cost_e > -10
+        )
 
+        # C) Études en cours → étudier 7j/7 en priorité sur le travail
         if edu.is_enrolled():
-            cost = STUDY_DOMAINS[edu.enrolled_domain][3]
-            if sim.money >= cost and peut_etudier:
+            session_cost = STUDY_DOMAINS[edu.enrolled_domain][3]
+            if sim.money >= session_cost + 160 and peut_etudier:  # +160 = 2 médecins buffer
                 return "etudier"
-            elif sim.job and peut_travailler:
+            # Pas de session possible → travailler pour financer les études
+            if not is_weekend and sim.job and peut_travailler:
                 return "travailler"
-        elif sim.job and peut_travailler:
+
+        # D) Pas encore inscrit → s'inscrire dès que le buffer le permet (session + 200$ médecin)
+        elif (not edu.has_diploma() and sim.money >= 350
+                and "inscrire" not in blocked):
+            return "inscrire"
+
+        # E) Travailler (semaine seulement)
+        elif not is_weekend and sim.job and peut_travailler:
             return "travailler"
 
-        # Conditions non réunies → récupération ciblée
-        if not peut_travailler:
+        # Récupération ciblée si conditions de travail non réunies
+        if not peut_travailler and not is_weekend:
             if n["energie"] < energie_work_min:
                 return "sieste" if n["energie"] >= 30 else "dormir"
             if n["faim"] < 65:
@@ -1671,7 +1670,7 @@ def ai_auto_adopter(sim):
 def ai_auto_inscrire(sim):
     """Choisit automatiquement le domaine d'études le plus rentable accessible.
     Garde un buffer financier (400$) pour les soins médicaux et dépenses courantes."""
-    MONEY_BUFFER = 400   # réserve à ne pas entamer pour les urgences
+    MONEY_BUFFER = 200   # réserve santé minimale (2-3 médecins)
     best_domain = None
     best_salary = 0
     for key, (lbl, emoji, sessions, cost) in STUDY_DOMAINS.items():
