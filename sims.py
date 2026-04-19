@@ -163,9 +163,9 @@ class Sim:
     def tick(self, hours=1):
         decay = {
             "faim": -5 * hours,
-            "energie": -3 * hours,
+            "energie": -2 * hours,
             "hygiene": -2 * hours,
-            "fun": -4 * hours,
+            "fun": -3 * hours,
             "social": -3 * hours,
             "vessie": -7 * hours,
         }
@@ -879,7 +879,7 @@ def action_travailler(sim):
     slow_print(f"\n {C.YELLOW}Tu travailles toute la journée comme {sim.job}... 💼{C.RESET}", 0.02)
     sim.money += salary
     sim.job_days += 1
-    sim.modify(energie=-30, faim=-25, social=+10, hygiene=-10, fun=-15)
+    sim.modify(energie=-25, faim=-20, social=+15, hygiene=-10, fun=+5)
     sim.tick(8)
     slow_print(f" {C.GREEN}+${salary} gagnés ! Total : ${sim.money}{C.RESET}", 0.02)
     lvl = sim.skills.gain('travail', 10)
@@ -1395,10 +1395,10 @@ def ai_choose_action(sim):
     extra_h = -sum(DISEASES[d][2].get("hygiene", 0) for d in h.diseases if d in DISEASES)
     extra_f = -sum(DISEASES[d][2].get("fun",     0) for d in h.diseases if d in DISEASES)
 
-    # Seuils dynamiques : garantissent de rester >22 hygiene / >15 energie après action 8h
+    # Seuils dynamiques (tick énergie=-2/h, fun=-3/h depuis refonte)
     hygiene_thresh = 22 + 10 + 8 * (2 + extra_h)  # 48 sain | 72 grippe+rhume
-    energie_thresh = 42 + extra_e * 6              # 42 sain | 66 grippe+rhume
-    fun_thresh     = 48 + extra_f * 4              # 48 sain | 56 grippe+rhume
+    energie_thresh = 36 + extra_e * 5              # 36 sain | 61 grippe+rhume
+    fun_thresh     = 44 + extra_f * 3              # 44 sain | 50 grippe+rhume
 
     # Coûts d'un sleep (pour la préparation pré-bedtime)
     _sleep_hyg_cost = 10 + 8 * (2 + extra_h)       # 26 sain | 50 grippe+rhume
@@ -1413,6 +1413,8 @@ def ai_choose_action(sim):
         # Préparation pré-sleep : éviter famine/HP drain pendant le sleep
         if n["faim"]    < _faim_safe:    return "snack" if sim.money < 5 else "manger"
         if n["hygiene"] < _hygiene_safe: return "douche"
+        if n["fun"]     < 50 and sim.hour < 23 and "mediter" not in blocked:
+            return "mediter"   # dormir avec plus de fun → réveiller avec moins de drain
         return "dormir"
 
     # ═══════════════════════════════════════════════════════════════
@@ -1428,11 +1430,11 @@ def ai_choose_action(sim):
         faim_safe    = 15 + sleep_faim_cost           # 75 — survive sleep
         hygiene_safe = 22 + sleep_hyg_cost            # 48 sain | 72 grippe+rhume
 
-        about_to_sleep = n["energie"] < 22
+        about_to_sleep = n["energie"] < 15
 
         if about_to_sleep:
             # Urgence : energie ≈ 0 + maladies multiples → sleep ne restaure PAS l'énergie.
-            # ex: grippe+rhume: gain=60, coût=8×9=72, net=-12 → energie=0 pour toujours sans cure.
+            # ex: grippe+rhume: gain=60, coût=8×(2+3+1)×8=48, net=+12 (nouveau tick -2/h).
             # Médecin SEULEMENT si energie < 10 pour limiter les ticks de faim (1 appel max).
             if n["energie"] < 10 and sim.money >= 80:    return "medecin"
             needs_meds_now = any(v > 1 for v in h.diseases.values())
@@ -1494,8 +1496,8 @@ def ai_choose_action(sim):
     # Méditer (0.5h): +15 fun +15 energie GRATUITEMENT (quasi nul)
     # ═══════════════════════════════════════════════════════════════
     # Sieste proactive — recharger avant seuil de travail
-    energie_work_min = 54 + extra_e * 8 + 15  # seuil minimal pour travailler
-    if n["energie"] < min(72, energie_work_min) and n["faim"] >= 25 and "sieste" not in blocked:
+    energie_work_min = 25 + 8 * (2 + extra_e) + 3   # 44 sain | 68 grippe+rhume
+    if n["energie"] < min(55, energie_work_min) and n["faim"] >= 20 and "sieste" not in blocked:
         return "sieste"
 
     # Social préventif : si social bas, mental drain imminent (fun<25 ET social<25 → -4/h)
@@ -1530,27 +1532,28 @@ def ai_choose_action(sim):
                 and sim.money > 950 and random.random() < 0.15):
             return "inscrire"
 
-        # Coûts prédictifs ajustés pour les maladies actives
-        e_cost_t = 30 + 8 * (3 + extra_e)   # modify + tick avec maladies
-        f_cost_t = 15 + 8 * (4 + extra_f)
+        # Coûts prédictifs (tick énergie=-2/h, fun=-3/h ; work modify énergie=-25, fun=+5)
+        e_cost_t   = 25 + 8 * (2 + extra_e)   # 41 sain | 65 grippe+rhume
+        f_cost_t   = -5 + 8 * (3 + extra_f)   # 19 sain | 35 grippe+rhume (fun+5 modify inclus)
         hyg_cost_t = 10 + 8 * (2 + extra_h)
+        faim_cost_t = 20 + 8 * 5               # 60 (modify -20 + tick 8×5)
         energie_post_t  = n["energie"] - e_cost_t
-        faim_post_t     = n["faim"]    - 65
+        faim_post_t     = n["faim"]    - faim_cost_t
         fun_post_t      = n["fun"]     - f_cost_t
         hygiene_post_t  = n["hygiene"] - hyg_cost_t
         peut_travailler = (
-            energie_post_t  > 15 and
+            energie_post_t  > 3  and
             faim_post_t     > 5  and
-            fun_post_t      > 8  and
-            hygiene_post_t  > 22
+            fun_post_t      > -20 and
+            hygiene_post_t  > 20
         )
 
-        e_cost_e = 8 + 6 * (3 + extra_e)
-        f_cost_e = 12 + 6 * (4 + extra_f)
+        e_cost_e = 8 + 6 * (2 + extra_e)
+        f_cost_e = 0 + 6 * (3 + extra_f)
         energie_post_e = n["energie"] - e_cost_e
         faim_post_e    = n["faim"]    - 45
         fun_post_e     = n["fun"]     - f_cost_e
-        peut_etudier = (energie_post_e > 18 and faim_post_e > 12 and fun_post_e > 8)
+        peut_etudier = (energie_post_e > 12 and faim_post_e > 10 and fun_post_e > -10)
 
         if edu.is_enrolled():
             cost = STUDY_DOMAINS[edu.enrolled_domain][3]
@@ -1561,15 +1564,15 @@ def ai_choose_action(sim):
         elif sim.job and peut_travailler:
             return "travailler"
 
-        # Conditions non réunies → récupération active (report au prochain tick)
+        # Conditions non réunies → récupération ciblée
         if not peut_travailler:
             if n["energie"] < energie_work_min:
-                return "sieste" if n["energie"] >= 42 else "dormir"
-            if n["faim"] < 70:
+                return "sieste" if n["energie"] >= 30 else "dormir"
+            if n["faim"] < 65:
                 return "manger"
-            if n["fun"] < fun_thresh + 10:
+            if n["fun"] < 25 and "mediter" not in blocked:
                 return "mediter"
-            if n["hygiene"] < hygiene_thresh + 15:
+            if n["hygiene"] < hygiene_thresh:
                 return "douche"
 
     # ═══════════════════════════════════════════════════════════════
