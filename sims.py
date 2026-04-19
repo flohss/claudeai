@@ -406,10 +406,10 @@ STUDY_DOMAINS = {
     "arts": ("Arts & Lettres", "🎨", 6, 200),
     "informatique": ("Informatique", "💻", 6, 250),
     "sciences": ("Sciences", "🔬", 6, 250),
-    "droit": ("Droit", "⚖", 10, 350),
-    "medecine": ("Médecine", "🏥", 10, 400),
-    "psychologie": ("Psychologie", "🧠", 8, 280),
-    "architecture": ("Architecture", "🏛", 8, 280),
+    "droit": ("Droit", "⚖", 8, 350),
+    "medecine": ("Médecine", "🏥", 8, 400),
+    "psychologie": ("Psychologie", "🧠", 6, 280),
+    "architecture": ("Architecture", "🏛", 6, 280),
     "communication":("Communication", "📡", 4, 150),
     "finance": ("Finance & Économie", "📈", 6, 250),
     "enseignement": ("Sciences de l'éduc.", "📚", 6, 200),
@@ -1548,7 +1548,10 @@ def ai_choose_action(sim):
         # C) Études en cours → étudier 7j/7 en priorité sur le travail
         if edu.is_enrolled():
             session_cost = STUDY_DOMAINS[edu.enrolled_domain][3]
-            if sim.money >= session_cost + 160 and peut_etudier:  # +160 = 2 médecins buffer
+            sessions_left = edu.sessions_required() - edu.sessions_done
+            # Buffer réduit quand on approche de la fin : plus besoin de garder autant de réserve
+            study_buffer = max(0, (sessions_left - 1)) * 80   # 0$ sur la dernière session, 80$/session sinon
+            if sim.money >= session_cost + study_buffer and peut_etudier:
                 return "etudier"
             # Pas de session possible → travailler pour financer les études
             if not is_weekend and sim.job and peut_travailler:
@@ -1671,23 +1674,27 @@ def ai_auto_inscrire(sim):
     """Choisit automatiquement le domaine d'études le plus rentable accessible.
     Garde un buffer financier (400$) pour les soins médicaux et dépenses courantes."""
     MONEY_BUFFER = 200   # réserve santé minimale (2-3 médecins)
-    best_domain = None
-    best_salary = 0
+    scored = {}  # domain → score
     for key, (lbl, emoji, sessions, cost) in STUDY_DOMAINS.items():
-        # Doit pouvoir payer la session ET garder le buffer
         if sim.money < cost + MONEY_BUFFER:
             continue
-        for jlbl, jsal, dom, grade in JOBS:
-            if dom == key and grade in (None, "Passable", "Bien"):
-                if jsal > best_salary:
-                    best_salary = jsal
-                    best_domain = key
-    if best_domain is None:
-        affordable = [(k, v) for k, v in STUDY_DOMAINS.items()
-                      if sim.money >= v[3] + MONEY_BUFFER]
-        if not affordable:
-            return
-        best_domain = min(affordable, key=lambda x: x[1][3])[0]
+        best_sal = max(
+            (jsal for jlbl, jsal, dom, grade in JOBS
+             if dom == key and grade in (None, "Passable", "Bien")),
+            default=0,
+        )
+        if best_sal > 0:
+            # Score = salaire / sessions (efficacité par session) avec plancher à 1
+            scored[key] = best_sal / max(sessions, 1)
+
+    if not scored:
+        return
+    # Sélection pondérée parmi les filières dont le score est ≥ 70 % du meilleur
+    best_score = max(scored.values())
+    candidates = {k: s for k, s in scored.items() if s >= 0.70 * best_score}
+    keys = list(candidates.keys())
+    weights = [candidates[k] for k in keys]
+    best_domain = random.choices(keys, weights=weights, k=1)[0]
     lbl, emoji, sessions, cost = STUDY_DOMAINS[best_domain]
     sim.money -= cost
     sim.education.enrolled_domain = best_domain
