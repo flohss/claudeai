@@ -2499,11 +2499,13 @@ def ai_choose_action(sim):
         faim_safe    = 15 + sleep_faim_cost
         hygiene_safe = 22 + sleep_hyg_cost
 
-        # Maladies fatales : aller au médecin en priorité absolue
+        # Maladies fatales : consulter quand le stade progresse, pas en urgence permanente
         if h.has_fatal():
             max_stage = h.fatal_max_stage()
             fat_cost = 400 if max_stage >= 2 else 250
-            if sim.money >= fat_cost and n["faim"] > 40 and n["energie"] > 25:
+            # Tente le médecin tous les ~3 jours si budget (pas chaque tour)
+            if (sim.money >= fat_cost * 1.5 and n["faim"] > 40 and n["energie"] > 25
+                    and sim.age % 3 == 0):
                 return "medecin"
 
         about_to_sleep = n["energie"] < 15
@@ -2822,7 +2824,14 @@ def autopilot_loop(sim, speed=0.8):
             else:
                 danger_turns = 0
             if sim.health.hp <= 0:
-                slow_print(f"\n {C.RED}💀 {sim.name} est décédé(e) des suites de sa santé.{C.RESET}", 0.02)
+                _death_cause = next(
+                    (DISEASES[d][0] for d in sim.health.diseases
+                     if DISEASES.get(d,('','','',0,0,'inf'))[5] in ("fat","neuro")),
+                    None)
+                if _death_cause:
+                    slow_print(f"\n {C.RED}💀 {sim.name} est décédé(e) des suites de {_death_cause}...{C.RESET}", 0.02)
+                else:
+                    slow_print(f"\n {C.RED}💀 {sim.name} est décédé(e) des suites de sa santé.{C.RESET}", 0.02)
                 return "santé"
 
             # — Décision IA —
@@ -3145,8 +3154,15 @@ def game_loop(sim):
             danger_turns = 0
         # Mort par mauvaise santé
         if sim.health.hp <= 0:
-            slow_print(f"\n {C.RED}💀 {sim.name} est décédé(e) des suites de problèmes de santé...{C.RESET}")
-            slow_print(f" {C.GRAY}Pense à consulter un médecin régulièrement !{C.RESET}")
+            _fatal = next(
+                (DISEASES[d][0] for d in sim.health.diseases
+                 if DISEASES.get(d,('','','',0,0,'inf'))[5] in ("fat","neuro")),
+                None)
+            if _fatal:
+                slow_print(f"\n {C.RED}💀 {sim.name} est décédé(e) des suites de {_fatal}...{C.RESET}")
+            else:
+                slow_print(f"\n {C.RED}💀 {sim.name} est décédé(e) des suites de problèmes de santé...{C.RESET}")
+                slow_print(f" {C.GRAY}Pense à consulter un médecin régulièrement !{C.RESET}")
             return "santé"
 
         if sim.hour >= 22:
