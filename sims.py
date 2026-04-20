@@ -253,6 +253,7 @@ class Pet:
         self.species = species
         self.hunger = 80
         self.happiness = 80
+        self.neglect_days = 0
 
     @property
     def emoji(self):
@@ -579,6 +580,80 @@ RANDOM_EVENTS = [
     (3, "🐾", "Ton voisin te confie son chien le temps d'un week-end.", {"fun": +20, "social": +10, "energie": -5}, 0),
 ]
 
+# --- Événements partenaire ---
+# Format : (prob%, emoji, desc_template, effects, money, aff_delta, min_level, condition_fn)
+# {p} dans desc sera remplacé par le prénom du partenaire
+PARTNER_EVENTS = [
+    (13, "💌",
+     "{p} t'envoie un message touchant — ça réchauffe le cœur.",
+     {"fun": +15, "social": +10}, 0, +5, 1, lambda s: True),
+    (10, "💬",
+     "Longue conversation sincère avec {p} jusqu'à tard ce soir.",
+     {"social": +25, "energie": -10}, 0, +8, 2, lambda s: True),
+    (9, "🌹",
+     "{p} t'a préparé une surprise romantique — quelle délicate attention !",
+     {"fun": +30, "social": +20}, 0, +12, 4, lambda s: s.relationship.affection >= 55),
+    (7, "🎉",
+     "{p} a une excellente nouvelle — vous fêtez ça ensemble !",
+     {"fun": +25, "social": +20}, +40, +8, 2, lambda s: True),
+    (8, "😤",
+     "{p} est de mauvaise humeur ce soir — tension palpable à la maison.",
+     {"fun": -20, "social": -10}, 0, -10, 2, lambda s: s.relationship.affection < 65),
+    (7, "🤒",
+     "{p} est souffrant(e) — tu veilles sur lui/elle toute la nuit.",
+     {"energie": -15, "fun": -10, "social": +10}, -20, -3, 1, lambda s: True),
+    (8, "✈",
+     "{p} part en déplacement pro — la maison est silencieuse quelques jours.",
+     {"social": -20, "fun": -10}, 0, -5, 1, lambda s: True),
+    (7, "😔",
+     "{p} traverse une période difficile — il/elle a besoin de ton soutien.",
+     {"social": +15, "energie": -10}, 0, +6, 2, lambda s: True),
+    (6, "💔",
+     "{p} te reproche ton manque de présence — ça ne se passe pas bien.",
+     {"fun": -25, "social": -15}, 0, -18, 3, lambda s: s.relationship.affection < 45),
+    (5, "🎁",
+     "{p} rentre avec un cadeau surprise — tu es touché(e).",
+     {"fun": +25, "social": +15}, +25, +10, 4, lambda s: s.relationship.affection >= 70),
+]
+
+def trigger_partner_event(sim):
+    rel = sim.relationship
+    if not rel.has_partner():
+        return None
+    candidates = list(PARTNER_EVENTS)
+    random.shuffle(candidates)
+    for prob, emoji, desc_tpl, effects, money, aff_delta, min_level, condition in candidates:
+        if rel.level < min_level:
+            continue
+        if not condition(sim):
+            continue
+        if random.randint(1, 100) > prob:
+            continue
+        desc = desc_tpl.replace("{p}", rel.partner_name)
+        sim.modify(**effects)
+        sim.money = max(0, sim.money + money)
+        rel.affection = max(0, min(100, rel.affection + aff_delta))
+        parts = []
+        for need, delta in effects.items():
+            lbl = Sim.NEED_LABELS[need][0]
+            sign = "+" if delta >= 0 else ""
+            col = C.GREEN if delta > 0 else C.RED
+            parts.append(f"{col}{sign}{delta} {lbl}{C.RESET}")
+        money_str = ""
+        if money != 0:
+            sign = "+" if money >= 0 else ""
+            col = C.GREEN if money > 0 else C.RED
+            money_str = f"  {col}{sign}${money}{C.RESET}"
+        aff_str = ""
+        if aff_delta != 0:
+            sign = "+" if aff_delta >= 0 else ""
+            col = C.GREEN if aff_delta > 0 else C.RED
+            aff_str = f"  {col}{sign}{aff_delta} Affection{C.RESET}"
+        return (f"\n {C.BOLD}━━ PARTENAIRE 💑 {rel.partner_name.upper()} ━━{C.RESET}\n"
+                f" {emoji} {desc}\n"
+                f" {', '.join(parts)}{money_str}{aff_str}")
+    return None
+
 # --- Événements liés aux traits ---
 # Format : (prob%, emoji, description, effects_dict, money_delta, condition_fn, consequence_key)
 # consequence_key : "fracture" | "grippe" | "burnout" | "stress_up" | "mental_down" | None
@@ -845,7 +920,12 @@ def show_status(sim):
 
     if sim.pet:
         p = sim.pet
-        warn = f" {C.RED}⚠ BESOIN D'ATTENTION !{C.RESET}" if p.is_neglected() else ""
+        if p.neglect_days > 0:
+            warn = f" {C.RED}⚠ NÉGLIGÉ {p.neglect_days}/3j — {3 - p.neglect_days} jour(s) restant(s) !{C.RESET}"
+        elif p.is_neglected():
+            warn = f" {C.YELLOW}⚠ BESOIN D'ATTENTION{C.RESET}"
+        else:
+            warn = ""
         print(f" {C.BOLD}Animal :{C.RESET} {p.emoji} {p.name} ({p.species})"
               f" Faim {bar(p.hunger, length=10)} Humeur {bar(p.happiness, length=10)}{warn}")
     print()
@@ -1011,14 +1091,33 @@ def action_dormir(sim):
     for child in sim.children:
         child.tick_day()
 
-    # ── Événements nocturnes : trait en priorité, sinon aléatoire (40%) ──
+    # ── Animal : négligence prolongée ─────────────────────────────
+    if sim.pet:
+        if sim.pet.is_neglected():
+            sim.pet.neglect_days += 1
+            sim.modify(fun=-8, social=-5)
+            if sim.pet.neglect_days >= 3:
+                slow_print(f"\n {C.RED}💔 {sim.pet.name} est parti(e) faute de soins... tu te sens terriblement coupable.{C.RESET}", 0.02)
+                sim.modify(fun=-30, social=-20)
+                sim.stress = min(100, sim.stress + 20)
+                sim.pet = None
+            else:
+                slow_print(f" {C.YELLOW}⚠ {sim.pet.name} souffre de négligence — encore {3 - sim.pet.neglect_days} jour(s) avant l'irréparable.{C.RESET}", 0.02)
+        else:
+            sim.pet.neglect_days = 0
+
+    # ── Événements nocturnes : trait > partenaire > aléatoire (40%) ──
     trait_msg = trigger_trait_event(sim)
     if trait_msg:
         sim.last_event = trait_msg
-    elif random.randint(1, 100) <= 40:
-        sim.last_event = trigger_random_event(sim)
     else:
-        sim.last_event = None
+        partner_msg = trigger_partner_event(sim)
+        if partner_msg:
+            sim.last_event = partner_msg
+        elif random.randint(1, 100) <= 40:
+            sim.last_event = trigger_random_event(sim)
+        else:
+            sim.last_event = None
 
     # ── Récupération du stress au repos ────────────────────────────
     stress_rec = 15
@@ -1483,7 +1582,8 @@ def action_sauvegarder(sim):
             "affection": sim.relationship.affection,
         },
         "pet": {"name": sim.pet.name, "species": sim.pet.species,
-                "hunger": sim.pet.hunger, "happiness": sim.pet.happiness
+                "hunger": sim.pet.hunger, "happiness": sim.pet.happiness,
+                "neglect_days": sim.pet.neglect_days,
                 } if sim.pet else None,
         "weather_idx": WEATHER_TYPES.index(sim.weather._data),
         "skills": {"levels": sim.skills.levels, "xp": sim.skills.xp},
@@ -2517,6 +2617,7 @@ def load_game():
         sim.pet = Pet(p["name"], p["species"])
         sim.pet.hunger = p["hunger"]
         sim.pet.happiness = p["happiness"]
+        sim.pet.neglect_days = p.get("neglect_days", 0)
 
     widx = d.get("weather_idx", 0)
     sim.weather._data = WEATHER_TYPES[min(widx, len(WEATHER_TYPES) - 1)]
