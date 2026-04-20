@@ -354,6 +354,7 @@ class Child:
     def __init__(self, name):
         self.name = name
         self.days = 0
+        self.study_score = 0  # sessions d'aide aux devoirs reçues
 
     def tick_day(self):
         self.days += 1
@@ -1061,6 +1062,9 @@ def get_available_actions(sim):
         # Week-end : pas de travail
         if is_weekend and key == "travailler":
             continue
+        # Label dynamique pour devoirs : "Faire ses devoirs" quand on est jeune
+        if key == "devoirs" and stage[1] in ("Enfant", "Adolescent"):
+            entry = (key, "Faire ses devoirs (aide parentale)", fn, "📚 Études")
         available.append(entry)
     return available
 
@@ -1549,20 +1553,34 @@ def action_famille(sim):
     _cont()
 
 def action_devoirs(sim):
+    _, stage = get_stage(sim.age)
+    # ── Jeune sim : faire ses propres devoirs avec l'aide des parents ──
+    if stage[1] in ("Enfant", "Adolescent"):
+        slow_print(f"\n {C.CYAN}Tes parents t'aident à faire tes devoirs... 📚{C.RESET}", 0.02)
+        sim.modify(energie=-15, fun=-5, social=+10)
+        sim.tick(1)
+        lvl = sim.skills.gain('travail', 8)
+        if lvl: slow_print(f" {C.GREEN}Compétence Travail → Niv. {lvl} ! 💼{C.RESET}", 0.02)
+        slow_print(f" {C.GREEN}Bien guidé(e) — tu progresses et te prépares pour l'avenir ! 🌟{C.RESET}", 0.02)
+        _cont()
+        return
+    # ── Adulte sans enfants ────────────────────────────────────────────
     if not sim.children:
         print(f"\n {C.YELLOW}Tu n'as pas d'enfants à aider.{C.RESET}")
         _cont()
         return
-    slow_print(f"\n {C.CYAN}Tu aides tes enfants à faire leurs devoirs... 📚{C.RESET}", 0.02)
+    # ── Adulte avec enfants ────────────────────────────────────────────
+    kids = ", ".join(c.name for c in sim.children)
+    slow_print(f"\n {C.CYAN}Tu aides {kids} à faire leurs devoirs... 📚{C.RESET}", 0.02)
     sim.modify(social=+15, fun=+10, energie=-10)
     sim.tick(1)
-    # Boost les compétences des enfants (héritage)
     for child in sim.children:
-        child.days = min(child.days + 0, child.days)   # cosmétique
-    # Boost les compétences propres (patience, travail)
+        if child.age_label != "Adulte 💪":
+            child.study_score += 1
+            slow_print(f" {C.GREEN}{child.name} progresse (+1 session d'aide){C.RESET}", 0.02)
     lvl = sim.skills.gain('travail', 4)
     if lvl: slow_print(f" {C.GREEN}Compétence Travail → Niv. {lvl} ! 💼{C.RESET}", 0.02)
-    slow_print(f" {C.GREEN}Tes enfants progressent ! Tu te sens utile. 🌟{C.RESET}", 0.02)
+    slow_print(f" {C.GREEN}Tu te sens utile et proche de ta famille. 🌟{C.RESET}", 0.02)
     _cont()
 
 def action_sauvegarder(sim):
@@ -1587,7 +1605,7 @@ def action_sauvegarder(sim):
                 } if sim.pet else None,
         "weather_idx": WEATHER_TYPES.index(sim.weather._data),
         "skills": {"levels": sim.skills.levels, "xp": sim.skills.xp},
-        "children": [{"name": c.name, "days": c.days} for c in sim.children],
+        "children": [{"name": c.name, "days": c.days, "study_score": c.study_score} for c in sim.children],
         "health": {"hp": sim.health.hp, "mental": sim.health.mental, "diseases": sim.health.diseases},
         "education": {
             "enrolled_domain": sim.education.enrolled_domain,
@@ -2106,6 +2124,11 @@ def ai_choose_action(sim):
     # ═══════════════════════════════════════════════════════════════
     # PRIORITÉ 7 : famille
     # ═══════════════════════════════════════════════════════════════
+    # Jeune sim : faire ses propres devoirs (booste travail skill)
+    if (stage[1] in ("Enfant", "Adolescent")
+            and "devoirs" not in blocked
+            and n["energie"] > 40 and random.random() < 0.25):
+        return "devoirs"
     if ("avoir_enfant" not in blocked
         and sim.relationship.level == 6
         and len(sim.children) < 3
@@ -2283,12 +2306,15 @@ def ai_offer_legacy(sim):
     chosen = max(adult_children, key=lambda c: c.days)
     heir = Sim(chosen.name)
     heir.age = 10
-    heir.money = sim.money // 2
+    study_bonus = chosen.study_score * 20   # 20$ par session d'aide reçue
+    heir.money = sim.money // 2 + study_bonus
     heir.orientation = sim.orientation
     for sk in heir.skills.levels:
         heir.skills.levels[sk] = sim.skills.levels[sk] // 2
     heir.children = [c for c in sim.children if c.name != chosen.name]
     slow_print(f"\n {C.YELLOW}[IA] La vie continue avec {chosen.name} — génération suivante !{C.RESET}", 0.03)
+    if study_bonus > 0:
+        slow_print(f" {C.GREEN}Grâce aux devoirs partagés : +${study_bonus} d'avance au départ{C.RESET}", 0.02)
     slow_print(f" {C.GRAY}Héritage : ${heir.money} | Compétences héritées à 50 %{C.RESET}", 0.02)
     time.sleep(1)
     return heir
@@ -2477,13 +2503,15 @@ def offer_legacy(sim):
             chosen = adult_children[choice - 1]
             heir = Sim(chosen.name)
             heir.age = 10
-            heir.money = sim.money // 2
+            study_bonus = chosen.study_score * 20
+            heir.money = sim.money // 2 + study_bonus
             heir.orientation = sim.orientation
             for sk in heir.skills.levels:
                 heir.skills.levels[sk] = sim.skills.levels[sk] // 2
             heir.children = [c for c in sim.children if c.name != chosen.name]
             slow_print(f"\n {C.GREEN}Bienvenue {chosen.name} ! Tu prends le relais de {sim.name}.{C.RESET}", 0.03)
-            slow_print(f" {C.GRAY}Héritage : ${heir.money} | Compétences héritées à 50 %{C.RESET}", 0.02)
+            bonus_str = f" + ${study_bonus} (devoirs)" if study_bonus > 0 else ""
+            slow_print(f" {C.GRAY}Héritage : ${heir.money}{bonus_str} | Compétences héritées à 50 %{C.RESET}", 0.02)
             time.sleep(1)
             return heir
     except (ValueError, EOFError, KeyboardInterrupt):
@@ -2629,6 +2657,7 @@ def load_game():
     for cd in d.get("children", []):
         c = Child(cd["name"])
         c.days = cd["days"]
+        c.study_score = cd.get("study_score", 0)
         sim.children.append(c)
 
     hd = d.get("health", {})
