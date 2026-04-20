@@ -883,6 +883,128 @@ def trigger_partner_event(sim):
                 f" {', '.join(parts)}{money_str}{aff_str}")
     return None
 
+# --- Événements saisonniers ---
+# Format : (prob%, emoji, desc, effects, money, condition_fn, special)
+# special : "grippe" | "rhume" | "fracture" | None
+SEASON_EVENTS = {
+    "printemps": [
+        (18, "🌸", "Les cerisiers sont en fleur — une promenade magique s'impose.",
+         {"fun": +20, "social": +10}, 0, None, None),
+        (14, "🤧", "Les pollens du printemps t'assaillent — allergies en pleine forme.",
+         {"energie": -15, "fun": -10}, 0, None, "rhume"),
+        (15, "🌱", "Tu passes l'après-midi à préparer ton potager.",
+         {"fun": +15, "energie": -10}, 0, None, None),
+        (12, "🎪", "Une fête de village bat son plein dans le quartier !",
+         {"fun": +30, "social": +25}, -20, None, None),
+        (14, "🌧", "Un orage de printemps t'attrape en pleine sortie.",
+         {"hygiene": -25, "fun": -10, "energie": -5}, 0, None, None),
+        (10, "🍓", "Les premières fraises du marché — tu craques pour un kilo.",
+         {"faim": +20, "fun": +15}, -15, None, None),
+        (12, "🚴", "Sortie vélo sous le soleil printanier avec des amis.",
+         {"fun": +25, "energie": -15, "social": +15}, 0, None, None),
+        (8,  "🐛", "Tu tombes nez-à-nez avec une chenille processionnaire — bonne frayeur.",
+         {"fun": -10}, 0, None, None),
+    ],
+    "ete": [
+        (18, "🏖", "Journée plage avec des amis — soleil, rires et vagues !",
+         {"fun": +35, "social": +25, "energie": -10}, 0, None, None),
+        (14, "🌡", "Canicule nocturne — la nuit est étouffante, impossible de dormir.",
+         {"energie": -20, "fun": -10}, 0, None, None),
+        (12, "🎆", "Feu d'artifice du 14 juillet — le ciel explose de couleurs !",
+         {"fun": +30, "social": +20}, 0, None, None),
+        (13, "🍦", "Glace artisanale sous le soleil — petit plaisir de l'été.",
+         {"fun": +15, "faim": +10}, -12, None, None),
+        (12, "🏊", "Après-midi à la piscine municipale — rafraîchissant !",
+         {"fun": +25, "energie": -10, "hygiene": -5}, -15, None, None),
+        (10, "🍖", "Barbecue improvisé avec les voisins — ambiance festive !",
+         {"fun": +30, "social": +30, "faim": +20}, -25, None, None),
+        (10, "⚡", "Orage violent en pleine nuit — le tonnerre te réveille en sursaut.",
+         {"energie": -15, "fun": -10}, 0, None, None),
+        (8,  "🌻", "Champ de tournesols au détour d'une route — le bonheur simple.",
+         {"fun": +20}, 0, None, None),
+    ],
+    "automne": [
+        (16, "🍄", "Cueillette de champignons en forêt — le panier est plein !",
+         {"fun": +20, "energie": -10, "faim": +10}, +20, None, None),
+        (14, "🎃", "Halloween — décoration, costumes et friandises pour les enfants.",
+         {"fun": +25, "social": +20}, -20,
+         lambda s: bool(s.children) or s.relationship.level >= 4, None),
+        (12, "🍷", "Vendanges chez un ami viticulteur — tu mets la main à la pâte.",
+         {"fun": +20, "social": +25, "energie": -15}, +30, None, None),
+        (13, "🌧", "Pluie grise et froide — une mélancolie automnale t'envahit.",
+         {"fun": -15, "social": -10}, 0, None, None),
+        (12, "🌰", "Tu ramasses des châtaignes et les fais griller au feu de bois.",
+         {"fun": +20, "faim": +15}, 0, None, None),
+        (10, "🦔", "Un hérisson déambule dans ton jardin ce soir — craquant !",
+         {"fun": +15, "social": +5}, 0, None, None),
+        (10, "📚", "Rentrée culturelle : conférence passionnante au théâtre local.",
+         {"fun": +15, "social": +15}, -20, None, None),
+        (9,  "💨", "Tempête automnale — une branche casse sur ta voiture.",
+         {"fun": -20}, -80, None, None),
+    ],
+    "hiver": [
+        (18, "🎄", "Décorations de Noël partout dans le quartier — ambiance féerique.",
+         {"fun": +25, "social": +15}, -30, None, None),
+        (16, "🎁", "Tu reçois un cadeau surprise d'un proche pour les fêtes !",
+         {"fun": +30, "social": +20}, +50,
+         lambda s: s.relationship.level >= 2, None),
+        (13, "⛷", "Sortie ski avec des amis — pistes enneigées et vin chaud !",
+         {"fun": +35, "social": +25, "energie": -20}, -60,
+         lambda s: s.money >= 100, "entorse"),
+        (12, "🌨", "Tempête de neige — tu restes blotti(e) chez toi toute la journée.",
+         {"fun": +10, "social": -15, "energie": +5}, 0, None, None),
+        (14, "🎆", "Réveillon du Nouvel An — champagne, musique et bonne humeur !",
+         {"fun": +40, "social": +35, "energie": -15}, -30, None, None),
+        (14, "🤒", "Le froid t'a fragilisé(e) — tu couve quelque chose.",
+         {"energie": -20, "fun": -10}, 0, None, "grippe"),
+        (12, "☕", "Soirée cocooning au coin du feu — plaid, thé et bonne lecture.",
+         {"fun": +20, "energie": +10, "social": -5}, 0, None, None),
+        (8,  "🧊", "Verglas sur le trottoir — tu glisses et te blesses.",
+         {"energie": -15, "fun": -20}, -30, None, "fracture"),
+    ],
+}
+
+def trigger_season_event(sim):
+    sid, sdata = get_season(sim.age)
+    events = list(SEASON_EVENTS.get(sid, []))
+    random.shuffle(events)
+    for prob, emoji, desc, effects, money, condition, special in events:
+        if condition and not condition(sim):
+            continue
+        if random.randint(1, 100) > prob:
+            continue
+        sim.modify(**effects)
+        sim.money = max(0, sim.money + money)
+        if special == "grippe":
+            sim.health.get_sick("grippe")
+        elif special == "rhume":
+            sim.health.get_sick("rhume")
+        elif special == "fracture":
+            if random.randint(1, 100) <= 40:
+                sim.health.get_sick("fracture")
+                sim.health.hp = max(0, sim.health.hp - 8)
+        elif special == "entorse":
+            if random.randint(1, 100) <= 30:
+                sim.health.get_sick("entorse")
+        lines = [
+            f"\n {C.BOLD}━━ ÉVÉNEMENT {sdata[1]} {sdata[0].upper()} ━━{C.RESET}",
+            f" {emoji} {desc}",
+        ]
+        if effects:
+            parts = []
+            for need, delta in effects.items():
+                label = Sim.NEED_LABELS[need][0]
+                sign = "+" if delta >= 0 else ""
+                col = C.GREEN if delta > 0 else C.RED
+                parts.append(f"{col}{sign}{delta} {label}{C.RESET}")
+            lines.append(f" Effets : {', '.join(parts)}")
+        if money != 0:
+            sign = "+" if money >= 0 else ""
+            col = C.GREEN if money > 0 else C.RED
+            lines.append(f" Argent : {col}{sign}${money}{C.RESET}")
+        return "\n".join(lines)
+    return None
+
 # --- Événements liés aux traits ---
 # Format : (prob%, emoji, description, effects_dict, money_delta, condition_fn, consequence_key)
 # consequence_key : "fracture" | "grippe" | "burnout" | "stress_up" | "mental_down" | None
@@ -1534,10 +1656,14 @@ def action_dormir(sim):
         partner_msg = trigger_partner_event(sim)
         if partner_msg:
             sim.last_event = partner_msg
-        elif random.randint(1, 100) <= 40:
-            sim.last_event = trigger_random_event(sim)
         else:
-            sim.last_event = None
+            season_msg = trigger_season_event(sim) if random.randint(1, 100) <= 35 else None
+            if season_msg:
+                sim.last_event = season_msg
+            elif random.randint(1, 100) <= 40:
+                sim.last_event = trigger_random_event(sim)
+            else:
+                sim.last_event = None
 
     # ── Récupération du stress au repos ────────────────────────────
     stress_rec = 15
