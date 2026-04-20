@@ -230,8 +230,11 @@ class Weather:
     def __init__(self):
         self._data = random.choice(WEATHER_TYPES)
 
-    def new_day(self):
-        self._data = random.choice(WEATHER_TYPES)
+    def new_day(self, season_weights=None):
+        if season_weights:
+            self._data = random.choices(WEATHER_TYPES, weights=season_weights)[0]
+        else:
+            self._data = random.choice(WEATHER_TYPES)
 
     @property
     def emoji(self): return self._data[0]
@@ -1097,8 +1100,12 @@ def show_status(sim):
     _we = (sim.age % 7) >= 5
     _we_str = f"  {C.YELLOW}[Week-end]{C.RESET}" if _we else ""
     _hcol = C.YELLOW if _we else C.CYAN
+    _ssid, _ssdata = get_season(sim.age)
+    _season_cols = {"printemps": C.GREEN, "ete": C.YELLOW, "automne": C.YELLOW, "hiver": C.CYAN}
+    _scol = _season_cols[_ssid]
     print(f" {C.BOLD}Heure :{C.RESET} {_hcol}🕐 {_h:02d}h{_m:02d}{C.RESET}  "
-          f"{C.BOLD}Jour :{C.RESET} {_day}  {C.BOLD}·{C.RESET}  Jour {sim.age}{_we_str}")
+          f"{C.BOLD}Jour :{C.RESET} {_day}  {C.BOLD}·{C.RESET}  Jour {sim.age}  "
+          f"{_ssdata[1]} {_scol}{_ssdata[0]}{C.RESET}{_we_str}")
 
     # Acquis scolaire (affiché en âge scolaire, ou si > 0 en adulte)
     ab = getattr(sim, 'academic_bonus', 0)
@@ -1296,6 +1303,21 @@ ACTION_DURATIONS = {
 
 JOURS_SEMAINE = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]
 
+YEAR_LENGTH = 28   # 4 saisons × 7 jours
+
+# Format : (nom, emoji, effets_quotidiens, poids_météos[soleil/nuag/pluie/orage/neige])
+SEASONS = {
+    "printemps": ("Printemps", "🌸", {"fun": +3},                  [35, 35, 20, 10,  0]),
+    "ete":       ("Été",       "☀",  {"fun": +5, "energie": -2},   [50, 25, 15, 10,  0]),
+    "automne":   ("Automne",   "🍂", {"fun": -2, "social": -1},    [15, 35, 40, 10,  0]),
+    "hiver":     ("Hiver",     "❄",  {"fun": -3, "energie": -3},   [10, 30, 20,  5, 35]),
+}
+_SEASON_ORDER = ["printemps", "ete", "automne", "hiver"]
+
+def get_season(age):
+    sid = _SEASON_ORDER[(age % YEAR_LENGTH) // (YEAR_LENGTH // 4)]
+    return sid, SEASONS[sid]
+
 def get_available_actions(sim):
     """Retourne la liste des actions disponibles selon l'heure et le jour."""
     _, stage = get_stage(sim.age)
@@ -1360,18 +1382,23 @@ def maybe_contract_disease(sim):
     age = sim.age
     stress = getattr(sim, 'stress', 0)
     sport_level = sim.skills.levels.get('sport', 0)
+    season_id, _ = get_season(age)
+
+    # Multiplicateurs saisonniers
+    _grippe_m = 3 if season_id == "hiver" else (1.5 if season_id == "automne" else 0.5)
+    _gastro_m = 2 if season_id == "ete"   else 1.0
 
     # ── Infections (tous âges) ──────────────────────────────────────
     if "grippe" not in h.diseases and "rhume" not in h.diseases:
-        if random.randint(1, 200) <= 2:
+        if random.randint(1, 200) <= max(1, int(2 * _grippe_m)):
             h.get_sick("grippe")
             if not AUTOPILOT:
                 slow_print(f" {C.YELLOW}🤒 Tu commences à avoir de la fièvre... c'est la grippe.{C.RESET}", 0.02)
     if "rhume" not in h.diseases and "grippe" not in h.diseases:
-        if random.randint(1, 100) <= 3:
+        if random.randint(1, 100) <= max(1, int(3 * _grippe_m)):
             h.get_sick("rhume")
     if "gastro" not in h.diseases and sim.needs["hygiene"] < 30:
-        if random.randint(1, 100) <= 4:
+        if random.randint(1, 100) <= max(1, int(4 * _gastro_m)):
             h.get_sick("gastro")
             if not AUTOPILOT:
                 slow_print(f" {C.YELLOW}🤢 Gastro-entérite... malaise garanti.{C.RESET}", 0.02)
@@ -1448,10 +1475,22 @@ def action_dormir(sim):
     slow_print(f"\n {C.BLUE}Tu dors profondément pendant 8 heures... 💤{C.RESET}", 0.02)
     sim.modify(energie=+60, hygiene=-10, faim=-20)
     sim.tick(8)
+    _prev_sid = get_season(sim.age)[0]
     sim.age += 1
     sim.hour = 7    # réveil à 07h00
-    sim.weather.new_day()
-    slow_print(f" {C.CYAN}Nouveau jour ! Météo : {sim.weather.emoji} {sim.weather.name}{C.RESET}", 0.02)
+    _sid, _sdata = get_season(sim.age)
+    sim.weather.new_day(_sdata[3])
+    if _sid != _prev_sid:
+        _msgs = {
+            "printemps": f"🌸 La nature se réveille — {C.GREEN}Printemps{C.RESET} !",
+            "ete":       f"☀  Le soleil est au zénith — {C.YELLOW}Été{C.RESET} !",
+            "automne":   f"🍂 Les feuilles tombent — {C.YELLOW}Automne{C.RESET} !",
+            "hiver":     f"❄  Un froid glacial s'installe — {C.CYAN}Hiver{C.RESET} !",
+        }
+        slow_print(f"\n {_msgs[_sid]}", 0.03)
+    slow_print(f" {C.CYAN}Nouveau jour ! {_sdata[1]} {_sdata[0]} — Météo : {sim.weather.emoji} {sim.weather.name}{C.RESET}", 0.02)
+    # Effets saisonniers quotidiens
+    sim.modify(**_sdata[2])
     _prev_stages = {k: sim.health.disease_stage.get(k, 1)
                     for k in sim.health.diseases
                     if DISEASES.get(k, ('','','',0,0,'inf'))[5] in ("fat", "neuro")}
