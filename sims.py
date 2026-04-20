@@ -274,8 +274,159 @@ class Pet:
     def is_neglected(self):
         return self.hunger <= 20 or self.happiness <= 20
 
+# --- Prénoms ---
+_PRENOMS_MASC = [
+    # Contemporains français
+    "Théo", "Hugo", "Lucas", "Léo", "Nathan", "Tom", "Mathis", "Ethan", "Louis", "Arthur",
+    "Raphaël", "Clément", "Baptiste", "Julien", "Pierre", "Antoine", "Nicolas", "Guillaume",
+    "Thomas", "Alexandre", "Maxime", "Valentin", "Romain", "Simon", "Adrien", "Victor",
+    "Florian", "Axel", "Quentin", "Kevin", "Enzo", "Luca", "Matteo", "Gabin", "Paul",
+    "Rémi", "Tristan", "Alexis", "Robin", "Jordan", "Nolan", "Kylian", "Yanis", "Adam",
+    "Mehdi", "Sacha", "Félix", "Oscar", "Émile", "Gabriel", "Marius", "Jules", "Charles",
+    "Henri", "Timothée", "Théodore", "Thibaut", "Gaspard", "Armand", "Florent", "Cédric",
+    "Dorian", "Aymeric", "Anthony", "Samuel", "Kilian", "Gaétan", "Maxence", "Aurélien",
+    "Thibault", "Sandro", "Ilian", "Darius", "Boris", "Basile", "Brice", "Amaury",
+    "Antonin", "Ariel", "Aristide", "Arsène", "Noé", "Achille", "Étienne", "Jérémy",
+    # Classiques français
+    "Jean", "Jacques", "François", "Philippe", "Maurice", "André", "Marcel", "Roger",
+    "Fernand", "Gaston", "Gérard", "Bernard", "Robert", "Michel", "Alain", "Daniel",
+    "Éric", "Patrick", "Christophe", "Stéphane", "Frédéric", "Olivier", "Laurent",
+    "Sébastien", "Jérôme", "Xavier", "Arnaud", "Gilles", "Cyril", "Pascal", "Thierry",
+    "Denis", "Yves", "Luc", "Bruno", "Serge", "Claude", "Emmanuel", "Fabrice", "Hubert",
+    "Joël", "Lionel", "Benoît", "René", "Lucien", "Patrice", "Norbert", "Fabien",
+    "Damien", "Vincent", "Grégoire", "Gautier", "Geoffroy", "Godefroy", "Lambert",
+    "Lancelot", "Stanislas", "Sylvestre", "Théophile", "Ulysse", "Renaud", "Raoul",
+    "Gonzague", "Hippolyte", "Isidore", "Prosper", "Casimir", "Anastase", "Aubin",
+    # Régionaux (breton, basque…)
+    "Maël", "Ronan", "Yann", "Corentin", "Malo", "Gaël", "Loïc", "Erwan", "Titouan",
+    "Brendan", "Gwénolé", "Tugdual", "Efflan", "Gurvan", "Jakez", "Tangi", "Gwendal",
+    "Iker", "Aitor", "Mikel", "Eneko", "Gaizka", "Gorka", "Iñigo", "Unai", "Xabi",
+    # Internationaux
+    "Logan", "Mason", "Elijah", "Oliver", "James", "Benjamin", "Henry", "Sebastian",
+    "Jonah", "Ezra", "Aaron", "Eli", "William", "Wyatt", "Cameron", "Aiden", "Hunter",
+    "Tyler", "Cole", "Bryce", "Chase", "Connor", "Finn", "Gavin", "Hayden", "Jasper",
+    "Kai", "Kyle", "Lance", "Maxwell", "Miles", "Nash", "Orlando", "Parker", "Quinn",
+    "Reed", "Rowan", "Scott", "Seth", "Shane", "Blake", "Owen", "Liam", "Noah",
+    "Edward", "Edwin", "Curtis", "Craig", "Colin", "Colby", "Clay", "Clark",
+    "Austin", "Archer", "Aldo", "Alden", "Albert", "Bruno", "Brett",
+    # Espagnols / latinos
+    "Carlos", "Diego", "Miguel", "Pablo", "Luis", "Juan", "Eduardo", "Roberto",
+    "Fernando", "Sergio", "Rafael", "Alejandro", "Marcos", "Rodrigo", "Alvaro",
+    "Jaime", "Pedro", "Vicente", "Salvador", "Emilio", "Felipe", "Gonzalo",
+    "Enrique", "Ignacio", "Jorge", "Julio", "Lorenzo", "Manuel", "Santiago",
+    # Italiens
+    "Alessandro", "Francesco", "Andrea", "Davide", "Emanuele", "Nicola",
+    "Angelo", "Dario", "Domenico", "Fabio", "Giacomo", "Giovanni", "Giuseppe",
+    "Leonardo", "Mauro", "Paolo", "Stefano", "Valentino", "Marco",
+    # Nordiques / germaniques
+    "Björn", "Lars", "Erik", "Sven", "Magnus", "Olaf", "Gunnar", "Leif",
+    "Rasmus", "Casper", "Mads", "Mikkel", "Hans", "Klaus", "Karl", "Otto",
+    # Arabes / nord-africains
+    "Mohammed", "Youssef", "Amine", "Karim", "Hakim", "Hassan", "Omar", "Ali",
+    "Rachid", "Nabil", "Tarek", "Walid", "Yacine", "Zakaria", "Bilal", "Farid",
+    "Hicham", "Marwan", "Nassim", "Sofiane", "Ayoub", "Aziz", "Badr", "Anass",
+    "Rayan", "Samy", "Imad", "Ismail", "Hamza", "Ghali", "Fares", "Djamal",
+    "Brahim", "Adil", "Akram", "Amar", "Wissam", "Yazid", "Ziad", "Ramzi",
+    "Othman", "Abdel", "Idriss", "Nadir", "Mourad", "Samir", "Hichem", "Anas",
+    # Africains subsahariens
+    "Mamadou", "Ibrahima", "Abdoulaye", "Moussa", "Seydou", "Ousmane", "Modou",
+    "Lamine", "Cheikh", "Daouda", "Aliou", "Malick", "Souleymane", "Pape",
+    "Babacar", "Kofi", "Kwame", "Amadou", "Boubacar", "Ismaël", "Oumar",
+    "Thierno", "Alpha", "Demba", "Samba", "Sékou", "Assane", "Alassane",
+]
+
+_PRENOMS_FEM = [
+    # Contemporaines françaises
+    "Emma", "Jade", "Manon", "Léa", "Inès", "Chloé", "Louise", "Alice", "Camille",
+    "Lucie", "Eva", "Clara", "Sophie", "Julie", "Laura", "Sarah", "Charlotte",
+    "Mathilde", "Zoé", "Lola", "Pauline", "Elisa", "Anaïs", "Marine", "Justine",
+    "Clémence", "Amandine", "Émilie", "Mélanie", "Audrey", "Amélie", "Céline",
+    "Diane", "Elise", "Fanny", "Gaëlle", "Isabelle", "Julia", "Karine", "Lisa",
+    "Margaux", "Margot", "Nathalie", "Océane", "Yasmine", "Fleur", "Flore",
+    "Estelle", "Agathe", "Victoire", "Adèle", "Héloïse", "Noémie", "Perrine",
+    "Violette", "Rose", "Iris", "Lily", "Luna", "Nina", "Mia", "Maëlle",
+    "Nolwenn", "Morgane", "Rozenn", "Lou", "Louisa", "Lucile", "Lilas", "Loan",
+    "Maëva", "Marion", "Maud", "Mélodie", "Milena", "Mona", "Nadège", "Naomi",
+    "Natacha", "Nawel", "Ophélie", "Oriane", "Paola", "Pénélope", "Perle",
+    "Prune", "Romane", "Rosalie", "Roxane", "Sabrina", "Salomé", "Sandra",
+    "Sirine", "Solène", "Tiphaine", "Valentine", "Vanessa", "Axelle", "Coralie",
+    "Daphnée", "Éléonore", "Floriane", "Livia", "Maëlis", "Mahault",
+    "Joséphine", "Juliette", "Laetitia", "Laure", "Lise", "Lorraine",
+    "Magnolia", "Malorie", "Manuela", "Marielle", "Marilyne", "Maureen",
+    "Mélissa", "Nelly", "Pascaline", "Prescillia", "Prudence", "Séraphine",
+    "Stéphanie", "Tamara", "Valéria", "Wendeline", "Yara", "Ysabeau",
+    "Junia", "Céleste", "Colombe", "Blanche", "Capucine", "Cassandre",
+    "Guillemette", "Harmonie", "Ingrid", "Orianne", "Roseline", "Thalia",
+    # Classiques françaises
+    "Marie", "Anne", "Jeanne", "Françoise", "Hélène", "Suzanne", "Marguerite",
+    "Madeleine", "Simone", "Odette", "Denise", "Nicole", "Monique", "Jacqueline",
+    "Martine", "Michèle", "Christine", "Sylvie", "Véronique", "Laurence",
+    "Virginie", "Delphine", "Aurélie", "Patricia", "Florence", "Geneviève",
+    "Colette", "Brigitte", "Cécile", "Danielle", "Edith", "Germaine", "Huguette",
+    "Irène", "Joëlle", "Lydie", "Nadine", "Noëlle", "Pascale", "Renée",
+    "Séverine", "Tatiana", "Viviane", "Yvonne", "Corinne", "Valérie", "Sandrine",
+    "Geneviève", "Andrée", "Bernadette", "Fernande", "Odile", "Régine",
+    "Rosine", "Thérèse", "Ursule", "Wanda", "Xavière", "Zelda",
+    # Régionales (bretonnes…)
+    "Gwenaëlle", "Sterenn", "Maïwenn", "Gaëllane", "Soizic", "Gwenola",
+    "Naïg", "Rozenn", "Nolwenn", "Enora", "Armelle", "Aziliz",
+    # Internationales
+    "Olivia", "Sophia", "Isabella", "Amelia", "Harper", "Evelyn", "Abigail",
+    "Emily", "Victoria", "Scarlett", "Grace", "Penelope", "Riley", "Hazel",
+    "Violet", "Aurora", "Savannah", "Brooklyn", "Bella", "Skylar", "Lucy",
+    "Anna", "Caroline", "Nova", "Kennedy", "Samantha", "Maya", "Willow",
+    "Aaliyah", "Elena", "Ariana", "Gabrielle", "Brianna", "Hailey", "Autumn",
+    "Alyssa", "Lilly", "Madison", "Morgan", "Taylor", "Casey", "Blake",
+    "Avery", "Dakota", "Quinn", "Peyton", "Sydney", "Bailey", "Jamie",
+    "Reese", "Sage", "Sloane", "Skye", "Nadia", "Vera", "Mila", "Natasha",
+    "Alicia", "Bianca", "Carmen", "Diana", "Elena", "Francesca", "Gloria",
+    "Hannah", "Ingrid", "Jessica", "Kate", "Linda", "Monica", "Nancy",
+    "Patricia", "Rebecca", "Stella", "Uma", "Valentina", "Wendy", "Xenia",
+    # Espagnoles / latines
+    "Lucia", "Sofia", "Valeria", "Camila", "Isabel", "Daniela", "Fernanda",
+    "Catalina", "Alejandra", "Mariana", "Beatriz", "Claudia", "Esperanza",
+    "Jimena", "Lola", "Pilar", "Rosario", "Silvia", "Teresa", "Ximena",
+    # Arabes / nord-africaines
+    "Amina", "Leila", "Sonia", "Nora", "Sara", "Lina", "Fatima", "Zayneb",
+    "Maryam", "Kenza", "Imane", "Hafsa", "Houda", "Samira", "Karima",
+    "Naima", "Aicha", "Malika", "Meriem", "Nadia", "Nabila", "Nawal",
+    "Nour", "Rima", "Safia", "Salima", "Selma", "Siham", "Yamina",
+    "Zineb", "Zorah", "Djamila", "Farida", "Fadela", "Fatiha", "Hakima",
+    "Halima", "Hassiba", "Hayat", "Loubna", "Manel", "Nassima", "Nesrine",
+    "Nissa", "Nourhen", "Radia", "Rahima", "Rym", "Wahiba", "Yousra",
+    # Africaines subsahariennes
+    "Aminata", "Fatoumata", "Mariama", "Kadiatou", "Mariam", "Aissatou",
+    "Coumba", "Khady", "Penda", "Awa", "Binta", "Djeneba", "Fatouma",
+    "Hawa", "Maimouna", "Nafissatou", "Oumou", "Ramata", "Fanta",
+    "Halima", "Hadja", "Khadija", "Koumba", "Mariatou", "Mireille",
+    "Miriam", "Zeinab", "Adja", "Astou", "Fatou", "Ndéye", "Rokhaya",
+]
+
+_PRENOMS_ANIMAUX = [
+    # Chiens classiques
+    "Fido", "Rex", "Max", "Buddy", "Rocky", "Duke", "Cooper", "Bear", "Tucker", "Milo",
+    "Zeus", "Buster", "Winston", "Leo", "Oliver", "Oscar", "Jasper", "Bentley", "Toby",
+    # Noms français / gourmands
+    "Minou", "Noisette", "Caramel", "Bulle", "Grizou", "Luna", "Pixel", "Câlin", "Doudou",
+    "Pépite", "Cannelle", "Chocolat", "Vanille", "Praline", "Fraise", "Myrtille", "Cacao",
+    "Nougat", "Cerise", "Amande", "Pistache", "Abricot", "Figue", "Olive", "Papaye",
+    # Nature / fleurs
+    "Coquelicot", "Pâquerette", "Lilas", "Jasmin", "Mimosa", "Bouton", "Étoile", "Comète",
+    "Soleil", "Lune", "Brume", "Tornade", "Tempête", "Orage", "Sirocco", "Mistral",
+    # Références culturelles
+    "Einstein", "Picasso", "Mozart", "Darwin", "Newton", "Tesla", "Voltaire", "Socrate",
+    "Platon", "Archimède", "Galilée", "Copernic", "Descartes", "Pascal", "Rousseau",
+    # Fantaisie / superhéros
+    "Zorro", "Tornado", "Flash", "Turbo", "Rocket", "Comet", "Nova", "Star", "Galaxy",
+    "Cosmos", "Nebula", "Aurora", "Eclipse", "Phoenix", "Titan", "Atlas", "Orion",
+    # Mignons
+    "Bobine", "Toupie", "Pirouette", "Frimousse", "Chamallow", "Guimauve", "Bonbon",
+    "Câlinette", "Fluffie", "Patapouf", "Ronron", "Minette", "Rouquin", "Bibi",
+    "Boubou", "Coco", "Lulu", "Mimi", "Nono", "Pacha", "Riri", "Titi", "Zozo",
+]
+
 # --- Relations ---
-PARTNER_NAMES = ["Alex", "Sam", "Jordan", "Morgan", "Taylor", "Casey", "Robin", "Jamie", "Charlie", "River", "Noa", "Lou"]
+PARTNER_NAMES = _PRENOMS_MASC + _PRENOMS_FEM
 
 class Relationship:
     STAGES = [
@@ -1537,7 +1688,7 @@ def action_psy(sim):
     sim.tick(1)
     _cont()
 
-CHILD_NAMES = ["Emma", "Léo", "Jade", "Noah", "Inès", "Lucas", "Chloé", "Tom", "Manon", "Hugo"]
+CHILD_NAMES = _PRENOMS_MASC + _PRENOMS_FEM
 
 def action_avoir_enfant(sim):
     if sim.relationship.level < 6:
@@ -1902,8 +2053,7 @@ ACTION_FNS = {
 }
 
 # --- IA Autopilote ---
-_AUTO_NAMES = ["Camille", "Alex", "Jordan", "Morgan", "Sam", "Robin",
-               "Léa", "Noah", "Inès", "Lucas", "Jade", "Tom"]
+_AUTO_NAMES = _PRENOMS_MASC + _PRENOMS_FEM
 
 def ai_choose_action(sim):
     """IA survie optimisée — seuils dynamiques tenant compte des maladies actives."""
@@ -2193,7 +2343,7 @@ def ai_choose_action(sim):
     pool = [a for a in pool if a not in blocked]
     return random.choice(pool) if pool else "mediter"
 
-_AUTO_PET_NAMES = ["Fido", "Minou", "Noisette", "Caramel", "Bulle", "Pixel", "Grizou", "Luna"]
+_AUTO_PET_NAMES = _PRENOMS_ANIMAUX
 
 def ai_auto_postuler(sim):
     """Choisit automatiquement le meilleur job disponible (ou change si mieux payé)."""
