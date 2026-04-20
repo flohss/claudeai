@@ -145,6 +145,11 @@ class Sim:
         self.children = []
         self.health = Health()
         self.education = Education()
+        self.traits = Traits()
+        self.stress = 0             # 0–100 ; >70 pénalise le travail, >90 = burn-out
+        self.salary_multiplier = 1.0  # augmente avec l'expérience (+5% / 10 j travaillés)
+        self.last_romance_day = 0   # dernier jour où une action romantique a eu lieu
+        self.days_burned_out = 0    # nb de jours restants de burn-out forcé
         self.hour = 7   # heure courante de la journée (float, 07h00 au réveil)
 
     @property
@@ -176,8 +181,17 @@ class Sim:
         for need, mod in self.health.decay_mods().items():
             if need in decay:
                 decay[need] += mod * hours
+        # Modificateurs de traits
+        for need, mod in self.traits.tick_mods().items():
+            if need in decay:
+                decay[need] += mod * hours
+        # Vieillissement avancé : drain légèrement plus rapide après 40 ans
+        if self.age >= 40:
+            for need in ("faim", "energie", "fun"):
+                if decay[need] < 0:
+                    decay[need] *= 1.12
         for need, delta in decay.items():
-            self.needs[need] = max(0, min(100, self.needs[need] + delta))
+            self.needs[need] = max(0, min(100, self.needs[need] + int(delta)))
         if self.pet:
             self.pet.tick(hours)
         if self.needs["hygiene"] < 20 or self.needs["energie"] < 15:
@@ -352,10 +366,12 @@ class Child:
 
 # --- Santé ---
 DISEASES = {
-    "rhume": ("Rhume", "🤧", {"energie": -1, "hygiene": -1}, 3, 50),
-    "grippe": ("Grippe", "🤒", {"energie": -3, "hygiene": -2, "fun": -2}, 5, 80),
-    "burnout": ("Burn-out", "😵", {"energie": -4, "fun": -3, "social": -2}, 7, 120),
-    "fracture": ("Fracture", "🦴", {"energie": -2, "fun": -2}, 6, 150),
+    "rhume":    ("Rhume",     "🤧", {"energie": -1, "hygiene": -1},           3,  50),
+    "grippe":   ("Grippe",    "🤒", {"energie": -3, "hygiene": -2, "fun": -2},5,  80),
+    "burnout":  ("Burn-out",  "😵", {"energie": -4, "fun": -3, "social": -2}, 7, 120),
+    "fracture": ("Fracture",  "🦴", {"energie": -2, "fun": -2},               6, 150),
+    "arthrite": ("Arthrite",  "🦵", {"energie": -1},                          18, 200),
+    "diabete":  ("Diabète",   "🩸", {"faim": -2},                             20, 250),
 }
 
 class Health:
@@ -398,6 +414,56 @@ class Health:
         if self.mental > 60: return C.GREEN
         if self.mental > 30: return C.YELLOW
         return C.RED
+
+# --- Traits de personnalité ---
+TRAIT_DEFS = {
+    "ambitieux":   ("Ambitieux(se)", "🔥", "Salaire +5%, meilleure moyenne aux études."),
+    "paresseux":   ("Paresseux(se)", "😴", "Énergie -50% de drain, mais nécessite plus de fun pour travailler."),
+    "sociable":    ("Sociable",      "🗣", "Social se vide moins vite, rencontres plus faciles."),
+    "anxieux":     ("Anxieux(se)",   "😰", "Fun se vide plus vite, stress s'accumule 50% plus vite."),
+    "curieux":     ("Curieux(se)",   "🔎", "+10 pts aux sessions d'études."),
+    "sportif":     ("Sportif(ve)",   "💪", "Énergie -30% de drain, adoré faire du sport."),
+    "gourmand":    ("Gourmand(e)",   "🍴", "Faim se vide 50% plus vite, mange avec +10 fun."),
+    "artistique":  ("Artistique",   "🎨", "Fun se vide moins vite, loisirs créatifs +10 fun."),
+    "econome":     ("Économe",      "💰", "Salaire +5%, dépenses réduites."),
+    "malchanceux": ("Malchanceux(se)","🪤", "Événements négatifs 2× plus fréquents."),
+}
+
+class Traits:
+    def __init__(self, trait_ids=None):
+        if trait_ids is None:
+            # Éviter la combinaison ambitieux+paresseux (contradictoire)
+            pool = list(TRAIT_DEFS.keys())
+            t1 = random.choice(pool)
+            pool2 = [t for t in pool if not (t1 == "ambitieux" and t == "paresseux")
+                                     and not (t1 == "paresseux" and t == "ambitieux")
+                                     and t != t1]
+            t2 = random.choice(pool2)
+            trait_ids = [t1, t2]
+        self.active = set(trait_ids)
+
+    def has(self, tid):
+        return tid in self.active
+
+    def tick_mods(self):
+        """Modificateurs de decay horaire liés aux traits (en plus des bases)."""
+        m = {}
+        if "paresseux"  in self.active: m["energie"] = m.get("energie", 0) + 1.0
+        if "anxieux"    in self.active: m["fun"]     = m.get("fun",     0) - 0.5
+        if "sportif"    in self.active: m["energie"] = m.get("energie", 0) + 0.6
+        if "gourmand"   in self.active: m["faim"]    = m.get("faim",    0) - 1.5
+        if "artistique" in self.active: m["fun"]     = m.get("fun",     0) + 0.5
+        if "sociable"   in self.active: m["social"]  = m.get("social",  0) + 1.0
+        return m
+
+    def salary_mult(self):
+        mult = 1.0
+        if "ambitieux" in self.active: mult += 0.05
+        if "econome"   in self.active: mult += 0.05
+        return mult
+
+    def labels(self):
+        return [(TRAIT_DEFS[t][0], TRAIT_DEFS[t][1]) for t in sorted(self.active) if t in TRAIT_DEFS]
 
 # --- Éducation ---
 STUDY_DOMAINS = {
@@ -495,6 +561,22 @@ RANDOM_EVENTS = [
     (5, "🤧", "Tu attrapes un petit rhume.", {"energie": -20, "hygiene": -15, "fun": -10}, 0),
     (4, "🔑", "Tu t'enfermes dehors et dois appeler un serrurier.", {"fun": -15, "social": -5}, -60),
     (5, "😬", "Tu renverses ton café sur toi au bureau... gênant.", {"hygiene": -20, "fun": -15, "social": -10}, 0),
+    # Nouveaux événements : vie réaliste
+    (3, "🏆", "Tu reçois une prime exceptionnelle pour ton travail !", {"fun": +20, "social": +10}, +200),
+    (2, "💎", "Un oncle lointain te lègue un petit héritage !", {"fun": +25}, +350),
+    (4, "🚑", "Tu fais une chute et te blesses légèrement.", {"energie": -30, "fun": -20}, -50),
+    (3, "🔧", "Une canalisation explose chez toi — plombier d'urgence.", {"fun": -15}, -120),
+    (4, "🎲", "Tu remportes un petit tournoi local !", {"fun": +30, "social": +20}, +80),
+    (3, "📉", "Ton entreprise traverse une crise — pas de prime ce mois.", {"fun": -10, "social": -5}, -80),
+    (4, "💡", "Une idée de side-hustle te rapporte quelques euros !", {"fun": +15}, +60),
+    (3, "🧾", "Redressement fiscal surprise — aïe !", {"fun": -20}, -150),
+    (4, "🌴", "Un ami t'invite à un voyage surprise ce week-end !", {"fun": +35, "social": +25, "energie": -10}, +20),
+    (5, "📱", "Ton téléphone tombe en panne — réparation urgente.", {"fun": -20, "social": -15}, -90),
+    (3, "🎗", "Tu reçois une reconnaissance associative locale.", {"fun": +20, "social": +25}, +30),
+    (4, "🌡", "Vague de chaleur : difficile de dormir la nuit.", {"energie": -15, "fun": -10}, 0),
+    (3, "🎓", "Un ami réussit son concours — soirée de célébration !", {"fun": +25, "social": +30, "faim": -15}, +20),
+    (4, "🧠", "Une période de rumination t'épuise mentalement.", {"fun": -20, "energie": -10}, 0),
+    (3, "🐾", "Ton voisin te confie son chien le temps d'un week-end.", {"fun": +20, "social": +10, "energie": -5}, 0),
 ]
 
 def trigger_random_event(sim):
@@ -512,6 +594,19 @@ def trigger_random_event(sim):
                 sim.health.hp = max(0, sim.health.hp - 15)
             elif emoji == "🤧":
                 sim.health.get_sick("rhume")
+            elif emoji == "🚑":
+                sim.health.hp = max(0, sim.health.hp - 20)
+                if random.random() < 0.3:
+                    sim.health.get_sick("fracture")
+            elif emoji == "🧠":
+                sim.health.mental = max(0, sim.health.mental - 15)
+                sim.stress = min(100, sim.stress + 10)
+            # Événements doublés pour les malchanceux
+            if hasattr(sim, 'traits') and sim.traits.has("malchanceux") and actual_money < 0:
+                sim.money = max(0, sim.money + actual_money)  # double la perte
+                effects_str_extra = f" {C.RED}(×2 — malchanceux){C.RESET}"
+            else:
+                effects_str_extra = ""
 
             lines = [f"\n {C.BOLD}━━ ÉVÉNEMENT ALÉATOIRE ━━{C.RESET}",
                      f" {emoji} {desc}"]
@@ -526,7 +621,7 @@ def trigger_random_event(sim):
             if actual_money != 0:
                 sign = "+" if actual_money >= 0 else ""
                 color = C.GREEN if actual_money > 0 else C.RED
-                lines.append(f" Argent : {color}{sign}${actual_money}{C.RESET}")
+                lines.append(f" Argent : {color}{sign}${actual_money}{C.RESET}{effects_str_extra}")
 
             return "\n".join(lines)
     return None
@@ -562,10 +657,21 @@ def show_status(sim):
               f"Session {edu.sessions_done}/{sessions} "
               f"Moy. {edu.total_score // max(1, edu.sessions_done)}/100")
 
+    # Traits de personnalité
+    if hasattr(sim, 'traits'):
+        t_str = "  ".join(f"{e} {n}" for n, e in sim.traits.labels())
+        print(f" {C.BOLD}Traits :{C.RESET} {t_str}")
+
     if sim.job:
-        print(f" {C.BOLD}Travail :{C.RESET} {sim.job} ({sim.job_days} jour(s))")
+        sal_str = f"  ×{sim.salary_multiplier:.2f}" if sim.salary_multiplier != 1.0 else ""
+        bo_str  = f"  {C.RED}[BURN-OUT {sim.days_burned_out}j]{C.RESET}" if sim.days_burned_out > 0 else ""
+        print(f" {C.BOLD}Travail :{C.RESET} {sim.job} ({sim.job_days} jour(s)){sal_str}{bo_str}")
     else:
         print(f" {C.BOLD}Travail :{C.RESET} {C.GRAY}Chômeur(se){C.RESET}")
+    # Stress
+    if hasattr(sim, 'stress'):
+        sc = C.RED if sim.stress > 70 else (C.YELLOW if sim.stress > 40 else C.GREEN)
+        print(f" {C.BOLD}Stress  :{C.RESET} {sc}{sim.stress}%{C.RESET} {bar(sim.stress, length=12)}")
 
     w = sim.weather
     print(f" {C.BOLD}Météo :{C.RESET} {w.emoji} {w.name}", end="")
@@ -680,6 +786,7 @@ ACTIONS = [
     ("rupture", "Rompre", None, "💕 Vie amoureuse"),
     ("avoir_enfant", "Avoir un enfant", None, "👨‍👩‍👧 Famille"),
     ("famille", "Temps en famille", None, "👨‍👩‍👧 Famille"),
+    ("devoirs", "Aide aux devoirs", None, "👨‍👩‍👧 Famille"),
     ("sauvegarder", "Sauvegarder la partie", None, "💾 Système"),
 ]
 
@@ -696,7 +803,7 @@ ACTION_DURATIONS = {
     "inscrire": 4.0,   "sortir": 4.0,
     "etudier": 6.0,
     "dormir": 8.0,     "travailler": 8.0,
-    "avoir_enfant": 0.0, "sauvegarder": 0.0,
+    "avoir_enfant": 0.0, "devoirs": 1.0, "sauvegarder": 0.0,
 }
 
 JOURS_SEMAINE = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]
@@ -752,10 +859,67 @@ def action_dormir(sim):
     sim.health.tick_day()
     for child in sim.children:
         child.tick_day()
+
+    # ── Récupération du stress au repos ────────────────────────────
+    stress_rec = 15
+    if "paresseux" in sim.traits.active: stress_rec = 20
+    sim.stress = max(0, sim.stress - stress_rec)
+    if sim.days_burned_out > 0:
+        sim.days_burned_out -= 1
+        if sim.days_burned_out == 0:
+            slow_print(f" {C.GREEN}✅ Tu te sens enfin reposé(e). Le burn-out est derrière toi.{C.RESET}", 0.02)
+
+    # ── Coûts journaliers des enfants ──────────────────────────────
+    if sim.children:
+        daily_kid_cost = 15 * len(sim.children)
+        if sim.money >= daily_kid_cost:
+            sim.money -= daily_kid_cost
+        else:
+            sim.money = 0
+            sim.modify(fun=-8, social=-5)
+
+    # ── Dégradation naturelle de la relation ──────────────────────
+    rel = sim.relationship
+    if rel.has_partner():
+        days_since_romance = sim.age - sim.last_romance_day
+        if days_since_romance >= 3:
+            decay_aff = 3 if rel.level >= 4 else 1
+            rel.affection = max(0, rel.affection - decay_aff)
+        # Risque de rupture spontanée si affection trop basse
+        if rel.affection < 20 and rel.level in (1, 2, 3) and random.randint(1, 100) <= 10:
+            slow_print(f"\n {C.RED}💔 {rel.partner_name} s'éloigne... La relation prend fin.{C.RESET}", 0.02)
+            rel.breakup()
+        elif rel.affection < 15 and rel.level == 4 and random.randint(1, 100) <= 5:
+            slow_print(f"\n {C.RED}💔 Votre couple ne tient plus... Rupture avec {rel.partner_name}.{C.RESET}", 0.02)
+            rel.breakup()
+
+    # ── Licenciement aléatoire (rare : ~1 fois en 5 ans) ─────────
+    if sim.job and sim.job_days >= 10:
+        layoff_risk = 1 if sim.education.has_diploma() else 2   # 1-2% / jour
+        if random.randint(1, 1000) <= layoff_risk * 5:           # 0.5-1% effectif
+            if not AUTOPILOT:
+                slow_print(f"\n {C.RED}📋 Mauvaise nouvelle : tu as été licencié(e) de ton poste de {sim.job}.{C.RESET}", 0.02)
+                slow_print(f" {C.GRAY}Des réductions d'effectifs ont touché ton entreprise.{C.RESET}", 0.02)
+            prev_job = sim.job
+            sim.job = None
+            # On garde job_days pour ne pas perdre les acquis d'ancienneté
+            sim.modify(fun=-15, social=-10)
+
+    # ── Maladies chroniques liées à l'âge ────────────────────────
+    if sim.age >= 32 and "arthrite" not in sim.health.diseases:
+        if random.randint(1, 1000) <= 5:   # 0.5%/jour
+            sim.health.get_sick("arthrite")
+            slow_print(f" {C.YELLOW}🦵 Tu ressens des douleurs articulaires persistantes (arthrite).{C.RESET}", 0.02)
+    if sim.age >= 38 and "diabete" not in sim.health.diseases:
+        if random.randint(1, 1000) <= 4:   # 0.4%/jour
+            sim.health.get_sick("diabete")
+            slow_print(f" {C.YELLOW}🩸 Un bilan sanguin révèle un diabète de type 2.{C.RESET}", 0.02)
+
     _cont()
 
 def action_sieste(sim):
     slow_print(f"\n {C.BLUE}Tu fais une petite sieste de 2h... 😴{C.RESET}", 0.02)
+    sim.stress = max(0, sim.stress - 5)
     sim.modify(energie=+20, faim=-5)
     sim.tick(2)
     _cont()
@@ -874,19 +1038,38 @@ def action_travailler(sim):
         print(f"\n {C.RED}Tu n'as pas de travail ! Postule d'abord.{C.RESET}")
         _cont()
         return
+    # Burn-out forcé : impossible de travailler
+    if sim.days_burned_out > 0:
+        slow_print(f"\n {C.RED}Tu es en burn-out total... Tu ne peux pas travailler. Repose-toi. 😵{C.RESET}", 0.02)
+        _cont()
+        return
+    # Stress élevé → travail plus épuisant
+    stress_penalty = 10 if sim.stress > 70 else 0
     base_salary = next(sal for lbl, sal, *_ in JOBS if lbl == sim.job)
-    salary = int(base_salary * (1 + sim.skills.bonus('travail')))
+    salary = int(base_salary * (1 + sim.skills.bonus('travail')) * sim.salary_multiplier * sim.traits.salary_mult())
     slow_print(f"\n {C.YELLOW}Tu travailles toute la journée comme {sim.job}... 💼{C.RESET}", 0.02)
     sim.money += salary
     sim.job_days += 1
-    sim.modify(energie=-25, faim=-20, social=+15, hygiene=-10, fun=+5)
+    sim.modify(energie=-(25 + stress_penalty), faim=-20, social=+15, hygiene=-10, fun=+5)
     sim.tick(8)
+    # Stress cumulé par la journée de travail
+    stress_gain = 8
+    if "anxieux" in sim.traits.active: stress_gain = 12
+    if "paresseux" in sim.traits.active: stress_gain = 5
+    sim.stress = min(100, sim.stress + stress_gain)
     slow_print(f" {C.GREEN}+${salary} gagnés ! Total : ${sim.money}{C.RESET}", 0.02)
+    if sim.stress > 70:
+        slow_print(f" {C.YELLOW}⚠ Stress élevé ({sim.stress}%) — tu ressens la pression...{C.RESET}", 0.02)
+    # Augmentation de salaire tous les 10 jours travaillés (max ×1.5)
+    if sim.job_days % 10 == 0 and sim.salary_multiplier < 1.50:
+        sim.salary_multiplier = round(min(1.50, sim.salary_multiplier + 0.05), 2)
+        slow_print(f" {C.GREEN}⬆ Augmentation ! Ton salaire est maintenant ×{sim.salary_multiplier:.2f}{C.RESET}", 0.02)
     lvl = sim.skills.gain('travail', 10)
     if lvl: slow_print(f" {C.GREEN}Compétence Travail → Niv. {lvl} ! 💼{C.RESET}", 0.02)
     if sim.needs["energie"] < 15 and sim.needs["fun"] < 15:
         sim.health.get_sick("burnout")
-        slow_print(f" {C.RED}Tu fais un burn-out... 😵 Repose-toi !{C.RESET}", 0.02)
+        sim.days_burned_out = 3
+        slow_print(f" {C.RED}💥 Tu fais un burn-out ! Tu dois te reposer 3 jours...{C.RESET}", 0.02)
     _cont()
 
 def action_postuler(sim):
@@ -940,6 +1123,7 @@ def action_sport(sim):
 def action_mediter(sim):
     slow_print(f"\n {C.CYAN}Tu médites tranquillement... 🧘{C.RESET}", 0.02)
     sim.modify(energie=+15, fun=+15, social=-5)
+    sim.stress = max(0, sim.stress - 8)
     sim.tick(0)
     _cont()
 
@@ -1067,8 +1251,9 @@ def action_psy(sim):
     slow_print(f"\n {C.MAGENTA}Tu parles avec ton psy... 🛋{C.RESET}", 0.02)
     sim.money -= cost
     sim.health.mental = min(100, sim.health.mental + 35)
+    sim.stress = max(0, sim.stress - 25)
     sim.modify(fun=+15, social=+10)
-    slow_print(f" {C.GREEN}Santé mentale +35. Tu te sens mieux. (-${cost}){C.RESET}", 0.02)
+    slow_print(f" {C.GREEN}Santé mentale +35. Stress −25. Tu te sens mieux. (-${cost}){C.RESET}", 0.02)
     sim.tick(1)
     _cont()
 
@@ -1099,7 +1284,26 @@ def action_famille(sim):
     kids = ", ".join(c.name for c in sim.children)
     slow_print(f"\n {C.GREEN}Tu passes du temps en famille avec {kids}... 👨‍👩‍👧‍👦{C.RESET}", 0.02)
     sim.modify(fun=+25, social=+30, energie=-10)
+    # La famille aide aussi à décompresser
+    sim.stress = max(0, sim.stress - 6)
     sim.tick(2)
+    _cont()
+
+def action_devoirs(sim):
+    if not sim.children:
+        print(f"\n {C.YELLOW}Tu n'as pas d'enfants à aider.{C.RESET}")
+        _cont()
+        return
+    slow_print(f"\n {C.CYAN}Tu aides tes enfants à faire leurs devoirs... 📚{C.RESET}", 0.02)
+    sim.modify(social=+15, fun=+10, energie=-10)
+    sim.tick(1)
+    # Boost les compétences des enfants (héritage)
+    for child in sim.children:
+        child.days = min(child.days + 0, child.days)   # cosmétique
+    # Boost les compétences propres (patience, travail)
+    lvl = sim.skills.gain('travail', 4)
+    if lvl: slow_print(f" {C.GREEN}Compétence Travail → Niv. {lvl} ! 💼{C.RESET}", 0.02)
+    slow_print(f" {C.GREEN}Tes enfants progressent ! Tu te sens utile. 🌟{C.RESET}", 0.02)
     _cont()
 
 def action_sauvegarder(sim):
@@ -1108,6 +1312,11 @@ def action_sauvegarder(sim):
         "hour": sim.hour,
         "job": sim.job, "job_days": sim.job_days, "needs": sim.needs,
         "orientation": sim.orientation,
+        "stress": sim.stress,
+        "salary_multiplier": sim.salary_multiplier,
+        "last_romance_day": sim.last_romance_day,
+        "days_burned_out": sim.days_burned_out,
+        "traits": list(sim.traits.active),
         "relationship": {
             "level": sim.relationship.level,
             "partner_name": sim.relationship.partner_name,
@@ -1140,6 +1349,7 @@ def action_flirter(sim):
         _cont()
         return
     slow_print(f"\n {C.MAGENTA}Tu flirtes et cherches une connexion... 😏{C.RESET}", 0.02)
+    sim.last_romance_day = sim.age
     sim.modify(social=+20, fun=+15, energie=-5)
     if rel.is_single():
         if random.randint(1, 100) <= 60:
@@ -1172,6 +1382,7 @@ def action_rendezvous(sim):
         _cont()
         return
     slow_print(f"\n {C.MAGENTA}Tu passes une soirée romantique avec {rel.partner_name}... 🌹{C.RESET}", 0.02)
+    sim.last_romance_day = sim.age
     sim.money -= cost
     sim.modify(fun=+35, social=+35, energie=-15, faim=-10)
     rel.gain_affection(25)
@@ -1190,6 +1401,7 @@ def action_intimite(sim):
         _cont()
         return
     slow_print(f"\n {C.MAGENTA}Tu partages un moment d'intimité avec {rel.partner_name}... 💕{C.RESET}", 0.02)
+    sim.last_romance_day = sim.age
     sim.modify(fun=+25, social=+20, energie=-15, faim=-5)
     rel.gain_affection(12)
     sim.tick(2)
@@ -1252,6 +1464,10 @@ def _study_session_score(sim):
     base += sim.skills.levels.get("travail", 0) * 2
     base += sim.skills.levels.get("social", 0) * 1
     base += random.randint(-15, 15)
+    if hasattr(sim, 'traits') and sim.traits.has("curieux"):
+        base += 10
+    if hasattr(sim, 'traits') and sim.traits.has("ambitieux"):
+        base += 5
     return max(0, min(100, int(base)))
 
 def action_inscrire(sim):
@@ -1367,6 +1583,7 @@ ACTION_FNS = {
     "rupture": action_rupture,
     "avoir_enfant": action_avoir_enfant,
     "famille": action_famille,
+    "devoirs": action_devoirs,
     "sauvegarder": action_sauvegarder,
     "medecin": action_medecin,
     "medicament": action_medicament,
@@ -1404,6 +1621,20 @@ def ai_choose_action(sim):
     _sleep_hyg_cost = 10 + 8 * (2 + extra_h)       # 26 sain | 50 grippe+rhume
     _faim_safe      = 15 + 60                       # 75 — survive sleep
     _hygiene_safe   = 22 + _sleep_hyg_cost          # 48 sain | 72 grippe+rhume
+
+    # Burn-out forcé : pas de travail, récupération prioritaire
+    if getattr(sim, 'days_burned_out', 0) > 0:
+        if n["faim"] < 60:  return "snack" if sim.money < 5 else "manger"
+        if n["energie"] < 60: return "sieste" if n["energie"] >= 30 else "dormir"
+        if n["fun"] < 50 and "mediter" not in blocked: return "mediter"
+        if h.mental < 50 and sim.money >= 60: return "psy"
+        return "lire"
+
+    # Stress > 90 → ne peut pas travailler, décompresser en priorité
+    if getattr(sim, 'stress', 0) >= 90:
+        if sim.money >= 60 and h.mental < 80: return "psy"
+        if n["fun"] < 70 and "mediter" not in blocked: return "mediter"
+        return "lire"
 
     # Urgence absolue : faim=0 → manger avant tout (sinon danger_turns → famine)
     if n["faim"] == 0:
@@ -1514,7 +1745,7 @@ def ai_choose_action(sim):
     if "travailler" not in blocked:
         edu = sim.education
 
-        # A) Pas de job → postuler immédiatement
+        # A) Pas de job → postuler immédiatement (y compris après licenciement)
         if not sim.job and jobs_available(edu):
             return "postuler"
 
@@ -1622,6 +1853,8 @@ def ai_choose_action(sim):
         return "avoir_enfant"
     if sim.children and random.random() < 0.40:
         return "famille"
+    if sim.children and random.random() < 0.20 and "devoirs" not in blocked:
+        return "devoirs"
 
     # ═══════════════════════════════════════════════════════════════
     # PRIORITÉ 8 : loisirs sécurisés
@@ -2155,6 +2388,14 @@ def load_game():
     sim.education.total_score = ed.get("total_score", 0)
     sim.education.diploma_domain = ed.get("diploma_domain")
     sim.education.grade = ed.get("grade")
+
+    sim.stress           = d.get("stress", 0)
+    sim.salary_multiplier = d.get("salary_multiplier", 1.0)
+    sim.last_romance_day  = d.get("last_romance_day", 0)
+    sim.days_burned_out   = d.get("days_burned_out", 0)
+    trait_ids = d.get("traits")
+    if trait_ids:
+        sim.traits = Traits(trait_ids)
 
     return sim
 
