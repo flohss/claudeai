@@ -152,6 +152,8 @@ class Sim:
         self.days_burned_out = 0    # nb de jours restants de burn-out forcé
         self.hour = 7   # heure courante de la journée (float, 07h00 au réveil)
         self.academic_bonus = 0     # acquis scolaire (0–30), booste les notes à l'université
+        self.retired = False        # True après action prendre_retraite
+        self.pension = 0            # montant quotidien de la pension ($/jour)
 
     @property
     def mood(self):
@@ -1049,7 +1051,12 @@ def show_status(sim):
         t_str = "  ".join(f"{e} {n}" for n, e in sim.traits.labels())
         print(f" {C.BOLD}Traits :{C.RESET} {t_str}")
 
-    if sim.job:
+    if getattr(sim, 'retired', False):
+        pension_col = C.GREEN if sim.pension >= 300 else (C.CYAN if sim.pension >= 150 else C.YELLOW)
+        print(f" {C.BOLD}Retraite :{C.RESET} {C.GREEN}🎉 Retraité(e){C.RESET}  "
+              f"{pension_col}Pension ${sim.pension}/jour{C.RESET}  "
+              f"{C.GRAY}({sim.job_days} j. cotisés){C.RESET}")
+    elif sim.job:
         sal_str = f"  ×{sim.salary_multiplier:.2f}" if sim.salary_multiplier != 1.0 else ""
         bo_str  = f"  {C.RED}[BURN-OUT {sim.days_burned_out}j]{C.RESET}" if sim.days_burned_out > 0 else ""
         print(f" {C.BOLD}Travail :{C.RESET} {sim.job} ({sim.job_days} jour(s)){sal_str}{bo_str}")
@@ -1162,6 +1169,9 @@ ACTIONS = [
     ("appel", "Appeler quelqu'un", None, "💬 Social"),
     ("travailler", "Aller travailler", None, "💼 Travail & Carrière"),
     ("postuler", "Chercher un emploi", None, "💼 Travail & Carrière"),
+    ("prendre_retraite", "Prendre sa retraite 🎉", None, "💼 Travail & Carrière"),
+    ("benevole", "Faire du bénévolat", None, "🎮 Loisirs"),
+    ("voyage", "Partir en voyage", None, "🎮 Loisirs"),
     ("inscrire", "S'inscrire à l'université", None, "🎓 Études"),
     ("etudier", "Étudier (session univ.)", None, "🎓 Études"),
     ("medecin", "Consulter un médecin", None, "🏥 Santé"),
@@ -1196,6 +1206,7 @@ ACTION_DURATIONS = {
     "etudier": 6.0,
     "dormir": 8.0,     "travailler": 8.0,
     "avoir_enfant": 0.0, "devoirs": 1.0, "sauvegarder": 0.0,
+    "prendre_retraite": 0.5, "benevole": 4.0, "voyage": 4.0,
 }
 
 JOURS_SEMAINE = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]
@@ -1206,6 +1217,8 @@ def get_available_actions(sim):
     blocked = set(stage[4])
     hour = sim.hour
     is_weekend = (sim.age % 7) >= 5
+
+    is_retired = getattr(sim, 'retired', False)
 
     available = []
     for entry in ACTIONS:
@@ -1221,6 +1234,19 @@ def get_available_actions(sim):
             continue
         # Week-end : pas de travail
         if is_weekend and key == "travailler":
+            continue
+        # Retraité : bloquer travail et candidature
+        if is_retired and key in ("travailler", "postuler"):
+            continue
+        # prendre_retraite : uniquement Senior non encore retraité
+        if key == "prendre_retraite":
+            if is_retired or stage[1] not in ("Senior",):
+                continue
+        # bénévolat : uniquement retraité
+        if key == "benevole" and not is_retired:
+            continue
+        # voyage : adultes seulement (pas Enfant/Adolescent)
+        if key == "voyage" and stage[1] in ("Enfant", "Adolescent"):
             continue
         # Label dynamique pour devoirs : "Faire ses devoirs" quand on est jeune
         if key == "devoirs" and stage[1] in ("Enfant", "Adolescent"):
@@ -1254,6 +1280,11 @@ def action_dormir(sim):
     sim.health.tick_day()
     for child in sim.children:
         child.tick_day()
+
+    # ── Pension de retraite ───────────────────────────────────────
+    if getattr(sim, 'retired', False) and sim.pension > 0:
+        sim.money += sim.pension
+        slow_print(f" {C.GREEN}💰 Pension du jour : +${sim.pension}  (Total : ${sim.money}){C.RESET}", 0.02)
 
     # ── Animal : négligence prolongée ─────────────────────────────
     if sim.pet:
@@ -1774,6 +1805,8 @@ def action_sauvegarder(sim):
         "last_romance_day": sim.last_romance_day,
         "days_burned_out": sim.days_burned_out,
         "academic_bonus": sim.academic_bonus,
+        "retired": sim.retired,
+        "pension": sim.pension,
         "traits": list(sim.traits.active),
         "relationship": {
             "level": sim.relationship.level,
@@ -2013,6 +2046,83 @@ def action_etudier(sim):
             sim.modify(fun=-15)
     _cont()
 
+# --- Retraite ---
+
+def calculate_pension(sim):
+    if sim.job:
+        base = next((sal for lbl, sal, *_ in JOBS if lbl == sim.job), 80)
+    else:
+        base = 80
+    cotisation = min(1.0, sim.job_days / 30)
+    pension = int(base * 0.60 * cotisation * sim.salary_multiplier)
+    if sim.age >= 45:
+        pension = int(pension * 1.15)   # bonus retraite tardive
+    if sim.education.has_diploma():
+        pension = int(pension * 1.05)   # bonus diplômé
+    return max(60, pension)
+
+def action_prendre_retraite(sim):
+    clear()
+    pension = calculate_pension(sim)
+    sim.retired = True
+    sim.pension = pension
+
+    slow_print(f"\n {C.BOLD}{C.YELLOW}🎉 Tu prends ta retraite bien méritée !{C.RESET}", 0.03)
+    slow_print(f"\n {C.BOLD}── Bilan de carrière ──────────────────{C.RESET}", 0.02)
+    job_label = sim.job or "Sans emploi"
+    if sim.job:
+        base_sal = next((sal for lbl, sal, *_ in JOBS if lbl == sim.job), 80)
+    else:
+        base_sal = 80
+    cotisation_pct = min(100, int(sim.job_days / 30 * 100))
+    bonus_str = "tardive +15%" if sim.age >= 45 else "normale"
+    slow_print(f"   Dernier poste      : {job_label}", 0.02)
+    slow_print(f"   Jours travaillés   : {sim.job_days}  ({cotisation_pct}% de carrière complète)", 0.02)
+    slow_print(f"   Salaire de pointe  : ${int(base_sal * sim.salary_multiplier)}/j  (×{sim.salary_multiplier:.2f})", 0.02)
+    slow_print(f"   Type de retraite   : {bonus_str}", 0.02)
+    slow_print(f"\n {C.GREEN}💰 Pension accordée : ${pension}/jour — versée chaque matin.{C.RESET}", 0.03)
+    if pension >= 400:
+        slow_print(f" {C.GREEN}✨ Retraite dorée — profite pleinement !{C.RESET}", 0.02)
+    elif pension >= 200:
+        slow_print(f" {C.CYAN}Bonne retraite — tu as de quoi vivre confortablement.{C.RESET}", 0.02)
+    else:
+        slow_print(f" {C.YELLOW}Retraite modeste — gère ton budget avec soin.{C.RESET}", 0.02)
+
+    sim.stress = max(0, sim.stress - 30)
+    sim.modify(fun=+15, social=+10)
+    slow_print(f" {C.GREEN}Le stress fond... Bienvenue dans la liberté ! 🌅{C.RESET}", 0.02)
+    _cont()
+
+def action_benevole(sim):
+    slow_print(f"\n {C.GREEN}Tu consacres ta matinée au bénévolat... 🤝{C.RESET}", 0.02)
+    sim.modify(social=+25, fun=+20, energie=-15, faim=-10)
+    sim.tick(4)
+    sim.stress = max(0, sim.stress - 10)
+    lvl = sim.skills.gain('social', 8)
+    if lvl: slow_print(f" {C.GREEN}Compétence Social → Niv. {lvl} !{C.RESET}", 0.02)
+    slow_print(f" {C.CYAN}Tu te sens utile et pleinement épanoui(e). 💚{C.RESET}", 0.02)
+    _cont()
+
+def action_voyage(sim):
+    if sim.money < 200:
+        slow_print(f"\n {C.RED}Il te faut au moins $200 pour partir en voyage.{C.RESET}", 0.02)
+        _cont()
+        return
+    cost = min(random.randint(150, 300), sim.money - 50)
+    destinations = [
+        ("Paris", "🗼"), ("Rome", "🏛"), ("Lisbonne", "🌊"), ("Barcelone", "🌞"),
+        ("Prague", "🏰"), ("Amsterdam", "🚲"), ("Vienne", "🎶"),
+        ("Tokyo", "🗾"), ("New York", "🗽"), ("Marrakech", "🕌"),
+    ]
+    dest, emoji = random.choice(destinations)
+    slow_print(f"\n {C.CYAN}✈ Tu pars en voyage à {dest} {emoji}...{C.RESET}", 0.02)
+    sim.money -= cost
+    sim.modify(fun=+40, social=+20, energie=-10, faim=-15)
+    sim.tick(4)
+    slow_print(f" {C.YELLOW}-${cost} — Dépenses de voyage{C.RESET}", 0.02)
+    slow_print(f" {C.GREEN}Quel dépaysement ! Ces souvenirs resteront gravés... 🌍{C.RESET}", 0.02)
+    _cont()
+
 ACTION_FNS = {
     "manger": action_manger,
     "snack": action_snack,
@@ -2050,6 +2160,9 @@ ACTION_FNS = {
     "psy": action_psy,
     "inscrire": action_inscrire,
     "etudier": action_etudier,
+    "prendre_retraite": action_prendre_retraite,
+    "benevole": action_benevole,
+    "voyage": action_voyage,
 }
 
 # --- IA Autopilote ---
@@ -2094,6 +2207,56 @@ def ai_choose_action(sim):
         if sim.money >= 60 and h.mental < 80: return "psy"
         if n["fun"] < 70 and "mediter" not in blocked: return "mediter"
         return "lire"
+
+    # ── Retraite ─────────────────────────────────────────────────
+    if getattr(sim, 'retired', False):
+        # Pré-sleep : même logique que pour les actifs après 22h
+        if sim.hour >= 22:
+            if n["faim"]    < _faim_safe:    return "snack" if sim.money < 5 else "manger"
+            if n["hygiene"] < _hygiene_safe: return "douche"
+            if n["fun"]     < 50 and sim.hour < 23 and "mediter" not in blocked: return "mediter"
+            return "dormir"
+        # Seuils calés sur le coût bénévolat/voyage (4h, Senior : énergie ~-9/h, faim ~-6/h)
+        # Urgence HP : hygiene critique → douche AVANT dormir (sinon HP drain pendant le sleep)
+        if n["hygiene"] < 25 and n["energie"] > 20: return "douche"
+        if n["faim"] < 70:    return "snack" if sim.money < 5 else "manger"
+        # Hygiene faible AVANT de dormir : se laver en priorité pour éviter HP drain nocturne
+        if n["energie"] < 60 and n["hygiene"] < 50 and n["energie"] > 20: return "douche"
+        if n["energie"] < 60: return "sieste" if n["energie"] >= 35 else "dormir"
+        if n["hygiene"] < 65: return "douche"
+        if n["vessie"] < 50:  return "toilettes"
+        if n["fun"] < 40 and "mediter" not in blocked:  return "mediter"
+        if n["social"] < 40:  return "appel"
+        if h.is_sick():
+            if sim.money >= 20: return "medicament"
+            return "lire"
+        # Garde prédictive avant bénévolat : vérifier les réserves post-4h
+        _benv_ok = (
+            n["energie"]          > 75 and    # energie après bénév. : ~75-35=40 > seuil
+            n["faim"]             > 75 and    # faim après bénév.    : ~75-32=43 > seuil
+            n["hygiene"] - 12     > 55 and    # hygiene après bénév.  : marge sécurité HP
+            n["vessie"]           > 60        # vessie après 4h (-28) : >32 OK
+        )
+        # Voyage ponctuel si finances et formes le permettent
+        if (sim.money >= 250 and n["fun"] < 65 and _benv_ok and random.random() < 0.25):
+            return "voyage"
+        # Bénévolat : activité sociale principale en retraite
+        if _benv_ok and (n["social"] < 70 or n["fun"] < 70):
+            return "benevole"
+        pool_r = ["lire", "jardiner", "mediter", "tv", "jeux", "appel"]
+        if sim.children:              pool_r += ["famille", "devoirs"]
+        if sim.relationship.level >= 4: pool_r += ["intimite"]
+        if sim.money >= 20 and sim.skills.levels.get("cuisine", 0) > 0:
+            pool_r += ["gastronomie"]
+        pool_r = [a for a in pool_r if a not in blocked]
+        return random.choice(pool_r) if pool_r else "lire"
+
+    # Décision de prendre la retraite : IA attend le jour 45 (retraite tardive + 15%)
+    if stage[1] == "Senior" and sim.age >= 45:
+        if sim.education.is_enrolled():
+            pass   # finir les études d'abord
+        elif not h.is_sick() and sim.money >= 200:
+            return "prendre_retraite"
 
     # Urgence absolue : faim=0 → manger avant tout (sinon danger_turns → famine)
     if n["faim"] == 0:
@@ -2858,6 +3021,8 @@ def load_game():
     sim.last_romance_day  = d.get("last_romance_day", 0)
     sim.days_burned_out   = d.get("days_burned_out", 0)
     sim.academic_bonus    = d.get("academic_bonus", 0)
+    sim.retired           = d.get("retired", False)
+    sim.pension           = d.get("pension", 0)
     trait_ids = d.get("traits")
     if trait_ids:
         sim.traits = Traits(trait_ids)
