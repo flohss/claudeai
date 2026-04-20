@@ -521,42 +521,113 @@ class Child:
         return "Adulte 💪"
 
 # --- Santé ---
+# Format : (nom, emoji, decay_mods, durée_ou_None, coût, catégorie)
+# catégorie : "inf"=infection  "trau"=trauma  "chr"=chronique
+#             "fat"=fatal/progressif  "neuro"=neurodégénératif  "ment"=mental
 DISEASES = {
-    "rhume":    ("Rhume",     "🤧", {"energie": -1, "hygiene": -1},           3,  50),
-    "grippe":   ("Grippe",    "🤒", {"energie": -3, "hygiene": -2, "fun": -2},5,  80),
-    "burnout":  ("Burn-out",  "😵", {"energie": -4, "fun": -3, "social": -2}, 7, 120),
-    "fracture": ("Fracture",  "🦴", {"energie": -2, "fun": -2},               6, 150),
-    "arthrite": ("Arthrite",  "🦵", {"energie": -1},                          18, 200),
-    "diabete":  ("Diabète",   "🩸", {"faim": -2},                             20, 250),
+    # ── Infections ──────────────────────────────────────────────────
+    "rhume":        ("Rhume",                "🤧", {"energie": -1, "hygiene": -1},                  3,   40, "inf"),
+    "gastro":       ("Gastro-entérite",      "🤢", {"energie": -2, "faim": -3},                     4,   60, "inf"),
+    "grippe":       ("Grippe",               "🤒", {"energie": -3, "hygiene": -2, "fun": -2},        6,   80, "inf"),
+    "bronchite":    ("Bronchite",            "😮", {"energie": -2, "hygiene": -1, "fun": -1},        9,  110, "inf"),
+    "pneumonie":    ("Pneumonie",            "🫁", {"energie": -5, "hygiene": -3, "fun": -3},       14,  200, "inf"),
+    # ── Traumatismes ────────────────────────────────────────────────
+    "entorse":      ("Entorse",              "🦶", {"energie": -1, "fun": -2},                       5,   80, "trau"),
+    "fracture":     ("Fracture",             "🦴", {"energie": -2, "fun": -2},                       8,  150, "trau"),
+    "commotion":    ("Commotion cérébrale",  "🤕", {"energie": -3, "social": -2},                    6,  180, "trau"),
+    # ── Maladies chroniques (permanentes, gérables) ──────────────
+    "hypertension": ("Hypertension",         "💗", {"energie": -1, "fun": -1},                    None,  120, "chr"),
+    "asthme":       ("Asthme",               "💨", {"energie": -2},                               None,  100, "chr"),
+    "arthrite":     ("Arthrite",             "🦵", {"energie": -1},                               None,  180, "chr"),
+    "diabete":      ("Diabète",              "🩸", {"faim": -2, "energie": -1},                   None,  250, "chr"),
+    "insuff_card":  ("Insuf. cardiaque",     "❤", {"energie": -3, "fun": -2, "social": -2},       None,  400, "chr"),
+    # ── Maladies progressives/fatales (stades 1→2→3) ─────────────
+    "cancer_poumon":("Cancer du poumon",     "🫁", {"energie": -3, "fun": -2, "hygiene": -1},     None,  600, "fat"),
+    "cancer_colon": ("Cancer colorectal",    "🏥", {"energie": -2, "faim": -2, "fun": -1},        None,  500, "fat"),
+    "cancer_peau":  ("Mélanome",             "🌑", {"energie": -1, "fun": -1},                    None,  350, "fat"),
+    "leucemie":     ("Leucémie",             "🩸", {"energie": -4, "hygiene": -2, "fun": -3},     None,  600, "fat"),
+    # ── Neurodégénératives (seniors, incurables) ──────────────────
+    "alzheimer":    ("Maladie d'Alzheimer",  "🧠", {"social": -3, "fun": -2, "energie": -1},      None,  250, "neuro"),
+    "parkinson":    ("Maladie de Parkinson", "🤲", {"energie": -2, "fun": -2, "social": -1},      None,  220, "neuro"),
+    # ── Mental ───────────────────────────────────────────────────
+    "burnout":      ("Burn-out",             "😵", {"energie": -4, "fun": -3, "social": -2},        7,  120, "ment"),
 }
 
 class Health:
     def __init__(self):
         self.hp = 100
         self.mental = 80
-        self.diseases = {}
+        self.diseases = {}          # id → jours restants ou None (chronique/progressif)
+        self.disease_stage = {}     # id → stade 1–3 (fat/neuro uniquement)
 
     def get_sick(self, disease_id):
-        if disease_id not in self.diseases:
-            _, _, _, duration, _ = DISEASES[disease_id]
-            self.diseases[disease_id] = duration
+        if disease_id not in self.diseases and disease_id in DISEASES:
+            cat = DISEASES[disease_id][5]
+            dur = DISEASES[disease_id][3]
+            if cat in ("chr", "fat", "neuro"):
+                self.diseases[disease_id] = None
+                if cat in ("fat", "neuro"):
+                    self.disease_stage[disease_id] = 1
+            else:
+                self.diseases[disease_id] = dur
 
     def tick_day(self):
-        recovered = [k for k, v in self.diseases.items() if v <= 1]
+        # Guérison des maladies à durée finie
+        recovered = [k for k, v in self.diseases.items() if v is not None and v <= 1]
         for k in recovered:
             del self.diseases[k]
-        for k in self.diseases:
-            self.diseases[k] -= 1
+            self.disease_stage.pop(k, None)
+        for k in list(self.diseases):
+            if self.diseases.get(k) is not None:
+                self.diseases[k] -= 1
+        # Progression et HP drain des maladies évolutives
+        for did in list(self.diseases):
+            if did not in self.diseases or did not in DISEASES:
+                continue
+            cat = DISEASES[did][5]
+            stage = self.disease_stage.get(did, 1)
+            if cat == "fat":
+                if stage < 3 and random.randint(1, 100) <= 6:  # ~16j/stade
+                    self.disease_stage[did] = stage + 1
+                self.hp = max(0, self.hp - {1: 0, 2: 1, 3: 3}.get(stage, 0))
+            elif cat == "neuro":
+                if stage < 3 and random.randint(1, 100) <= 4:  # ~25j/stade
+                    self.disease_stage[did] = stage + 1
+                self.hp = max(0, self.hp - max(0, stage - 1))
+            elif did == "pneumonie":
+                self.hp = max(0, self.hp - 2)
+            elif did == "insuff_card":
+                self.hp = max(0, self.hp - 1)
 
     def cure_all(self):
-        self.diseases.clear()
+        """Supprime uniquement les maladies guérissables (infections, traumas, mental)."""
+        to_remove = [k for k in self.diseases
+                     if k in DISEASES and DISEASES[k][5] not in ("chr", "fat", "neuro")]
+        for k in to_remove:
+            del self.diseases[k]
+            self.disease_stage.pop(k, None)
 
     def decay_mods(self):
         mods = {}
         for did in self.diseases:
-            for need, delta in DISEASES[did][2].items():
+            if did not in DISEASES:
+                continue
+            base = DISEASES[did][2]
+            stage = self.disease_stage.get(did, 1)
+            if DISEASES[did][5] in ("fat", "neuro") and stage > 1:
+                base = {k: v * stage for k, v in base.items()}
+            for need, delta in base.items():
                 mods[need] = mods.get(need, 0) + delta
         return mods
+
+    def has_fatal(self):
+        return any(DISEASES.get(d, ('','','',0,0,'inf'))[5] in ("fat", "neuro")
+                   for d in self.diseases)
+
+    def fatal_max_stage(self):
+        stages = [self.disease_stage.get(d, 1) for d in self.diseases
+                  if DISEASES.get(d, ('','','',0,0,'inf'))[5] in ("fat", "neuro")]
+        return max(stages, default=0)
 
     def is_sick(self):
         return bool(self.diseases)
@@ -1108,8 +1179,22 @@ def show_status(sim):
     print(f" {C.BOLD}Santé :{C.RESET} {h.hp_color()}Physique{C.RESET} {hp_bar} "
           f"{h.mental_color()}Mentale{C.RESET} {men_bar}")
     if h.is_sick():
-        sick_str = " ".join(f"{DISEASES[d][1]} {DISEASES[d][0]} ({v}j)" for d, v in h.diseases.items())
-        print(f" {C.RED}{C.BOLD} Maladies actives : {sick_str}{C.RESET}")
+        parts = []
+        for d, v in h.diseases.items():
+            if d not in DISEASES: continue
+            name, emoji, _, _, _, cat = DISEASES[d]
+            stage = h.disease_stage.get(d, 0)
+            if cat in ("fat", "neuro"):
+                sc = C.RED if stage >= 3 else (C.YELLOW if stage >= 2 else C.CYAN)
+                parts.append(f"{emoji} {name} {sc}stade {stage}{C.RESET}")
+            elif cat == "chr":
+                parts.append(f"{emoji} {name} {C.GRAY}(chronique){C.RESET}")
+            elif v is not None:
+                parts.append(f"{emoji} {name} ({v}j)")
+            else:
+                parts.append(f"{emoji} {name}")
+        if parts:
+            print(f" {C.RED}{C.BOLD}Maladies :{C.RESET} {' | '.join(parts)}")
 
     if sim.children:
         kids_str = " ".join(f"{c.name} ({c.age_label})" for c in sim.children)
@@ -1269,6 +1354,96 @@ def action_snack(sim):
     sim.tick(0)
     _cont()
 
+def maybe_contract_disease(sim):
+    """Déclenchement quotidien des maladies selon l'âge, le style de vie et le hasard."""
+    h = sim.health
+    age = sim.age
+    stress = getattr(sim, 'stress', 0)
+    sport_level = sim.skills.levels.get('sport', 0)
+
+    # ── Infections (tous âges) ──────────────────────────────────────
+    if "grippe" not in h.diseases and "rhume" not in h.diseases:
+        if random.randint(1, 200) <= 2:
+            h.get_sick("grippe")
+            if not AUTOPILOT:
+                slow_print(f" {C.YELLOW}🤒 Tu commences à avoir de la fièvre... c'est la grippe.{C.RESET}", 0.02)
+    if "rhume" not in h.diseases and "grippe" not in h.diseases:
+        if random.randint(1, 100) <= 3:
+            h.get_sick("rhume")
+    if "gastro" not in h.diseases and sim.needs["hygiene"] < 30:
+        if random.randint(1, 100) <= 4:
+            h.get_sick("gastro")
+            if not AUTOPILOT:
+                slow_print(f" {C.YELLOW}🤢 Gastro-entérite... malaise garanti.{C.RESET}", 0.02)
+    # Bronchite (grippe qui traîne)
+    if ("grippe" in h.diseases and h.diseases["grippe"] is not None
+            and h.diseases["grippe"] <= 2 and "bronchite" not in h.diseases
+            and random.randint(1, 100) <= 20):
+        h.get_sick("bronchite")
+        if not AUTOPILOT:
+            slow_print(f" {C.RED}😮 La grippe a évolué en bronchite...{C.RESET}", 0.02)
+    # Pneumonie (bronchite grave ou HP très bas + grippe)
+    if ("bronchite" in h.diseases and h.diseases.get("bronchite") is not None
+            and h.diseases["bronchite"] <= 2 and "pneumonie" not in h.diseases
+            and random.randint(1, 100) <= 15):
+        h.get_sick("pneumonie")
+        if not AUTOPILOT:
+            slow_print(f" {C.RED}🫁 Pneumonie déclarée — consultation d'urgence recommandée !{C.RESET}", 0.03)
+
+    # ── Maladies chroniques (âge-dépendant) ─────────────────────
+    if age >= 25 and "hypertension" not in h.diseases:
+        prob = max(0, int((age - 22) * 0.3 + (stress > 60) * 3 + (sport_level < 2) * 2))
+        if random.randint(1, 1000) <= prob:
+            h.get_sick("hypertension")
+            if not AUTOPILOT:
+                slow_print(f" {C.YELLOW}💗 Ton médecin détecte une hypertension artérielle.{C.RESET}", 0.02)
+    if age >= 20 and "asthme" not in h.diseases:
+        if random.randint(1, 2000) <= 2:
+            h.get_sick("asthme")
+            if not AUTOPILOT:
+                slow_print(f" {C.YELLOW}💨 On diagnostique un asthme. Évite les efforts intenses.{C.RESET}", 0.02)
+    if age >= 32 and "arthrite" not in h.diseases:
+        if random.randint(1, 1000) <= max(1, age - 30):
+            h.get_sick("arthrite")
+            if not AUTOPILOT:
+                slow_print(f" {C.YELLOW}🦵 Douleurs articulaires persistantes — c'est de l'arthrite.{C.RESET}", 0.02)
+    if age >= 35 and "diabete" not in h.diseases:
+        prob = max(0, int((age - 32) * 0.5 + (sport_level < 2) * 2))
+        if random.randint(1, 1000) <= prob:
+            h.get_sick("diabete")
+            if not AUTOPILOT:
+                slow_print(f" {C.YELLOW}🩸 Bilan sanguin : diabète de type 2 diagnostiqué.{C.RESET}", 0.02)
+    if age >= 40 and "insuff_card" not in h.diseases:
+        prob = max(0, int((age - 38) * 0.4 + ("hypertension" in h.diseases) * 5 + (stress > 70) * 3))
+        if random.randint(1, 1000) <= prob:
+            h.get_sick("insuff_card")
+            if not AUTOPILOT:
+                slow_print(f" {C.RED}❤ Diagnostic : insuffisance cardiaque. Prenez soin de vous.{C.RESET}", 0.02)
+
+    # ── Cancers et maladies fatales (seniors) ───────────────────
+    if age >= 35 and not h.has_fatal():
+        prob = max(0, int((age - 32) * 0.3 + (stress > 70) * 2 + ("hypertension" in h.diseases) * 1))
+        if random.randint(1, 1000) <= prob:
+            cancer_type = random.choices(
+                ["cancer_poumon", "cancer_colon", "cancer_peau", "leucemie"],
+                weights=[30, 30, 30, 10]
+            )[0]
+            h.get_sick(cancer_type)
+            _names = {"cancer_poumon": "cancer du poumon", "cancer_colon": "cancer colorectal",
+                      "cancer_peau": "mélanome", "leucemie": "leucémie"}
+            if not AUTOPILOT:
+                slow_print(f"\n {C.RED}⚕ Les examens révèlent : {_names[cancer_type]} (stade 1).{C.RESET}", 0.03)
+                slow_print(f" {C.YELLOW}Consulte régulièrement ton médecin pour ralentir la progression.{C.RESET}", 0.02)
+
+    # ── Neurodégénératives (très seniors) ─────────────────────
+    if age >= 42 and not any(d in h.diseases for d in ("alzheimer", "parkinson")):
+        prob = max(0, int((age - 40) * 0.6))
+        if random.randint(1, 1000) <= prob:
+            disease_id = random.choice(["alzheimer", "parkinson"])
+            h.get_sick(disease_id)
+            if not AUTOPILOT:
+                slow_print(f"\n {C.RED}🧠 Diagnostic : {DISEASES[disease_id][0]} (stade 1).{C.RESET}", 0.03)
+
 def action_dormir(sim):
     slow_print(f"\n {C.BLUE}Tu dors profondément pendant 8 heures... 💤{C.RESET}", 0.02)
     sim.modify(energie=+60, hygiene=-10, faim=-20)
@@ -1277,7 +1452,18 @@ def action_dormir(sim):
     sim.hour = 7    # réveil à 07h00
     sim.weather.new_day()
     slow_print(f" {C.CYAN}Nouveau jour ! Météo : {sim.weather.emoji} {sim.weather.name}{C.RESET}", 0.02)
+    _prev_stages = {k: sim.health.disease_stage.get(k, 1)
+                    for k in sim.health.diseases
+                    if DISEASES.get(k, ('','','',0,0,'inf'))[5] in ("fat", "neuro")}
     sim.health.tick_day()
+    for _did, _old in _prev_stages.items():
+        if _did in sim.health.diseases:
+            _new = sim.health.disease_stage.get(_did, 1)
+            if _new > _old:
+                _sc = C.RED if _new >= 3 else C.YELLOW
+                slow_print(f" {_sc}⚠ {DISEASES[_did][1]} {DISEASES[_did][0]} a progressé au stade {_new} !{C.RESET}", 0.02)
+                if _new == 3:
+                    slow_print(f" {C.RED}Stade terminal — consultation médicale d'urgence !{C.RESET}", 0.02)
     for child in sim.children:
         child.tick_day()
 
@@ -1359,15 +1545,7 @@ def action_dormir(sim):
             # On garde job_days pour ne pas perdre les acquis d'ancienneté
             sim.modify(fun=-15, social=-10)
 
-    # ── Maladies chroniques liées à l'âge ────────────────────────
-    if sim.age >= 32 and "arthrite" not in sim.health.diseases:
-        if random.randint(1, 1000) <= 5:   # 0.5%/jour
-            sim.health.get_sick("arthrite")
-            slow_print(f" {C.YELLOW}🦵 Tu ressens des douleurs articulaires persistantes (arthrite).{C.RESET}", 0.02)
-    if sim.age >= 38 and "diabete" not in sim.health.diseases:
-        if random.randint(1, 1000) <= 4:   # 0.4%/jour
-            sim.health.get_sick("diabete")
-            slow_print(f" {C.YELLOW}🩸 Un bilan sanguin révèle un diabète de type 2.{C.RESET}", 0.02)
+    maybe_contract_disease(sim)
 
     _cont()
 
@@ -1676,32 +1854,73 @@ def action_jouer_pet(sim):
     _cont()
 
 def action_medecin(sim):
-    cost = 80
+    h = sim.health
+    has_fat = h.has_fatal()
+    max_stage = h.fatal_max_stage()
+    has_chr = any(DISEASES.get(d, ('','','',0,0,'inf'))[5] == "chr" for d in h.diseases)
+    if has_fat and max_stage >= 2:
+        cost, visit = 400, "traitement oncologique"
+    elif has_fat:
+        cost, visit = 250, "suivi oncologique"
+    elif has_chr:
+        cost, visit = 150, "suivi maladie chronique"
+    else:
+        cost, visit = 80, "consultation"
     if sim.money < cost:
-        print(f"\n {C.RED}Pas assez d'argent pour le médecin (${cost}).{C.RESET}")
+        print(f"\n {C.RED}Pas assez d'argent pour la {visit} (${cost}).{C.RESET}")
         _cont()
         return
-    slow_print(f"\n {C.CYAN}Tu consultes un médecin... 👨‍⚕️{C.RESET}", 0.02)
+    slow_print(f"\n {C.CYAN}Tu consultes un médecin... 👨‍⚕️  ({visit}){C.RESET}", 0.02)
     sim.money -= cost
-    sim.health.hp = min(100, sim.health.hp + 30)
-    sim.health.cure_all()
-    sim.modify(energie=+10)
-    slow_print(f" {C.GREEN}Toutes tes maladies sont soignées ! Santé +30. (-${cost}){C.RESET}", 0.02)
+    h.hp = min(100, h.hp + 20)
+    cured, managed = [], []
+    for did in list(h.diseases):
+        if did not in DISEASES: continue
+        cat = DISEASES[did][5]
+        if cat in ("inf", "trau", "ment"):
+            del h.diseases[did]
+            h.disease_stage.pop(did, None)
+            cured.append(DISEASES[did][0])
+        elif cat == "chr":
+            h.hp = min(100, h.hp + 8)
+            managed.append(f"{DISEASES[did][0]} (chronique)")
+        elif cat in ("fat", "neuro"):
+            stage = h.disease_stage.get(did, 1)
+            if stage > 1 and random.randint(1, 100) <= 30:
+                h.disease_stage[did] = stage - 1
+                slow_print(f" {C.GREEN}✨ Le traitement a fait régresser {DISEASES[did][0]} au stade {stage-1} !{C.RESET}", 0.02)
+            managed.append(f"{DISEASES[did][0]} stade {h.disease_stage.get(did, 1)}")
+    if cured:
+        slow_print(f" {C.GREEN}Guéri(e) : {', '.join(cured)}{C.RESET}", 0.02)
+    if managed:
+        slow_print(f" {C.CYAN}Suivi : {', '.join(managed)}{C.RESET}", 0.02)
+    slow_print(f" {C.GREEN}Santé +20. (-${cost}){C.RESET}", 0.02)
+    sim.modify(energie=+5)
     sim.tick(1)
     _cont()
 
 def action_medicament(sim):
     cost = 20
-    if sim.money < cost:
-        print(f"\n {C.RED}Pas assez d'argent pour les médicaments (${cost}).{C.RESET}")
+    h = sim.health
+    treatable = {k for k in h.diseases
+                 if k in DISEASES and DISEASES[k][5] in ("inf", "trau", "ment")}
+    if not treatable:
+        msg = ("Les médicaments n'ont pas d'effet sur les maladies chroniques ou graves."
+               if h.is_sick() else "Tu n'as pas de maladie aiguë à traiter.")
+        print(f"\n {C.YELLOW}{msg}{C.RESET}")
         _cont()
         return
-    slow_print(f"\n {C.YELLOW}Tu prends des médicaments... 💊{C.RESET}", 0.02)
+    if sim.money < cost:
+        print(f"\n {C.RED}Pas assez d'argent (${cost}).{C.RESET}")
+        _cont()
+        return
+    slow_print(f"\n {C.YELLOW}Tu prends tes médicaments... 💊{C.RESET}", 0.02)
     sim.money -= cost
-    sim.health.hp = min(100, sim.health.hp + 10)
-    for d in sim.health.diseases:
-        sim.health.diseases[d] = max(1, sim.health.diseases[d] - 1)
-    slow_print(f" {C.GREEN}Santé +10, maladies accélérées. (-${cost}){C.RESET}", 0.02)
+    h.hp = min(100, h.hp + 8)
+    for d in treatable:
+        if h.diseases.get(d) is not None:
+            h.diseases[d] = max(1, h.diseases[d] - 1)
+    slow_print(f" {C.GREEN}Santé +8, maladies aiguës accélérées. (-${cost}){C.RESET}", 0.02)
     _cont()
 
 def action_psy(sim):
@@ -1820,7 +2039,8 @@ def action_sauvegarder(sim):
         "weather_idx": WEATHER_TYPES.index(sim.weather._data),
         "skills": {"levels": sim.skills.levels, "xp": sim.skills.xp},
         "children": [{"name": c.name, "days": c.days, "study_score": c.study_score} for c in sim.children],
-        "health": {"hp": sim.health.hp, "mental": sim.health.mental, "diseases": sim.health.diseases},
+        "health": {"hp": sim.health.hp, "mental": sim.health.mental,
+                   "diseases": sim.health.diseases, "disease_stage": sim.health.disease_stage},
         "education": {
             "enrolled_domain": sim.education.enrolled_domain,
             "sessions_done": sim.education.sessions_done,
@@ -2272,27 +2492,26 @@ def ai_choose_action(sim):
 
     # ═══════════════════════════════════════════════════════════════
     # MODE MALADIE : GUÉRIR en priorité (médicament réduit durée de 1j/prise).
-    # 4 médicaments + 1 sleep cure grippe (5→1→tick_day=0) pour $80.
-    # COÛTS SLEEP : faim −60, hygiene −(10+8×(2+extra_h)), énergie net +4 (grippe+rhume)
-    # PIÈGE : douche coûte tick(1) → énergie −7 avec maladies.
-    #   → Séparer "pré-sleep" (préparer les reserves) de "éveillé" (médicaments).
     # ═══════════════════════════════════════════════════════════════
     if h.is_sick():
-        sleep_faim_cost = 60                          # modify -20 + tick 8×5
-        sleep_hyg_cost  = 10 + 8 * (2 + extra_h)     # 26 sain | 50 grippe+rhume
-        faim_safe    = 15 + sleep_faim_cost           # 75 — survive sleep
-        hygiene_safe = 22 + sleep_hyg_cost            # 48 sain | 72 grippe+rhume
+        sleep_faim_cost = 60
+        sleep_hyg_cost  = 10 + 8 * (2 + extra_h)
+        faim_safe    = 15 + sleep_faim_cost
+        hygiene_safe = 22 + sleep_hyg_cost
+
+        # Maladies fatales : aller au médecin en priorité absolue
+        if h.has_fatal():
+            max_stage = h.fatal_max_stage()
+            fat_cost = 400 if max_stage >= 2 else 250
+            if sim.money >= fat_cost and n["faim"] > 40 and n["energie"] > 25:
+                return "medecin"
 
         about_to_sleep = n["energie"] < 15
 
         if about_to_sleep:
-            # Urgence : energie ≈ 0 + maladies multiples → sleep ne restaure PAS l'énergie.
-            # ex: grippe+rhume: gain=60, coût=8×(2+3+1)×8=48, net=+12 (nouveau tick -2/h).
-            # Médecin SEULEMENT si energie < 10 pour limiter les ticks de faim (1 appel max).
             if n["energie"] < 10 and sim.money >= 80:    return "medecin"
-            needs_meds_now = any(v > 1 for v in h.diseases.values())
+            needs_meds_now = any(v is not None and v > 1 for v in h.diseases.values())
             if n["energie"] < 10 and needs_meds_now and sim.money >= 20: return "medicament"
-            # Préparer le sleep AVANT de dormir (ordre : faim → hygiene → sleep)
             if n["faim"]    < faim_safe:             return "snack" if sim.money < 5 else "manger"
             if n["hygiene"] < hygiene_safe:          return "douche"
             return "dormir"
@@ -2300,12 +2519,13 @@ def ai_choose_action(sim):
         # Éveillé et malade → GUÉRIR
         if n["faim"]    < 45:                        return "snack" if sim.money < 5 else "manger"
         if n["hygiene"] < 45:                        return "douche"
-        # Médecin : cure_all() + HP+30 pour $80
-        if sim.money >= 80:                          return "medecin"
-        # Médicament pour réduire durée de maladie si durée > 1
-        needs_meds = any(v > 1 for v in h.diseases.values())
-        if needs_meds and sim.money >= 20:           return "medicament"
-        # Maladies toutes à 1j → attendre le prochain sleep pour guérir ; récupérer
+        if sim.money >= 80 and not h.has_fatal():    return "medecin"
+        has_treatable = any(
+            h.diseases.get(k) is not None and h.diseases[k] > 1
+            and DISEASES.get(k, ('','','',0,0,'inf'))[5] in ("inf", "trau", "ment")
+            for k in h.diseases
+        )
+        if has_treatable and sim.money >= 20:        return "medicament"
         if n["energie"] < 60 and "sieste" not in blocked: return "sieste"
         if n["faim"]    < 60:                        return "manger"
         return "mediter" if "mediter" not in blocked else "lire"
@@ -3008,6 +3228,7 @@ def load_game():
     sim.health.hp = hd.get("hp", 100)
     sim.health.mental = hd.get("mental", 80)
     sim.health.diseases = hd.get("diseases", {})
+    sim.health.disease_stage = hd.get("disease_stage", {})
 
     ed = d.get("education", {})
     sim.education.enrolled_domain = ed.get("enrolled_domain")
