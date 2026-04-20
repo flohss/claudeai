@@ -1943,7 +1943,17 @@ def action_travailler(sim):
     sim.money += salary
     sim.job_days += 1
     sim.modify(energie=-(25 + stress_penalty), faim=-20, social=+15, hygiene=-10, fun=+5)
-    sim.tick(8)
+    sim.tick(4)   # matinée (4h)
+    # ── Pause déjeuner ─────────────────────────────────────────
+    lunch_cost = 15
+    if sim.money >= lunch_cost:
+        sim.money -= lunch_cost
+        sim.modify(faim=+35)
+        slow_print(f" {C.GRAY}⌚ Pause déjeuner — repas à la cantine (+35 faim, -${lunch_cost}){C.RESET}", 0.02)
+    else:
+        sim.modify(faim=+15)
+        slow_print(f" {C.GRAY}⌚ Pause déjeuner — sandwich rapide (+15 faim){C.RESET}", 0.02)
+    sim.tick(4)   # après-midi (4h)
     # Stress cumulé par la journée de travail
     stress_gain = 8
     if "anxieux" in sim.traits.active: stress_gain = 12
@@ -2914,52 +2924,28 @@ def ai_choose_action(sim):
         return "dormir"
 
     # ═══════════════════════════════════════════════════════════════
-    # PRIORITÉ 2 : santé proactive
+    # PRIORITÉ 2 : urgence santé (HP très bas ou mental effondré)
+    # Seuil bas (65) : seule une détresse réelle bloque le travail/études.
+    # La santé préventive (hp < 85) reste en priorité 3, après la carrière.
     # ═══════════════════════════════════════════════════════════════
-    if h.hp < 85 and sim.money >= 80:                                     return "medecin"
-    if h.mental < 45 and sim.money >= 60:                                 return "psy"
-    # Mental critique sans argent → fun/social
+    if h.hp < 65 and sim.money >= 80:                                     return "medecin"
     if h.mental < 30:
         if n["fun"] < 80 and "mediter" not in blocked:                    return "mediter"
         return "appel"
 
     # ═══════════════════════════════════════════════════════════════
-    # PRIORITÉ 3 : animal de compagnie
-    # ═══════════════════════════════════════════════════════════════
-    if sim.pet and sim.pet.hunger    < 35:                                return "nourrir"
-    if sim.pet and sim.pet.happiness < 30:                                return "jouer_pet"
-    if (not sim.pet and "adopter" not in blocked
-            and sim.money > 400 and random.random() < 0.03):              return "adopter"
-
-    # ═══════════════════════════════════════════════════════════════
-    # PRIORITÉ 4 : récupération préventive
-    # Sieste (2h): +30 énergie (modify) + tick(2) → net ~+22 énergie, coûte -15 faim
-    # Méditer (0.5h): +15 fun +15 energie GRATUITEMENT (quasi nul)
-    # ═══════════════════════════════════════════════════════════════
-    # Sieste proactive — recharger avant seuil de travail
-    energie_work_min = 25 + 8 * (2 + extra_e) + 3   # 44 sain | 68 grippe+rhume
-    if n["energie"] < min(55, energie_work_min) and n["faim"] >= 20 and "sieste" not in blocked:
-        return "sieste"
-
-    # Social préventif : si social bas, mental drain imminent (fun<25 ET social<25 → -4/h)
-    if n["social"] < 42:                                                   return "appel"
-
-    # Fun préventif
-    if n["fun"] < fun_thresh and "mediter" not in blocked:                return "mediter"
-    if n["fun"] < fun_thresh - 10 and n["energie"] > 55 and n["faim"] > 45:
-        if "tv" not in blocked:                                            return "tv"
-
-    # ═══════════════════════════════════════════════════════════════
-    # PRIORITÉ 5 : carrière & études
+    # PRIORITÉ 3 : carrière & études — engagements fermes
+    # Études : 7j/7. Travail : lun-ven.
+    # Seule l'urgence physique (énergie/faim sous seuil minimal) peut différer.
     # ═══════════════════════════════════════════════════════════════
     if "travailler" not in blocked:
         edu = sim.education
 
-        # A) Pas de job → postuler immédiatement (y compris après licenciement)
+        # A) Pas de job → postuler immédiatement
         if not sim.job and jobs_available(edu):
             return "postuler"
 
-        # B) Diplôme obtenu → changer de poste sans délai
+        # B) Diplôme → re-postuler si poste plus payant disponible
         if edu.has_diploma():
             best = max(jobs_available(edu), key=lambda x: x[1], default=None)
             if best:
@@ -2967,56 +2953,65 @@ def ai_choose_action(sim):
                 if best[1] > cur_sal:
                     return "postuler"
 
-        # Calcul prédictif (tick énergie=-2/h, fun=-3/h)
-        e_cost_t    = 25 + 8 * (2 + extra_e)   # 41 sain | 65 grippe
-        f_cost_t    = -5 + 8 * (3 + extra_f)   # 19 sain | 35 grippe
-        hyg_cost_t  = 10 + 8 * (2 + extra_h)
-        faim_cost_t = 20 + 8 * 5               # 60
-        peut_travailler = (
-            n["energie"] - e_cost_t  > 3   and
-            n["faim"]    - faim_cost_t > 5  and
-            n["fun"]     - f_cost_t  > -20  and
-            n["hygiene"] - hyg_cost_t > 20
-        )
-        e_cost_e = 8 + 6 * (2 + extra_e)
-        f_cost_e = 0 + 6 * (3 + extra_f)
-        peut_etudier = (
-            n["energie"] - e_cost_e > 12 and
-            n["faim"]    - 45       > 10 and
-            n["fun"]     - f_cost_e > -10
-        )
+        # Seuils minimaux : juste assez pour tenir une journée de cours ou de travail
+        _can_work  = n["energie"] > 25 and n["faim"] > 20 and n["hygiene"] > 20
+        _can_study = n["energie"] > 20 and n["faim"] > 15
 
-        # C) Études en cours → étudier 7j/7 en priorité sur le travail
+        # C) Études en cours → 7j/7, toutes priorités secondaires cèdent
         if edu.is_enrolled():
             session_cost = STUDY_DOMAINS[edu.enrolled_domain][3]
-            sessions_left = edu.sessions_required() - edu.sessions_done
-            # Buffer réduit quand on approche de la fin : plus besoin de garder autant de réserve
-            study_buffer = max(0, (sessions_left - 1)) * 80   # 0$ sur la dernière session, 80$/session sinon
-            if sim.money >= session_cost + study_buffer and peut_etudier:
+            if sim.money >= session_cost and _can_study:
                 return "etudier"
-            # Pas de session possible → travailler pour financer les études
-            if not is_weekend and sim.job and peut_travailler:
+            # Argent insuffisant → travailler pour financer (semaine)
+            if not is_weekend and sim.job and _can_work:
                 return "travailler"
+            # Récupération minimale si physiquement incapable
+            if not _can_study:
+                if n["faim"] <= 15:    return "snack" if sim.money < 5 else "manger"
+                return "sieste" if n["energie"] >= 20 else "dormir"
 
-        # D) Pas encore inscrit → s'inscrire dès que le buffer le permet (session + 200$ médecin)
-        elif (not edu.has_diploma() and sim.money >= 350
-                and "inscrire" not in blocked):
+        # D) Pas de diplôme → s'inscrire dès que les fonds permettent
+        elif not edu.has_diploma() and sim.money >= 350 and "inscrire" not in blocked:
             return "inscrire"
 
-        # E) Travailler (semaine seulement)
-        elif not is_weekend and sim.job and peut_travailler:
-            return "travailler"
+        # E) Travailler lun-ven — présence systématique sauf urgence physique
+        # La pause déjeuner dans action_travailler couvre la faim, pas besoin de pré-manger.
+        elif not is_weekend and sim.job:
+            if _can_work:
+                return "travailler"
+            # Récupération rapide si incapable physiquement
+            if n["faim"] <= 20:    return "snack" if sim.money < 5 else "manger"
+            return "sieste" if n["energie"] >= 20 else "dormir"
 
-        # Récupération ciblée si conditions de travail non réunies
-        if not peut_travailler and not is_weekend:
-            if n["energie"] < energie_work_min:
-                return "sieste" if n["energie"] >= 30 else "dormir"
-            if n["faim"] < 65:
-                return "manger"
-            if n["fun"] < 25 and "mediter" not in blocked:
-                return "mediter"
-            if n["hygiene"] < hygiene_thresh:
-                return "douche"
+    # ═══════════════════════════════════════════════════════════════
+    # PRIORITÉ 4 : santé proactive (hp modérément bas, mental fragile)
+    # S'exécute uniquement quand il n'y a pas de travail/études imminent
+    # (week-end, après les cours, ou sim sans emploi).
+    # ═══════════════════════════════════════════════════════════════
+    if h.hp < 85 and sim.money >= 80:                                     return "medecin"
+    if h.mental < 45 and sim.money >= 60:                                 return "psy"
+
+    # ═══════════════════════════════════════════════════════════════
+    # PRIORITÉ 4 : animal de compagnie
+    # ═══════════════════════════════════════════════════════════════
+    if sim.pet and sim.pet.hunger    < 35:                                return "nourrir"
+    if sim.pet and sim.pet.happiness < 30:                                return "jouer_pet"
+    if (not sim.pet and "adopter" not in blocked
+            and sim.money > 400 and random.random() < 0.03):              return "adopter"
+
+    # ═══════════════════════════════════════════════════════════════
+    # PRIORITÉ 5 : récupération préventive (loisirs / social / sieste)
+    # Ces actions n'ont lieu que si aucun travail ni étude n'est imminent.
+    # ═══════════════════════════════════════════════════════════════
+    energie_work_min = 25 + 8 * (2 + extra_e) + 3
+    if n["energie"] < min(55, energie_work_min) and n["faim"] >= 20 and "sieste" not in blocked:
+        return "sieste"
+
+    if n["social"] < 42:                                                   return "appel"
+
+    if n["fun"] < fun_thresh and "mediter" not in blocked:                return "mediter"
+    if n["fun"] < fun_thresh - 10 and n["energie"] > 55 and n["faim"] > 45:
+        if "tv" not in blocked:                                            return "tv"
 
     # ═══════════════════════════════════════════════════════════════
     # PRIORITÉ 5b : immobilier — acheter dès que les finances le permettent
