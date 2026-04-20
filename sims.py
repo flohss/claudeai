@@ -151,6 +151,7 @@ class Sim:
         self.last_romance_day = 0   # dernier jour où une action romantique a eu lieu
         self.days_burned_out = 0    # nb de jours restants de burn-out forcé
         self.hour = 7   # heure courante de la journée (float, 07h00 au réveil)
+        self.academic_bonus = 0     # acquis scolaire (0–30), booste les notes à l'université
 
     @property
     def mood(self):
@@ -875,6 +876,14 @@ def show_status(sim):
     print(f" {C.BOLD}Heure :{C.RESET} {_hcol}🕐 {_h:02d}h{_m:02d}{C.RESET}  "
           f"{C.BOLD}Jour :{C.RESET} {_day}  {C.BOLD}·{C.RESET}  Jour {sim.age}{_we_str}")
 
+    # Acquis scolaire (affiché en âge scolaire, ou si > 0 en adulte)
+    ab = getattr(sim, 'academic_bonus', 0)
+    if stage[1] in ("Enfant", "Adolescent"):
+        ab_col = C.GREEN if ab >= 20 else (C.YELLOW if ab >= 10 else C.GRAY)
+        print(f" {C.BOLD}Scolarité :{C.RESET} {ab_col}Acquis {ab}/30{C.RESET}  {bar(ab, max_value=30, length=12)}")
+    elif ab > 0 and not sim.education.has_diploma():
+        print(f" {C.BOLD}Scolarité :{C.RESET} {C.CYAN}Acquis scolaire +{ab} pts (bonus universitaire){C.RESET}")
+
     edu = sim.education
     if edu.has_diploma():
         print(f" {C.BOLD}Diplôme :{C.RESET} {C.GREEN}{edu.domain_label}{C.RESET} Mention : {C.YELLOW}{edu.grade}{C.RESET}")
@@ -1206,9 +1215,17 @@ def action_tv(sim):
     _cont()
 
 def action_lire(sim):
-    slow_print(f"\n {C.GREEN}Tu lis un bon livre pendant 2h... 📖{C.RESET}", 0.02)
-    sim.modify(fun=+20, energie=-5, faim=-5)
-    sim.tick(2)
+    _, stage = get_stage(sim.age)
+    if stage[1] in ("Enfant", "Adolescent"):
+        slow_print(f"\n {C.GREEN}Tu lis et tu apprends par toi-même... 📖{C.RESET}", 0.02)
+        sim.modify(fun=+15, energie=-5, faim=-5)
+        sim.tick(2)
+        sim.academic_bonus = min(30, sim.academic_bonus + 1)
+        slow_print(f" {C.CYAN}Acquis scolaire : {sim.academic_bonus}/30{C.RESET}", 0.02)
+    else:
+        slow_print(f"\n {C.GREEN}Tu lis un bon livre pendant 2h... 📖{C.RESET}", 0.02)
+        sim.modify(fun=+20, energie=-5, faim=-5)
+        sim.tick(2)
     _cont()
 
 def action_sortir(sim):
@@ -1554,14 +1571,26 @@ def action_famille(sim):
 
 def action_devoirs(sim):
     _, stage = get_stage(sim.age)
-    # ── Jeune sim : faire ses propres devoirs avec l'aide des parents ──
-    if stage[1] in ("Enfant", "Adolescent"):
+    # ── Enfant : devoirs avec aide des parents ─────────────────────────
+    if stage[1] == "Enfant":
         slow_print(f"\n {C.CYAN}Tes parents t'aident à faire tes devoirs... 📚{C.RESET}", 0.02)
         sim.modify(energie=-15, fun=-5, social=+10)
         sim.tick(1)
-        lvl = sim.skills.gain('travail', 8)
+        sim.academic_bonus = min(30, sim.academic_bonus + 3)
+        lvl = sim.skills.gain('travail', 6)
         if lvl: slow_print(f" {C.GREEN}Compétence Travail → Niv. {lvl} ! 💼{C.RESET}", 0.02)
-        slow_print(f" {C.GREEN}Bien guidé(e) — tu progresses et te prépares pour l'avenir ! 🌟{C.RESET}", 0.02)
+        slow_print(f" {C.GREEN}Bien guidé(e) ! Acquis scolaire : {sim.academic_bonus}/30 📈{C.RESET}", 0.02)
+        _cont()
+        return
+    # ── Adolescent : révisions en autonomie ───────────────────────────
+    if stage[1] == "Adolescent":
+        slow_print(f"\n {C.CYAN}Tu travailles seul(e) sur tes cours et révisions... 📖{C.RESET}", 0.02)
+        sim.modify(energie=-20, fun=-10, social=+5)
+        sim.tick(1)
+        sim.academic_bonus = min(30, sim.academic_bonus + 4)
+        lvl = sim.skills.gain('travail', 10)
+        if lvl: slow_print(f" {C.GREEN}Compétence Travail → Niv. {lvl} ! 💼{C.RESET}", 0.02)
+        slow_print(f" {C.GREEN}Discipline et rigueur — acquis scolaire : {sim.academic_bonus}/30 📈{C.RESET}", 0.02)
         _cont()
         return
     # ── Adulte sans enfants ────────────────────────────────────────────
@@ -1593,6 +1622,7 @@ def action_sauvegarder(sim):
         "salary_multiplier": sim.salary_multiplier,
         "last_romance_day": sim.last_romance_day,
         "days_burned_out": sim.days_burned_out,
+        "academic_bonus": sim.academic_bonus,
         "traits": list(sim.traits.active),
         "relationship": {
             "level": sim.relationship.level,
@@ -1741,6 +1771,7 @@ def _study_session_score(sim):
     base += (sim.needs["energie"] - 50) * 0.3
     base += sim.skills.levels.get("travail", 0) * 2
     base += sim.skills.levels.get("social", 0) * 1
+    base += getattr(sim, 'academic_bonus', 0)   # acquis scolaire de l'enfance
     base += random.randint(-15, 15)
     if hasattr(sim, 'traits') and sim.traits.has("curieux"):
         base += 10
@@ -2676,6 +2707,7 @@ def load_game():
     sim.salary_multiplier = d.get("salary_multiplier", 1.0)
     sim.last_romance_day  = d.get("last_romance_day", 0)
     sim.days_burned_out   = d.get("days_burned_out", 0)
+    sim.academic_bonus    = d.get("academic_bonus", 0)
     trait_ids = d.get("traits")
     if trait_ids:
         sim.traits = Traits(trait_ids)
