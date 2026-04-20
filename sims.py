@@ -1011,10 +1011,14 @@ def action_dormir(sim):
     for child in sim.children:
         child.tick_day()
 
-    # ── Événement lié aux traits (une fois par nuit) ──────────────
+    # ── Événements nocturnes : trait en priorité, sinon aléatoire (40%) ──
     trait_msg = trigger_trait_event(sim)
     if trait_msg:
         sim.last_event = trait_msg
+    elif random.randint(1, 100) <= 40:
+        sim.last_event = trigger_random_event(sim)
+    else:
+        sim.last_event = None
 
     # ── Récupération du stress au repos ────────────────────────────
     stress_rec = 15
@@ -2146,19 +2150,16 @@ def autopilot_loop(sim, speed=0.8):
             if action_key == "postuler":
                 ai_auto_postuler(sim)
                 sim.hour += ACTION_DURATIONS.get("postuler", 0)
-                sim.last_event = trigger_random_event(sim)
                 time.sleep(speed)
                 continue
             if action_key == "inscrire":
                 ai_auto_inscrire(sim)
                 sim.hour += ACTION_DURATIONS.get("inscrire", 0)
-                sim.last_event = trigger_random_event(sim)
                 time.sleep(speed)
                 continue
             if action_key == "adopter":
                 ai_auto_adopter(sim)
                 sim.hour += ACTION_DURATIONS.get("adopter", 0)
-                sim.last_event = trigger_random_event(sim)
                 time.sleep(speed)
                 continue
 
@@ -2167,10 +2168,8 @@ def autopilot_loop(sim, speed=0.8):
             print(f"\n {C.CYAN}[IA]{C.RESET} → {label}")
 
             ACTION_FNS[action_key](sim)
-            # dormir remet l'heure à 7 lui-même ; pour les autres on avance l'horloge
             if action_key != "dormir":
                 sim.hour += ACTION_DURATIONS.get(action_key, 0)
-            sim.last_event = trigger_random_event(sim)
             time.sleep(speed)
 
     finally:
@@ -2480,14 +2479,12 @@ def game_loop(sim):
                 if action_key in stage[5]:
                     if ask_parental_auth(sim, stage[1]):
                         ACTION_FNS[action_key](sim)
-                        sim.last_event = trigger_random_event(sim)
                         if action_key != "dormir":
                             sim.hour += ACTION_DURATIONS.get(action_key, 0)
                     else:
                         sim.last_event = None
                 else:
                     ACTION_FNS[action_key](sim)
-                    sim.last_event = trigger_random_event(sim)
                     if action_key != "dormir":
                         sim.hour += ACTION_DURATIONS.get(action_key, 0)
             else:
