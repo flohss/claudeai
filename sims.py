@@ -154,6 +154,7 @@ class Sim:
         self.academic_bonus = 0     # acquis scolaire (0–30), booste les notes à l'université
         self.retired = False        # True après action prendre_retraite
         self.pension = 0            # montant quotidien de la pension ($/jour)
+        self.housing = None         # None ou dict {property_id, purchase_price, loan_total, loan_remaining, daily_payment, days_missed}
 
     @property
     def mood(self):
@@ -1267,6 +1268,24 @@ def show_status(sim):
         sc = C.RED if sim.stress > 70 else (C.YELLOW if sim.stress > 40 else C.GREEN)
         print(f" {C.BOLD}Stress  :{C.RESET} {sc}{sim.stress}%{C.RESET} {bar(sim.stress, length=12)}")
 
+    if sim.housing:
+        _hw = sim.housing
+        _hpdata = get_property_data(_hw["property_id"])
+        if _hpdata:
+            _hnom, _hemoji = _hpdata[1], _hpdata[2]
+            if _hw["loan_remaining"] > 0:
+                _paid = _hw["loan_total"] - _hw["loan_remaining"]
+                _pct  = int(_paid * 100 / max(1, _hw["loan_total"]))
+                _miss = (f"  {C.RED}⚠ {_hw['days_missed']} impayé(s){C.RESET}"
+                         if _hw["days_missed"] > 0 else "")
+                _pcol = C.RED if _hw["days_missed"] > 0 else C.YELLOW
+                print(f" {C.BOLD}Logement :{C.RESET} {_hemoji} {_hnom}  "
+                      f"Crédit {_pcol}${_hw['daily_payment']}/j{C.RESET}  "
+                      f"Restant ${_hw['loan_remaining']:,}/{_hw['loan_total']:,}  "
+                      f"{bar(_pct, length=10)}{_miss}")
+            else:
+                print(f" {C.BOLD}Logement :{C.RESET} {_hemoji} {_hnom}  {C.GREEN}✅ Propriétaire !{C.RESET}")
+
     w = sim.weather
     print(f" {C.BOLD}Météo :{C.RESET} {w.emoji} {w.name}", end="")
     if w.daily_effects:
@@ -1403,6 +1422,8 @@ ACTIONS = [
     ("avoir_enfant", "Avoir un enfant", None, "👨‍👩‍👧 Famille"),
     ("famille", "Temps en famille", None, "👨‍👩‍👧 Famille"),
     ("devoirs", "Aide aux devoirs", None, "👨‍👩‍👧 Famille"),
+    ("acheter_maison", "Acheter un bien immobilier", None, "🏠 Immobilier"),
+    ("vendre_maison",  "Vendre son bien immobilier",  None, "🏠 Immobilier"),
     ("sauvegarder", "Sauvegarder la partie", None, "💾 Système"),
 ]
 
@@ -1421,7 +1442,34 @@ ACTION_DURATIONS = {
     "dormir": 8.0,     "travailler": 8.0,
     "avoir_enfant": 0.0, "devoirs": 1.0, "sauvegarder": 0.0,
     "prendre_retraite": 0.5, "benevole": 4.0, "voyage": 4.0,
+    "acheter_maison": 2.0, "vendre_maison": 1.0,
 }
+
+# --- Immobilier ---
+# Format : (id, nom, emoji, prix, acompte_pct, standing, effets_quotidiens)
+PROPERTIES = [
+    ("studio",    "Studio",             "🏠",  2_000, 0.20, 1, {"fun": +1, "energie": +1}),
+    ("appt_t2",   "Appartement T2",     "🏢",  4_500, 0.20, 2, {"fun": +1, "energie": +1, "social": +1}),
+    ("appt_t3",   "Appartement T3",     "🏢",  8_000, 0.20, 3, {"fun": +2, "energie": +1, "social": +1}),
+    ("maison_tv", "Maison de ville",    "🏡", 14_000, 0.25, 4, {"fun": +2, "energie": +2, "social": +2}),
+    ("maison_c",  "Maison de campagne", "🌿", 20_000, 0.25, 5, {"fun": +3, "energie": +2, "social": +1}),
+    ("villa",     "Villa",              "🏰", 32_000, 0.25, 6, {"fun": +4, "energie": +3, "social": +3}),
+    ("manoir",    "Manoir",             "🏯", 50_000, 0.30, 7, {"fun": +6, "energie": +4, "social": +5}),
+]
+
+# Format : (label, durée_jours, taux_intérêt)
+LOAN_TERMS = [
+    ("Court terme  (30j)",  30, 0.03),
+    ("Moyen terme  (60j)",  60, 0.05),
+    ("Long terme   (90j)",  90, 0.08),
+    ("Très long   (120j)", 120, 0.10),
+]
+
+def get_property_data(pid):
+    for p in PROPERTIES:
+        if p[0] == pid:
+            return p
+    return None
 
 JOURS_SEMAINE = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]
 
@@ -1476,6 +1524,13 @@ def get_available_actions(sim):
             continue
         # voyage : adultes seulement (pas Enfant/Adolescent)
         if key == "voyage" and stage[1] in ("Enfant", "Adolescent"):
+            continue
+        # Achat immobilier : pas déjà propriétaire, pas Enfant/Adolescent
+        if key == "acheter_maison":
+            if getattr(sim, 'housing', None) or stage[1] in ("Enfant", "Adolescent"):
+                continue
+        # Vente : uniquement si propriétaire
+        if key == "vendre_maison" and not getattr(sim, 'housing', None):
             continue
         # Label dynamique pour devoirs : "Faire ses devoirs" quand on est jeune
         if key == "devoirs" and stage[1] in ("Enfant", "Adolescent"):
@@ -1673,6 +1728,38 @@ def action_dormir(sim):
         sim.days_burned_out -= 1
         if sim.days_burned_out == 0:
             slow_print(f" {C.GREEN}✅ Tu te sens enfin reposé(e). Le burn-out est derrière toi.{C.RESET}", 0.02)
+
+    # ── Remboursement immobilier ──────────────────────────────────
+    if sim.housing:
+        _mh = sim.housing
+        if _mh["loan_remaining"] > 0:
+            _payment = min(_mh["daily_payment"], _mh["loan_remaining"])
+            if sim.money >= _payment:
+                sim.money -= _payment
+                _mh["loan_remaining"] = max(0, _mh["loan_remaining"] - _payment)
+                _mh["days_missed"] = 0
+                if _mh["loan_remaining"] == 0:
+                    _pd = get_property_data(_mh["property_id"])
+                    slow_print(f" {C.GREEN}🏠 Crédit remboursé ! Tu es pleinement propriétaire de "
+                               f"{_pd[2]} {_pd[1]} !{C.RESET}", 0.02)
+            else:
+                _mh["days_missed"] += 1
+                slow_print(f" {C.RED}⚠ Échéance immobilière non payée (${_payment}) ! "
+                           f"Impayés : {_mh['days_missed']}/3{C.RESET}", 0.02)
+                sim.modify(fun=-10, social=-5)
+                sim.stress = min(100, getattr(sim, 'stress', 0) + 15)
+                if _mh["days_missed"] >= 3:
+                    _pd = get_property_data(_mh["property_id"])
+                    slow_print(f" {C.RED}💔 Saisie ! {_pd[2]} {_pd[1]} t'est retirée "
+                               f"faute de paiements.{C.RESET}", 0.02)
+                    sim.modify(fun=-30, social=-20)
+                    sim.stress = min(100, sim.stress + 30)
+                    sim.housing = None
+        # Effets quotidiens du bien immobilier (confort du logement)
+        if sim.housing:
+            _pd2 = get_property_data(sim.housing["property_id"])
+            if _pd2:
+                sim.modify(**_pd2[6])
 
     # ── Coûts journaliers des enfants ──────────────────────────────
     if sim.children:
@@ -2191,6 +2278,7 @@ def action_sauvegarder(sim):
         "academic_bonus": sim.academic_bonus,
         "retired": sim.retired,
         "pension": sim.pension,
+        "housing": sim.housing,
         "traits": list(sim.traits.active),
         "relationship": {
             "level": sim.relationship.level,
@@ -2508,6 +2596,117 @@ def action_voyage(sim):
     slow_print(f" {C.GREEN}Quel dépaysement ! Ces souvenirs resteront gravés... 🌍{C.RESET}", 0.02)
     _cont()
 
+def action_acheter_maison(sim):
+    if sim.housing:
+        _pd = get_property_data(sim.housing["property_id"])
+        slow_print(f"\n {C.RED}Tu possèdes déjà {_pd[2]} {_pd[1]}. Vends-la d'abord.{C.RESET}", 0.02)
+        _cont()
+        return
+
+    slow_print(f"\n {C.YELLOW}🏘 Marché immobilier — Propriétés disponibles :{C.RESET}", 0.02)
+    print()
+    for i, (pid, nom, emoji, prix, acompte_pct, standing, effets) in enumerate(PROPERTIES, 1):
+        acompte = int(prix * acompte_pct)
+        eff_str = "  ".join(f"{'+'if v>0 else ''}{v} {k}" for k, v in effets.items())
+        ok = "✅" if sim.money >= acompte else f"{C.RED}❌ manque ${acompte - sim.money:,}{C.RESET}"
+        print(f" {C.CYAN}[{i}]{C.RESET} {emoji} {nom:22s}  "
+              f"{C.BOLD}${prix:,}{C.RESET}  Acompte {C.YELLOW}${acompte:,}{C.RESET} {ok}"
+              f"  {C.GRAY}({eff_str}){C.RESET}")
+    print(f"\n {C.CYAN}[ 0]{C.RESET} Annuler\n")
+
+    try:
+        choice = input(f" {C.BOLD}Propriété : {C.RESET}").strip()
+    except (EOFError, KeyboardInterrupt):
+        choice = "0"
+
+    if not choice.isdigit() or int(choice) == 0 or int(choice) > len(PROPERTIES):
+        slow_print(f" {C.GRAY}Transaction annulée.{C.RESET}", 0.02)
+        _cont()
+        return
+
+    pid, nom, emoji, prix, acompte_pct, standing, effets = PROPERTIES[int(choice) - 1]
+    acompte = int(prix * acompte_pct)
+
+    if sim.money < acompte:
+        slow_print(f"\n {C.RED}Fonds insuffisants (${acompte:,} requis, tu as ${sim.money}).{C.RESET}", 0.02)
+        _cont()
+        return
+
+    loan_principal = prix - acompte
+    slow_print(f"\n {C.YELLOW}💳 Choisir la durée du crédit (emprunt : ${loan_principal:,}) :{C.RESET}", 0.02)
+    print()
+    for i, (lbl, days, rate) in enumerate(LOAN_TERMS, 1):
+        total = int(loan_principal * (1 + rate))
+        daily = max(1, round(total / days))
+        print(f" {C.CYAN}[{i}]{C.RESET} {lbl:22s}  {C.BOLD}${daily}/jour{C.RESET}  "
+              f"Total remboursé ${total:,}  Taux {int(rate*100)}%")
+    print(f"\n {C.CYAN}[ 0]{C.RESET} Annuler\n")
+
+    try:
+        tc = input(f" {C.BOLD}Durée : {C.RESET}").strip()
+    except (EOFError, KeyboardInterrupt):
+        tc = "0"
+
+    if not tc.isdigit() or int(tc) == 0 or int(tc) > len(LOAN_TERMS):
+        slow_print(f" {C.GRAY}Transaction annulée.{C.RESET}", 0.02)
+        _cont()
+        return
+
+    _, term_days, interest_rate = LOAN_TERMS[int(tc) - 1]
+    loan_total = int(loan_principal * (1 + interest_rate))
+    daily_payment = max(1, round(loan_total / term_days))
+
+    sim.money -= acompte
+    sim.housing = {
+        "property_id": pid,
+        "purchase_price": prix,
+        "loan_total": loan_total,
+        "loan_remaining": loan_total,
+        "daily_payment": daily_payment,
+        "days_missed": 0,
+    }
+    slow_print(f"\n {C.GREEN}🎉 Félicitations ! Tu es propriétaire d'un(e) {emoji} {nom} !{C.RESET}", 0.02)
+    slow_print(f" Acompte versé : {C.YELLOW}-${acompte:,}{C.RESET}  "
+               f"Crédit : ${daily_payment}/jour pendant {term_days} jours.", 0.02)
+    sim.modify(fun=+15, social=+10)
+    sim.tick(2)
+    _cont()
+
+
+def action_vendre_maison(sim):
+    if not sim.housing:
+        slow_print(f"\n {C.RED}Tu ne possèdes aucun bien immobilier.{C.RESET}", 0.02)
+        _cont()
+        return
+
+    _mh = sim.housing
+    _pd = get_property_data(_mh["property_id"])
+    pid, nom, emoji, prix, *_ = _pd
+    equity = max(0, _mh["purchase_price"] - _mh["loan_remaining"])
+
+    slow_print(f"\n {C.YELLOW}🏘 Vente de {emoji} {nom}{C.RESET}", 0.02)
+    slow_print(f" Prix d'estimation : ${_mh['purchase_price']:,}", 0.02)
+    slow_print(f" Capital restant dû : ${_mh['loan_remaining']:,}", 0.02)
+    slow_print(f" Gain net : {C.GREEN}${equity:,}{C.RESET}", 0.02)
+
+    try:
+        confirm = input(f"\n {C.BOLD}Confirmer la vente ? (o/n) : {C.RESET}").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        confirm = "n"
+
+    if confirm != "o":
+        slow_print(f" {C.GRAY}Vente annulée.{C.RESET}", 0.02)
+        _cont()
+        return
+
+    sim.money += equity
+    sim.housing = None
+    slow_print(f"\n {C.GREEN}Vente effectuée ! +${equity:,} récupérés.{C.RESET}", 0.02)
+    sim.modify(fun=-5)
+    sim.tick(1)
+    _cont()
+
+
 ACTION_FNS = {
     "manger": action_manger,
     "snack": action_snack,
@@ -2548,6 +2747,8 @@ ACTION_FNS = {
     "prendre_retraite": action_prendre_retraite,
     "benevole": action_benevole,
     "voyage": action_voyage,
+    "acheter_maison": action_acheter_maison,
+    "vendre_maison": action_vendre_maison,
 }
 
 # --- IA Autopilote ---
@@ -2818,6 +3019,27 @@ def ai_choose_action(sim):
                 return "douche"
 
     # ═══════════════════════════════════════════════════════════════
+    # PRIORITÉ 5b : immobilier — acheter dès que les finances le permettent
+    # ═══════════════════════════════════════════════════════════════
+    if not getattr(sim, 'housing', None) and "acheter_maison" not in blocked:
+        salary = next((sal for lbl, sal, *_ in JOBS if lbl == sim.job), 0)
+        if getattr(sim, 'retired', False):
+            salary = sim.pension
+        if salary > 0:
+            # Vérifie s'il y a une propriété abordable (même logique que ai_auto_acheter_maison)
+            money_buffer = 240 + 10 * (15 * len(sim.children) if sim.children else 0)
+            for prop in reversed(PROPERTIES):
+                pid, nom, emoji, prix, acompte_pct, standing, effets = prop
+                acompte = int(prix * acompte_pct)
+                if sim.money < acompte + money_buffer:
+                    continue
+                for term in reversed(LOAN_TERMS):
+                    _, days, rate = term
+                    daily = max(1, round(int((prix - acompte) * (1 + rate)) / days))
+                    if daily <= salary * 0.45:
+                        return "acheter_maison"
+
+    # ═══════════════════════════════════════════════════════════════
     # PRIORITÉ 6 : vie amoureuse — progression déterministe
     # ═══════════════════════════════════════════════════════════════
     if "flirter" not in blocked:
@@ -2950,6 +3172,58 @@ def ai_auto_inscrire(sim):
     slow_print(f" {C.GREEN}[IA] Inscrit(e) en {lbl} {emoji} ({sessions} sessions){C.RESET}", 0.02)
     sim.tick(4)
 
+def ai_auto_acheter_maison(sim):
+    """Choisit automatiquement la propriété et le crédit optimaux pour l'IA."""
+    if sim.housing:
+        return
+    salary = next((sal for lbl, sal, *_ in JOBS if lbl == sim.job), 0)
+    if getattr(sim, 'retired', False):
+        salary = sim.pension
+    if salary == 0:
+        return
+    # Réserve de sécurité : 3 médecins + 10 jours de besoins quotidiens (~80$/j)
+    money_buffer = 240 + 10 * (15 * len(sim.children) if sim.children else 0)
+    # Cherche la meilleure propriété dont le paiement quotidien ≤ 40% du revenu
+    chosen_prop = None
+    chosen_term = None
+    for prop in reversed(PROPERTIES):  # du plus cher au moins cher
+        pid, nom, emoji, prix, acompte_pct, standing, effets = prop
+        acompte = int(prix * acompte_pct)
+        if sim.money < acompte + money_buffer:
+            continue
+        # Cherche le terme le plus long (paiement le plus faible)
+        for term in reversed(LOAN_TERMS):
+            lbl, days, rate = term
+            loan_total = int((prix - acompte) * (1 + rate))
+            daily = max(1, round(loan_total / days))
+            if daily <= salary * 0.45:
+                chosen_prop = prop
+                chosen_term = term
+                break
+        if chosen_prop:
+            break
+    if not chosen_prop or not chosen_term:
+        return  # pas encore les moyens
+    pid, nom, emoji, prix, acompte_pct, standing, effets = chosen_prop
+    acompte = int(prix * acompte_pct)
+    _, term_days, interest_rate = chosen_term
+    loan_total = int((prix - acompte) * (1 + interest_rate))
+    daily_payment = max(1, round(loan_total / term_days))
+    sim.money -= acompte
+    sim.housing = {
+        "property_id": pid,
+        "purchase_price": prix,
+        "loan_total": loan_total,
+        "loan_remaining": loan_total,
+        "daily_payment": daily_payment,
+        "days_missed": 0,
+    }
+    slow_print(f"  {C.GREEN}[IA] 🏠 Achat : {emoji} {nom} — Acompte ${acompte:,} — "
+               f"Crédit ${daily_payment}/j × {term_days}j{C.RESET}", 0.02)
+    sim.modify(fun=+15, social=+10)
+    sim.tick(2)
+
+
 def autopilot_loop(sim, speed=0.8):
     """Boucle de jeu autonome — l'IA prend toutes les décisions."""
     global AUTOPILOT
@@ -3021,6 +3295,11 @@ def autopilot_loop(sim, speed=0.8):
             if action_key == "adopter":
                 ai_auto_adopter(sim)
                 sim.hour += ACTION_DURATIONS.get("adopter", 0)
+                time.sleep(speed)
+                continue
+            if action_key == "acheter_maison":
+                ai_auto_acheter_maison(sim)
+                sim.hour += ACTION_DURATIONS.get("acheter_maison", 0)
                 time.sleep(speed)
                 continue
 
@@ -3425,6 +3704,7 @@ def load_game():
     sim.academic_bonus    = d.get("academic_bonus", 0)
     sim.retired           = d.get("retired", False)
     sim.pension           = d.get("pension", 0)
+    sim.housing           = d.get("housing", None)
     trait_ids = d.get("traits")
     if trait_ids:
         sim.traits = Traits(trait_ids)
