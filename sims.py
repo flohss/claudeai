@@ -579,6 +579,157 @@ RANDOM_EVENTS = [
     (3, "🐾", "Ton voisin te confie son chien le temps d'un week-end.", {"fun": +20, "social": +10, "energie": -5}, 0),
 ]
 
+# --- Événements liés aux traits ---
+# Format : (prob%, emoji, description, effects_dict, money_delta, condition_fn, consequence_key)
+# consequence_key : "fracture" | "grippe" | "burnout" | "stress_up" | "mental_down" | None
+TRAIT_EVENTS = {
+    "ambitieux": [
+        (8,  "📈", "Ton patron te remarque et te propose plus de responsabilités !",
+             {"fun": +15, "social": +10}, +100, lambda s: bool(s.job), None),
+        (5,  "⚡", "Tu travailles jusqu'à l'épuisement pour prouver ta valeur.",
+             {"energie": -30, "fun": -10}, +80,  lambda s: bool(s.job), "stress_up"),
+        (5,  "🤝", "Une offre d'emploi concurrente arrive dans ta boîte mail.",
+             {"fun": +20, "social": +15}, 0,    lambda s: True, None),
+    ],
+    "paresseux": [
+        (8,  "⏰", "Tu rates ton réveil et arrives en retard — réprimande du chef.",
+             {"fun": -15, "social": -15}, -30,  lambda s: bool(s.job), None),
+        (9,  "🛋", "Tu t'accordes une sieste royale non planifiée... un pur bonheur.",
+             {"energie": +40, "fun": +20}, 0,   lambda s: True, None),
+        (6,  "📺", "Une journée entière de série sans culpabilité aucune.",
+             {"fun": +30, "energie": -5}, 0,    lambda s: True, None),
+    ],
+    "sociable": [
+        (7,  "🌟", "Tu rencontres une personnalité influente lors d'un événement mondain.",
+             {"social": +35, "fun": +25}, +60,  lambda s: True, None),
+        (8,  "🎉", "Tu organises une soirée improvisée — un succès fou !",
+             {"social": +40, "fun": +30, "energie": -20}, -50, lambda s: s.money >= 60, None),
+        (6,  "💬", "Ton réseau te permet de décrocher un contrat en or.",
+             {"social": +15}, +120, lambda s: bool(s.job), None),
+    ],
+    "anxieux": [
+        (9,  "😰", "Crise d'anxiété soudaine — tout te semble insurmontable.",
+             {"fun": -35, "energie": -20}, 0,   lambda s: True, "stress_up"),
+        (7,  "🌙", "Nuit blanche à ruminer — tu te réveilles épuisé(e).",
+             {"energie": -30, "fun": -15}, 0,   lambda s: True, "stress_up"),
+        (5,  "💊", "L'anxiété devient trop forte, tu consultes en urgence.",
+             {"fun": -10}, -80,  lambda s: s.money >= 80, "mental_down"),
+    ],
+    "curieux": [
+        (8,  "🔬", "Une découverte fascinante dans ta lecture du soir t'inspire !",
+             {"fun": +30, "energie": -5}, 0,    lambda s: True, None),
+        (6,  "📚", "Tu passes la nuit à te former sur un sujet inconnu — épuisant mais enrichissant.",
+             {"fun": +25, "energie": -25}, 0,   lambda s: True, None),
+        (5,  "🏆", "Ta curiosité paie : tu résous un problème que personne n'avait vu.",
+             {"fun": +25, "social": +15}, +80,  lambda s: bool(s.job), None),
+    ],
+    "sportif": [
+        (9,  "🏅", "Tu bats ton record personnel — quelle fierté !",
+             {"fun": +35, "energie": +10}, 0,   lambda s: True, None),
+        (4,  "🦵", "En forçant trop à l'entraînement, tu te blesses sérieusement.",
+             {"energie": -35, "fun": -25}, -60, lambda s: True, "fracture"),
+        (7,  "🏆", "Tu es invité(e) à un événement sportif local — superbe expérience.",
+             {"fun": +25, "social": +20, "energie": -10}, +40, lambda s: True, None),
+    ],
+    "gourmand": [
+        (8,  "🍽", "Tu dénichess un restaurant gastronomique extraordinaire.",
+             {"fun": +35, "faim": +20, "social": +10}, -65, lambda s: s.money >= 75, None),
+        (9,  "🧁", "Un excès gourmand ce soir — tellement bon, mais les remords arrivent.",
+             {"faim": -20, "fun": +20, "hygiene": -10}, -20, lambda s: s.money >= 20, None),
+        (5,  "👨‍🍳", "Tu es invité(e) à un atelier cuisine — tu brilles parmi les convives !",
+             {"fun": +30, "social": +25}, +20,  lambda s: True, None),
+    ],
+    "artistique": [
+        (9,  "✨", "Une vague d'inspiration créative t'envahit — tu crées quelque chose de beau.",
+             {"fun": +40, "energie": -10}, 0,   lambda s: True, None),
+        (6,  "🎭", "Tu improvises une performance devant tes amis — ovation debout !",
+             {"fun": +30, "social": +35}, +25,  lambda s: True, None),
+        (5,  "💔", "Un critique détruit publiquement ta dernière création.",
+             {"fun": -35, "social": -20}, 0,    lambda s: True, "mental_down"),
+    ],
+    "econome": [
+        (9,  "💡", "Tu déniche une occasion incroyable — prix imbattable sur quelque chose dont tu as besoin.",
+             {"fun": +20}, +70,  lambda s: True, None),
+        (6,  "📊", "Ton épargne fructifie mieux que prévu ce mois-ci.",
+             {"fun": +15}, +90,  lambda s: s.money >= 200, None),
+        (6,  "🎯", "Tu résistes à une tentation coûteuse et tu t'en félicites.",
+             {"fun": +10}, +30,  lambda s: True, None),
+    ],
+    "malchanceux": [
+        (10, "💥", "Journée catastrophique : panne + retard + oubli — tout à la fois.",
+             {"fun": -30, "energie": -15, "social": -10}, -90, lambda s: True, "stress_up"),
+        (8,  "🎭", "Tu glisses dans la rue... et ta chute est filmée par un passant.",
+             {"energie": -15, "fun": -25, "hygiene": -15}, -40, lambda s: True, None),
+        (9,  "📉", "Une série noire sans fin — rien ne marche comme prévu aujourd'hui.",
+             {"fun": -25, "social": -15}, -60, lambda s: True, "stress_up"),
+    ],
+}
+
+def trigger_trait_event(sim):
+    """Déclenche AU PLUS UN événement lié aux traits par nuit.
+
+    Les conséquences graves (fracture, burnout) ne s'appliquent que si le sim
+    est assez en forme (hp > 60, energie > 30, âge > 15) pour les encaisser.
+    """
+    # Construire la liste candidate en mêlant tous les traits
+    candidates = []
+    for trait in sim.traits.active:
+        for ev in TRAIT_EVENTS.get(trait, []):
+            candidates.append((trait, ev))
+    random.shuffle(candidates)
+
+    for trait, (prob, emoji, desc, effects, money, condition, consequence) in candidates:
+        if not condition(sim):
+            continue
+        if random.randint(1, 100) > prob:
+            continue
+
+        # Garder les conséquences graves hors de portée des sims déjà fragiles
+        severe = consequence in ("fracture", "burnout")
+        if severe and (sim.health.hp < 65 or sim.needs["energie"] < 35 or sim.age < 18):
+            continue
+
+        # Appliquer effets
+        sim.modify(**effects)
+        sim.money = max(0, sim.money + money)
+
+        # Conséquences spéciales
+        if consequence == "fracture":
+            sim.health.get_sick("fracture")
+            sim.health.hp = max(0, sim.health.hp - 12)
+        elif consequence == "grippe":
+            sim.health.get_sick("grippe")
+        elif consequence == "burnout":
+            sim.health.get_sick("burnout")
+            sim.days_burned_out = max(sim.days_burned_out, 2)
+        elif consequence == "stress_up":
+            sim.stress = min(100, sim.stress + 15)
+        elif consequence == "mental_down":
+            sim.health.mental = max(0, sim.health.mental - 20)
+
+        # Message affiché
+        trait_lbl, trait_emoji, _ = TRAIT_DEFS[trait]
+        parts = []
+        for need, delta in effects.items():
+            lbl = Sim.NEED_LABELS[need][0]
+            sign = "+" if delta >= 0 else ""
+            col = C.GREEN if delta > 0 else C.RED
+            parts.append(f"{col}{sign}{delta} {lbl}{C.RESET}")
+        money_str = ""
+        if money != 0:
+            sign = "+" if money >= 0 else ""
+            col = C.GREEN if money > 0 else C.RED
+            money_str = f"  {col}{sign}${money}{C.RESET}"
+        cons_str = ""
+        if consequence == "fracture":   cons_str = f"  {C.RED}→ Fracture !{C.RESET}"
+        elif consequence == "stress_up":cons_str = f"  {C.YELLOW}→ +15 Stress{C.RESET}"
+        elif consequence == "mental_down":cons_str = f"  {C.RED}→ Santé mentale −20{C.RESET}"
+
+        return (f"\n {C.BOLD}━━ TRAIT {trait_emoji} {trait_lbl.upper()} ━━{C.RESET}\n"
+                f" {emoji} {desc}\n"
+                f" {', '.join(parts)}{money_str}{cons_str}")
+    return None
+
 def trigger_random_event(sim):
     for prob, emoji, desc, effects, money in RANDOM_EVENTS:
         if random.randint(1, 100) <= prob:
@@ -859,6 +1010,11 @@ def action_dormir(sim):
     sim.health.tick_day()
     for child in sim.children:
         child.tick_day()
+
+    # ── Événement lié aux traits (une fois par nuit) ──────────────
+    trait_msg = trigger_trait_event(sim)
+    if trait_msg:
+        sim.last_event = trait_msg
 
     # ── Récupération du stress au repos ────────────────────────────
     stress_rec = 15
