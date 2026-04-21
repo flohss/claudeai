@@ -2060,8 +2060,9 @@ def action_sport(sim):
 
 def action_mediter(sim):
     slow_print(f"\n {C.CYAN}Tu médites tranquillement... 🧘{C.RESET}", 0.02)
-    sim.modify(energie=+15, fun=+15, social=-5)
+    sim.modify(energie=+15, fun=+15)
     sim.stress = max(0, sim.stress - 8)
+    sim.health.mental = min(100, sim.health.mental + 5)
     sim.tick(0)
     _cont()
 
@@ -2847,6 +2848,7 @@ def ai_choose_action(sim):
         if sim.hour >= 22:
             if n["faim"]    < _faim_safe:    return "snack" if sim.money < 5 else "manger"
             if n["hygiene"] < _hygiene_safe: return "douche"
+            if n["social"] < 65 and sim.hour < 23:                         return "appel"
             if n["fun"]     < 50 and sim.hour < 23 and "mediter" not in blocked: return "mediter"
             return "dormir"
         # Seuils calés sur le coût bénévolat/voyage (4h, Senior : énergie ~-9/h, faim ~-6/h)
@@ -2858,11 +2860,15 @@ def ai_choose_action(sim):
         if n["energie"] < 60: return "sieste" if n["energie"] >= 35 else "dormir"
         if n["hygiene"] < 65: return "douche"
         if n["vessie"] < 50:  return "toilettes"
-        if n["fun"] < 40 and "mediter" not in blocked:  return "mediter"
-        if n["social"] < 40:  return "appel"
+        # Seuils alignés sur le chemin actif (44/42) pour éviter drain mental en retraite
+        if n["fun"] < 44 and "mediter" not in blocked:  return "mediter"
+        if n["social"] < 42:  return "appel"
         if h.is_sick():
             if sim.money >= 20: return "medicament"
             return "lire"
+        # Adoption en retraite (chemin actif ne s'applique pas aux retraités)
+        if (not sim.pet and "adopter" not in blocked
+                and sim.money > 250 and random.random() < 0.25):          return "adopter"
         # Garde prédictive avant bénévolat : vérifier les réserves post-4h
         _benv_ok = (
             n["energie"]          > 75 and    # energie après bénév. : ~75-35=40 > seuil
@@ -2885,10 +2891,12 @@ def ai_choose_action(sim):
         return random.choice(pool_r) if pool_r else "lire"
 
     # Décision de prendre la retraite : IA attend le jour 45 (retraite tardive + 15%)
+    # job_days >= 25 garantit une pension décente ET empêche une retraite prématurée
+    # d'un sim qui n'a jamais travaillé (résout le bug "sans emploi" seed 29).
     if stage[1] == "Senior" and sim.age >= 45:
         if sim.education.is_enrolled():
             pass   # finir les études d'abord
-        elif not h.is_sick() and sim.money >= 200:
+        elif not h.is_sick() and sim.money >= 200 and sim.job_days >= 18 and sim.job:
             return "prendre_retraite"
 
     # Urgence absolue : faim=0 → manger avant tout (sinon danger_turns → famine)
@@ -2899,6 +2907,8 @@ def ai_choose_action(sim):
         # Préparation pré-sleep : éviter famine/HP drain pendant le sleep
         if n["faim"]    < _faim_safe:    return "snack" if sim.money < 5 else "manger"
         if n["hygiene"] < _hygiene_safe: return "douche"
+        # Garde social pré-sleep (8h tick -24 → social < 42 passerait sous 25 → mental -16)
+        if n["social"] < 65 and sim.hour < 23:                             return "appel"
         if n["fun"]     < 50 and sim.hour < 23 and "mediter" not in blocked:
             return "mediter"   # dormir avec plus de fun → réveiller avec moins de drain
         return "dormir"
@@ -2958,6 +2968,9 @@ def ai_choose_action(sim):
     if n["energie"] < energie_thresh:
         # Vérifier faim avant de dormir (sleep coûte 60 faim; dormir avec faim<75 → réveil à ~15)
         if n["faim"] < _faim_safe:   return "snack" if sim.money < 5 else "manger"
+        # Garde social pré-sleep urgence (même logique que 22h : 8h tick -24 social)
+        if n["social"] < 65 and n["energie"] > 20:                         return "appel"
+        if n["fun"] < 50 and "mediter" not in blocked and n["energie"] > 15: return "mediter"
         return "dormir"
 
     # ═══════════════════════════════════════════════════════════════
@@ -2969,6 +2982,18 @@ def ai_choose_action(sim):
     if h.mental < 30:
         if n["fun"] < 80 and "mediter" not in blocked:                    return "mediter"
         return "appel"
+
+    # ═══════════════════════════════════════════════════════════════
+    # PRIORITÉ 2b : garde proactive fun/social — prévenir effondrement mental
+    # fun < 44 ou social < 42 → récupération AVANT de travailler/étudier.
+    # Sans ce garde, 8h de travail avec fun=20 → mental -16 pts/jour.
+    # Seuils identiques à PRIORITÉ 5 : la différence clé est que ces checks
+    # se font AVANT la carrière (lun-ven inclus), pas seulement le week-end.
+    # Effet secondaire : l'énergie consommée par appel/mediter empêche naturellement
+    # le double-shift (2e journée de travail dans la même journée).
+    # ═══════════════════════════════════════════════════════════════
+    if n["fun"] < fun_thresh and "mediter" not in blocked:                return "mediter"
+    if n["social"] < 42:                                                   return "appel"
 
     # ═══════════════════════════════════════════════════════════════
     # PRIORITÉ 3 : carrière & études — engagements fermes
@@ -2998,7 +3023,14 @@ def ai_choose_action(sim):
         if edu.is_enrolled():
             session_cost = STUDY_DOMAINS[edu.enrolled_domain][3]
             if sim.money >= session_cost and _can_study:
+                # Gardes pré-étude : etudier = modify(-10,-5) + tick(6) → fun-28, social-23
+                # Après étude : fun=44, social=42 → avec mediter 22h : fun=57→33>25, social=42→appel→54→30>25
+                if n["fun"] < 72 and "mediter" not in blocked:              return "mediter"
+                if n["social"] < 65:                                        return "appel"
                 return "etudier"
+            # Pas de job → postuler d'abord pour financer les études
+            if not sim.job and jobs_available(edu):
+                return "postuler"
             # Argent insuffisant → mi-temps pour financer (7j/7, moins épuisant)
             if sim.job and _can_work:
                 return "travailler_partiel"
@@ -3021,20 +3053,22 @@ def ai_choose_action(sim):
             return "sieste" if n["energie"] >= 20 else "dormir"
 
     # ═══════════════════════════════════════════════════════════════
-    # PRIORITÉ 4 : santé proactive (hp modérément bas, mental fragile)
+    # PRIORITÉ 4 : animal de compagnie
+    # Avant la santé proactive : le check hp<85 → medecin bloquerait sinon
+    # quasi-systématiquement (HP moy ~77), empêchant toute adoption.
+    # ═══════════════════════════════════════════════════════════════
+    if sim.pet and sim.pet.hunger    < 35:                                return "nourrir"
+    if sim.pet and sim.pet.happiness < 30:                                return "jouer_pet"
+    if (not sim.pet and "adopter" not in blocked
+            and sim.money > 250 and random.random() < 0.25):              return "adopter"
+
+    # ═══════════════════════════════════════════════════════════════
+    # PRIORITÉ 4b : santé proactive (hp modérément bas, mental fragile)
     # S'exécute uniquement quand il n'y a pas de travail/études imminent
     # (week-end, après les cours, ou sim sans emploi).
     # ═══════════════════════════════════════════════════════════════
     if h.hp < 85 and sim.money >= 80:                                     return "medecin"
     if h.mental < 45 and sim.money >= 60:                                 return "psy"
-
-    # ═══════════════════════════════════════════════════════════════
-    # PRIORITÉ 4 : animal de compagnie
-    # ═══════════════════════════════════════════════════════════════
-    if sim.pet and sim.pet.hunger    < 35:                                return "nourrir"
-    if sim.pet and sim.pet.happiness < 30:                                return "jouer_pet"
-    if (not sim.pet and "adopter" not in blocked
-            and sim.money > 400 and random.random() < 0.03):              return "adopter"
 
     # ═══════════════════════════════════════════════════════════════
     # PRIORITÉ 5 : récupération préventive (loisirs / social / sieste)
@@ -3163,7 +3197,8 @@ def ai_auto_postuler(sim):
     if sim.job == best[0]:
         return
     sim.job = best[0]
-    sim.job_days = 0
+    # job_days n'est PAS remis à zéro : les cotisations retraite s'accumulent
+    # sur toute la carrière, pas seulement sur le dernier poste.
     slow_print(f"  {C.GREEN}[IA] Embauché(e) comme {sim.job} (${best[1]}/j) 💼{C.RESET}", 0.02)
 
 
