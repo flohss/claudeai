@@ -1401,6 +1401,7 @@ ACTIONS = [
     ("sortir", "Sortir avec des amis", None, "💬 Social"),
     ("appel", "Appeler quelqu'un", None, "💬 Social"),
     ("travailler", "Aller travailler", None, "💼 Travail & Carrière"),
+    ("travailler_partiel", "Travailler à mi-temps (4h)", None, "💼 Travail & Carrière"),
     ("postuler", "Chercher un emploi", None, "💼 Travail & Carrière"),
     ("prendre_retraite", "Prendre sa retraite 🎉", None, "💼 Travail & Carrière"),
     ("benevole", "Faire du bénévolat", None, "🎮 Loisirs"),
@@ -1443,6 +1444,7 @@ ACTION_DURATIONS = {
     "avoir_enfant": 0.0, "devoirs": 1.0, "sauvegarder": 0.0,
     "prendre_retraite": 0.5, "benevole": 4.0, "voyage": 4.0,
     "acheter_maison": 2.0, "vendre_maison": 1.0,
+    "travailler_partiel": 4.0,
 }
 
 # --- Immobilier ---
@@ -1513,8 +1515,14 @@ def get_available_actions(sim):
         if is_weekend and key == "travailler":
             continue
         # Retraité : bloquer travail et candidature
-        if is_retired and key in ("travailler", "postuler"):
+        if is_retired and key in ("travailler", "postuler", "travailler_partiel"):
             continue
+        # Mi-temps : uniquement si inscrit à l'université et a un emploi
+        if key == "travailler_partiel":
+            if not sim.education.is_enrolled() or not sim.job:
+                continue
+            if stage[1] in ("Enfant", "Adolescent"):
+                continue
         # prendre_retraite : uniquement Senior non encore retraité
         if key == "prendre_retraite":
             if is_retired or stage[1] not in ("Senior",):
@@ -1973,6 +1981,34 @@ def action_travailler(sim):
         sim.days_burned_out = 3
         slow_print(f" {C.RED}💥 Tu fais un burn-out ! Tu dois te reposer 3 jours...{C.RESET}", 0.02)
     _cont()
+
+def action_travailler_partiel(sim):
+    """Demi-journée de travail — idéal pour financer les études sans s'épuiser."""
+    if not sim.job:
+        slow_print(f"\n {C.RED}Tu n'as pas de travail ! Postule d'abord.{C.RESET}", 0.02)
+        _cont()
+        return
+    if sim.days_burned_out > 0:
+        slow_print(f"\n {C.RED}Tu es en burn-out... Repose-toi.{C.RESET}", 0.02)
+        _cont()
+        return
+    stress_penalty = 5 if sim.stress > 70 else 0
+    base_salary = next(sal for lbl, sal, *_ in JOBS if lbl == sim.job)
+    salary = int(base_salary * 0.5 * (1 + sim.skills.bonus('travail')) * sim.salary_multiplier * sim.traits.salary_mult())
+    slow_print(f"\n {C.YELLOW}Tu travailles une demi-journée comme {sim.job}... ⏰{C.RESET}", 0.02)
+    sim.money += salary
+    sim.job_days += 1
+    sim.modify(energie=-(12 + stress_penalty), faim=-10, social=+8, hygiene=-5, fun=+3)
+    sim.tick(4)
+    stress_gain = 4
+    if "anxieux" in sim.traits.active:   stress_gain = 6
+    if "paresseux" in sim.traits.active: stress_gain = 2
+    sim.stress = min(100, sim.stress + stress_gain)
+    slow_print(f" {C.GREEN}+${salary} gagnés ! Total : ${sim.money}{C.RESET}", 0.02)
+    lvl = sim.skills.gain('travail', 5)
+    if lvl: slow_print(f" {C.GREEN}Compétence Travail → Niv. {lvl} ! 💼{C.RESET}", 0.02)
+    _cont()
+
 
 def action_postuler(sim):
     if sim.job:
@@ -2729,6 +2765,7 @@ ACTION_FNS = {
     "sortir": action_sortir,
     "appel": action_appel,
     "travailler": action_travailler,
+    "travailler_partiel": action_travailler_partiel,
     "postuler": action_postuler,
     "passer": action_passer,
     "sport": action_sport,
@@ -2962,9 +2999,9 @@ def ai_choose_action(sim):
             session_cost = STUDY_DOMAINS[edu.enrolled_domain][3]
             if sim.money >= session_cost and _can_study:
                 return "etudier"
-            # Argent insuffisant → travailler pour financer (semaine)
-            if not is_weekend and sim.job and _can_work:
-                return "travailler"
+            # Argent insuffisant → mi-temps pour financer (7j/7, moins épuisant)
+            if sim.job and _can_work:
+                return "travailler_partiel"
             # Récupération minimale si physiquement incapable
             if not _can_study:
                 if n["faim"] <= 15:    return "snack" if sim.money < 5 else "manger"
@@ -3113,11 +3150,16 @@ def ai_choose_action(sim):
 _AUTO_PET_NAMES = _PRENOMS_ANIMAUX
 
 def ai_auto_postuler(sim):
-    """Choisit automatiquement le meilleur job disponible (ou change si mieux payé)."""
+    """Choisit automatiquement un job disponible.
+    Avec diplôme : meilleur salaire. Sans diplôme : choix aléatoire (variété)."""
     available = jobs_available(sim.education)
     if not available:
         return
-    best = max(available, key=lambda x: x[1])
+    if sim.education.has_diploma():
+        best = max(available, key=lambda x: x[1])
+    else:
+        # Sans diplôme : choix aléatoire parmi tous les postes accessibles
+        best = random.choice(available)
     if sim.job == best[0]:
         return
     sim.job = best[0]
