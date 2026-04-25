@@ -2907,6 +2907,7 @@ def ai_choose_action(sim):
         # Préparation pré-sleep : éviter famine/HP drain pendant le sleep
         if n["faim"]    < _faim_safe:    return "snack" if sim.money < 5 else "manger"
         if n["hygiene"] < _hygiene_safe: return "douche"
+        if n["vessie"]  < 30:            return "toilettes"
         # Garde social pré-sleep (8h tick -24 → social < 42 passerait sous 25 → mental -16)
         if n["social"] < 65 and sim.hour < 23:                             return "appel"
         if n["fun"]     < 50 and sim.hour < 23 and "mediter" not in blocked:
@@ -2953,7 +2954,8 @@ def ai_choose_action(sim):
         if has_treatable and sim.money >= 20:        return "medicament"
         if n["energie"] < 60 and "sieste" not in blocked: return "sieste"
         if n["faim"]    < 60:                        return "manger"
-        return "mediter" if "mediter" not in blocked else "lire"
+        if n["fun"] < 60 and "mediter" not in blocked: return "mediter"
+        return "lire"
 
     # ═══════════════════════════════════════════════════════════════
     # PRIORITÉ 1 : besoins critiques (sim sain — seuils dynamiques)
@@ -3022,9 +3024,10 @@ def ai_choose_action(sim):
         # C) Études en cours → 7j/7, toutes priorités secondaires cèdent
         if edu.is_enrolled():
             session_cost = STUDY_DOMAINS[edu.enrolled_domain][3]
-            if sim.money >= session_cost and _can_study:
+            _time_ok_study = sim.hour + 6 <= 23   # session 6h doit finir avant minuit
+            if sim.money >= session_cost and _can_study and _time_ok_study:
                 # Gardes pré-étude : etudier = modify(-10,-5) + tick(6) → fun-28, social-23
-                # Après étude : fun=44, social=42 → avec mediter 22h : fun=57→33>25, social=42→appel→54→30>25
+                # seuil 72 : fun post-étude = 72-28 = 44 >= fun_thresh
                 if n["fun"] < 72 and "mediter" not in blocked:              return "mediter"
                 if n["social"] < 65:                                        return "appel"
                 return "etudier"
@@ -3032,7 +3035,7 @@ def ai_choose_action(sim):
             if not sim.job and jobs_available(edu):
                 return "postuler"
             # Argent insuffisant → mi-temps pour financer (7j/7, moins épuisant)
-            if sim.job and _can_work:
+            if sim.job and _can_work and sim.hour + 4 <= 23:
                 return "travailler_partiel"
             # Récupération minimale si physiquement incapable
             if not _can_study:
