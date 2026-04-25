@@ -1,0 +1,239 @@
+==============================================================
+  RAPPORT DÉBOGAGE — MODE AUTOPILOTE
+  Date       : 2026-04-21  20:34:34
+  Simulations: 30
+==============================================================
+
+── Simulation #1 : Gloria ──────────────────────
+  Survie     : 10 jours  |  Fin : 🕯 Vieillesse  |  6 génération(s)
+  Travail    : Aucun (0 j)  |  Diplôme : Aucun
+  Argent     : $3985  |  HP : 100  |  Mental : 80
+  Relation   : Célibataire  |  Enfants : 2  |  Animal : Aucun
+  Besoins    : faim= 80  énergie= 80  hygiene= 70  fun= 60  social= 60  vessie= 80
+
+── Simulation #2 : Rahima ──────────────────────
+  Survie     : 45 jours  |  Fin : 🕯 Vieillesse  |  1 génération(s)
+  Travail    : Architecte en chef (26 j)  |  Diplôme : architecture (Très bien)
+  Argent     : $8  |  HP : 100  |  Mental : 84
+  Relation   : Fiancé(e) avec Fabien  |  Enfants : 0  |  Animal : Aucun
+  ⚠ Maladies : hypertension
+  Besoins    : faim= 21  énergie= 47  hygiene= 35  fun= 53  social=  4  vessie=  0
+
+── Simulation #3 : Wahiba ──────────────────────
+  Survie     : 49 jours  |  Fin : 💀 Santé  |  1 génération(s)
+  Travail    : Aucun (21 j)  |  Diplôme : Aucun
+  Argent     : $85  |  HP : 0  |  Mental : 0
+  Relation   : Célibataire  |  Enfants : 0  |  Animal : Aucun
+  ⚠ Maladies : arthrite, rhume
+  Besoins    : faim= 70  énergie=  0  hygiene= 96  fun=  0  social=  4  vessie=  0
+
+── Simulation #4 : Nova ──────────────────────
+  Survie     : 45 jours  |  Fin : 🕯 Vieillesse  |  1 génération(s)
+  Travail    : Psychologue (25 j)  |  Diplôme : psychologie (Très bien)
+  Argent     : $1141  |  HP : 75  |  Mental : 0
+  Relation   : Marié(e) avec Thibaut  |  Enfants : 1  |  Animal : Aucun
+  Besoins    : faim= 26  énergie= 21  hygiene= 37  fun= 11  social=  0  vessie= 24
+
+── Simulation #5 : Kilian ──────────────────────
+  Survie     : 10 jours  |  Fin : 🕯 Vieillesse  |  6 génération(s)
+  Travail    : Aucun (0 j)  |  Diplôme : Aucun
+  Argent     : $3402  |  HP : 100  |  Mental : 80
+  Relation   : Célibataire  |  Enfants : 2  |  Animal : Aucun
+  Besoins    : faim= 80  énergie= 80  hygiene= 70  fun= 60  social= 60  vessie= 80
+
+── Simulation #6 : Xabi ──────────────────────
+  Survie     : 10 jours  |  Fin : 🕯 Vieillesse  |  6 génération(s)
+  Travail    : Aucun (0 j)  |  Diplôme : Aucun
+  Argent     : $1338  |  HP : 100  |  Mental : 80
+  Relation   : Célibataire  |  Enfants : 2  |  Animal : Aucun
+  Besoins    : faim= 80  énergie= 80  hygiene= 70  fun= 60  social= 60  vessie= 80
+
+── Simulation #7 : Jakez ──────────────────────
+  Survie     : 10 jours  |  Fin : 🕯 Vieillesse  |  6 génération(s)
+  Travail    : Aucun (0 j)  |  Diplôme : Aucun
+  Argent     : $0  |  HP : 100  |  Mental : 80
+  Relation   : Célibataire  |  Enfants : 2  |  Animal : Aucun
+  Besoins    : faim= 80  énergie= 80  hygiene= 70  fun= 60  social= 60  vessie= 80
+
+── Simulation #8 : Efflan ──────────────────────
+  Survie     : 46 jours  |  Fin : 🕯 Vieillesse  |  1 génération(s)
+  Travail    : Architecte en chef (23 j)  |  Diplôme : architecture (Très bien)
+  Argent     : $4290  |  HP : 62  |  Mental : 0
+  Relation   : Marié(e) avec Benjamin  |  Enfants : 1  |  Animal : Aucun
+  Besoins    : faim= 12  énergie= 39  hygiene= 25  fun= 28  social= 45  vessie=  0
+
+── Simulation #9 : Harper ──────────────────────
+  Survie     : 10 jours  |  Fin : 🕯 Vieillesse  |  6 génération(s)
+  Travail    : Aucun (0 j)  |  Diplôme : Aucun
+  Argent     : $9264  |  HP : 100  |  Mental : 80
+  Relation   : Célibataire  |  Enfants : 2  |  Animal : Aucun
+  Besoins    : faim= 80  énergie= 80  hygiene= 70  fun= 60  social= 60  vessie= 80
+
+── Simulation #10 : Zayneb ──────────────────────
+  Survie     : 46 jours  |  Fin : 🕯 Vieillesse  |  2 génération(s)
+  Travail    : Psychologue (23 j)  |  Diplôme : psychologie (Très bien)
+  Argent     : $5403  |  HP : 76  |  Mental : 47
+  Relation   : Marié(e) avec Marguerite  |  Enfants : 3  |  Animal : Aucun
+  Besoins    : faim= 31  énergie= 29  hygiene=  0  fun= 32  social= 56  vessie=  0
+
+── Simulation #11 : Benjamin ──────────────────────
+  Survie     : 10 jours  |  Fin : 🕯 Vieillesse  |  6 génération(s)
+  Travail    : Aucun (0 j)  |  Diplôme : Aucun
+  Argent     : $1936  |  HP : 100  |  Mental : 80
+  Relation   : Célibataire  |  Enfants : 2  |  Animal : Aucun
+  Besoins    : faim= 80  énergie= 80  hygiene= 70  fun= 60  social= 60  vessie= 80
+
+── Simulation #12 : Malo ──────────────────────
+  Survie     : 10 jours  |  Fin : 🕯 Vieillesse  |  6 génération(s)
+  Travail    : Aucun (0 j)  |  Diplôme : Aucun
+  Argent     : $20  |  HP : 100  |  Mental : 80
+  Relation   : Célibataire  |  Enfants : 2  |  Animal : Aucun
+  Besoins    : faim= 80  énergie= 80  hygiene= 70  fun= 60  social= 60  vessie= 80
+
+── Simulation #13 : Santiago ──────────────────────
+  Survie     : 10 jours  |  Fin : 🕯 Vieillesse  |  6 génération(s)
+  Travail    : Aucun (0 j)  |  Diplôme : Aucun
+  Argent     : $2137  |  HP : 100  |  Mental : 80
+  Relation   : Célibataire  |  Enfants : 2  |  Animal : Aucun
+  Besoins    : faim= 80  énergie= 80  hygiene= 70  fun= 60  social= 60  vessie= 80
+
+── Simulation #14 : Henry ──────────────────────
+  Survie     : 45 jours  |  Fin : 🕯 Vieillesse  |  1 génération(s)
+  Travail    : Psychologue (32 j)  |  Diplôme : psychologie (Très bien)
+  Argent     : $3870  |  HP : 74  |  Mental : 50
+  Relation   : Marié(e) avec Lise  |  Enfants : 3  |  Animal : Aucun
+  ⚠ Maladies : rhume
+  Besoins    : faim= 26  énergie= 34  hygiene= 53  fun= 32  social= 21  vessie= 22
+
+── Simulation #15 : Roxane ──────────────────────
+  Survie     : 10 jours  |  Fin : 🕯 Vieillesse  |  6 génération(s)
+  Travail    : Aucun (0 j)  |  Diplôme : Aucun
+  Argent     : $4254  |  HP : 100  |  Mental : 80
+  Relation   : Célibataire  |  Enfants : 2  |  Animal : Aucun
+  Besoins    : faim= 80  énergie= 80  hygiene= 70  fun= 60  social= 60  vessie= 80
+
+── Simulation #16 : Prune ──────────────────────
+  Survie     : 50 jours  |  Fin : 🕯 Vieillesse  |  1 génération(s)
+  Travail    : Architecte en chef (22 j)  |  Diplôme : architecture (Félicitations du jury)
+  Argent     : $10  |  HP : 0  |  Mental : 0
+  Relation   : Marié(e) avec Ariel  |  Enfants : 0  |  Animal : Aucun
+  ⚠ Maladies : diabete
+  Besoins    : faim=  4  énergie=  4  hygiene= 37  fun=  0  social=  0  vessie=  0
+
+── Simulation #17 : Lilly ──────────────────────
+  Survie     : 54 jours  |  Fin : 🕯 Vieillesse  |  1 génération(s)
+  Travail    : Biologiste (28 j)  |  Diplôme : sciences (Très bien)
+  Argent     : $35  |  HP : 26  |  Mental : 0
+  Relation   : En couple avec Nora  |  Enfants : 0  |  Animal : Aucun
+  ⚠ Maladies : hypertension
+  Besoins    : faim=  5  énergie=  5  hygiene= 53  fun= 31  social= 20  vessie=  0
+
+── Simulation #18 : Aziliz ──────────────────────
+  Survie     : 10 jours  |  Fin : 🕯 Vieillesse  |  6 génération(s)
+  Travail    : Aucun (0 j)  |  Diplôme : Aucun
+  Argent     : $4527  |  HP : 100  |  Mental : 80
+  Relation   : Célibataire  |  Enfants : 2  |  Animal : Aucun
+  Besoins    : faim= 80  énergie= 80  hygiene= 70  fun= 60  social= 60  vessie= 80
+
+── Simulation #19 : Ramzi ──────────────────────
+  Survie     : 53 jours  |  Fin : 🕯 Vieillesse  |  3 génération(s)
+  Travail    : Médecin (23 j)  |  Diplôme : medecine (Très bien)
+  Argent     : $5146  |  HP : 44  |  Mental : 0
+  Relation   : Célibataire  |  Enfants : 0  |  Animal : Aucun
+  ⚠ Maladies : arthrite
+  Besoins    : faim= 31  énergie= 41  hygiene= 16  fun= 27  social= 16  vessie=  0
+
+── Simulation #20 : Malika ──────────────────────
+  Survie     : 62 jours  |  Fin : 💀 Santé  |  1 génération(s)
+  Travail    : Biologiste (20 j)  |  Diplôme : sciences (Très bien)
+  Argent     : $3990  |  HP : 0  |  Mental : 0
+  Relation   : Célibataire  |  Enfants : 0  |  Animal : Aucun
+  ⚠ Maladies : arthrite, cancer_poumon
+  Besoins    : faim= 86  énergie=  0  hygiene=  0  fun= 34  social=  0  vessie=  0
+
+── Simulation #21 : Santiago ──────────────────────
+  Survie     : 45 jours  |  Fin : 🕯 Vieillesse  |  1 génération(s)
+  Travail    : Psychologue (38 j)  |  Diplôme : psychologie (Très bien)
+  Argent     : $3889  |  HP : 78  |  Mental : 57
+  Relation   : Marié(e) avec Abdoulaye  |  Enfants : 1  |  Animal : Aucun
+  Besoins    : faim=  8  énergie= 23  hygiene= 40  fun= 16  social= 11  vessie= 29
+
+── Simulation #22 : Gwénolé ──────────────────────
+  Survie     : 10 jours  |  Fin : 🕯 Vieillesse  |  6 génération(s)
+  Travail    : Aucun (0 j)  |  Diplôme : Aucun
+  Argent     : $7016  |  HP : 100  |  Mental : 80
+  Relation   : Célibataire  |  Enfants : 2  |  Animal : Aucun
+  Besoins    : faim= 80  énergie= 80  hygiene= 70  fun= 60  social= 60  vessie= 80
+
+── Simulation #23 : Skye ──────────────────────
+  Survie     : 10 jours  |  Fin : 🕯 Vieillesse  |  6 génération(s)
+  Travail    : Aucun (0 j)  |  Diplôme : Aucun
+  Argent     : $3132  |  HP : 100  |  Mental : 80
+  Relation   : Célibataire  |  Enfants : 2  |  Animal : Aucun
+  Besoins    : faim= 80  énergie= 80  hygiene= 70  fun= 60  social= 60  vessie= 80
+
+── Simulation #24 : Julia ──────────────────────
+  Survie     : 10 jours  |  Fin : 🕯 Vieillesse  |  6 génération(s)
+  Travail    : Aucun (0 j)  |  Diplôme : Aucun
+  Argent     : $20  |  HP : 100  |  Mental : 80
+  Relation   : Célibataire  |  Enfants : 1  |  Animal : Aucun
+  Besoins    : faim= 80  énergie= 80  hygiene= 70  fun= 60  social= 60  vessie= 80
+
+── Simulation #25 : Laurence ──────────────────────
+  Survie     : 48 jours  |  Fin : 🕯 Vieillesse  |  1 génération(s)
+  Travail    : Banquier (24 j)  |  Diplôme : finance (Très bien)
+  Argent     : $20  |  HP : 44  |  Mental : 0
+  Relation   : Marié(e) avec Julia  |  Enfants : 0  |  Animal : Aucun
+  ⚠ Maladies : hypertension
+  Besoins    : faim= 31  énergie= 22  hygiene= 14  fun= 35  social=  0  vessie=  0
+
+── Simulation #26 : Paul ──────────────────────
+  Survie     : 45 jours  |  Fin : 🕯 Vieillesse  |  1 génération(s)
+  Travail    : Coach sportif (20 j)  |  Diplôme : sport_science (Bien)
+  Argent     : $1565  |  HP : 91  |  Mental : 0
+  Relation   : Marié(e) avec Samuel  |  Enfants : 1  |  Animal : Aucun
+  Besoins    : faim=  8  énergie= 29  hygiene= 26  fun=  1  social= 44  vessie= 37
+
+── Simulation #27 : Philippe ──────────────────────
+  Survie     : 10 jours  |  Fin : 🕯 Vieillesse  |  6 génération(s)
+  Travail    : Aucun (0 j)  |  Diplôme : Aucun
+  Argent     : $6921  |  HP : 100  |  Mental : 80
+  Relation   : Célibataire  |  Enfants : 2  |  Animal : Aucun
+  Besoins    : faim= 80  énergie= 80  hygiene= 70  fun= 60  social= 60  vessie= 80
+
+── Simulation #28 : Badr ──────────────────────
+  Survie     : 47 jours  |  Fin : 🕯 Vieillesse  |  1 génération(s)
+  Travail    : Banquier (44 j)  |  Diplôme : finance (Très bien)
+  Argent     : $135  |  HP : 99  |  Mental : 0
+  Relation   : Marié(e) avec Yazid  |  Enfants : 1  |  Animal : Aucun
+  ⚠ Maladies : diabete
+  Besoins    : faim=  4  énergie= 24  hygiene= 44  fun= 17  social= 16  vessie=  0
+
+── Simulation #29 : Fanny ──────────────────────
+  Survie     : 10 jours  |  Fin : 🕯 Vieillesse  |  6 génération(s)
+  Travail    : Aucun (0 j)  |  Diplôme : Aucun
+  Argent     : $7350  |  HP : 100  |  Mental : 80
+  Relation   : Célibataire  |  Enfants : 1  |  Animal : Aucun
+  Besoins    : faim= 80  énergie= 80  hygiene= 70  fun= 60  social= 60  vessie= 80
+
+── Simulation #30 : Gaël ──────────────────────
+  Survie     : 10 jours  |  Fin : 🕯 Vieillesse  |  6 génération(s)
+  Travail    : Aucun (0 j)  |  Diplôme : Aucun
+  Argent     : $2911  |  HP : 100  |  Mental : 80
+  Relation   : Célibataire  |  Enfants : 1  |  Animal : Aucun
+  Besoins    : faim= 80  énergie= 80  hygiene= 70  fun= 60  social= 60  vessie= 80
+
+==============================================================
+  STATISTIQUES GLOBALES
+==============================================================
+  Survie moyenne : 28.0 jours
+  Survie max     : 62 jours  (sim #20)
+  Survie min     : 10 jours  (sim #1)
+  Causes de fin  : vieillesse ×28  santé ×2
+  Top jobs       : Psychologue ×4  |  Architecte en chef ×3  |  Biologiste ×2  |  Banquier ×2  |  Médecin ×1
+  Top diplômes   : psychologie ×4  |  architecture ×3  |  sciences ×2  |  finance ×2  |  medecine ×1
+  Argent moyen   : $2927
+  Mariés à fin   : 9/30
+  Burnout actif  : 0/30
+  Maladies finales: hypertension ×3  arthrite ×3  rhume ×2  diabete ×2  cancer_poumon ×1
+==============================================================
