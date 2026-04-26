@@ -121,10 +121,11 @@ class Sim:
         "vessie": ("Vessie", "🚽"),
     }
 
-    def __init__(self, name):
+    def __init__(self, name, config=None):
         self.name = name
+        self._config = config or GameConfig()
         self.age = 10
-        self.money = 500
+        self.money = self._config.start_money
         self.job = None
         self.job_days = 0
         self.needs = {
@@ -145,7 +146,7 @@ class Sim:
         self.children = []
         self.health = Health()
         self.education = Education()
-        self.traits = Traits()
+        self.traits = Traits(self._config.forced_traits)
         self.stress = 0             # 0–100 ; >70 pénalise le travail, >90 = burn-out
         self.salary_multiplier = 1.0  # augmente avec l'expérience (+5% / 10 j travaillés)
         self.last_romance_day = 0   # dernier jour où une action romantique a eu lieu
@@ -194,8 +195,9 @@ class Sim:
             for need in ("faim", "energie", "fun"):
                 if decay[need] < 0:
                     decay[need] *= 1.12
+        _mult = getattr(self._config, 'decay_mult', 1.0)
         for need, delta in decay.items():
-            self.needs[need] = max(0, min(100, self.needs[need] + int(delta)))
+            self.needs[need] = max(0, min(100, self.needs[need] + int(delta * _mult)))
         if self.pet:
             self.pet.tick(hours)
         if self.needs["hygiene"] < 20 or self.needs["energie"] < 15:
@@ -660,6 +662,22 @@ TRAIT_DEFS = {
     "malchanceux": ("Malchanceux(se)","🪤", "Événements négatifs 2× plus fréquents."),
 }
 
+class GameConfig:
+    """Paramètres de partie choisis par le joueur avant de commencer."""
+    DIFF = {
+        "facile":   ("😌 Facile",   0.7,  "Besoins déclinent 30% moins vite"),
+        "normal":   ("😐 Normale",  1.0,  "Paramètres par défaut"),
+        "hardcore": ("💀 Hardcore", 1.4,  "Besoins déclinent 40% plus vite"),
+    }
+    MONEYS = [(0, "0 $   — mode survie"), (500, "500 $ — par défaut"), (1500, "1500 $ — mode confort")]
+
+    def __init__(self):
+        self.difficulty    = "normal"
+        self.decay_mult    = 1.0
+        self.start_money   = 500
+        self.forced_traits = None   # None = aléatoire, list[str] = traits imposés
+
+
 class Traits:
     def __init__(self, trait_ids=None):
         if trait_ids is None:
@@ -671,6 +689,14 @@ class Traits:
                                      and t != t1]
             t2 = random.choice(pool2)
             trait_ids = [t1, t2]
+        elif len(trait_ids) == 1:
+            # Un trait imposé, second aléatoire (évite ambitieux+paresseux)
+            forced = trait_ids[0]
+            pool = [t for t in TRAIT_DEFS.keys()
+                    if t != forced
+                    and not (forced == "ambitieux" and t == "paresseux")
+                    and not (forced == "paresseux" and t == "ambitieux")]
+            trait_ids = [forced, random.choice(pool)]
         self.active = set(trait_ids)
 
     def has(self, tid):
@@ -3508,6 +3534,70 @@ def _format_debug_report(results):
     lines.append(sep)
     return "\n".join(lines)
 
+def configure_game():
+    """Wizard de configuration avant une nouvelle partie. Retourne un GameConfig."""
+    cfg = GameConfig()
+    clear()
+    print(f"\n{C.BOLD}{C.CYAN} ⚙  CONFIGURATION DE LA PARTIE{C.RESET}")
+    print(f" {C.GRAY}{'─'*38}{C.RESET}\n")
+
+    # ── 1. Difficulté ──────────────────────────────────────────────────
+    print(f" {C.BOLD}1. Difficulté{C.RESET}")
+    diff_keys = list(GameConfig.DIFF.keys())
+    for i, key in enumerate(diff_keys, 1):
+        label, _, desc = GameConfig.DIFF[key]
+        marker = f" {C.GREEN}✓{C.RESET}" if key == "normal" else ""
+        print(f"   {C.CYAN}[{i}]{C.RESET} {label:18s} {C.GRAY}{desc}{C.RESET}{marker}")
+    try:
+        ch = input(f"\n   Choix [1-3, Entrée=Normale] : ").strip()
+        idx = int(ch) - 1
+        if 0 <= idx < len(diff_keys):
+            key = diff_keys[idx]
+            cfg.difficulty  = key
+            cfg.decay_mult  = GameConfig.DIFF[key][1]
+    except (ValueError, EOFError, KeyboardInterrupt):
+        pass
+    lbl, _, _ = GameConfig.DIFF[cfg.difficulty]
+    print(f"   → {lbl} sélectionnée.\n")
+
+    # ── 2. Argent de départ ────────────────────────────────────────────
+    print(f" {C.BOLD}2. Argent de départ{C.RESET}")
+    for i, (amt, desc) in enumerate(GameConfig.MONEYS, 1):
+        marker = f" {C.GREEN}✓{C.RESET}" if amt == 500 else ""
+        print(f"   {C.CYAN}[{i}]{C.RESET} {desc}{marker}")
+    try:
+        ch = input(f"\n   Choix [1-3, Entrée=500 $] : ").strip()
+        idx = int(ch) - 1
+        if 0 <= idx < len(GameConfig.MONEYS):
+            cfg.start_money = GameConfig.MONEYS[idx][0]
+    except (ValueError, EOFError, KeyboardInterrupt):
+        pass
+    print(f"   → {cfg.start_money} $ de départ.\n")
+
+    # ── 3. Trait imposé ────────────────────────────────────────────────
+    print(f" {C.BOLD}3. Trait imposé{C.RESET}")
+    print(f"   {C.CYAN}[0]{C.RESET} Aléatoire {C.GREEN}✓{C.RESET}")
+    trait_keys = list(TRAIT_DEFS.keys())
+    for i, key in enumerate(trait_keys, 1):
+        name, emoji, desc = TRAIT_DEFS[key]
+        print(f"   {C.CYAN}[{i:2d}]{C.RESET} {emoji} {name:18s} {C.GRAY}{desc}{C.RESET}")
+    try:
+        ch = input(f"\n   Choix [0-{len(trait_keys)}, Entrée=Aléatoire] : ").strip()
+        idx = int(ch)
+        if 1 <= idx <= len(trait_keys):
+            cfg.forced_traits = [trait_keys[idx - 1]]
+    except (ValueError, EOFError, KeyboardInterrupt):
+        pass
+    if cfg.forced_traits:
+        fn, fe, _ = TRAIT_DEFS[cfg.forced_traits[0]]
+        print(f"   → Trait {fe} {fn} imposé (second trait aléatoire).\n")
+    else:
+        print(f"   → Traits aléatoires.\n")
+
+    slow_print(f" {C.GREEN}Configuration prête !{C.RESET} Passons au choix du prénom...\n", 0.03)
+    return cfg
+
+
 def debug_batch_run(n_sims=10, max_gen=5):
     """Lance n_sims simulations autopilote en batch et sauvegarde le rapport."""
     global DEBUG_MODE
@@ -3806,6 +3896,7 @@ def main():
         print(f" {C.CYAN}[2]{C.RESET} Charger la partie sauvegardée")
     print(f" {C.CYAN}[3]{C.RESET} 🤖 Mode Autopilote — l'IA joue à ta place")
     print(f" {C.CYAN}[4]{C.RESET} 🔧 Mode Débogage — Simuler plusieurs parties en batch")
+    print(f" {C.CYAN}[5]{C.RESET} ⚙  Partie personnalisée — difficulté, argent, traits")
     try:
         start = input(f"\n {C.BOLD}Choix : {C.RESET}").strip()
     except (EOFError, KeyboardInterrupt):
@@ -3888,12 +3979,17 @@ def main():
         slow_print(f" {C.GRAY}Fin de la lignée. Merci d'avoir joué !{C.RESET}\n")
         return
 
+    # ── Partie personnalisée ──────────────────────────────────────────
+    _custom_config = None
+    if start == "5":
+        _custom_config = configure_game()
+
     # ── Nouvelle partie ───────────────────────────────────────────────
     name = input(f"\n {C.BOLD}Quel est le prénom de ton Sim ? {C.RESET}").strip()
     if not name:
         name = "Alex"
 
-    sim = Sim(name)
+    sim = Sim(name, config=_custom_config)
 
     orientations = ["Hétérosexuel(le)", "Homosexuel(le)", "Bisexuel(le)", "Je préfère ne pas préciser"]
     print(f"\n {C.BOLD}Quelle est l'orientation sexuelle de {name} ?{C.RESET}")
