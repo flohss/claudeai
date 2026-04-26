@@ -2942,8 +2942,12 @@ def ai_choose_action(sim):
 
     # ═══════════════════════════════════════════════════════════════
     # MODE MALADIE : GUÉRIR en priorité (médicament réduit durée de 1j/prise).
+    # Chroniques (hypertension, asthme…) sont permanentes → ne pas bloquer le sim
+    # en "sick mode" indéfiniment ; seules les maladies aiguës/fatales déclenchent ce mode.
     # ═══════════════════════════════════════════════════════════════
-    if h.is_sick():
+    _has_acute = any(DISEASES.get(k, ('','','',0,0,'inf'))[5] in ("inf", "trau", "ment")
+                     for k in h.diseases)
+    if _has_acute or h.has_fatal():
         sleep_faim_cost = 60
         sleep_hyg_cost  = 10 + 8 * (2 + extra_h)
         faim_safe    = 15 + sleep_faim_cost
