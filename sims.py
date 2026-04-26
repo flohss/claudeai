@@ -3464,72 +3464,165 @@ def show_results(sim, cause=""):
 DEBUG_REPORT_FILE = "debug_report.txt"
 
 def _format_debug_report(results):
-    """Formate les résultats de simulation en rapport texte lisible."""
+    """Formate les résultats de simulation en rapport texte détaillé."""
+    from collections import Counter
     lines = []
-    sep = "=" * 62
+    W    = 70
+    sep  = "=" * W
+    sep2 = "-" * W
+
     lines += [sep,
               "  RAPPORT DÉBOGAGE — MODE AUTOPILOTE",
               f"  Date       : {datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}",
               f"  Simulations: {len(results)}",
               sep]
 
+    cause_label = {"famine": "💀 Famine", "santé": "💀 Santé",
+                   "vieillesse": "🕯 Vieillesse", "timeout": "⏱ Limite",
+                   None: "✅ En vie"}
+
     for r in results:
-        lines.append(f"\n── Simulation #{r['sim']} : {r['name']} ──────────────────────")
-        cause_str = {"famine": "💀 Famine", "santé": "💀 Santé",
-                     "vieillesse": "🕯 Vieillesse", "timeout": "⏱ Limite atteinte",
-                     None: "✅ En vie"}.get(r['cause'], r['cause'])
-        lines.append(f"  Survie     : {r['age']} jours  |  Fin : {cause_str}  |  {r['generations']} génération(s)")
-        lines.append(f"  Travail    : {r['job'] or 'Aucun'} ({r['job_days']} j)  |  Diplôme : {r['diploma'] or 'Aucun'}")
-        lines.append(f"  Argent     : ${r['money']}  |  HP : {r['hp']}  |  Mental : {r['mental']}")
+        lines.append(f"\n{'─'*W}")
+        lines.append(f"  SIM #{r['sim']:02d} — {r['name']}  ({r['orient']})")
+        lines.append(f"{'─'*W}")
+
+        # ── Résumé ──────────────────────────────────────────────
+        cstr = cause_label.get(r['cause'], r['cause'])
+        lines.append(f"  Survie    : {r['age']} jours  │  Fin : {cstr}  │  {r['generations']} gén.")
+        lines.append(f"  Traits    : {', '.join(r['traits']) or '—'}")
+
+        dip = r['diploma'] or 'Aucun'
+        lines.append(f"  Carrière  : {r['job'] or 'Sans emploi'} — {r['job_days']} j. trav."
+                     f"  salaire ×{r['salary_mult']:.2f}")
+        lines.append(f"  Diplôme   : {dip}")
+        lines.append(f"  Finances  : ${r['money']}  │  Pension : ${r['pension']}/j")
+        lines.append(f"  Santé     : HP={r['hp']}  │  Stress={r['stress']}")
+        lines.append(f"  Mental    : final={r['mental']}  moy={r['mental_avg']}  min={r['mental_min']}")
         rel_str = r['relationship']
         if r['partner']:
             rel_str += f" avec {r['partner']}"
-        lines.append(f"  Relation   : {rel_str}  |  Enfants : {r['children']}  |  Animal : {r['pet'] or 'Aucun'}")
+        lines.append(f"  Vie soc.  : {rel_str}  │  Enfants : {r['children']}  │  Animal : {r['pet'] or 'Aucun'}")
         if r['diseases']:
-            lines.append(f"  ⚠ Maladies : {', '.join(r['diseases'])}")
+            lines.append(f"  Maladies  : {', '.join(r['diseases'])}")
+        if r['skills']:
+            sk_str = "  ".join(f"{k}={v}" for k, v in sorted(r['skills'].items(), key=lambda x:-x[1]))
+            lines.append(f"  Compét.   : {sk_str}")
         n = r['needs']
-        lines.append(f"  Besoins    : faim={n['faim']:3d}  énergie={n['energie']:3d}  "
+        lines.append(f"  Besoins   : faim={n['faim']:3d}  énergie={n['energie']:3d}  "
                      f"hygiene={n['hygiene']:3d}  fun={n['fun']:3d}  "
                      f"social={n['social']:3d}  vessie={n['vessie']:3d}")
 
-    # ── Statistiques globales ──────────────────────────────────
-    lines += ["", sep, "  STATISTIQUES GLOBALES", sep]
-    ages = [r['age'] for r in results]
-    lines.append(f"  Survie moyenne : {sum(ages)/len(ages):.1f} jours")
-    lines.append(f"  Survie max     : {max(ages)} jours  (sim #{results[ages.index(max(ages))]['sim']})")
-    lines.append(f"  Survie min     : {min(ages)} jours  (sim #{results[ages.index(min(ages))]['sim']})")
+        # ── Top actions ──────────────────────────────────────────
+        total_a = sum(r['action_counts'].values())
+        top_a = sorted(r['action_counts'].items(), key=lambda x: -x[1])[:8]
+        lines.append(f"\n  Actions totales : {total_a}")
+        for aname, cnt in top_a:
+            pct = 100 * cnt // total_a
+            bar = "█" * (pct // 5)
+            lines.append(f"    {aname:22s} {cnt:4d}  {pct:3d}%  {bar}")
 
-    from collections import Counter
+        # ── Historique jour par jour ─────────────────────────────
+        lines.append(f"\n  Historique :")
+        from itertools import groupby
+        days = {}
+        for day, hour, action, mental, needs in r['action_log']:
+            days.setdefault(day, []).append((hour, action, mental))
+
+        for day in sorted(days.keys()):
+            entries = days[day]
+            # Compresser les répétitions : mediter mediter mediter → mediter×3
+            compressed = []
+            for action, grp in groupby(entries, key=lambda x: x[1]):
+                grp_list = list(grp)
+                if len(grp_list) > 1:
+                    compressed.append(f"{action}×{len(grp_list)}")
+                else:
+                    compressed.append(action)
+            h_start = f"{entries[0][0]:05.2f}"
+            h_end   = f"{entries[-1][0]:05.2f}"
+            mental_at_end = entries[-1][2]
+            seq = "  ".join(compressed)
+            lines.append(f"    J{day:03d} [{h_start}→{h_end}] m={mental_at_end:3d} │ {seq}")
+
+    # ═══════════════════════════════════════════════════════════
+    # STATISTIQUES GLOBALES
+    # ═══════════════════════════════════════════════════════════
+    lines += ["", sep, "  STATISTIQUES GLOBALES", sep]
+
+    ages = [r['age'] for r in results]
+    lines.append(f"  Survie         : moy={sum(ages)/len(ages):.1f}j"
+                 f"  max={max(ages)}j (#{results[ages.index(max(ages))]['sim']})"
+                 f"  min={min(ages)}j (#{results[ages.index(min(ages))]['sim']})")
+
     causes = Counter(r['cause'] for r in results)
     causes_str = "  ".join(f"{k or 'en vie'} ×{v}" for k, v in causes.most_common())
     lines.append(f"  Causes de fin  : {causes_str}")
 
+    mentals_final = [r['mental'] for r in results]
+    mentals_avg   = [r['mental_avg'] for r in results]
+    mentals_min   = [r['mental_min'] for r in results]
+    lines.append(f"  Mental final   : moy={sum(mentals_final)/len(mentals_final):.1f}"
+                 f"  min={min(mentals_final)}  max={max(mentals_final)}")
+    lines.append(f"  Mental (vie)   : moy_moy={sum(mentals_avg)/len(mentals_avg):.1f}"
+                 f"  moy_min={sum(mentals_min)/len(mentals_min):.1f}")
+
+    stresses = [r['stress'] for r in results]
+    lines.append(f"  Stress final   : moy={sum(stresses)/len(stresses):.1f}"
+                 f"  max={max(stresses)}")
+
+    pensions = [r['pension'] for r in results if r['pension'] > 0]
+    if pensions:
+        lines.append(f"  Pensions       : moy=${sum(pensions)/len(pensions):.0f}/j"
+                     f"  min=${min(pensions)}/j  max=${max(pensions)}/j"
+                     f"  ({len(pensions)}/{len(results)} retraités)")
+    else:
+        lines.append(f"  Pensions       : aucun retraité")
+
+    moneys = [r['money'] for r in results]
+    lines.append(f"  Argent final   : moy=${sum(moneys)/len(moneys):.0f}"
+                 f"  min=${min(moneys)}  max=${max(moneys)}")
+
     jobs = [r['job'] for r in results if r['job']]
     if jobs:
         top = Counter(jobs).most_common(5)
-        lines.append(f"  Top jobs       : " + "  |  ".join(f"{j} ×{c}" for j, c in top))
+        lines.append(f"  Top jobs       : " + "  │  ".join(f"{j} ×{c}" for j, c in top))
 
     dips = [r['diploma'].split(' (')[0] for r in results if r['diploma']]
     if dips:
         top = Counter(dips).most_common(5)
-        lines.append(f"  Top diplômes   : " + "  |  ".join(f"{d} ×{c}" for d, c in top))
+        lines.append(f"  Top diplômes   : " + "  │  ".join(f"{d} ×{c}" for d, c in top))
     else:
         lines.append(f"  Diplômes       : aucun obtenu")
 
-    avg_money = sum(r['money'] for r in results) / len(results)
-    lines.append(f"  Argent moyen   : ${avg_money:.0f}")
+    all_traits = []
+    for r in results:
+        all_traits.extend(r['traits'])
+    if all_traits:
+        top_t = Counter(all_traits).most_common(5)
+        lines.append(f"  Top traits     : " + "  │  ".join(f"{t} ×{c}" for t, c in top_t))
 
     married = sum(1 for r in results if "Marié" in r['relationship'])
     burnout_count = sum(1 for r in results if 'burnout' in r['diseases'])
-    lines.append(f"  Mariés à fin   : {married}/{len(results)}")
+    lines.append(f"  Mariés         : {married}/{len(results)}")
     lines.append(f"  Burnout actif  : {burnout_count}/{len(results)}")
 
     all_diseases = []
     for r in results:
         all_diseases.extend(r['diseases'])
     if all_diseases:
-        top_d = Counter(all_diseases).most_common()
-        lines.append(f"  Maladies finales: " + "  ".join(f"{d} ×{c}" for d, c in top_d))
+        top_d = Counter(all_diseases).most_common(8)
+        lines.append(f"  Maladies       : " + "  ".join(f"{d} ×{c}" for d, c in top_d))
+
+    # Actions les plus fréquentes toutes sims confondues
+    all_acts: Counter = Counter()
+    for r in results:
+        all_acts.update(r['action_counts'])
+    top_acts = all_acts.most_common(10)
+    total_all = all_acts.total()
+    lines.append(f"\n  Top actions (toutes sims, {total_all} total) :")
+    for aname, cnt in top_acts:
+        pct = 100 * cnt // total_all
+        lines.append(f"    {aname:22s} {cnt:5d}  ({pct}%)")
 
     lines.append(sep)
     return "\n".join(lines)
@@ -3605,6 +3698,7 @@ def debug_batch_run(n_sims=10, max_gen=5):
 
     results = []
     orientations = ["Hétérosexuel(le)", "Homosexuel(le)", "Bisexuel(le)"]
+    _globs = globals()
 
     for sim_num in range(1, n_sims + 1):
         print(f"\r  ▶ Simulation {sim_num:3d}/{n_sims}...", end="", flush=True)
@@ -3617,38 +3711,72 @@ def debug_batch_run(n_sims=10, max_gen=5):
         gen         = 1
         final_cause = None
 
-        # Rediriger stdout pour supprimer tout affichage pendant la simulation
-        with contextlib.redirect_stdout(io.StringIO()):
-            while gen <= max_gen:
-                cause = autopilot_loop(sim, speed=0)
-                final_cause = cause
-                if cause is None:
-                    break
-                heir = ai_offer_legacy(sim)
-                if heir is None:
-                    break
-                sim = heir
-                gen += 1
+        # ── Instrumentation : capture des décisions IA ───────────────
+        action_log    = []   # [(day, hour, action, mental, needs_snap)]
+        _orig_ai      = _globs['ai_choose_action']
+
+        def _instrumented(s, _orig=_orig_ai, _log=action_log):
+            a = _orig(s)
+            _log.append((
+                s.age,
+                round(s.hour, 2),
+                a,
+                s.health.mental,
+                {k: round(v) for k, v in s.needs.items()},
+            ))
+            return a
+
+        _globs['ai_choose_action'] = _instrumented
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                while gen <= max_gen:
+                    cause = autopilot_loop(sim, speed=0)
+                    final_cause = cause
+                    if cause is None:
+                        break
+                    heir = ai_offer_legacy(sim)
+                    if heir is None:
+                        break
+                    sim = heir
+                    gen += 1
+        finally:
+            _globs['ai_choose_action'] = _orig_ai
+
+        # ── Calcul de métriques ───────────────────────────────────────
+        mentals = [e[3] for e in action_log]
+        action_counts = {}
+        for e in action_log:
+            action_counts[e[2]] = action_counts.get(e[2], 0) + 1
 
         results.append({
             "sim":          sim_num,
             "name":         name,
+            "orient":       orient,
+            "traits":       sorted(sim.traits.active),
             "age":          sim.age,
             "generations":  gen,
             "cause":        final_cause,
             "job":          sim.job,
             "job_days":     sim.job_days,
+            "salary_mult":  sim.salary_multiplier,
             "diploma":      (f"{sim.education.diploma_domain} ({sim.education.grade})"
                              if sim.education.has_diploma() else None),
             "money":        sim.money,
+            "pension":      sim.pension,
             "hp":           sim.health.hp,
             "mental":       sim.health.mental,
+            "mental_min":   min(mentals) if mentals else 0,
+            "mental_avg":   round(sum(mentals) / len(mentals)) if mentals else 0,
+            "stress":       sim.stress,
+            "skills":       {k: v for k, v in sim.skills.levels.items() if v > 0},
             "relationship": sim.relationship.label,
             "partner":      sim.relationship.partner_name,
             "children":     len(sim.children),
             "pet":          (f"{sim.pet.name} ({sim.pet.species})" if sim.pet else None),
             "diseases":     list(sim.health.diseases.keys()),
-            "needs":        dict(sim.needs),
+            "needs":        {k: round(v) for k, v in sim.needs.items()},
+            "action_counts": action_counts,
+            "action_log":   action_log,
         })
 
     DEBUG_MODE = False
@@ -3659,7 +3787,8 @@ def debug_batch_run(n_sims=10, max_gen=5):
     with open(DEBUG_REPORT_FILE, "w", encoding="utf-8") as f:
         f.write(report)
 
-    print(report)
+    print(report[:6000] + ("\n  [... rapport tronqué — voir le fichier complet ...]\n"
+                           if len(report) > 6000 else ""))
     print(f"\n {C.GREEN}Rapport sauvegardé → {DEBUG_REPORT_FILE}{C.RESET}")
     input(f"\n{C.GRAY}Appuie sur Entrée pour revenir au menu...{C.RESET}")
 

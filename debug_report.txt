@@ -1,239 +1,230 @@
-==============================================================
+======================================================================
   RAPPORT DÉBOGAGE — MODE AUTOPILOTE
-  Date       : 2026-04-21  20:34:34
-  Simulations: 30
-==============================================================
+  Date       : 2026-04-26  20:31:46
+  Simulations: 3
+======================================================================
 
-── Simulation #1 : Gloria ──────────────────────
-  Survie     : 10 jours  |  Fin : 🕯 Vieillesse  |  6 génération(s)
-  Travail    : Aucun (0 j)  |  Diplôme : Aucun
-  Argent     : $3985  |  HP : 100  |  Mental : 80
-  Relation   : Célibataire  |  Enfants : 2  |  Animal : Aucun
-  Besoins    : faim= 80  énergie= 80  hygiene= 70  fun= 60  social= 60  vessie= 80
+──────────────────────────────────────────────────────────────────────
+  SIM #01 — Gloria  (Hétérosexuel(le))
+──────────────────────────────────────────────────────────────────────
+  Survie    : 10 jours  │  Fin : 🕯 Vieillesse  │  2 gén.
+  Traits    : artistique, curieux
+  Carrière  : Sans emploi — 0 j. trav.  salaire ×1.00
+  Diplôme   : Aucun
+  Finances  : $3093  │  Pension : $0/j
+  Santé     : HP=100  │  Stress=0
+  Mental    : final=80  moy=61  min=0
+  Vie soc.  : Célibataire  │  Enfants : 2  │  Animal : Aucun
+  Compét.   : cuisine=4  social=1  travail=1
+  Besoins   : faim= 80  énergie= 80  hygiene= 70  fun= 60  social= 60  vessie= 80
 
-── Simulation #2 : Rahima ──────────────────────
-  Survie     : 45 jours  |  Fin : 🕯 Vieillesse  |  1 génération(s)
-  Travail    : Architecte en chef (26 j)  |  Diplôme : architecture (Très bien)
-  Argent     : $8  |  HP : 100  |  Mental : 84
-  Relation   : Fiancé(e) avec Fabien  |  Enfants : 0  |  Animal : Aucun
-  ⚠ Maladies : hypertension
-  Besoins    : faim= 21  énergie= 47  hygiene= 35  fun= 53  social=  4  vessie=  0
+  Actions totales : 456
+    manger                   91   19%  ███
+    mediter                  69   15%  ███
+    toilettes                65   14%  ██
+    douche                   63   13%  ██
+    appel                    50   10%  ██
+    dormir                   38    8%  █
+    travailler               22    4%  
+    sieste                   15    3%  
 
-── Simulation #3 : Wahiba ──────────────────────
-  Survie     : 49 jours  |  Fin : 💀 Santé  |  1 génération(s)
-  Travail    : Aucun (21 j)  |  Diplôme : Aucun
-  Argent     : $85  |  HP : 0  |  Mental : 0
-  Relation   : Célibataire  |  Enfants : 0  |  Animal : Aucun
-  ⚠ Maladies : arthrite, rhume
-  Besoins    : faim= 70  énergie=  0  hygiene= 96  fun=  0  social=  4  vessie=  0
+  Historique :
+    J010 [07.00→24.75] m= 91 │ postuler  inscrire  mediter×2  appel  etudier  toilettes  manger×2  douche  appel  manger  dormir
+    J011 [07.00→22.00] m=100 │ toilettes  manger  douche  appel  mediter  appel  etudier  toilettes  manger×2  douche  appel  manger  dormir
+    J012 [07.00→23.00] m=100 │ toilettes  manger  douche  mediter×3  travailler_partiel  manger  appel  toilettes  travailler_partiel  manger  douche  manger  dormir
+    J013 [07.00→22.50] m=100 │ toilettes  manger  mediter×2  appel  douche  mediter  appel  etudier  toilettes  manger  postuler  flirter  manger  dormir
+    J014 [07.00→32.25] m=100 │ toilettes  manger  douche  mediter×2  travailler  toilettes  manger  douche  mediter×2  appel  travailler  manger  douche  manger  toilettes  dormir
+    J015 [07.00→30.75] m= 78 │ toilettes  mediter  appel  manger  douche  appel  travailler  toilettes  manger  mediter  travailler  manger  douche  toilettes  dormir
+    J016 [07.00→23.00] m= 51 │ manger  douche  toilettes  mediter×3  appel×2  travailler  manger  toilettes  douche  manger  dormir
+    J017 [07.00→24.00] m= 39 │ manger  toilettes  douche  mediter×3  appel  travailler  manger  toilettes  douche  appel×2  manger  dormir
+    J018 [07.00→27.75] m= 30 │ toilettes  manger  douche  travailler  toilettes  manger  douche  travailler  manger  toilettes  dormir
+    J019 [07.00→24.00] m= 83 │ manger  douche  mediter×5  appel  toilettes  appel×2  adopter  psy  acheter_maison  manger  douche  rendezvous  manger  toilettes  dormir
+    J020 [07.00→24.00] m=100 │ manger  douche  mediter  rendezvous  toilettes  rendezvous  manger  flirter  sieste  flirter  manger  toilettes  intimite  douche  dormir
+    J021 [07.00→18.00] m=100 │ toilettes  manger  travailler  manger  douche  toilettes  dormir
+    J022 [07.00→23.00] m= 95 │ manger  douche  mediter×3  appel  toilettes  travailler  manger  douche  manger  toilettes  appel  dormir
+    J023 [07.00→30.00] m= 92 │ manger  douche  toilettes  mediter×3  travailler  mediter×2  travailler  manger  douche  manger  toilettes  dormir
+    J024 [07.00→23.00] m= 67 │ toilettes  manger  douche  mediter×3  appel×2  travailler  toilettes  manger  douche  appel  dormir
+    J025 [07.00→09.75] m= 45 │ toilettes  manger  douche  manger  dormir
+    J026 [07.00→23.25] m= 75 │ toilettes  manger  douche  mediter×5  appel×2  medecin  psy  adopter  proposer  marier  avoir_enfant  famille  manger  dormir
+    J027 [07.00→24.25] m=100 │ toilettes  manger  douche  sieste  intimite  sieste  toilettes  manger  mediter  appel×2  lire  douche  nourrir  sieste  manger  dormir
+    J028 [07.00→18.00] m=100 │ toilettes  manger  douche  travailler  toilettes  manger  dormir
+    J029 [07.00→23.00] m= 92 │ toilettes  manger  douche  mediter×3  appel  travailler  toilettes  douche  manger  appel×2  dormir
+    J030 [07.00→21.50] m= 73 │ toilettes  manger  douche  mediter×2  travailler  toilettes  manger  douche  appel×2  dormir
+    J031 [07.00→18.50] m= 62 │ toilettes  manger  douche  mediter  travailler  toilettes  manger  dormir
+    J032 [07.00→29.50] m= 62 │ manger  douche  toilettes  mediter×3  appel  travailler  douche  mediter  travailler  manger  toilettes  dormir
+    J033 [07.00→22.00] m= 90 │ toilettes  manger  douche  appel  mediter×2  medecin  mediter  psy  avoir_enfant  sieste  adopter  avoir_enfant  sieste  manger  douche  toilettes  lire  dormir
+    J034 [07.00→25.00] m=100 │ manger  toilettes  douche  famille  devoirs  mediter  famille  manger  sieste  appel×2  toilettes  sieste  lire  manger  douche  dormir
+    J035 [07.00→18.00] m=100 │ toilettes  manger  travailler  toilettes  douche  manger  dormir
+    J036 [07.00→08.75] m= 84 │ toilettes  manger  douche  dormir
+    J037 [07.00→21.50] m= 57 │ manger  toilettes  douche  mediter  appel×2  douche  travailler  toilettes  manger  douche  dormir
+    J038 [07.00→08.75] m= 37 │ toilettes  manger  douche  dormir
+    J039 [07.00→10.75] m=  0 │ manger  toilettes  douche  appel×2  dormir
+    J040 [07.00→10.75] m=  0 │ toilettes  manger  douche  manger  appel  dormir
+    J041 [07.00→10.25] m=  6 │ toilettes  manger  douche  appel  mediter  dormir
+    J042 [07.00→25.00] m= 46 │ toilettes  manger  douche  medecin  mediter×5  appel×3  travailler  manger  douche  toilettes  dormir
+    J043 [07.00→08.75] m= 46 │ toilettes  manger  douche  dormir
+    J044 [07.00→11.25] m=  0 │ manger  douche  medecin  toilettes  manger  douche  dormir
+    J045 [07.00→08.50] m=  0 │ prendre_retraite  manger  dormir
+    J046 [07.00→23.75] m= 10 │ douche  manger  sieste  douche  sieste  manger  sieste  toilettes  mediter×2  appel×2  manger  douche  jardiner  manger  dormir
+    J047 [07.00→23.25] m= 13 │ manger  douche  sieste×2  manger  sieste  douche  sieste  manger  toilettes  mediter×2  appel  adopter  appel  dormir
 
-── Simulation #4 : Nova ──────────────────────
-  Survie     : 45 jours  |  Fin : 🕯 Vieillesse  |  1 génération(s)
-  Travail    : Psychologue (25 j)  |  Diplôme : psychologie (Très bien)
-  Argent     : $1141  |  HP : 75  |  Mental : 0
-  Relation   : Marié(e) avec Thibaut  |  Enfants : 1  |  Animal : Aucun
-  Besoins    : faim= 26  énergie= 21  hygiene= 37  fun= 11  social=  0  vessie= 24
+──────────────────────────────────────────────────────────────────────
+  SIM #02 — Alden  (Bisexuel(le))
+──────────────────────────────────────────────────────────────────────
+  Survie    : 47 jours  │  Fin : 🕯 Vieillesse  │  1 gén.
+  Traits    : anxieux, curieux
+  Carrière  : Dir. commercial — 22 j. trav.  salaire ×1.10
+  Diplôme   : commerce (Très bien)
+  Finances  : $4985  │  Pension : $232/j
+  Santé     : HP=49  │  Stress=0
+  Mental    : final=0  moy=64  min=0
+  Vie soc.  : Marié(e) avec Éric  │  Enfants : 1  │  Animal : Aucun
+  Compét.   : cuisine=8  social=2  travail=2
+  Besoins   : faim= 31  énergie= 17  hygiene=  0  fun=  1  social=  1  vessie=  0
 
-── Simulation #5 : Kilian ──────────────────────
-  Survie     : 10 jours  |  Fin : 🕯 Vieillesse  |  6 génération(s)
-  Travail    : Aucun (0 j)  |  Diplôme : Aucun
-  Argent     : $3402  |  HP : 100  |  Mental : 80
-  Relation   : Célibataire  |  Enfants : 2  |  Animal : Aucun
-  Besoins    : faim= 80  énergie= 80  hygiene= 70  fun= 60  social= 60  vessie= 80
+  Actions totales : 375
+    manger                   83   22%  ████
+    toilettes                56   14%  ██
+    douche                   53   14%  ██
+    mediter                  49   13%  ██
+    appel                    42   11%  ██
+    dormir                   37    9%  █
+    travailler               16    4%  
+    travailler_partiel        6    1%  
 
-── Simulation #6 : Xabi ──────────────────────
-  Survie     : 10 jours  |  Fin : 🕯 Vieillesse  |  6 génération(s)
-  Travail    : Aucun (0 j)  |  Diplôme : Aucun
-  Argent     : $1338  |  HP : 100  |  Mental : 80
-  Relation   : Célibataire  |  Enfants : 2  |  Animal : Aucun
-  Besoins    : faim= 80  énergie= 80  hygiene= 70  fun= 60  social= 60  vessie= 80
+  Historique :
+    J010 [07.00→24.75] m= 91 │ postuler  inscrire  mediter×2  appel  etudier  toilettes  manger×2  douche  appel  manger  dormir
+    J011 [07.00→24.50] m=100 │ toilettes  manger  douche  mediter×2  appel  travailler_partiel  manger  toilettes  mediter×2  appel  travailler_partiel  manger×2  douche  dormir
+    J012 [07.00→23.50] m=100 │ toilettes  manger  douche  appel×2  etudier  toilettes  manger×2  douche  appel  sieste  manger  dormir
+    J013 [07.00→23.00] m= 91 │ toilettes  manger  douche  mediter×2  travailler_partiel  manger  mediter  appel  toilettes  travailler_partiel  manger  douche  manger  dormir
+    J014 [07.00→24.50] m=100 │ toilettes  manger  douche  mediter×2  appel  travailler_partiel  manger  toilettes  mediter×2  appel  travailler_partiel  manger  douche  manger  dormir
+    J015 [07.00→31.25] m=100 │ toilettes  manger  mediter  appel  douche  mediter×2  appel  etudier  toilettes  manger  postuler  travailler  manger  douche  manger  toilettes  dormir
+    J016 [07.00→23.50] m= 88 │ manger  toilettes  douche  manger  appel×2  mediter  appel  mediter  travailler  toilettes  manger  douche  dormir
+    J017 [07.00→30.25] m= 90 │ toilettes  manger  douche  mediter×2  travailler  toilettes  manger  appel  mediter  travailler  manger  douche  toilettes  dormir
+    J018 [07.00→11.25] m= 64 │ manger  douche  manger  medecin  toilettes  douche  dormir
+    J019 [07.00→23.50] m= 82 │ toilettes  manger  douche  mediter  appel×2  medecin  manger  psy  acheter_maison  appel  sieste  toilettes  adopter  flirter  appel  manger  dormir
+    J020 [07.00→16.75] m= 98 │ toilettes  manger  douche  nourrir  flirter×2  rendezvous  manger  douche  jouer_pet  toilettes  dormir
+    J021 [07.00→17.75] m=100 │ manger  travailler  toilettes  manger  douche  dormir
+    J022 [07.00→19.00] m= 87 │ toilettes  manger  douche  mediter  travailler  toilettes  manger  douche  dormir
+    J023 [07.00→24.00] m= 62 │ manger  toilettes  douche  mediter×3  appel×2  travailler  toilettes  manger  appel  douche  manger  dormir
+    J024 [07.00→21.50] m= 48 │ toilettes  manger  mediter×2  travailler  douche  toilettes  manger  mediter  appel×2  dormir
+    J025 [07.00→18.50] m= 32 │ toilettes  manger  douche  travailler  manger  toilettes  douche  dormir
+    J026 [07.00→10.75] m=  8 │ manger  medecin  toilettes  douche  manger  dormir
+    J027 [07.00→25.00] m= 84 │ manger  toilettes  douche  mediter×5  appel×4  psy  adopter  rendezvous  manger  sieste  manger  toilettes  douche  dormir
+    J028 [07.00→28.00] m= 99 │ toilettes  manger  mediter  travailler  douche  mediter×2  travailler  manger  douche  toilettes  dormir
+    J029 [07.00→23.50] m= 77 │ toilettes  manger  mediter×3  appel×2  douche  travailler  toilettes  manger  appel×2  dormir
+    J030 [07.00→10.75] m= 53 │ toilettes  manger  douche  manger  appel  dormir
+    J031 [07.00→22.00] m= 51 │ toilettes  manger  douche  mediter×2  appel  travailler  toilettes  douche  manger  appel  mediter  dormir
+    J032 [07.00→29.75] m= 56 │ toilettes  manger  douche  mediter  travailler  manger  toilettes  douche  appel  mediter  travailler  manger  toilettes  dormir
+    J033 [07.00→20.75] m= 66 │ manger  douche  appel  toilettes  mediter×3  medecin  rendezvous  sieste  manger  douche  intimite  dormir
+    J034 [07.00→14.75] m= 74 │ toilettes  manger  douche  proposer  marier  appel  avoir_enfant  manger  dormir
+    J035 [07.00→18.50] m= 96 │ toilettes  manger  douche  travailler  toilettes  manger  douche  dormir
+    J036 [07.00→08.75] m= 81 │ toilettes  manger  douche  dormir
+    J037 [07.00→08.75] m= 77 │ manger  toilettes  douche  dormir
+    J038 [07.00→08.00] m= 43 │ manger  dormir
+    J039 [07.00→11.25] m=  0 │ medecin  toilettes  manger  douche×2  manger  dormir
+    J040 [07.00→08.75] m=  0 │ toilettes  manger  douche  dormir
+    J041 [07.00→09.75] m=  0 │ toilettes  manger  douche  appel  dormir
+    J042 [07.00→09.75] m=  0 │ toilettes  manger  douche  manger  dormir
+    J043 [07.00→11.25] m=  3 │ toilettes  manger  douche  mediter  appel×2  dormir
+    J044 [07.00→09.75] m=  0 │ toilettes  manger  douche  manger  dormir
+    J045 [07.00→08.50] m=  0 │ prendre_retraite  manger  dormir
+    J046 [07.00→08.00] m=  0 │ manger  dormir
 
-── Simulation #7 : Jakez ──────────────────────
-  Survie     : 10 jours  |  Fin : 🕯 Vieillesse  |  6 génération(s)
-  Travail    : Aucun (0 j)  |  Diplôme : Aucun
-  Argent     : $0  |  HP : 100  |  Mental : 80
-  Relation   : Célibataire  |  Enfants : 2  |  Animal : Aucun
-  Besoins    : faim= 80  énergie= 80  hygiene= 70  fun= 60  social= 60  vessie= 80
+──────────────────────────────────────────────────────────────────────
+  SIM #03 — Rosario  (Bisexuel(le))
+──────────────────────────────────────────────────────────────────────
+  Survie    : 51 jours  │  Fin : 🕯 Vieillesse  │  1 gén.
+  Traits    : ambitieux, anxieux
+  Carrière  : Psychologue — 31 j. trav.  salaire ×1.05
+  Diplôme   : psychologie (Très bien)
+  Finances  : $113  │  Pension : $0/j
+  Santé     : HP=30  │  Stress=0
+  Mental    : final=0  moy=51  min=0
+  Vie soc.  : Coup de coeur avec Xabi  │  Enfants : 0  │  Animal : Aucun
+  Maladies  : asthme, rhume
+  Compét.   : cuisine=8  social=2  travail=2
+  Besoins   : faim= 31  énergie=  0  hygiene= 14  fun= 15  social= 10  vessie=  0
 
-── Simulation #8 : Efflan ──────────────────────
-  Survie     : 46 jours  |  Fin : 🕯 Vieillesse  |  1 génération(s)
-  Travail    : Architecte en chef (23 j)  |  Diplôme : architecture (Très bien)
-  Argent     : $4290  |  HP : 62  |  Mental : 0
-  Relation   : Marié(e) avec Benjamin  |  Enfants : 1  |  Animal : Aucun
-  Besoins    : faim= 12  énergie= 39  hygiene= 25  fun= 28  social= 45  vessie=  0
+  Actions totales : 467
+    manger                   87   18%  ███
+    douche                   60   12%  ██
+    toilettes                55   11%  ██
+    mediter                  55   11%  ██
+    medecin                  44    9%  █
+    dormir                   41    8%  █
+    appel                    41    8%  █
+    travailler_partiel       23    4%  
 
-── Simulation #9 : Harper ──────────────────────
-  Survie     : 10 jours  |  Fin : 🕯 Vieillesse  |  6 génération(s)
-  Travail    : Aucun (0 j)  |  Diplôme : Aucun
-  Argent     : $9264  |  HP : 100  |  Mental : 80
-  Relation   : Célibataire  |  Enfants : 2  |  Animal : Aucun
-  Besoins    : faim= 80  énergie= 80  hygiene= 70  fun= 60  social= 60  vessie= 80
+  Historique :
+    J010 [07.00→24.25] m= 85 │ postuler  inscrire  travailler_partiel  toilettes  manger  douche  mediter  travailler_partiel  manger×2  dormir
+    J011 [07.00→23.50] m= 67 │ toilettes  manger  douche  mediter×3  appel×2  mediter  appel  etudier  toilettes  manger×2  douche  manger  dormir
+    J012 [07.00→23.50] m= 52 │ toilettes  manger  douche  appel  travailler_partiel  manger  toilettes  travailler_partiel  manger  douche  manger  appel×2  dormir
+    J013 [07.00→23.50] m= 49 │ toilettes  manger  douche  mediter  travailler_partiel  manger  mediter  travailler_partiel  toilettes  manger  douche  flirter×2  manger  dormir
+    J014 [07.00→24.00] m= 64 │ manger  douche  medecin  toilettes  mediter  travailler_partiel  manger  mediter  travailler_partiel  toilettes  manger  douche  mediter  appel  manger  dormir
+    J015 [07.00→23.00] m= 86 │ toilettes  manger  douche  mediter  appel  travailler_partiel  manger  mediter×2  appel  travailler_partiel  toilettes  manger  douche  dormir
+    J016 [07.00→24.50] m= 98 │ manger  douche  medecin  toilettes  mediter  appel  manger  mediter  appel  etudier  toilettes  manger  douche  sieste  manger  dormir
+    J017 [07.00→23.75] m= 56 │ manger  douche  medicament  sieste  manger  mediter×4  lire×3  manger  douche  lire  snack  toilettes  dormir
+    J018 [07.00→23.50] m= 43 │ manger  douche  medecin  toilettes  appel×2  travailler_partiel  manger  travailler_partiel  toilettes  manger  douche  appel  dormir
+    J019 [07.00→23.00] m= 56 │ toilettes  manger  douche  mediter×2  appel  travailler_partiel  manger  travailler_partiel  toilettes  manger  douche  mediter  appel  dormir
+    J020 [07.00→23.00] m= 62 │ toilettes  manger  douche  travailler_partiel  manger  mediter  travailler_partiel  toilettes  manger  douche  flirter  adopter  appel  dormir
+    J021 [07.00→24.00] m= 84 │ toilettes  manger  mediter  travailler_partiel  manger  douche  mediter×3  appel  etudier  manger  toilettes  dormir
+    J022 [07.00→23.00] m= 85 │ toilettes  manger  douche  mediter  appel×2  travailler_partiel  manger  douche  travailler_partiel  toilettes  manger  appel  dormir
+    J023 [07.00→23.25] m= 99 │ toilettes  manger  douche  mediter×2  travailler_partiel  manger  mediter  appel  travailler_partiel  toilettes  douche  nourrir  jouer_pet  manger  dormir
+    J024 [07.00→18.50] m=100 │ toilettes  manger  douche  mediter  appel  etudier  toilettes  manger  appel  dormir
+    J025 [07.00→23.25] m=100 │ manger  toilettes  douche  mediter×2  travailler_partiel  manger  douche  mediter  travailler_partiel  toilettes  nourrir  jouer_pet  manger  appel  dormir
+    J026 [07.00→17.25] m=100 │ toilettes  manger  douche  mediter  appel  etudier  manger  dormir
+    J027 [07.00→11.75] m= 91 │ toilettes  manger  douche  appel  manger  appel  dormir
+    J028 [07.00→30.75] m= 86 │ toilettes  manger  douche  mediter×3  postuler  travailler  toilettes  douche  mediter×2  travailler  manger  douche  toilettes  dormir
+    J029 [07.00→23.00] m= 71 │ manger  mediter×3  appel  toilettes  douche  appel  travailler  manger  toilettes  appel  mediter  dormir
+    J030 [07.00→30.50] m= 72 │ manger  douche  toilettes  mediter×2  appel  travailler  manger  douche  toilettes  mediter  travailler  manger  douche  dormir
+    J031 [07.00→20.00] m= 46 │ toilettes  manger  douche  mediter×2  appel  travailler  toilettes  manger  dormir
+    J032 [07.00→23.50] m= 45 │ toilettes  manger  douche  mediter×4  appel×2  travailler  toilettes  douche  manger  appel  dormir
+    J033 [07.00→16.75] m= 63 │ toilettes  manger  douche  acheter_maison  sieste  adopter  flirter×2  manger  dormir
+    J034 [07.00→12.75] m= 73 │ toilettes  manger  douche  rendezvous  manger  dormir
+    J035 [07.00→18.50] m= 74 │ toilettes  manger  douche  travailler  toilettes  manger  douche  dormir
+    J036 [07.00→08.75] m= 50 │ toilettes  manger  douche  dormir
+    J037 [07.00→13.75] m= 16 │ manger  toilettes  douche  appel  mediter  appel×2  manger  douche  dormir
+    J038 [07.00→08.75] m=  0 │ toilettes  manger  douche  dormir
+    J039 [07.00→09.75] m=  0 │ toilettes  manger  douche  appel  dormir
+    J040 [07.00→10.75] m=  0 │ toilettes  manger  douche  appel  manger  dormir
+    J041 [07.00→08.75] m=  0 │ toilettes  manger  douche  dormir
+    J042 [07.00→20.25] m=  0 │ medecin×6  manger  medecin×5  snack×3  douche  dormir
+    J043 [07.00→08.75] m=  0 │ snack×4  douche  snack  dormir
+    J044 [07.00→08.50] m=  0 │ snack×4  douche  dormir
+    J045 [07.00→08.75] m=  0 │ snack×4  douche  snack  dormir
+    J046 [07.00→23.75] m=  0 │ medecin×15  manger  toilettes  douche  dormir
+    J047 [07.00→23.75] m=  0 │ medecin×15  manger  toilettes  douche  dormir
+    J048 [07.00→08.00] m=  0 │ snack×4  dormir
+    J049 [07.00→08.50] m=  0 │ manger  douche  dormir
+    J050 [07.00→10.00] m=  0 │ medicament×2  manger  douche  manger  dormir
 
-── Simulation #10 : Zayneb ──────────────────────
-  Survie     : 46 jours  |  Fin : 🕯 Vieillesse  |  2 génération(s)
-  Travail    : Psychologue (23 j)  |  Diplôme : psychologie (Très bien)
-  Argent     : $5403  |  HP : 76  |  Mental : 47
-  Relation   : Marié(e) avec Marguerite  |  Enfants : 3  |  Animal : Aucun
-  Besoins    : faim= 31  énergie= 29  hygiene=  0  fun= 32  social= 56  vessie=  0
-
-── Simulation #11 : Benjamin ──────────────────────
-  Survie     : 10 jours  |  Fin : 🕯 Vieillesse  |  6 génération(s)
-  Travail    : Aucun (0 j)  |  Diplôme : Aucun
-  Argent     : $1936  |  HP : 100  |  Mental : 80
-  Relation   : Célibataire  |  Enfants : 2  |  Animal : Aucun
-  Besoins    : faim= 80  énergie= 80  hygiene= 70  fun= 60  social= 60  vessie= 80
-
-── Simulation #12 : Malo ──────────────────────
-  Survie     : 10 jours  |  Fin : 🕯 Vieillesse  |  6 génération(s)
-  Travail    : Aucun (0 j)  |  Diplôme : Aucun
-  Argent     : $20  |  HP : 100  |  Mental : 80
-  Relation   : Célibataire  |  Enfants : 2  |  Animal : Aucun
-  Besoins    : faim= 80  énergie= 80  hygiene= 70  fun= 60  social= 60  vessie= 80
-
-── Simulation #13 : Santiago ──────────────────────
-  Survie     : 10 jours  |  Fin : 🕯 Vieillesse  |  6 génération(s)
-  Travail    : Aucun (0 j)  |  Diplôme : Aucun
-  Argent     : $2137  |  HP : 100  |  Mental : 80
-  Relation   : Célibataire  |  Enfants : 2  |  Animal : Aucun
-  Besoins    : faim= 80  énergie= 80  hygiene= 70  fun= 60  social= 60  vessie= 80
-
-── Simulation #14 : Henry ──────────────────────
-  Survie     : 45 jours  |  Fin : 🕯 Vieillesse  |  1 génération(s)
-  Travail    : Psychologue (32 j)  |  Diplôme : psychologie (Très bien)
-  Argent     : $3870  |  HP : 74  |  Mental : 50
-  Relation   : Marié(e) avec Lise  |  Enfants : 3  |  Animal : Aucun
-  ⚠ Maladies : rhume
-  Besoins    : faim= 26  énergie= 34  hygiene= 53  fun= 32  social= 21  vessie= 22
-
-── Simulation #15 : Roxane ──────────────────────
-  Survie     : 10 jours  |  Fin : 🕯 Vieillesse  |  6 génération(s)
-  Travail    : Aucun (0 j)  |  Diplôme : Aucun
-  Argent     : $4254  |  HP : 100  |  Mental : 80
-  Relation   : Célibataire  |  Enfants : 2  |  Animal : Aucun
-  Besoins    : faim= 80  énergie= 80  hygiene= 70  fun= 60  social= 60  vessie= 80
-
-── Simulation #16 : Prune ──────────────────────
-  Survie     : 50 jours  |  Fin : 🕯 Vieillesse  |  1 génération(s)
-  Travail    : Architecte en chef (22 j)  |  Diplôme : architecture (Félicitations du jury)
-  Argent     : $10  |  HP : 0  |  Mental : 0
-  Relation   : Marié(e) avec Ariel  |  Enfants : 0  |  Animal : Aucun
-  ⚠ Maladies : diabete
-  Besoins    : faim=  4  énergie=  4  hygiene= 37  fun=  0  social=  0  vessie=  0
-
-── Simulation #17 : Lilly ──────────────────────
-  Survie     : 54 jours  |  Fin : 🕯 Vieillesse  |  1 génération(s)
-  Travail    : Biologiste (28 j)  |  Diplôme : sciences (Très bien)
-  Argent     : $35  |  HP : 26  |  Mental : 0
-  Relation   : En couple avec Nora  |  Enfants : 0  |  Animal : Aucun
-  ⚠ Maladies : hypertension
-  Besoins    : faim=  5  énergie=  5  hygiene= 53  fun= 31  social= 20  vessie=  0
-
-── Simulation #18 : Aziliz ──────────────────────
-  Survie     : 10 jours  |  Fin : 🕯 Vieillesse  |  6 génération(s)
-  Travail    : Aucun (0 j)  |  Diplôme : Aucun
-  Argent     : $4527  |  HP : 100  |  Mental : 80
-  Relation   : Célibataire  |  Enfants : 2  |  Animal : Aucun
-  Besoins    : faim= 80  énergie= 80  hygiene= 70  fun= 60  social= 60  vessie= 80
-
-── Simulation #19 : Ramzi ──────────────────────
-  Survie     : 53 jours  |  Fin : 🕯 Vieillesse  |  3 génération(s)
-  Travail    : Médecin (23 j)  |  Diplôme : medecine (Très bien)
-  Argent     : $5146  |  HP : 44  |  Mental : 0
-  Relation   : Célibataire  |  Enfants : 0  |  Animal : Aucun
-  ⚠ Maladies : arthrite
-  Besoins    : faim= 31  énergie= 41  hygiene= 16  fun= 27  social= 16  vessie=  0
-
-── Simulation #20 : Malika ──────────────────────
-  Survie     : 62 jours  |  Fin : 💀 Santé  |  1 génération(s)
-  Travail    : Biologiste (20 j)  |  Diplôme : sciences (Très bien)
-  Argent     : $3990  |  HP : 0  |  Mental : 0
-  Relation   : Célibataire  |  Enfants : 0  |  Animal : Aucun
-  ⚠ Maladies : arthrite, cancer_poumon
-  Besoins    : faim= 86  énergie=  0  hygiene=  0  fun= 34  social=  0  vessie=  0
-
-── Simulation #21 : Santiago ──────────────────────
-  Survie     : 45 jours  |  Fin : 🕯 Vieillesse  |  1 génération(s)
-  Travail    : Psychologue (38 j)  |  Diplôme : psychologie (Très bien)
-  Argent     : $3889  |  HP : 78  |  Mental : 57
-  Relation   : Marié(e) avec Abdoulaye  |  Enfants : 1  |  Animal : Aucun
-  Besoins    : faim=  8  énergie= 23  hygiene= 40  fun= 16  social= 11  vessie= 29
-
-── Simulation #22 : Gwénolé ──────────────────────
-  Survie     : 10 jours  |  Fin : 🕯 Vieillesse  |  6 génération(s)
-  Travail    : Aucun (0 j)  |  Diplôme : Aucun
-  Argent     : $7016  |  HP : 100  |  Mental : 80
-  Relation   : Célibataire  |  Enfants : 2  |  Animal : Aucun
-  Besoins    : faim= 80  énergie= 80  hygiene= 70  fun= 60  social= 60  vessie= 80
-
-── Simulation #23 : Skye ──────────────────────
-  Survie     : 10 jours  |  Fin : 🕯 Vieillesse  |  6 génération(s)
-  Travail    : Aucun (0 j)  |  Diplôme : Aucun
-  Argent     : $3132  |  HP : 100  |  Mental : 80
-  Relation   : Célibataire  |  Enfants : 2  |  Animal : Aucun
-  Besoins    : faim= 80  énergie= 80  hygiene= 70  fun= 60  social= 60  vessie= 80
-
-── Simulation #24 : Julia ──────────────────────
-  Survie     : 10 jours  |  Fin : 🕯 Vieillesse  |  6 génération(s)
-  Travail    : Aucun (0 j)  |  Diplôme : Aucun
-  Argent     : $20  |  HP : 100  |  Mental : 80
-  Relation   : Célibataire  |  Enfants : 1  |  Animal : Aucun
-  Besoins    : faim= 80  énergie= 80  hygiene= 70  fun= 60  social= 60  vessie= 80
-
-── Simulation #25 : Laurence ──────────────────────
-  Survie     : 48 jours  |  Fin : 🕯 Vieillesse  |  1 génération(s)
-  Travail    : Banquier (24 j)  |  Diplôme : finance (Très bien)
-  Argent     : $20  |  HP : 44  |  Mental : 0
-  Relation   : Marié(e) avec Julia  |  Enfants : 0  |  Animal : Aucun
-  ⚠ Maladies : hypertension
-  Besoins    : faim= 31  énergie= 22  hygiene= 14  fun= 35  social=  0  vessie=  0
-
-── Simulation #26 : Paul ──────────────────────
-  Survie     : 45 jours  |  Fin : 🕯 Vieillesse  |  1 génération(s)
-  Travail    : Coach sportif (20 j)  |  Diplôme : sport_science (Bien)
-  Argent     : $1565  |  HP : 91  |  Mental : 0
-  Relation   : Marié(e) avec Samuel  |  Enfants : 1  |  Animal : Aucun
-  Besoins    : faim=  8  énergie= 29  hygiene= 26  fun=  1  social= 44  vessie= 37
-
-── Simulation #27 : Philippe ──────────────────────
-  Survie     : 10 jours  |  Fin : 🕯 Vieillesse  |  6 génération(s)
-  Travail    : Aucun (0 j)  |  Diplôme : Aucun
-  Argent     : $6921  |  HP : 100  |  Mental : 80
-  Relation   : Célibataire  |  Enfants : 2  |  Animal : Aucun
-  Besoins    : faim= 80  énergie= 80  hygiene= 70  fun= 60  social= 60  vessie= 80
-
-── Simulation #28 : Badr ──────────────────────
-  Survie     : 47 jours  |  Fin : 🕯 Vieillesse  |  1 génération(s)
-  Travail    : Banquier (44 j)  |  Diplôme : finance (Très bien)
-  Argent     : $135  |  HP : 99  |  Mental : 0
-  Relation   : Marié(e) avec Yazid  |  Enfants : 1  |  Animal : Aucun
-  ⚠ Maladies : diabete
-  Besoins    : faim=  4  énergie= 24  hygiene= 44  fun= 17  social= 16  vessie=  0
-
-── Simulation #29 : Fanny ──────────────────────
-  Survie     : 10 jours  |  Fin : 🕯 Vieillesse  |  6 génération(s)
-  Travail    : Aucun (0 j)  |  Diplôme : Aucun
-  Argent     : $7350  |  HP : 100  |  Mental : 80
-  Relation   : Célibataire  |  Enfants : 1  |  Animal : Aucun
-  Besoins    : faim= 80  énergie= 80  hygiene= 70  fun= 60  social= 60  vessie= 80
-
-── Simulation #30 : Gaël ──────────────────────
-  Survie     : 10 jours  |  Fin : 🕯 Vieillesse  |  6 génération(s)
-  Travail    : Aucun (0 j)  |  Diplôme : Aucun
-  Argent     : $2911  |  HP : 100  |  Mental : 80
-  Relation   : Célibataire  |  Enfants : 1  |  Animal : Aucun
-  Besoins    : faim= 80  énergie= 80  hygiene= 70  fun= 60  social= 60  vessie= 80
-
-==============================================================
+======================================================================
   STATISTIQUES GLOBALES
-==============================================================
-  Survie moyenne : 28.0 jours
-  Survie max     : 62 jours  (sim #20)
-  Survie min     : 10 jours  (sim #1)
-  Causes de fin  : vieillesse ×28  santé ×2
-  Top jobs       : Psychologue ×4  |  Architecte en chef ×3  |  Biologiste ×2  |  Banquier ×2  |  Médecin ×1
-  Top diplômes   : psychologie ×4  |  architecture ×3  |  sciences ×2  |  finance ×2  |  medecine ×1
-  Argent moyen   : $2927
-  Mariés à fin   : 9/30
-  Burnout actif  : 0/30
-  Maladies finales: hypertension ×3  arthrite ×3  rhume ×2  diabete ×2  cancer_poumon ×1
-==============================================================
+======================================================================
+  Survie         : moy=36.0j  max=51j (#3)  min=10j (#1)
+  Causes de fin  : vieillesse ×3
+  Mental final   : moy=26.7  min=0  max=80
+  Mental (vie)   : moy_moy=58.7  moy_min=0.0
+  Stress final   : moy=0.0  max=0
+  Pensions       : moy=$232/j  min=$232/j  max=$232/j  (1/3 retraités)
+  Argent final   : moy=$2730  min=$113  max=$4985
+  Top jobs       : Dir. commercial ×1  │  Psychologue ×1
+  Top diplômes   : commerce ×1  │  psychologie ×1
+  Top traits     : curieux ×2  │  anxieux ×2  │  artistique ×1  │  ambitieux ×1
+  Mariés         : 1/3
+  Burnout actif  : 0/3
+  Maladies       : asthme ×1  rhume ×1
+
+  Top actions (toutes sims, 1298 total) :
+    manger                   261  (20%)
+    toilettes                176  (13%)
+    douche                   176  (13%)
+    mediter                  173  (13%)
+    appel                    133  (10%)
+    dormir                   116  (8%)
+    medecin                   53  (4%)
+    travailler                46  (3%)
+    travailler_partiel        31  (2%)
+    sieste                    22  (1%)
+======================================================================
