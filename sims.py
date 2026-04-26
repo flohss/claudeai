@@ -3420,6 +3420,52 @@ def autopilot_loop(sim, speed=0.8):
     finally:
         AUTOPILOT = False
 
+def _apply_legacy(heir, parent, chosen_child):
+    """Applique tous les bonus d'héritage parent → heir. Retourne la liste des messages."""
+    bonuses = []
+
+    # — Argent : 50 % des économies + bonus devoirs —
+    study_bonus = chosen_child.study_score * 20
+    heir.money = parent.money // 2 + study_bonus
+    if study_bonus > 0:
+        bonuses.append(f"📚 Bonus devoirs : +${study_bonus}")
+
+    # — Compétences : 50 % —
+    for sk in heir.skills.levels:
+        heir.skills.levels[sk] = parent.skills.levels[sk] // 2
+
+    # — Logement hérité —
+    if parent.housing:
+        heir.housing = dict(parent.housing)
+        heir.housing["days_missed"] = 0
+        prop = get_property_data(parent.housing["property_id"])
+        if prop:
+            bonuses.append(f"🏠 Logement hérité : {prop[2]} {prop[1]}")
+
+    # — Trait hérité (60 %) —
+    if parent.traits.active and random.random() < 0.60:
+        candidates = [t for t in parent.traits.active if t not in heir.traits.active]
+        if candidates:
+            t = random.choice(candidates)
+            old = random.choice(list(heir.traits.active))
+            heir.traits.active.discard(old)
+            heir.traits.active.add(t)
+            t_name, t_emoji, _ = TRAIT_DEFS[t]
+            bonuses.append(f"🧬 Trait hérité : {t_emoji} {t_name}")
+
+    # — Bourse familiale si parent diplômé —
+    if parent.education.has_diploma():
+        dom = parent.education.diploma_domain
+        sessions_req = STUDY_DOMAINS[dom][2]
+        cost_per     = STUDY_DOMAINS[dom][3]
+        scholarship  = (sessions_req // 2) * cost_per
+        heir.money  += scholarship
+        d_lbl, d_emoji, _, _ = STUDY_DOMAINS[dom]
+        bonuses.append(f"🎓 Bourse {d_emoji} {d_lbl} : +${scholarship}")
+
+    return bonuses
+
+
 def ai_offer_legacy(sim):
     """Choisit l'héritier adulte le plus âgé (le plus expérimenté)."""
     adult_children = [c for c in sim.children if c.days >= 15]
@@ -3428,16 +3474,13 @@ def ai_offer_legacy(sim):
     chosen = max(adult_children, key=lambda c: c.days)
     heir = Sim(chosen.name)
     heir.age = 10
-    study_bonus = chosen.study_score * 20   # 20$ par session d'aide reçue
-    heir.money = sim.money // 2 + study_bonus
     heir.orientation = sim.orientation
-    for sk in heir.skills.levels:
-        heir.skills.levels[sk] = sim.skills.levels[sk] // 2
     heir.children = [c for c in sim.children if c.name != chosen.name]
+    bonuses = _apply_legacy(heir, sim, chosen)
     slow_print(f"\n {C.YELLOW}[IA] La vie continue avec {chosen.name} — génération suivante !{C.RESET}", 0.03)
-    if study_bonus > 0:
-        slow_print(f" {C.GREEN}Grâce aux devoirs partagés : +${study_bonus} d'avance au départ{C.RESET}", 0.02)
-    slow_print(f" {C.GRAY}Héritage : ${heir.money} | Compétences héritées à 50 %{C.RESET}", 0.02)
+    for b in bonuses:
+        slow_print(f" {C.GRAY}{b}{C.RESET}", 0.02)
+    slow_print(f" {C.GRAY}Argent de départ : ${heir.money} | Compétences héritées à 50 %{C.RESET}", 0.02)
     time.sleep(1)
     return heir
 
@@ -3803,12 +3846,27 @@ def offer_legacy(sim):
     if not adult_children:
         return None
 
+    # Prévisualisation de l'héritage pour chaque enfant
+    def _preview(child):
+        parts = [f"${sim.money // 2 + child.study_score * 20}"]
+        if sim.housing:
+            prop = get_property_data(sim.housing["property_id"])
+            if prop:
+                parts.append(f"{prop[2]} {prop[1]}")
+        if parent_traits := list(sim.traits.active):
+            parts.append(f"trait possible")
+        if sim.education.has_diploma():
+            d_lbl, d_emoji, _, _ = STUDY_DOMAINS[sim.education.diploma_domain]
+            parts.append(f"bourse {d_emoji}")
+        return "  ·  ".join(parts)
+
     print(f" {C.BOLD}{C.YELLOW}{'═' * 42}{C.RESET}")
     slow_print(f" {sim.name} laisse derrière lui/elle une famille.", 0.03)
     slow_print(f" Veux-tu continuer l'aventure avec un(e) de ses enfants ?", 0.03)
     print()
     for i, child in enumerate(adult_children, 1):
-        print(f" {C.CYAN}[{i}]{C.RESET} {child.name}")
+        preview = _preview(child)
+        print(f" {C.CYAN}[{i}]{C.RESET} {child.name:<14} {C.GRAY}({preview}){C.RESET}")
     print(f" {C.CYAN}[0]{C.RESET} Non, terminer la partie")
     print(f" {C.BOLD}{C.YELLOW}{'═' * 42}{C.RESET}\n")
 
@@ -3818,15 +3876,13 @@ def offer_legacy(sim):
             chosen = adult_children[choice - 1]
             heir = Sim(chosen.name)
             heir.age = 10
-            study_bonus = chosen.study_score * 20
-            heir.money = sim.money // 2 + study_bonus
             heir.orientation = sim.orientation
-            for sk in heir.skills.levels:
-                heir.skills.levels[sk] = sim.skills.levels[sk] // 2
             heir.children = [c for c in sim.children if c.name != chosen.name]
+            bonuses = _apply_legacy(heir, sim, chosen)
             slow_print(f"\n {C.GREEN}Bienvenue {chosen.name} ! Tu prends le relais de {sim.name}.{C.RESET}", 0.03)
-            bonus_str = f" + ${study_bonus} (devoirs)" if study_bonus > 0 else ""
-            slow_print(f" {C.GRAY}Héritage : ${heir.money}{bonus_str} | Compétences héritées à 50 %{C.RESET}", 0.02)
+            for b in bonuses:
+                slow_print(f" {C.GRAY}{b}{C.RESET}", 0.02)
+            slow_print(f" {C.GRAY}Argent de départ : ${heir.money} | Compétences héritées à 50 %{C.RESET}", 0.02)
             time.sleep(1)
             return heir
     except (ValueError, EOFError, KeyboardInterrupt):
