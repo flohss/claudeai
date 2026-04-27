@@ -22,6 +22,7 @@ from moiai.condenser import condense_narrative, summarize_old_conversations
 from moiai.extractor import extract_and_store, extract_from_messages
 from moiai.importer import load_file
 from moiai.memory import (
+    CERTAINTY_BADGE,
     delete_fact,
     delete_profile_key,
     get_all_facts,
@@ -85,6 +86,14 @@ def _show_profile() -> None:
     console.print()
 
 
+_CERTAINTY_COLOR = {
+    "certain":   "white",
+    "probable":  "yellow",
+    "hypothèse": "dim",
+    "réfuté":    "red",
+}
+
+
 def _show_facts() -> None:
     facts = get_all_facts()
     if not facts:
@@ -95,13 +104,25 @@ def _show_facts() -> None:
     for f in facts:
         by_cat.setdefault(f["category"], []).append(f)
 
+    console.print(
+        "[dim]● certain  ◐ probable  ○ hypothèse  ✕ réfuté[/dim]\n"
+    )
     for cat, items in by_cat.items():
         table = Table(show_header=True, box=None, padding=(0, 1))
         table.add_column("ID", style="dim", width=5)
+        table.add_column(" ", width=2, no_wrap=True)
         table.add_column("Fait")
         table.add_column("✓", style="dim", width=4, justify="right")
         for f in items:
-            table.add_row(str(f["id"]), f["fact"], str(f["confirmed"]))
+            certainty = f.get("certainty", "certain")
+            badge = CERTAINTY_BADGE.get(certainty, "●")
+            color = _CERTAINTY_COLOR.get(certainty, "white")
+            table.add_row(
+                str(f["id"]),
+                f"[{color}]{badge}[/{color}]",
+                f"[{color}]{f['fact']}[/{color}]",
+                str(f["confirmed"]),
+            )
         console.print(Panel(table, title=f"[bold cyan]{cat}[/bold cyan]", border_style="dim"))
 
     console.print(f"[dim]{len(facts)} faits au total[/dim]\n")
@@ -149,10 +170,19 @@ def _handle_search(query: str) -> None:
     if facts:
         table = Table(show_header=True, box=None, padding=(0, 1))
         table.add_column("ID", style="dim", width=5)
+        table.add_column(" ", width=2, no_wrap=True)
         table.add_column("Catégorie", style="cyan", width=16)
         table.add_column("Fait")
         for f in facts:
-            table.add_row(str(f["id"]), f["category"], f["fact"])
+            certainty = f.get("certainty", "certain")
+            badge = CERTAINTY_BADGE.get(certainty, "●")
+            color = _CERTAINTY_COLOR.get(certainty, "white")
+            table.add_row(
+                str(f["id"]),
+                f"[{color}]{badge}[/{color}]",
+                f["category"],
+                f"[{color}]{f['fact']}[/{color}]",
+            )
         console.print(Panel(table, title=f"[bold]{len(facts)} fait(s) trouvé(s)[/bold]", border_style="dim"))
 
     console.print()

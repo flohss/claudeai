@@ -21,6 +21,13 @@ def _connect() -> sqlite3.Connection:
     return conn
 
 
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Add columns introduced after initial schema without breaking existing DBs."""
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(facts)")}
+    if "certainty" not in cols:
+        conn.execute("ALTER TABLE facts ADD COLUMN certainty TEXT NOT NULL DEFAULT 'certain'")
+
+
 def init_db() -> None:
     with _connect() as conn:
         conn.executescript("""
@@ -50,6 +57,7 @@ def init_db() -> None:
                 category  TEXT NOT NULL,
                 fact      TEXT NOT NULL,
                 source    TEXT,
+                certainty TEXT    NOT NULL DEFAULT 'certain',
                 confirmed INTEGER DEFAULT 1,
                 timestamp TEXT    NOT NULL
             );
@@ -60,6 +68,7 @@ def init_db() -> None:
                 timestamp TEXT NOT NULL
             );
         """)
+        _migrate(conn)
 
 
 # ── Conversations ──────────────────────────────────────────────────────────────
@@ -172,33 +181,58 @@ def _fact_is_duplicate(fact_text: str, existing: list[str]) -> bool:
     return False
 
 
+# Ordered from most to least certain — used for display and context priority
+CERTAINTY_LEVELS = ("certain", "probable", "hypothèse", "réfuté")
+
+# Emoji badges shown in CLI for each certainty level
+CERTAINTY_BADGE = {
+    "certain":   "●",
+    "probable":  "◐",
+    "hypothèse": "○",
+    "réfuté":    "✕",
+}
+
+
 def add_facts(facts: list[dict]) -> int:
     """
     Insert facts, skipping near-duplicates. Returns the number actually inserted.
-    facts: list of {category, fact, source?}
+    facts: list of {category, fact, certainty?, source?}
+    certainty: 'certain' | 'probable' | 'hypothèse' | 'réfuté'
     """
     now = datetime.now().isoformat()
     with _connect() as conn:
-        existing_rows = conn.execute("SELECT fact FROM facts").fetchall()
-        existing = [r["fact"] for r in existing_rows]
+        existing_rows = conn.execute("SELECT fact, certainty FROM facts").fetchall()
+        existing_texts = [r["fact"] for r in existing_rows]
 
         inserted = 0
         for f in facts:
             text = f.get("fact", "").strip()
             if not text or not f.get("category"):
                 continue
-            if _fact_is_duplicate(text, existing):
-                # Bump confirmed count instead
+            certainty = f.get("certainty", "certain")
+            if certainty not in CERTAINTY_LEVELS:
+                certainty = "certain"
+
+            if _fact_is_duplicate(text, existing_texts):
+                # On a near-match: update certainty if new one is more certain, bump confirmed
                 conn.execute(
-                    "UPDATE facts SET confirmed = confirmed + 1 WHERE fact = ?",
-                    (text,),
+                    "UPDATE facts SET confirmed = confirmed + 1, "
+                    "certainty = CASE "
+                    "  WHEN certainty = 'réfuté' THEN certainty "
+                    "  WHEN ? = 'certain' THEN 'certain' "
+                    "  WHEN ? = 'probable' AND certainty = 'hypothèse' THEN 'probable' "
+                    "  ELSE certainty END "
+                    "WHERE fact = ?",
+                    (certainty, certainty, text),
                 )
                 continue
+
             conn.execute(
-                "INSERT INTO facts (category, fact, source, timestamp) VALUES (?, ?, ?, ?)",
-                (f["category"], text, f.get("source", ""), now),
+                "INSERT INTO facts (category, fact, certainty, source, timestamp) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (f["category"], text, certainty, f.get("source", ""), now),
             )
-            existing.append(text)
+            existing_texts.append(text)
             inserted += 1
     return inserted
 
@@ -206,7 +240,8 @@ def add_facts(facts: list[dict]) -> int:
 def get_all_facts() -> list[dict]:
     with _connect() as conn:
         rows = conn.execute(
-            "SELECT id, category, fact, confirmed, timestamp FROM facts ORDER BY confirmed DESC, timestamp DESC"
+            "SELECT id, category, fact, certainty, confirmed, timestamp FROM facts "
+            "ORDER BY confirmed DESC, timestamp DESC"
         ).fetchall()
     return [dict(r) for r in rows]
 
@@ -222,7 +257,7 @@ def search_facts(query: str) -> list[dict]:
     q = f"%{query.lower()}%"
     with _connect() as conn:
         fact_rows = conn.execute(
-            "SELECT id, category, fact, confirmed, timestamp FROM facts "
+            "SELECT id, category, fact, certainty, confirmed, timestamp FROM facts "
             "WHERE LOWER(fact) LIKE ? OR LOWER(category) LIKE ? "
             "ORDER BY confirmed DESC",
             (q, q),
@@ -330,17 +365,23 @@ def build_smart_context(recent_messages: list[dict] | None = None) -> str:
         else:
             scored = all_facts  # already sorted by confirmed DESC
 
+        # Exclude réfuté facts from active context (keep them in DB only)
+        scored = [f for f in scored if f.get("certainty") != "réfuté"]
+
         # Inject up to 60 facts; the most relevant/confirmed ones first
         top = scored[:60]
-        by_cat: dict[str, list[str]] = {}
+        by_cat: dict[str, list[tuple[str, str]]] = {}
         for f in top:
-            by_cat.setdefault(f["category"], []).append(f["fact"])
+            certainty = f.get("certainty", "certain")
+            by_cat.setdefault(f["category"], []).append((f["fact"], certainty))
 
         lines.append("## Faits mémorisés")
+        lines.append("(● certain  ◐ probable  ○ hypothèse à explorer)")
         for cat, items in by_cat.items():
             lines.append(f"**{cat}**")
-            for item in items:
-                lines.append(f"  - {item}")
+            for fact_text, certainty in items:
+                badge = CERTAINTY_BADGE.get(certainty, "●")
+                lines.append(f"  {badge} {fact_text}")
         lines.append("")
 
     if not lines:

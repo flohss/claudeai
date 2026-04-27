@@ -1,6 +1,12 @@
 """
 Profile extraction engine — after each exchange, ask Claude to pull personal facts
 from the conversation and merge them into persistent memory.
+
+Each fact carries a certainty level:
+  certain   — stated as established fact ("je suis ingénieur")
+  probable  — likely but not fully confirmed ("j'ai tendance à procrastiner")
+  hypothèse — self-hypothesis, suspicion, possible diagnosis ("je pense être TDAH")
+  réfuté    — explicitly retracted or contradicted
 """
 
 import json
@@ -22,30 +28,56 @@ def _get_client() -> anthropic.Anthropic:
 
 _EXTRACTION_PROMPT = """\
 Tu es un moteur d'extraction silencieux. Analyse l'échange ci-dessous et extrais \
-toutes les informations personnelles explicites ou implicites sur l'utilisateur.
+toutes les informations personnelles sur l'utilisateur.
 
-Retourne UNIQUEMENT un objet JSON valide avec cette structure exacte :
+Retourne UNIQUEMENT un objet JSON valide :
 {
   "profile_updates": {
     "clé": "valeur"
   },
   "facts": [
-    {"category": "catégorie", "fact": "fait précis en une phrase"}
+    {
+      "category": "catégorie",
+      "fact": "fait précis rédigé avec le bon degré de certitude",
+      "certainty": "certain|probable|hypothèse|réfuté"
+    }
   ]
 }
 
-Catégories possibles (non exhaustif) : identité, famille, travail, santé, loisirs, \
-valeurs, habitudes, projets, finances, localisation, relations, éducation, croyances.
+Catégories possibles : identité, famille, travail, santé, loisirs, valeurs, \
+habitudes, projets, finances, localisation, relations, éducation, croyances, \
+psychologie, alimentation, humeur.
 
-Règles :
-- N'invente rien, extrais uniquement ce qui est dit.
-- profile_updates = informations stables (nom, âge, ville, profession…).
-- facts = tout fait utile à mémoriser, même ponctuel.
-- Si rien à extraire, retourne {"profile_updates": {}, "facts": []}.
+Règle critique sur la certitude — tu DOIS distinguer :
+- "certain"   : affirmé clairement sans nuance ("je suis développeur", "j'ai 32 ans")
+- "probable"  : exprimé comme tendance ou quasi-certitude ("j'ai souvent du mal à dormir")
+- "hypothèse" : auto-hypothèse, suspicion, diagnostic non confirmé, doute sur soi
+                ("je pense être TDAH", "j'ai peut-être de l'anxiété", "je crois que je suis introverti")
+- "réfuté"    : information explicitement annulée, corrigée ou contredite
+
+Règles supplémentaires :
+- Le texte du fait DOIT refléter la certitude : ne jamais écrire "a le TDAH" si l'utilisateur
+  dit "je pense être TDAH" → écrire "pense peut-être avoir le TDAH (non diagnostiqué)"
+- profile_updates = uniquement les faits "certain" et stables (nom, âge, ville, profession…)
+- N'invente rien, n'infère pas au-delà de ce qui est dit.
+- Si rien à extraire : {"profile_updates": {}, "facts": []}.
 - Aucun texte hors du JSON.
 
 Échange à analyser :
 """
+
+
+def _parse_json(raw: str) -> dict:
+    raw = raw.strip()
+    if raw.startswith("```"):
+        raw = raw.split("```")[1]
+        if raw.startswith("json"):
+            raw = raw[4:]
+        raw = raw.strip()
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
 
 
 def extract_and_store(user_msg: str, assistant_msg: str) -> int:
@@ -59,51 +91,52 @@ def extract_and_store(user_msg: str, assistant_msg: str) -> int:
         messages=[{"role": "user", "content": _EXTRACTION_PROMPT + exchange}],
     )
 
-    raw = response.content[0].text.strip()
-    # Strip markdown code fences if present
-    if raw.startswith("```"):
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
-        raw = raw.strip()
+    data = _parse_json(response.content[0].text)
 
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError:
-        return 0
-
+    # Only push certain facts to profile
     for key, value in data.get("profile_updates", {}).items():
         if key and value:
             update_profile(str(key), str(value))
 
     facts = [f for f in data.get("facts", []) if f.get("category") and f.get("fact")]
     if facts:
-        add_facts(facts)
+        return add_facts(facts)
 
-    return len(facts)
+    return 0
 
 
 # ── Batch extraction for imported files ───────────────────────────────────────
 
 _BATCH_PROMPT = """\
 Tu es un moteur d'extraction silencieux. Analyse les messages ci-dessous \
-(écrits par une personne ou attribués à des personnes) et extrais toutes \
-les informations personnelles sur la personne principale (l'utilisateur).
+et extrais toutes les informations personnelles sur la personne principale.
 
 Retourne UNIQUEMENT un objet JSON valide :
 {
   "profile_updates": {"clé": "valeur"},
-  "facts": [{"category": "catégorie", "fact": "fait en une phrase"}]
+  "facts": [
+    {
+      "category": "catégorie",
+      "fact": "fait rédigé avec le bon degré de certitude",
+      "certainty": "certain|probable|hypothèse|réfuté"
+    }
+  ]
 }
 
 Catégories : identité, famille, travail, santé, loisirs, valeurs, habitudes, \
-projets, finances, localisation, relations, éducation, croyances, humeur, alimentation.
+projets, finances, localisation, relations, éducation, croyances, psychologie, \
+alimentation, humeur.
 
-Règles :
-- N'invente rien.
-- profile_updates = faits stables (nom, âge, ville, métier…).
-- Si rien à extraire : {"profile_updates": {}, "facts": []}.
-- Aucun texte hors du JSON.
+Règle critique sur la certitude :
+- "certain"   : affirmé sans ambiguïté
+- "probable"  : quasi-certain, tendance claire
+- "hypothèse" : supposition, doute, auto-diagnostic non confirmé
+- "réfuté"    : annulé ou contredit
+
+Le texte du fait DOIT refléter la certitude (jamais "a le TDAH" si c'est une hypothèse).
+profile_updates = uniquement faits certains et stables.
+Si rien : {"profile_updates": {}, "facts": []}.
+Aucun texte hors du JSON.
 
 Messages :
 """
@@ -128,19 +161,6 @@ def _chunk_messages(messages: list[str], words_per_chunk: int = _CHUNK_WORDS) ->
     return chunks
 
 
-def _parse_json(raw: str) -> dict:
-    raw = raw.strip()
-    if raw.startswith("```"):
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
-        raw = raw.strip()
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError:
-        return {}
-
-
 def extract_from_messages(
     messages: list[str],
     progress_callback: Callable[[int, int], None] | None = None,
@@ -148,7 +168,6 @@ def extract_from_messages(
     """
     Extract personal facts from a list of messages (imported file).
     Splits into chunks and calls Claude on each. Returns total fact count.
-    progress_callback(current_chunk, total_chunks) is called after each chunk.
     """
     if not messages:
         return 0
@@ -174,8 +193,7 @@ def extract_from_messages(
 
         facts = [f for f in data.get("facts", []) if f.get("category") and f.get("fact")]
         if facts:
-            add_facts(facts)
-        total_facts += len(facts)
+            total_facts += add_facts(facts)
 
         if progress_callback:
             progress_callback(i, total)
