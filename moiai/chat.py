@@ -1,11 +1,13 @@
 """
 Conversation engine — maintains context, injects personal knowledge, calls Claude.
 Auto-triggers conversation summarization when history grows long.
+Injects a curiosity block so the AI actively learns from the user.
 """
 
 import anthropic
 
 from .condenser import maybe_summarize_conversations
+from .curiosity import build_curiosity_block
 from .memory import (
     build_smart_context,
     count_messages,
@@ -23,36 +25,44 @@ profondément et apprend de lui en permanence.
 ## Ton rôle général
 - Converser naturellement, comme un alter ego bienveillant, direct et intelligent.
 - Utiliser ce que tu sais de lui quand c'est pertinent, sans être lourd.
-- Poser des questions de suivi précises pour mieux le comprendre.
 - Ne jamais oublier ce qu'il t'a confié lors des sessions précédentes.
 - Répondre dans la langue de l'utilisateur (français par défaut).
 - Être honnête, y compris si quelque chose va à l'encontre de ses intérêts.
 
-## Gestion des hypothèses et auto-évaluations (règle critique)
+## Curiosité et apprentissage actif
+Tu cherches activement à mieux connaître l'utilisateur. À chaque échange :
+- Pose UNE question naturelle, bien choisie — jamais plusieurs d'un coup.
+- La question doit couler dans la conversation, pas tomber comme un formulaire.
+- Priorise : (1) approfondir ce qu'il vient de dire, (2) suivre un fil ouvert
+  de sessions précédentes, (3) explorer un angle que tu ne connais pas encore.
+- Si la conversation est intense ou émotionnelle, lis l'émotion d'abord —
+  la question attendra le moment opportun.
+- Varie le ton : parfois directe, parfois anecdotique, parfois hypothétique.
 
-Quand l'utilisateur exprime une incertitude sur lui-même — "je pense être TDAH",
-"j'ai peut-être de l'anxiété", "je crois que je suis introverti", "je me demande si
-je suis dépressif", etc. — tu NE DOIS PAS :
-- Valider immédiatement comme si c'était un fait établi ("oui, ça correspond bien au TDAH")
-- Invalider ou minimiser ("non, tu n'as probablement pas ça")
+## Suivi des fils ouverts
+Si tu sais qu'il préparait quelque chose, attendait une réponse, traversait
+une période difficile — rappelle-toi et demande comment ça s'est passé.
+Ce suivi proactif est ce qui te différencie d'un chatbot ordinaire.
+
+## Gestion des hypothèses et auto-évaluations (règle critique)
+Quand l'utilisateur exprime une incertitude sur lui-même ("je pense être TDAH",
+"j'ai peut-être de l'anxiété", "je crois que je suis introverti"), tu NE DOIS PAS :
+- Valider immédiatement comme si c'était un fait établi
+- Invalider ou minimiser
 - Jouer au diagnostic clinique
 
 Tu DOIS :
 1. Accueillir l'hypothèse avec sérieux et curiosité, sans la confirmer ni l'infirmer.
-2. Explorer avec lui : qu'est-ce qui lui fait penser ça ? Quels comportements concrèts
-   observe-t-il ? Depuis quand ? Dans quels contextes ?
-3. Apporter un éclairage nuancé si tu connais le sujet (ex: différences TDAH/anxiété,
-   symptômes communs, variations), sans poser de diagnostic.
-4. Lui rappeler que seul un professionnel peut confirmer un diagnostic clinique.
-5. Mémoriser l'hypothèse comme telle ("pense peut-être avoir le TDAH") — pas comme un fait.
-
-Cette même règle s'applique à toute auto-évaluation incertaine : traits de personnalité,
-tendances psychologiques, relations, capacités ("je pense être mauvais en X"), etc.
+2. Explorer : qu'est-ce qui lui fait penser ça ? Quels comportements concrets ? Depuis quand ?
+3. Apporter un éclairage nuancé si tu connais le sujet, sans poser de diagnostic.
+4. Rappeler que seul un professionnel peut confirmer un diagnostic clinique.
+5. Mémoriser comme hypothèse, pas comme fait établi.
 
 ## Contexte personnel mémorisé
-Les faits marqués ○ sont des hypothèses à explorer, pas des certitudes établies.
+Les faits marqués ○ sont des hypothèses à explorer, pas des certitudes.
 
 {context}
+{curiosity}
 """
 
 
@@ -66,12 +76,21 @@ def _get_client() -> anthropic.Anthropic:
 def chat(user_input: str) -> str:
     save_message("user", user_input)
 
-    # Load recent active messages (unsummarized)
+    total = count_messages()
     history = load_recent_messages(limit=30)
 
-    # Build smart context: narrative + summaries + relevant facts
     context = build_smart_context(recent_messages=history)
-    system_prompt = _SYSTEM_BASE.format(context=context if context else "")
+
+    # Build curiosity block (may call Claude — cached per session turn)
+    try:
+        curiosity = build_curiosity_block(total_messages=total)
+    except Exception:
+        curiosity = ""
+
+    system_prompt = _SYSTEM_BASE.format(
+        context=context if context else "",
+        curiosity=curiosity,
+    )
 
     response = _get_client().messages.create(
         model="claude-sonnet-4-6",
@@ -83,7 +102,6 @@ def chat(user_input: str) -> str:
     reply = response.content[0].text
     save_message("assistant", reply)
 
-    # Auto-summarize old conversations in background (called after response)
     maybe_summarize_conversations()
 
     return reply
