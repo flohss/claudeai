@@ -1,13 +1,13 @@
 """
-Conversation engine — maintains context, injects personal knowledge, calls Claude.
-Auto-triggers conversation summarization when history grows long.
-Injects a curiosity block so the AI actively learns from the user.
+Conversation engine — streaming responses, prompt caching for personal context,
+mood-aware system prompt, pre-cached curiosity block.
 """
 
-import anthropic
+from collections.abc import Iterator
 
+from .api import MODEL_CHAT, cached_block, plain_block, stream_chat
 from .condenser import maybe_summarize_conversations
-from .curiosity import build_curiosity_block
+from .curiosity import build_curiosity_block, warm_cache
 from .memory import (
     build_smart_context,
     count_messages,
@@ -16,95 +16,92 @@ from .memory import (
     save_message,
 )
 
-_client: anthropic.Anthropic | None = None
+# ── System prompt ──────────────────────────────────────────────────────────────
 
-_SYSTEM_BASE = """\
-Tu es le double artificiel personnel de l'utilisateur — une IA qui le connaît \
+_INSTRUCTIONS = """\
+Tu es le double artificiel personnel de l'utilisateur — une IA qui le connaît
 profondément et apprend de lui en permanence.
 
-## Ton rôle général
-- Converser naturellement, comme un alter ego bienveillant, direct et intelligent.
-- Utiliser ce que tu sais de lui quand c'est pertinent, sans être lourd.
+## Rôle
+- Alter ego bienveillant, direct, intellectuellement honnête.
+- Utilise ce que tu sais de lui quand c'est pertinent, sans être lourd.
 - Ne jamais oublier ce qu'il t'a confié lors des sessions précédentes.
-- Répondre dans la langue de l'utilisateur (français par défaut).
-- Être honnête, y compris si quelque chose va à l'encontre de ses intérêts.
+- Réponds dans la langue de l'utilisateur (français par défaut).
+- Sois honnête même si ça va à l'encontre de ce qu'il veut entendre.
 
 ## Curiosité et apprentissage actif
-Tu cherches activement à mieux connaître l'utilisateur. À chaque échange :
-- Pose UNE question naturelle, bien choisie — jamais plusieurs d'un coup.
-- La question doit couler dans la conversation, pas tomber comme un formulaire.
+- Pose UNE question naturelle par échange — jamais plusieurs d'un coup.
+- La question doit couler dans la conversation, jamais tomber comme un formulaire.
 - Priorise : (1) approfondir ce qu'il vient de dire, (2) suivre un fil ouvert
-  de sessions précédentes, (3) explorer un angle que tu ne connais pas encore.
-- Si la conversation est intense ou émotionnelle, lis l'émotion d'abord —
-  la question attendra le moment opportun.
-- Varie le ton : parfois directe, parfois anecdotique, parfois hypothétique.
+  de sessions précédentes, (3) explorer un angle inconnu.
+- Si la conversation est intense ou émotionnelle, lis l'émotion d'abord.
+- Suivi proactif : si tu sais qu'il préparait quelque chose ou traversait une période
+  difficile, reviens dessus spontanément — c'est ce qui te différencie d'un chatbot.
 
-## Suivi des fils ouverts
-Si tu sais qu'il préparait quelque chose, attendait une réponse, traversait
-une période difficile — rappelle-toi et demande comment ça s'est passé.
-Ce suivi proactif est ce qui te différencie d'un chatbot ordinaire.
-
-## Gestion des hypothèses et auto-évaluations (règle critique)
+## Gestion des hypothèses (règle critique)
 Quand l'utilisateur exprime une incertitude sur lui-même ("je pense être TDAH",
-"j'ai peut-être de l'anxiété", "je crois que je suis introverti"), tu NE DOIS PAS :
-- Valider immédiatement comme si c'était un fait établi
-- Invalider ou minimiser
-- Jouer au diagnostic clinique
+"j'ai peut-être de l'anxiété", etc.) :
+- NE PAS valider immédiatement comme fait établi.
+- NE PAS invalider ou minimiser.
+- Accueillir avec curiosité, explorer (quels comportements ? depuis quand ?),
+  apporter un éclairage nuancé si pertinent, rappeler qu'un professionnel seul
+  peut confirmer un diagnostic clinique.
+- Mémoriser comme hypothèse, pas comme certitude.
 
-Tu DOIS :
-1. Accueillir l'hypothèse avec sérieux et curiosité, sans la confirmer ni l'infirmer.
-2. Explorer : qu'est-ce qui lui fait penser ça ? Quels comportements concrets ? Depuis quand ?
-3. Apporter un éclairage nuancé si tu connais le sujet, sans poser de diagnostic.
-4. Rappeler que seul un professionnel peut confirmer un diagnostic clinique.
-5. Mémoriser comme hypothèse, pas comme fait établi.
-
-## Contexte personnel mémorisé
-Les faits marqués ○ sont des hypothèses à explorer, pas des certitudes.
-
-{context}
-{curiosity}
+## Humeur et ton
+Les faits marqués ○ sont des hypothèses, ◐ des probabilités, ● des certitudes.
+Adapte ton ton à l'humeur détectée : si l'utilisateur est stressé ou négatif,
+sois plus doux et attentif avant d'être analytique.
 """
 
 
-def _get_client() -> anthropic.Anthropic:
-    global _client
-    if _client is None:
-        _client = anthropic.Anthropic()
-    return _client
+def _build_system_blocks(context: str, curiosity: str) -> list[dict]:
+    """
+    Build system as list of content blocks for prompt caching.
+    - Instructions: static, not cached (short, always the same)
+    - Context: large personal knowledge → CACHED (changes slowly)
+    - Curiosity: changes every turn → not cached
+    """
+    blocks: list[dict] = [plain_block(_INSTRUCTIONS)]
+
+    if context:
+        # Cache the personal context — it's large and reused across turns
+        blocks.append(cached_block(context))
+
+    if curiosity:
+        blocks.append(plain_block(curiosity))
+
+    return blocks
 
 
-def chat(user_input: str) -> str:
+# ── Public API ─────────────────────────────────────────────────────────────────
+
+def stream_response(user_input: str) -> Iterator[str]:
+    """
+    Save user message, stream assistant response token by token.
+    Caller must call finish_turn() after consuming the stream.
+    Returns an iterator of text chunks.
+    """
     save_message("user", user_input)
 
     total = count_messages()
     history = load_recent_messages(limit=30)
-
     context = build_smart_context(recent_messages=history)
 
-    # Build curiosity block (may call Claude — cached per session turn)
     try:
         curiosity = build_curiosity_block(total_messages=total)
     except Exception:
         curiosity = ""
 
-    system_prompt = _SYSTEM_BASE.format(
-        context=context if context else "",
-        curiosity=curiosity,
-    )
+    system_blocks = _build_system_blocks(context, curiosity)
 
-    response = _get_client().messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=2048,
-        system=system_prompt,
-        messages=history,
-    )
+    return stream_chat(history, system_blocks=system_blocks, model=MODEL_CHAT)
 
-    reply = response.content[0].text
+
+def finish_turn(reply: str) -> None:
+    """Persist assistant reply and trigger background tasks."""
     save_message("assistant", reply)
-
     maybe_summarize_conversations()
-
-    return reply
 
 
 def get_stats() -> dict:
@@ -113,3 +110,9 @@ def get_stats() -> dict:
         "messages": count_messages(),
         "summaries": len(summaries),
     }
+
+
+def start_session() -> None:
+    """Warm curiosity cache at session start so first turn has no latency."""
+    total = count_messages()
+    warm_cache(total)

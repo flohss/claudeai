@@ -1,71 +1,92 @@
 """
-Profile extraction engine — after each exchange, ask Claude to pull personal facts
-from the conversation and merge them into persistent memory.
-
-Each fact carries a certainty level:
-  certain   — stated as established fact ("je suis ingénieur")
-  probable  — likely but not fully confirmed ("j'ai tendance à procrastiner")
-  hypothèse — self-hypothesis, suspicion, possible diagnosis ("je pense être TDAH")
-  réfuté    — explicitly retracted or contradicted
+Profile extraction engine — uses Haiku (fast/cheap) to pull personal facts,
+certainty levels, and current mood from each exchange.
 """
 
 import json
 from typing import Callable
 
-import anthropic
+from .api import MODEL_FAST, complete
+from .memory import CERTAINTY_LEVELS, VALID_CATEGORIES, add_facts, log_mood, update_profile
 
-from .memory import add_facts, update_profile
+# ── Prompts ────────────────────────────────────────────────────────────────────
 
-_client: anthropic.Anthropic | None = None
-
-
-def _get_client() -> anthropic.Anthropic:
-    global _client
-    if _client is None:
-        _client = anthropic.Anthropic()
-    return _client
-
+_SYSTEM = "Tu es un extracteur JSON silencieux. Réponds uniquement en JSON valide."
 
 _EXTRACTION_PROMPT = """\
-Tu es un moteur d'extraction silencieux. Analyse l'échange ci-dessous et extrais \
-toutes les informations personnelles sur l'utilisateur.
+Analyse l'échange et extrais toutes les informations personnelles sur l'utilisateur.
 
-Retourne UNIQUEMENT un objet JSON valide :
+Retourne UNIQUEMENT ce JSON :
 {
-  "profile_updates": {
-    "clé": "valeur"
-  },
+  "profile_updates": {"clé": "valeur"},
   "facts": [
     {
       "category": "catégorie",
-      "fact": "fait précis rédigé avec le bon degré de certitude",
+      "fact": "fait rédigé avec le bon degré de certitude",
+      "certainty": "certain|probable|hypothèse|réfuté"
+    }
+  ],
+  "mood": {
+    "valence": "positive|neutral|negative|mixed",
+    "state": "description courte de l'état émotionnel en 5 mots max",
+    "intensity": 3
+  }
+}
+
+Catégories valides : identité, famille, relations, travail, éducation, localisation,
+santé, psychologie, valeurs, croyances, loisirs, habitudes, projets, finances,
+alimentation, humeur, autre.
+
+Règles sur la certitude :
+- "certain"   : affirmé clairement ("je suis développeur", "j'ai 32 ans")
+- "probable"  : tendance quasi-certaine ("j'ai souvent du mal à dormir")
+- "hypothèse" : auto-hypothèse, suspicion, diagnostic possible ("je pense être TDAH")
+- "réfuté"    : explicitement annulé ou contredit
+
+CRITIQUE : le texte du fait DOIT refléter la certitude.
+Ne jamais écrire "a le TDAH" si l'utilisateur dit "je pense être TDAH".
+Écrire à la place : "pense peut-être avoir le TDAH (non diagnostiqué)".
+
+profile_updates = uniquement faits certains et stables (nom, âge, ville, métier).
+mood.intensity : 1 (très faible) à 5 (très intense). 3 si neutre ou incertain.
+Si rien à extraire : {"profile_updates": {}, "facts": [], "mood": {"valence": "neutral", "state": "", "intensity": 3}}.
+Aucun texte hors du JSON.
+
+Échange :
+"""
+
+_BATCH_PROMPT = """\
+Analyse les messages et extrais toutes les informations personnelles.
+
+Retourne UNIQUEMENT ce JSON :
+{
+  "profile_updates": {"clé": "valeur"},
+  "facts": [
+    {
+      "category": "catégorie",
+      "fact": "fait rédigé avec le bon degré de certitude",
       "certainty": "certain|probable|hypothèse|réfuté"
     }
   ]
 }
 
-Catégories possibles : identité, famille, travail, santé, loisirs, valeurs, \
-habitudes, projets, finances, localisation, relations, éducation, croyances, \
-psychologie, alimentation, humeur.
+Catégories valides : identité, famille, relations, travail, éducation, localisation,
+santé, psychologie, valeurs, croyances, loisirs, habitudes, projets, finances,
+alimentation, humeur, autre.
 
-Règle critique sur la certitude — tu DOIS distinguer :
-- "certain"   : affirmé clairement sans nuance ("je suis développeur", "j'ai 32 ans")
-- "probable"  : exprimé comme tendance ou quasi-certitude ("j'ai souvent du mal à dormir")
-- "hypothèse" : auto-hypothèse, suspicion, diagnostic non confirmé, doute sur soi
-                ("je pense être TDAH", "j'ai peut-être de l'anxiété", "je crois que je suis introverti")
-- "réfuté"    : information explicitement annulée, corrigée ou contredite
+Règles certitude : certain=affirmé, probable=tendance, hypothèse=supposition, réfuté=annulé.
+Texte du fait DOIT refléter la certitude (jamais "a le TDAH" si c'est une hypothèse).
+profile_updates = uniquement faits certains et stables.
+Si rien : {"profile_updates": {}, "facts": []}.
+Aucun texte hors du JSON.
 
-Règles supplémentaires :
-- Le texte du fait DOIT refléter la certitude : ne jamais écrire "a le TDAH" si l'utilisateur
-  dit "je pense être TDAH" → écrire "pense peut-être avoir le TDAH (non diagnostiqué)"
-- profile_updates = uniquement les faits "certain" et stables (nom, âge, ville, profession…)
-- N'invente rien, n'infère pas au-delà de ce qui est dit.
-- Si rien à extraire : {"profile_updates": {}, "facts": []}.
-- Aucun texte hors du JSON.
-
-Échange à analyser :
+Messages :
 """
 
+_CHUNK_WORDS = 1500
+
+
+# ── JSON helpers ───────────────────────────────────────────────────────────────
 
 def _parse_json(raw: str) -> dict:
     raw = raw.strip()
@@ -80,69 +101,41 @@ def _parse_json(raw: str) -> dict:
         return {}
 
 
-def extract_and_store(user_msg: str, assistant_msg: str) -> int:
-    """Extract personal info from one exchange and persist it. Returns fact count."""
-    exchange = f"Utilisateur : {user_msg}\nAssistant : {assistant_msg}"
-
-    response = _get_client().messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=1024,
-        system="Tu es un extracteur JSON silencieux. Réponds uniquement en JSON valide.",
-        messages=[{"role": "user", "content": _EXTRACTION_PROMPT + exchange}],
-    )
-
-    data = _parse_json(response.content[0].text)
-
-    # Only push certain facts to profile
+def _apply_extraction(data: dict, store_mood: bool = False) -> int:
+    """Persist profile_updates, facts, and optionally mood. Returns fact count."""
     for key, value in data.get("profile_updates", {}).items():
         if key and value:
             update_profile(str(key), str(value))
 
-    facts = [f for f in data.get("facts", []) if f.get("category") and f.get("fact")]
-    if facts:
-        return add_facts(facts)
+    raw_facts = data.get("facts", [])
+    valid_facts = [
+        f for f in raw_facts
+        if f.get("category") and f.get("fact")
+    ]
+    inserted = add_facts(valid_facts) if valid_facts else 0
 
-    return 0
+    if store_mood:
+        mood = data.get("mood", {})
+        valence = mood.get("valence", "")
+        state = mood.get("state", "")
+        intensity = mood.get("intensity", 3)
+        if valence and state:
+            log_mood(valence, state, intensity)
+
+    return inserted
 
 
-# ── Batch extraction for imported files ───────────────────────────────────────
+# ── Single-exchange extraction ─────────────────────────────────────────────────
 
-_BATCH_PROMPT = """\
-Tu es un moteur d'extraction silencieux. Analyse les messages ci-dessous \
-et extrais toutes les informations personnelles sur la personne principale.
+def extract_and_store(user_msg: str, assistant_msg: str) -> int:
+    """Extract facts + mood from one conversation exchange. Returns inserted fact count."""
+    exchange = f"Utilisateur : {user_msg}\nAssistant : {assistant_msg}"
+    raw = complete(_EXTRACTION_PROMPT + exchange, system=_SYSTEM, model=MODEL_FAST)
+    data = _parse_json(raw)
+    return _apply_extraction(data, store_mood=True)
 
-Retourne UNIQUEMENT un objet JSON valide :
-{
-  "profile_updates": {"clé": "valeur"},
-  "facts": [
-    {
-      "category": "catégorie",
-      "fact": "fait rédigé avec le bon degré de certitude",
-      "certainty": "certain|probable|hypothèse|réfuté"
-    }
-  ]
-}
 
-Catégories : identité, famille, travail, santé, loisirs, valeurs, habitudes, \
-projets, finances, localisation, relations, éducation, croyances, psychologie, \
-alimentation, humeur.
-
-Règle critique sur la certitude :
-- "certain"   : affirmé sans ambiguïté
-- "probable"  : quasi-certain, tendance claire
-- "hypothèse" : supposition, doute, auto-diagnostic non confirmé
-- "réfuté"    : annulé ou contredit
-
-Le texte du fait DOIT refléter la certitude (jamais "a le TDAH" si c'est une hypothèse).
-profile_updates = uniquement faits certains et stables.
-Si rien : {"profile_updates": {}, "facts": []}.
-Aucun texte hors du JSON.
-
-Messages :
-"""
-
-_CHUNK_WORDS = 1500
-
+# ── Batch extraction (imported files) ─────────────────────────────────────────
 
 def _chunk_messages(messages: list[str], words_per_chunk: int = _CHUNK_WORDS) -> list[str]:
     chunks: list[str] = []
@@ -166,36 +159,21 @@ def extract_from_messages(
     progress_callback: Callable[[int, int], None] | None = None,
 ) -> int:
     """
-    Extract personal facts from a list of messages (imported file).
-    Splits into chunks and calls Claude on each. Returns total fact count.
+    Extract facts from a list of messages (imported file).
+    Chunks by word count and calls Claude Haiku on each. Returns total inserted.
     """
     if not messages:
         return 0
 
     chunks = _chunk_messages(messages)
     total = len(chunks)
-    total_facts = 0
-
-    client = _get_client()
+    total_inserted = 0
 
     for i, chunk in enumerate(chunks, 1):
-        response = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=1024,
-            system="Tu es un extracteur JSON silencieux. Réponds uniquement en JSON valide.",
-            messages=[{"role": "user", "content": _BATCH_PROMPT + chunk}],
-        )
-        data = _parse_json(response.content[0].text)
-
-        for key, value in data.get("profile_updates", {}).items():
-            if key and value:
-                update_profile(str(key), str(value))
-
-        facts = [f for f in data.get("facts", []) if f.get("category") and f.get("fact")]
-        if facts:
-            total_facts += add_facts(facts)
-
+        raw = complete(_BATCH_PROMPT + chunk, system=_SYSTEM, model=MODEL_FAST, max_tokens=1024)
+        data = _parse_json(raw)
+        total_inserted += _apply_extraction(data, store_mood=False)
         if progress_callback:
             progress_callback(i, total)
 
-    return total_facts
+    return total_inserted

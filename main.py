@@ -4,6 +4,7 @@ Moi.AI — double personnel artificiel.
 Lancement : python main.py
 """
 
+import json
 import os
 import sys
 import threading
@@ -11,51 +12,75 @@ from datetime import datetime
 from pathlib import Path
 
 from rich.console import Console
+from rich.live import Live
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
 from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
-from moiai.chat import chat, get_stats
-from moiai.condenser import condense_narrative, summarize_old_conversations
+from moiai.chat import finish_turn, get_stats, start_session, stream_response
+from moiai.condenser import condense_narrative
 from moiai.extractor import extract_and_store, extract_from_messages
 from moiai.importer import load_file
 from moiai.memory import (
     CERTAINTY_BADGE,
+    CERTAINTY_LEVELS,
     delete_fact,
     delete_profile_key,
+    fact_age_badge,
     get_all_facts,
+    get_conversation_summaries,
+    get_fact_by_id,
     get_latest_narrative,
     get_profile,
+    get_recent_mood,
+    get_stale_facts,
     init_db,
+    load_conversation_history,
     search_facts,
+    update_fact,
 )
 
 console = Console()
 
-COMMANDS = {
-    "/profil":           "Afficher le profil mémorisé",
-    "/faits":            "Lister tous les faits mémorisés",
-    "/cherche <terme>":  "Rechercher dans la mémoire",
-    "/oublie <terme>":   "Supprimer des faits ou entrées profil",
-    "/condenser":        "Fusionner la mémoire en narration personnelle",
-    "/rapport":          "Exporter un rapport complet de ton profil",
-    "/import <fichier>": "Importer un fichier (WhatsApp, Instagram, Telegram, txt)",
-    "/stats":            "Statistiques de mémoire",
-    "/aide":             "Afficher cette aide",
-    "/quitter":          "Quitter",
+_CERTAINTY_COLOR = {
+    "certain":   "white",
+    "probable":  "yellow",
+    "hypothèse": "dim",
+    "réfuté":    "red",
 }
 
+COMMANDS = {
+    "/profil":              "Afficher profil + narration",
+    "/faits [cat]":         "Lister les faits (filtrable par catégorie)",
+    "/cherche <terme>":     "Recherche plein-texte dans la mémoire",
+    "/oublie <ID|terme>":   "Supprimer un fait ou une entrée profil",
+    "/edit <ID> <texte>":   "Corriger le texte d'un fait",
+    "/historique [n]":      "Afficher les n derniers échanges (défaut 10)",
+    "/import <fichier>":    "Importer un fichier (WhatsApp, Instagram, Telegram, txt)",
+    "/condenser":           "Fusionner la mémoire en narration personnelle",
+    "/rapport":             "Exporter le profil complet en Markdown",
+    "/export":              "Exporter toute la mémoire en JSON",
+    "/stats":               "Statistiques de mémoire",
+    "/aide":                "Afficher cette aide",
+    "/quitter":             "Quitter",
+}
+
+
+# ── Header ─────────────────────────────────────────────────────────────────────
 
 def _header() -> None:
     console.print(Panel(
         "[bold cyan]Moi.AI[/bold cyan]  —  ton double personnel artificiel\n"
-        "[dim]Tape [bold]/aide[/bold] pour les commandes disponibles[/dim]",
+        "[dim]Tape [bold]/aide[/bold] pour les commandes  •  "
+        "Les réponses s'affichent en temps réel[/dim]",
         border_style="cyan",
         expand=False,
     ))
 
+
+# ── Help ───────────────────────────────────────────────────────────────────────
 
 def _show_help() -> None:
     table = Table(show_header=False, box=None, padding=(0, 2))
@@ -67,12 +92,24 @@ def _show_help() -> None:
     console.print()
 
 
+# ── Profile ────────────────────────────────────────────────────────────────────
+
 def _show_profile() -> None:
-    profile = get_profile()
     narrative = get_latest_narrative()
+    profile = get_profile()
+    mood = get_recent_mood(limit=1)
 
     if narrative:
-        console.print(Panel(Markdown(narrative), title="[bold]Narration personnelle[/bold]", border_style="cyan"))
+        console.print(Panel(
+            Markdown(narrative),
+            title="[bold]Narration personnelle[/bold]",
+            border_style="cyan",
+        ))
+
+    if mood:
+        m = mood[0]
+        badge = {"positive": "🟢", "negative": "🔴", "mixed": "🟡", "neutral": "⚪"}.get(m["valence"], "⚪")
+        console.print(f"[dim]Humeur récente : {badge} {m['state']}[/dim]")
 
     if profile:
         table = Table(show_header=False, box=None, padding=(0, 2))
@@ -86,27 +123,25 @@ def _show_profile() -> None:
     console.print()
 
 
-_CERTAINTY_COLOR = {
-    "certain":   "white",
-    "probable":  "yellow",
-    "hypothèse": "dim",
-    "réfuté":    "red",
-}
+# ── Facts ──────────────────────────────────────────────────────────────────────
 
-
-def _show_facts() -> None:
+def _show_facts(args: str = "") -> None:
+    cat_filter = args.strip().lower() or None
     facts = get_all_facts()
+    if cat_filter:
+        facts = [f for f in facts if cat_filter in f["category"].lower()]
+
     if not facts:
-        console.print("[dim]Aucun fait mémorisé pour l'instant.[/dim]\n")
+        msg = f"Aucun fait dans la catégorie « {cat_filter} »." if cat_filter else "Aucun fait mémorisé."
+        console.print(f"[dim]{msg}[/dim]\n")
         return
+
+    console.print("[dim]● certain  ◐ probable  ○ hypothèse  ✕ réfuté  ⏳ >6 mois  ⌛ >1 an[/dim]\n")
 
     by_cat: dict[str, list[dict]] = {}
     for f in facts:
         by_cat.setdefault(f["category"], []).append(f)
 
-    console.print(
-        "[dim]● certain  ◐ probable  ○ hypothèse  ✕ réfuté[/dim]\n"
-    )
     for cat, items in by_cat.items():
         table = Table(show_header=True, box=None, padding=(0, 1))
         table.add_column("ID", style="dim", width=5)
@@ -117,46 +152,65 @@ def _show_facts() -> None:
             certainty = f.get("certainty", "certain")
             badge = CERTAINTY_BADGE.get(certainty, "●")
             color = _CERTAINTY_COLOR.get(certainty, "white")
+            age = fact_age_badge(f.get("last_confirmed") or f["timestamp"])
             table.add_row(
                 str(f["id"]),
                 f"[{color}]{badge}[/{color}]",
-                f"[{color}]{f['fact']}[/{color}]",
+                f"[{color}]{f['fact']}[/{color}]{age}",
                 str(f["confirmed"]),
             )
         console.print(Panel(table, title=f"[bold cyan]{cat}[/bold cyan]", border_style="dim"))
 
-    console.print(f"[dim]{len(facts)} faits au total[/dim]\n")
+    console.print(f"[dim]{len(facts)} fait(s)[/dim]\n")
 
+
+# ── Stats ──────────────────────────────────────────────────────────────────────
 
 def _show_stats() -> None:
     stats = get_stats()
     facts = get_all_facts()
     profile = get_profile()
     narrative = get_latest_narrative()
+    summaries = get_conversation_summaries(limit=100)
+    stale = get_stale_facts(days=180)
+
+    by_cat: dict[str, int] = {}
+    for f in facts:
+        by_cat[f["category"]] = by_cat.get(f["category"], 0) + 1
 
     table = Table(show_header=False, box=None, padding=(0, 2))
     table.add_column(style="dim")
     table.add_column(style="bold cyan")
     table.add_row("Messages totaux", str(stats["messages"]))
-    table.add_row("Résumés de conversation", str(stats["summaries"]))
+    table.add_row("Résumés de conversation", str(len(summaries)))
     table.add_row("Faits mémorisés", str(len(facts)))
+    table.add_row("Dont potentiellement périmés", f"[yellow]{len(stale)}[/yellow]" if stale else "0")
     table.add_row("Entrées profil", str(len(profile)))
-    table.add_row("Narration condensée", "oui" if narrative else "non")
+    table.add_row("Narration condensée", "[green]oui[/green]" if narrative else "[dim]non[/dim]")
+
+    if by_cat:
+        table.add_row("", "")
+        for cat, n in sorted(by_cat.items(), key=lambda x: -x[1]):
+            table.add_row(f"  {cat}", str(n))
+
     console.print(Panel(table, title="[bold]Statistiques[/bold]", border_style="dim"))
     console.print()
 
 
-def _handle_search(query: str) -> None:
-    if not query.strip():
+# ── Search ─────────────────────────────────────────────────────────────────────
+
+def _handle_search(args: str) -> None:
+    query = args.strip()
+    if not query:
         console.print("[yellow]Usage :[/yellow] /cherche <terme>\n")
         return
 
-    results = search_facts(query.strip())
+    results = search_facts(query, limit=25)
     facts = results["facts"]
     profile = results["profile"]
 
     if not facts and not profile:
-        console.print(f"[dim]Aucun résultat pour « {query.strip()} ».[/dim]\n")
+        console.print(f"[dim]Aucun résultat pour « {query} ».[/dim]\n")
         return
 
     if profile:
@@ -171,7 +225,7 @@ def _handle_search(query: str) -> None:
         table = Table(show_header=True, box=None, padding=(0, 1))
         table.add_column("ID", style="dim", width=5)
         table.add_column(" ", width=2, no_wrap=True)
-        table.add_column("Catégorie", style="cyan", width=16)
+        table.add_column("Catégorie", style="cyan", width=14)
         table.add_column("Fait")
         for f in facts:
             certainty = f.get("certainty", "certain")
@@ -183,91 +237,162 @@ def _handle_search(query: str) -> None:
                 f["category"],
                 f"[{color}]{f['fact']}[/{color}]",
             )
-        console.print(Panel(table, title=f"[bold]{len(facts)} fait(s) trouvé(s)[/bold]", border_style="dim"))
+        console.print(Panel(
+            table,
+            title=f"[bold]{len(facts)} fait(s) trouvé(s)[/bold]"
+            + ("[dim] (25 max)[/dim]" if len(facts) == 25 else ""),
+            border_style="dim",
+        ))
 
     console.print()
 
 
-def _handle_forget(query: str) -> None:
-    query = query.strip()
+# ── Forget ─────────────────────────────────────────────────────────────────────
+
+def _handle_forget(args: str) -> None:
+    query = args.strip()
     if not query:
-        console.print("[yellow]Usage :[/yellow] /oublie <terme ou ID>\n")
+        console.print("[yellow]Usage :[/yellow] /oublie <ID ou terme>\n")
         return
 
-    # Try numeric ID first
     if query.isdigit():
-        fact_id = int(query)
-        facts = get_all_facts()
-        target = next((f for f in facts if f["id"] == fact_id), None)
-        if not target:
-            console.print(f"[red]Aucun fait avec l'ID {fact_id}.[/red]\n")
+        f = get_fact_by_id(int(query))
+        if not f:
+            console.print(f"[red]Aucun fait avec l'ID {query}.[/red]\n")
             return
-        console.print(f"Fait : [cyan]{target['fact']}[/cyan]")
-        if Confirm.ask("Supprimer ce fait ?", default=False):
-            delete_fact(fact_id)
-            console.print("[green]✓ Supprimé.[/green]\n")
+        certainty = f.get("certainty", "certain")
+        color = _CERTAINTY_COLOR.get(certainty, "white")
+        console.print(f"[dim]#{f['id']}[/dim] [{f['category']}] [{color}]{f['fact']}[/{color}]")
+        if Confirm.ask("Supprimer ?", default=False):
+            delete_fact(f["id"])
+            console.print("[green]✓ Supprimé (soft-delete).[/green]\n")
         else:
             console.print("[dim]Annulé.[/dim]\n")
         return
 
-    # Otherwise search and let user pick
-    results = search_facts(query)
-    facts = results["facts"]
-    profile = results["profile"]
-
+    results = search_facts(query, limit=10)
     deleted_any = False
 
-    if profile:
-        for k, v in profile.items():
-            console.print(f"Profil : [cyan]{k}[/cyan] = {v}")
-            if Confirm.ask(f"Supprimer l'entrée profil « {k} » ?", default=False):
-                delete_profile_key(k)
-                console.print(f"[green]✓ Entrée « {k} » supprimée.[/green]")
-                deleted_any = True
+    for k, v in results["profile"].items():
+        console.print(f"Profil : [cyan]{k}[/cyan] = {v}")
+        if Confirm.ask(f"Supprimer « {k} » ?", default=False):
+            delete_profile_key(k)
+            console.print(f"[green]✓ Supprimé.[/green]")
+            deleted_any = True
 
-    if facts:
-        for f in facts:
-            console.print(f"[dim]ID {f['id']}[/dim] [{f['category']}] {f['fact']}")
-            if Confirm.ask("Supprimer ce fait ?", default=False):
-                delete_fact(f["id"])
-                console.print("[green]✓ Supprimé.[/green]")
-                deleted_any = True
+    for f in results["facts"]:
+        color = _CERTAINTY_COLOR.get(f.get("certainty", "certain"), "white")
+        console.print(f"[dim]#{f['id']}[/dim] [{f['category']}] [{color}]{f['fact']}[/{color}]")
+        if Confirm.ask("Supprimer ?", default=False):
+            delete_fact(f["id"])
+            console.print("[green]✓ Supprimé.[/green]")
+            deleted_any = True
 
-    if not facts and not profile:
+    if not results["facts"] and not results["profile"]:
         console.print(f"[dim]Aucun résultat pour « {query} ».[/dim]")
 
     console.print()
 
 
+# ── Edit ───────────────────────────────────────────────────────────────────────
+
+def _handle_edit(args: str) -> None:
+    parts = args.strip().split(None, 1)
+    if len(parts) < 2 or not parts[0].isdigit():
+        console.print("[yellow]Usage :[/yellow] /edit <ID> <nouveau texte>\n")
+        console.print("[dim]Astuce : /edit 42 certain  — pour changer uniquement la certitude[/dim]\n")
+        return
+
+    fact_id = int(parts[0])
+    new_text = parts[1].strip()
+    f = get_fact_by_id(fact_id)
+    if not f:
+        console.print(f"[red]Aucun fait avec l'ID {fact_id}.[/red]\n")
+        return
+
+    console.print(f"[dim]Actuel :[/dim] {f['fact']}  [dim]({f.get('certainty','certain')})[/dim]")
+
+    # Detect if the user is just changing the certainty
+    if new_text.lower() in CERTAINTY_LEVELS:
+        ok = update_fact(fact_id, new_certainty=new_text.lower())
+        if ok:
+            console.print(f"[green]✓ Certitude mise à jour → {new_text}.[/green]\n")
+        else:
+            console.print("[red]Mise à jour échouée.[/red]\n")
+    else:
+        ok = update_fact(fact_id, new_text=new_text)
+        if ok:
+            console.print(f"[green]✓ Fait mis à jour.[/green]\n")
+        else:
+            console.print("[red]Mise à jour échouée.[/red]\n")
+
+
+# ── History ────────────────────────────────────────────────────────────────────
+
+def _handle_history(args: str) -> None:
+    n = 10
+    if args.strip().isdigit():
+        n = min(int(args.strip()), 100)
+
+    history = load_conversation_history(limit=n)
+    if not history:
+        console.print("[dim]Aucun échange enregistré.[/dim]\n")
+        return
+
+    for msg in history:
+        role = msg["role"]
+        ts = msg["timestamp"][:16].replace("T", " ")
+        if role == "user":
+            console.print(Panel(
+                msg["content"],
+                title=f"[bold green]Toi[/bold green]  [dim]{ts}[/dim]",
+                border_style="green",
+            ))
+        else:
+            console.print(Panel(
+                Markdown(msg["content"]),
+                title=f"[bold blue]Moi.AI[/bold blue]  [dim]{ts}[/dim]",
+                border_style="blue",
+            ))
+    console.print()
+
+
+# ── Condense ───────────────────────────────────────────────────────────────────
+
 def _handle_condense() -> None:
-    console.print("[dim]Condensation de la mémoire en cours...[/dim]")
     with console.status("[dim]Claude synthétise ton profil...[/dim]", spinner="dots"):
         try:
             narrative = condense_narrative()
         except Exception as e:
             console.print(f"[red]Erreur :[/red] {e}\n")
             return
-
     console.print(Panel(
         Markdown(narrative),
         title="[bold]Narration personnelle condensée[/bold]",
         border_style="cyan",
     ))
-    console.print("[green]✓ Narration sauvegardée en mémoire.[/green]\n")
+    console.print("[green]✓ Narration sauvegardée.[/green]\n")
 
+
+# ── Rapport ────────────────────────────────────────────────────────────────────
 
 def _handle_rapport() -> None:
     profile = get_profile()
     facts = get_all_facts()
     narrative = get_latest_narrative()
     stats = get_stats()
+    mood = get_recent_mood(limit=5)
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     lines: list[str] = [f"# Rapport Moi.AI — {now}\n"]
 
     if narrative:
-        lines.append("## Narration personnelle\n")
-        lines.append(narrative)
+        lines += ["## Narration personnelle\n", narrative, ""]
+
+    if mood:
+        lines.append("## Humeur récente\n")
+        for m in mood:
+            lines.append(f"- {m['timestamp'][:10]} : {m['valence']} — {m['state']}")
         lines.append("")
 
     if profile:
@@ -277,35 +402,53 @@ def _handle_rapport() -> None:
         lines.append("")
 
     if facts:
-        by_cat: dict[str, list[str]] = {}
+        by_cat: dict[str, list[dict]] = {}
         for f in facts:
-            by_cat.setdefault(f["category"], []).append(f["fact"])
+            by_cat.setdefault(f["category"], []).append(f)
         lines.append("## Faits mémorisés\n")
         for cat, items in sorted(by_cat.items()):
             lines.append(f"### {cat}")
-            for item in items:
-                lines.append(f"- {item}")
+            for f in items:
+                badge = CERTAINTY_BADGE.get(f.get("certainty", "certain"), "●")
+                lines.append(f"- {badge} {f['fact']}")
             lines.append("")
 
-    lines.append("## Statistiques\n")
-    lines.append(f"- Messages totaux : {stats['messages']}")
-    lines.append(f"- Faits mémorisés : {len(facts)}")
-    lines.append(f"- Entrées profil : {len(profile)}")
-    lines.append(f"- Résumés de conversation : {stats['summaries']}")
+    lines += [
+        "## Statistiques\n",
+        f"- Messages totaux : {stats['messages']}",
+        f"- Faits mémorisés : {len(facts)}",
+        f"- Entrées profil : {len(profile)}",
+    ]
 
-    report_text = "\n".join(lines)
-
-    # Save to file
-    report_path = Path("rapport_moiai.md")
-    report_path.write_text(report_text, encoding="utf-8")
+    text = "\n".join(lines)
+    path = Path("rapport_moiai.md")
+    path.write_text(text, encoding="utf-8")
 
     console.print(Panel(
-        Markdown(report_text[:2000] + ("\n\n[…]" if len(report_text) > 2000 else "")),
+        Markdown(text[:2000] + ("\n\n[…]" if len(text) > 2000 else "")),
         title="[bold]Rapport[/bold]",
         border_style="cyan",
     ))
-    console.print(f"[green]✓ Rapport complet sauvegardé dans[/green] [bold]{report_path}[/bold]\n")
+    console.print(f"[green]✓ Sauvegardé dans[/green] [bold]{path}[/bold]\n")
 
+
+# ── Export JSON ────────────────────────────────────────────────────────────────
+
+def _handle_export() -> None:
+    data = {
+        "exported_at": datetime.now().isoformat(),
+        "profile": get_profile(),
+        "facts": get_all_facts(),
+        "narrative": get_latest_narrative(),
+        "mood_log": get_recent_mood(limit=50),
+        "conversation_summaries": get_conversation_summaries(limit=20),
+    }
+    path = Path("export_moiai.json")
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    console.print(f"[green]✓ Export JSON sauvegardé dans[/green] [bold]{path}[/bold]\n")
+
+
+# ── Import ─────────────────────────────────────────────────────────────────────
 
 def _handle_import(args: str) -> None:
     filepath = args.strip().strip('"').strip("'")
@@ -330,10 +473,7 @@ def _handle_import(args: str) -> None:
                 console.print("Participants : " + ", ".join(f"[cyan]{s}[/cyan]" for s in senders[:8]))
         except Exception:
             pass
-        inp = Prompt.ask(
-            "[bold]Ton nom dans ce fichier[/bold] (laisser vide = tous les messages)",
-            default="",
-        ).strip()
+        inp = Prompt.ask("[bold]Ton nom dans ce fichier[/bold] (vide = tous)", default="").strip()
         user_name = inp if inp else None
 
     try:
@@ -343,36 +483,34 @@ def _handle_import(args: str) -> None:
         return
 
     if not messages:
-        console.print("[yellow]Aucun message trouvé dans ce fichier.[/yellow]\n")
+        console.print("[yellow]Aucun message trouvé.[/yellow]\n")
         return
 
-    console.print(f"[dim]{len(messages)} messages chargés — extraction en cours...[/dim]")
+    console.print(f"[dim]{len(messages)} messages — extraction en cours...[/dim]")
 
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TaskProgressColumn(),
-        console=console,
-        transient=True,
+        BarColumn(), TaskProgressColumn(),
+        console=console, transient=False,
     ) as progress:
         task = progress.add_task("Analyse...", total=None)
 
         def on_progress(current: int, total: int) -> None:
             progress.update(task, total=total, completed=current,
                             description=f"Bloc {current}/{total}")
-
         try:
-            total_facts = extract_from_messages(messages, progress_callback=on_progress)
+            n = extract_from_messages(messages, progress_callback=on_progress)
         except Exception as e:
             console.print(f"[red]Erreur extraction :[/red] {e}\n")
             return
 
     console.print(
-        f"[green]✓[/green] Import terminé — "
-        f"[bold]{total_facts}[/bold] fait(s) mémorisé(s) depuis [cyan]{path.name}[/cyan]\n"
+        f"[green]✓[/green] {n} fait(s) mémorisé(s) depuis [cyan]{path.name}[/cyan]\n"
     )
 
+
+# ── Background extraction ──────────────────────────────────────────────────────
 
 def _extract_async(user_msg: str, assistant_msg: str) -> None:
     try:
@@ -383,17 +521,19 @@ def _extract_async(user_msg: str, assistant_msg: str) -> None:
         pass
 
 
+# ── Main loop ──────────────────────────────────────────────────────────────────
+
 def main() -> None:
     if not os.environ.get("ANTHROPIC_API_KEY"):
         console.print(
-            "[red]Erreur :[/red] La variable d'environnement "
-            "[bold]ANTHROPIC_API_KEY[/bold] n'est pas définie.\n"
+            "[red]Erreur :[/red] [bold]ANTHROPIC_API_KEY[/bold] non définie.\n"
             "Lance : [cyan]export ANTHROPIC_API_KEY=sk-...[/cyan]"
         )
         sys.exit(1)
 
     init_db()
     _header()
+    start_session()  # warm curiosity cache in background
 
     while True:
         try:
@@ -414,37 +554,54 @@ def main() -> None:
             _show_help()
         elif lower == "/profil":
             _show_profile()
-        elif lower == "/faits":
-            _show_facts()
+        elif lower.startswith("/faits"):
+            _show_facts(user_input[6:])
         elif lower == "/stats":
             _show_stats()
         elif lower == "/condenser":
             _handle_condense()
         elif lower == "/rapport":
             _handle_rapport()
+        elif lower == "/export":
+            _handle_export()
         elif lower.startswith("/cherche"):
             _handle_search(user_input[8:])
         elif lower.startswith("/oublie"):
             _handle_forget(user_input[7:])
+        elif lower.startswith("/edit"):
+            _handle_edit(user_input[5:])
+        elif lower.startswith("/historique"):
+            _handle_history(user_input[11:])
         elif lower.startswith("/import"):
             _handle_import(user_input[7:])
         else:
-            with console.status("[dim]Réflexion...[/dim]", spinner="dots"):
-                try:
-                    reply = chat(user_input)
-                except Exception as e:
-                    console.print(f"[red]Erreur API :[/red] {e}\n")
-                    continue
+            # ── Streaming chat response ────────────────────────────────────
+            full_reply = ""
+            try:
+                stream = stream_response(user_input)
+                with Live(
+                    Panel("", title="[bold blue]Moi.AI[/bold blue]", border_style="blue"),
+                    console=console,
+                    refresh_per_second=15,
+                    vertical_overflow="visible",
+                ) as live:
+                    for chunk in stream:
+                        full_reply += chunk
+                        live.update(Panel(
+                            Markdown(full_reply),
+                            title="[bold blue]Moi.AI[/bold blue]",
+                            border_style="blue",
+                        ))
+            except Exception as e:
+                error_type = type(e).__name__
+                console.print(f"[red]Erreur {error_type} :[/red] {e}\n")
+                continue
 
-            console.print(Panel(
-                Markdown(reply),
-                title="[bold blue]Moi.AI[/bold blue]",
-                border_style="blue",
-            ))
+            finish_turn(full_reply)
 
             threading.Thread(
                 target=_extract_async,
-                args=(user_input, reply),
+                args=(user_input, full_reply),
                 daemon=True,
             ).start()
 

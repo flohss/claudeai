@@ -1,42 +1,74 @@
 """
-Persistent memory layer — SQLite-backed storage for conversations, profile, facts,
-conversation summaries, and the condensed personal narrative.
+Persistent memory layer — SQLite with FTS5, indices, soft-delete, staleness
+detection, mood logging, and smart context building.
 """
 
 import difflib
+import json
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 DB_PATH = Path(__file__).parent / "data" / "memory.db"
 
-# How similar two fact strings must be (0-1) to be considered duplicates
 _DEDUP_THRESHOLD = 0.82
 
+CERTAINTY_LEVELS = ("certain", "probable", "hypothèse", "réfuté")
+CERTAINTY_BADGE = {
+    "certain":   "●",
+    "probable":  "◐",
+    "hypothèse": "○",
+    "réfuté":    "✕",
+}
+
+VALID_CATEGORIES = {
+    "identité", "famille", "relations", "travail", "éducation", "localisation",
+    "santé", "psychologie", "valeurs", "croyances", "loisirs", "habitudes",
+    "projets", "finances", "alimentation", "humeur", "autre",
+}
+
+# Staleness thresholds
+_STALE_DAYS = 180
+_VERY_STALE_DAYS = 365
+
+
+# ── Connection ─────────────────────────────────────────────────────────────────
 
 def _connect() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")   # better concurrent write performance
+    conn.execute("PRAGMA foreign_keys=ON")
     return conn
 
 
+# ── Schema & migrations ────────────────────────────────────────────────────────
+
 def _migrate(conn: sqlite3.Connection) -> None:
-    """Add columns introduced after initial schema without breaking existing DBs."""
+    """Idempotent migrations for columns added after initial schema."""
     cols = {r[1] for r in conn.execute("PRAGMA table_info(facts)")}
     if "certainty" not in cols:
         conn.execute("ALTER TABLE facts ADD COLUMN certainty TEXT NOT NULL DEFAULT 'certain'")
+    if "deleted_at" not in cols:
+        conn.execute("ALTER TABLE facts ADD COLUMN deleted_at TEXT DEFAULT NULL")
+    if "last_confirmed" not in cols:
+        conn.execute("ALTER TABLE facts ADD COLUMN last_confirmed TEXT DEFAULT NULL")
+
+    conv_cols = {r[1] for r in conn.execute("PRAGMA table_info(conversations)")}
+    if "summarized" not in conv_cols:
+        conn.execute("ALTER TABLE conversations ADD COLUMN summarized INTEGER DEFAULT 0")
 
 
 def init_db() -> None:
     with _connect() as conn:
         conn.executescript("""
             CREATE TABLE IF NOT EXISTS conversations (
-                id        INTEGER PRIMARY KEY AUTOINCREMENT,
-                role      TEXT    NOT NULL,
-                content   TEXT    NOT NULL,
-                timestamp TEXT    NOT NULL,
-                summarized INTEGER DEFAULT 0
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                role        TEXT    NOT NULL,
+                content     TEXT    NOT NULL,
+                timestamp   TEXT    NOT NULL,
+                summarized  INTEGER DEFAULT 0
             );
 
             CREATE TABLE IF NOT EXISTS conversation_summaries (
@@ -49,17 +81,20 @@ def init_db() -> None:
             CREATE TABLE IF NOT EXISTS profile (
                 key       TEXT PRIMARY KEY,
                 value     TEXT NOT NULL,
-                updated   TEXT NOT NULL
+                updated   TEXT NOT NULL,
+                created   TEXT NOT NULL
             );
 
             CREATE TABLE IF NOT EXISTS facts (
-                id        INTEGER PRIMARY KEY AUTOINCREMENT,
-                category  TEXT NOT NULL,
-                fact      TEXT NOT NULL,
-                source    TEXT,
-                certainty TEXT    NOT NULL DEFAULT 'certain',
-                confirmed INTEGER DEFAULT 1,
-                timestamp TEXT    NOT NULL
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                category       TEXT    NOT NULL,
+                fact           TEXT    NOT NULL,
+                certainty      TEXT    NOT NULL DEFAULT 'certain',
+                source         TEXT,
+                confirmed      INTEGER DEFAULT 1,
+                last_confirmed TEXT    DEFAULT NULL,
+                deleted_at     TEXT    DEFAULT NULL,
+                timestamp      TEXT    NOT NULL
             );
 
             CREATE TABLE IF NOT EXISTS narrative (
@@ -67,6 +102,42 @@ def init_db() -> None:
                 content   TEXT NOT NULL,
                 timestamp TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS mood_log (
+                id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                valence   TEXT NOT NULL,
+                state     TEXT NOT NULL,
+                intensity INTEGER DEFAULT 3,
+                timestamp TEXT NOT NULL
+            );
+
+            -- Indices for performance
+            CREATE INDEX IF NOT EXISTS idx_facts_category   ON facts(category)  WHERE deleted_at IS NULL;
+            CREATE INDEX IF NOT EXISTS idx_facts_certainty  ON facts(certainty) WHERE deleted_at IS NULL;
+            CREATE INDEX IF NOT EXISTS idx_facts_confirmed  ON facts(confirmed DESC) WHERE deleted_at IS NULL;
+            CREATE INDEX IF NOT EXISTS idx_conv_summarized  ON conversations(summarized, id);
+            CREATE INDEX IF NOT EXISTS idx_mood_timestamp   ON mood_log(timestamp DESC);
+
+            -- FTS5 for full-text search across facts
+            CREATE VIRTUAL TABLE IF NOT EXISTS facts_fts USING fts5(
+                fact, category,
+                content=facts,
+                content_rowid=id
+            );
+
+            -- Triggers to keep FTS in sync
+            CREATE TRIGGER IF NOT EXISTS facts_ai AFTER INSERT ON facts BEGIN
+                INSERT INTO facts_fts(rowid, fact, category) VALUES (new.id, new.fact, new.category);
+            END;
+            CREATE TRIGGER IF NOT EXISTS facts_ad AFTER DELETE ON facts BEGIN
+                INSERT INTO facts_fts(facts_fts, rowid, fact, category)
+                VALUES('delete', old.id, old.fact, old.category);
+            END;
+            CREATE TRIGGER IF NOT EXISTS facts_au AFTER UPDATE ON facts BEGIN
+                INSERT INTO facts_fts(facts_fts, rowid, fact, category)
+                VALUES('delete', old.id, old.fact, old.category);
+                INSERT INTO facts_fts(rowid, fact, category) VALUES (new.id, new.fact, new.category);
+            END;
         """)
         _migrate(conn)
 
@@ -82,7 +153,6 @@ def save_message(role: str, content: str) -> None:
 
 
 def load_recent_messages(limit: int = 30) -> list[dict]:
-    """Return recent unsummarized messages, plus summaries for older context."""
     with _connect() as conn:
         rows = conn.execute(
             "SELECT role, content FROM conversations "
@@ -90,6 +160,16 @@ def load_recent_messages(limit: int = 30) -> list[dict]:
             (limit,),
         ).fetchall()
     return [{"role": r["role"], "content": r["content"]} for r in reversed(rows)]
+
+
+def load_conversation_history(limit: int = 20) -> list[dict]:
+    """For /historique — includes role, content, timestamp."""
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT role, content, timestamp FROM conversations ORDER BY id DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    return [dict(r) for r in reversed(rows)]
 
 
 def load_messages_for_summary(after_id: int = 0, limit: int = 60) -> list[dict]:
@@ -104,10 +184,7 @@ def load_messages_for_summary(after_id: int = 0, limit: int = 60) -> list[dict]:
 
 def mark_messages_summarized(up_to_id: int) -> None:
     with _connect() as conn:
-        conn.execute(
-            "UPDATE conversations SET summarized = 1 WHERE id <= ?",
-            (up_to_id,),
-        )
+        conn.execute("UPDATE conversations SET summarized = 1 WHERE id <= ?", (up_to_id,))
 
 
 def save_conversation_summary(summary: str, up_to_id: int) -> None:
@@ -122,8 +199,7 @@ def save_conversation_summary(summary: str, up_to_id: int) -> None:
 def get_conversation_summaries(limit: int = 5) -> list[str]:
     with _connect() as conn:
         rows = conn.execute(
-            "SELECT summary FROM conversation_summaries ORDER BY id DESC LIMIT ?",
-            (limit,),
+            "SELECT summary FROM conversation_summaries ORDER BY id DESC LIMIT ?", (limit,)
         ).fetchall()
     return [r["summary"] for r in reversed(rows)]
 
@@ -149,12 +225,19 @@ def get_last_message_id() -> int:
 # ── Profile ────────────────────────────────────────────────────────────────────
 
 def update_profile(key: str, value: str) -> None:
+    now = datetime.now().isoformat()
     with _connect() as conn:
-        conn.execute(
-            "INSERT INTO profile (key, value, updated) VALUES (?, ?, ?) "
-            "ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated=excluded.updated",
-            (key, value, datetime.now().isoformat()),
-        )
+        existing = conn.execute("SELECT key FROM profile WHERE key = ?", (key,)).fetchone()
+        if existing:
+            conn.execute(
+                "UPDATE profile SET value = ?, updated = ? WHERE key = ?",
+                (value, now, key),
+            )
+        else:
+            conn.execute(
+                "INSERT INTO profile (key, value, updated, created) VALUES (?, ?, ?, ?)",
+                (key, value, now, now),
+            )
 
 
 def delete_profile_key(key: str) -> bool:
@@ -171,37 +254,25 @@ def get_profile() -> dict[str, str]:
 
 # ── Facts ──────────────────────────────────────────────────────────────────────
 
+def _normalize_category(cat: str) -> str:
+    c = cat.lower().strip()
+    return c if c in VALID_CATEGORIES else "autre"
+
+
 def _fact_is_duplicate(fact_text: str, existing: list[str]) -> bool:
-    """Return True if fact_text is too similar to any existing fact."""
     fact_lower = fact_text.lower()
     for ex in existing:
-        ratio = difflib.SequenceMatcher(None, fact_lower, ex.lower()).ratio()
-        if ratio >= _DEDUP_THRESHOLD:
+        if difflib.SequenceMatcher(None, fact_lower, ex.lower()).ratio() >= _DEDUP_THRESHOLD:
             return True
     return False
 
 
-# Ordered from most to least certain — used for display and context priority
-CERTAINTY_LEVELS = ("certain", "probable", "hypothèse", "réfuté")
-
-# Emoji badges shown in CLI for each certainty level
-CERTAINTY_BADGE = {
-    "certain":   "●",
-    "probable":  "◐",
-    "hypothèse": "○",
-    "réfuté":    "✕",
-}
-
-
 def add_facts(facts: list[dict]) -> int:
-    """
-    Insert facts, skipping near-duplicates. Returns the number actually inserted.
-    facts: list of {category, fact, certainty?, source?}
-    certainty: 'certain' | 'probable' | 'hypothèse' | 'réfuté'
-    """
     now = datetime.now().isoformat()
     with _connect() as conn:
-        existing_rows = conn.execute("SELECT fact, certainty FROM facts").fetchall()
+        existing_rows = conn.execute(
+            "SELECT fact, certainty FROM facts WHERE deleted_at IS NULL"
+        ).fetchall()
         existing_texts = [r["fact"] for r in existing_rows]
 
         inserted = 0
@@ -209,70 +280,192 @@ def add_facts(facts: list[dict]) -> int:
             text = f.get("fact", "").strip()
             if not text or not f.get("category"):
                 continue
+            category = _normalize_category(f["category"])
             certainty = f.get("certainty", "certain")
             if certainty not in CERTAINTY_LEVELS:
                 certainty = "certain"
 
             if _fact_is_duplicate(text, existing_texts):
-                # On a near-match: update certainty if new one is more certain, bump confirmed
                 conn.execute(
-                    "UPDATE facts SET confirmed = confirmed + 1, "
+                    "UPDATE facts SET confirmed = confirmed + 1, last_confirmed = ?, "
                     "certainty = CASE "
                     "  WHEN certainty = 'réfuté' THEN certainty "
                     "  WHEN ? = 'certain' THEN 'certain' "
                     "  WHEN ? = 'probable' AND certainty = 'hypothèse' THEN 'probable' "
                     "  ELSE certainty END "
-                    "WHERE fact = ?",
-                    (certainty, certainty, text),
+                    "WHERE fact = ? AND deleted_at IS NULL",
+                    (now, certainty, certainty, text),
                 )
                 continue
 
             conn.execute(
-                "INSERT INTO facts (category, fact, certainty, source, timestamp) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (f["category"], text, certainty, f.get("source", ""), now),
+                "INSERT INTO facts (category, fact, certainty, source, last_confirmed, timestamp) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (category, text, certainty, f.get("source", ""), now, now),
             )
             existing_texts.append(text)
             inserted += 1
     return inserted
 
 
-def get_all_facts() -> list[dict]:
+def get_all_facts(include_deleted: bool = False) -> list[dict]:
+    where = "" if include_deleted else "WHERE deleted_at IS NULL"
     with _connect() as conn:
         rows = conn.execute(
-            "SELECT id, category, fact, certainty, confirmed, timestamp FROM facts "
-            "ORDER BY confirmed DESC, timestamp DESC"
+            f"SELECT id, category, fact, certainty, confirmed, last_confirmed, timestamp "
+            f"FROM facts {where} ORDER BY confirmed DESC, timestamp DESC"
         ).fetchall()
     return [dict(r) for r in rows]
 
 
+def get_fact_by_id(fact_id: int) -> dict | None:
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT id, category, fact, certainty, confirmed, timestamp "
+            "FROM facts WHERE id = ?",
+            (fact_id,),
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def update_fact(fact_id: int, new_text: str | None = None, new_certainty: str | None = None) -> bool:
+    updates: list[str] = []
+    params: list = []
+    if new_text:
+        updates.append("fact = ?")
+        params.append(new_text.strip())
+    if new_certainty and new_certainty in CERTAINTY_LEVELS:
+        updates.append("certainty = ?")
+        params.append(new_certainty)
+    if not updates:
+        return False
+    updates.append("last_confirmed = ?")
+    params.append(datetime.now().isoformat())
+    params.append(fact_id)
+    with _connect() as conn:
+        cur = conn.execute(
+            f"UPDATE facts SET {', '.join(updates)} WHERE id = ? AND deleted_at IS NULL",
+            params,
+        )
+    return cur.rowcount > 0
+
+
+def soft_delete_fact(fact_id: int) -> bool:
+    with _connect() as conn:
+        cur = conn.execute(
+            "UPDATE facts SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL",
+            (datetime.now().isoformat(), fact_id),
+        )
+    return cur.rowcount > 0
+
+
 def delete_fact(fact_id: int) -> bool:
-    with _connect() as conn:
-        cur = conn.execute("DELETE FROM facts WHERE id = ?", (fact_id,))
-        return cur.rowcount > 0
+    """Soft delete — marks deleted_at, preserves row for audit."""
+    return soft_delete_fact(fact_id)
 
 
-def search_facts(query: str) -> list[dict]:
-    """Keyword search across facts and profile."""
-    q = f"%{query.lower()}%"
+def get_stale_facts(days: int = _STALE_DAYS) -> list[dict]:
+    cutoff = (datetime.now() - timedelta(days=days)).isoformat()
     with _connect() as conn:
-        fact_rows = conn.execute(
-            "SELECT id, category, fact, certainty, confirmed, timestamp FROM facts "
-            "WHERE LOWER(fact) LIKE ? OR LOWER(category) LIKE ? "
-            "ORDER BY confirmed DESC",
-            (q, q),
+        rows = conn.execute(
+            "SELECT id, category, fact, certainty, confirmed, timestamp "
+            "FROM facts WHERE deleted_at IS NULL "
+            "AND (last_confirmed < ? OR (last_confirmed IS NULL AND timestamp < ?))",
+            (cutoff, cutoff),
         ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def fact_age_badge(timestamp: str) -> str:
+    """Return a staleness badge string for display, or '' if fresh."""
+    try:
+        dt = datetime.fromisoformat(timestamp)
+    except ValueError:
+        return ""
+    age_days = (datetime.now() - dt).days
+    if age_days >= _VERY_STALE_DAYS:
+        return f" [dim]⌛ {age_days // 365}a[/dim]"
+    if age_days >= _STALE_DAYS:
+        return f" [dim]⏳ {age_days // 30}m[/dim]"
+    return ""
+
+
+def search_facts(query: str, limit: int = 30) -> dict:
+    """Full-text search across facts (FTS5) and profile (LIKE fallback)."""
+    with _connect() as conn:
+        # FTS5 search on facts
+        try:
+            fts_rows = conn.execute(
+                "SELECT f.id, f.category, f.fact, f.certainty, f.confirmed, f.timestamp "
+                "FROM facts f JOIN facts_fts ON f.id = facts_fts.rowid "
+                "WHERE facts_fts MATCH ? AND f.deleted_at IS NULL "
+                "ORDER BY rank LIMIT ?",
+                (query, limit),
+            ).fetchall()
+        except sqlite3.OperationalError:
+            # FTS not available or query syntax error — fall back to LIKE
+            q = f"%{query.lower()}%"
+            fts_rows = conn.execute(
+                "SELECT id, category, fact, certainty, confirmed, timestamp FROM facts "
+                "WHERE (LOWER(fact) LIKE ? OR LOWER(category) LIKE ?) AND deleted_at IS NULL "
+                "ORDER BY confirmed DESC LIMIT ?",
+                (q, q, limit),
+            ).fetchall()
+
+        # Profile search (LIKE)
+        q = f"%{query.lower()}%"
         profile_rows = conn.execute(
             "SELECT key, value FROM profile WHERE LOWER(key) LIKE ? OR LOWER(value) LIKE ?",
             (q, q),
         ).fetchall()
+
     return {
-        "facts": [dict(r) for r in fact_rows],
+        "facts": [dict(r) for r in fts_rows],
         "profile": {r["key"]: r["value"] for r in profile_rows},
     }
 
 
-# ── Narrative (condensed memory) ───────────────────────────────────────────────
+# ── Mood log ───────────────────────────────────────────────────────────────────
+
+def log_mood(valence: str, state: str, intensity: int = 3) -> None:
+    valid_valences = {"positive", "neutral", "negative", "mixed"}
+    if valence not in valid_valences:
+        valence = "neutral"
+    intensity = max(1, min(5, intensity))
+    with _connect() as conn:
+        conn.execute(
+            "INSERT INTO mood_log (valence, state, intensity, timestamp) VALUES (?, ?, ?, ?)",
+            (valence, state, intensity, datetime.now().isoformat()),
+        )
+
+
+def get_recent_mood(limit: int = 5) -> list[dict]:
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT valence, state, intensity, timestamp FROM mood_log "
+            "ORDER BY id DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_mood_summary() -> str:
+    """One-line mood summary for context injection."""
+    recent = get_recent_mood(limit=3)
+    if not recent:
+        return ""
+    latest = recent[0]
+    state_desc = f"{latest['valence']} — {latest['state']}"
+    if len(recent) > 1:
+        valences = [m["valence"] for m in recent]
+        if valences.count("negative") >= 2:
+            state_desc += " (tendance négative récente)"
+        elif valences.count("positive") >= 2:
+            state_desc += " (tendance positive récente)"
+    return state_desc
+
+
+# ── Narrative ──────────────────────────────────────────────────────────────────
 
 def save_narrative(content: str) -> None:
     with _connect() as conn:
@@ -298,13 +491,11 @@ def get_narrative_count() -> int:
 # ── Context building ───────────────────────────────────────────────────────────
 
 def _score_relevance(text: str, keywords: set[str]) -> int:
-    """Count how many keywords appear in text (case-insensitive)."""
     t = text.lower()
     return sum(1 for kw in keywords if kw in t)
 
 
 def _extract_keywords(messages: list[dict], min_len: int = 4) -> set[str]:
-    """Pull content words from recent messages for relevance scoring."""
     stopwords = {
         "que", "qui", "quoi", "dans", "avec", "pour", "sur", "par", "une", "des",
         "les", "est", "sont", "cette", "cela", "mais", "donc", "alors", "aussi",
@@ -322,21 +513,16 @@ def _extract_keywords(messages: list[dict], min_len: int = 4) -> set[str]:
 
 
 def build_smart_context(recent_messages: list[dict] | None = None) -> str:
-    """
-    Build the knowledge block to inject into prompts.
-    If recent_messages provided, rank facts by relevance to conversation.
-    Always includes: narrative, full profile, top-N facts.
-    """
     lines: list[str] = []
 
-    # 1. Condensed narrative (highest priority — rich personal summary)
+    # 1. Narrative
     narrative = get_latest_narrative()
     if narrative:
         lines.append("## Narration personnelle condensée")
         lines.append(narrative)
         lines.append("")
 
-    # 2. Conversation summaries (recent memory beyond context window)
+    # 2. Conversation summaries
     summaries = get_conversation_summaries(limit=3)
     if summaries:
         lines.append("## Résumés des conversations passées")
@@ -344,7 +530,12 @@ def build_smart_context(recent_messages: list[dict] | None = None) -> str:
             lines.append(f"- {s}")
         lines.append("")
 
-    # 3. Profile (always full)
+    # 3. Current mood
+    mood = get_mood_summary()
+    if mood:
+        lines.append(f"## Humeur récente détectée\n{mood}\n")
+
+    # 4. Profile
     profile = get_profile()
     if profile:
         lines.append("## Profil")
@@ -352,28 +543,23 @@ def build_smart_context(recent_messages: list[dict] | None = None) -> str:
             lines.append(f"- **{k}** : {v}")
         lines.append("")
 
-    # 4. Facts — ranked by relevance then by confirmed count
+    # 5. Facts — ranked by relevance + confirmed, capped at 60
     all_facts = get_all_facts()
     if all_facts:
         keywords = _extract_keywords(recent_messages or [])
+
+        # Sort: réfuté excluded, hypothèse last, then by relevance + confirmed
+        active = [f for f in all_facts if f.get("certainty") != "réfuté"]
         if keywords:
-            scored = sorted(
-                all_facts,
+            active.sort(
                 key=lambda f: (_score_relevance(f["fact"], keywords), f["confirmed"]),
                 reverse=True,
             )
-        else:
-            scored = all_facts  # already sorted by confirmed DESC
 
-        # Exclude réfuté facts from active context (keep them in DB only)
-        scored = [f for f in scored if f.get("certainty") != "réfuté"]
-
-        # Inject up to 60 facts; the most relevant/confirmed ones first
-        top = scored[:60]
+        top = active[:60]
         by_cat: dict[str, list[tuple[str, str]]] = {}
         for f in top:
-            certainty = f.get("certainty", "certain")
-            by_cat.setdefault(f["category"], []).append((f["fact"], certainty))
+            by_cat.setdefault(f["category"], []).append((f["fact"], f.get("certainty", "certain")))
 
         lines.append("## Faits mémorisés")
         lines.append("(● certain  ◐ probable  ○ hypothèse à explorer)")
@@ -386,5 +572,4 @@ def build_smart_context(recent_messages: list[dict] | None = None) -> str:
 
     if not lines:
         return ""
-
     return "# Ce que je sais de toi\n\n" + "\n".join(lines)
