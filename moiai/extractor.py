@@ -36,7 +36,10 @@ Retourne UNIQUEMENT ce JSON :
   "people": [
     {"name": "Prénom", "relation": "frère|ami|collègue|…", "note": "info utile"}
   ],
-  "goals": ["objectif formulé clairement"]
+  "goals": ["objectif formulé clairement"],
+  "capsules": [
+    {"content": "résumé de l'événement futur", "days": 7, "note": "question de suivi"}
+  ]
 }
 
 Catégories valides pour facts : identité, famille, relations, travail, éducation,
@@ -57,6 +60,10 @@ profile_updates = uniquement faits certains et stables (nom, âge, ville, métie
 people = uniquement les personnes AUTRES que l'utilisateur mentionnées par leur prénom/nom.
 goals = intentions ou objectifs déclarés ("veux apprendre le piano", "objectif : perdre 5kg").
 mood.intensity : 1 (très faible) à 5 (très intense). 3 si neutre.
+capsules = événements futurs concrets mentionnés (entretien, voyage, rendez-vous, deadline,
+  décision à prendre). days = délai estimé en jours avant l'événement.
+  note = la question naturelle à poser à ce moment-là.
+  Ne créer une capsule QUE si l'événement est précis et daté/délai estimable.
 Si rien à extraire dans un champ, retourner liste/objet vide.
 Aucun texte hors du JSON.
 
@@ -146,6 +153,18 @@ def _apply_extraction(data: dict, store_mood: bool = False) -> int:
     goal_texts = [g.strip() for g in data.get("goals", []) if isinstance(g, str) and g.strip()]
     if goal_texts:
         add_extracted_goals(goal_texts)
+
+    # Auto-capsules from future events
+    for c in data.get("capsules", []):
+        content = c.get("content", "").strip()
+        days = c.get("days")
+        note = c.get("note", "").strip() or None
+        if content and isinstance(days, (int, float)) and 1 <= int(days) <= 730:
+            try:
+                from .capsule import add_auto_capsule
+                add_auto_capsule(content, int(days), ai_note=note)
+            except Exception:
+                pass
 
     return inserted
 

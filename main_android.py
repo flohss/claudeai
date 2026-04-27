@@ -27,6 +27,14 @@ except ImportError:
     _RICH = False
 
 from moiai.chat import chat_complete, finish_turn, get_startup_briefing, get_stats, start_session
+from moiai.capsule import (
+    add_capsule,
+    delete_capsule,
+    get_all_capsules,
+    get_due_capsules,
+    mark_opened,
+    parse_delay,
+)
 from moiai.condenser import condense_narrative
 from moiai.extractor import extract_and_store, extract_from_messages
 from moiai.goals import (
@@ -121,6 +129,8 @@ COMMANDS_HELP = """
 /bilan        Auto-évaluation par domaine
 /révision     Détecter les contradictions
 /personnes    Personnes dans ta vie
+/capsule X    Créer une capsule temporelle (ex: dans 2 semaines)
+/capsules     Lister toutes les capsules
 /rapport      Export Markdown
 /export       Export JSON
 /stats        Statistiques
@@ -464,6 +474,71 @@ def _handle_people() -> None:
                 _print("ID introuvable.\n")
 
 
+# ── Capsules ───────────────────────────────────────────────────────────────────
+
+def _handle_add_capsule(args: str) -> None:
+    import re
+    args = args.strip()
+    if not args:
+        _print("Usage : /capsule <message> dans <n> jours|semaines|mois")
+        _print("Ex :    /capsule mon entretien Google dans 3 jours")
+        return
+
+    open_at = parse_delay(args)
+    if not open_at:
+        delay_str = _input("Dans combien de temps ? (ex: dans 2 semaines / 2025-06-01) : ")
+        open_at = parse_delay(delay_str)
+        if not open_at:
+            _print("Délai non reconnu.\n")
+            return
+        content = args
+    else:
+        content = re.sub(
+            r"\s+dans\s+\d+\s+(jour|jours|semaine|semaines|mois|an|ans).*$", "", args
+        ).strip() or args
+
+    cid = add_capsule(content, open_at)
+    _print(f"✓ Capsule #{cid} créée. S'ouvrira le {open_at.strftime('%d/%m/%Y')}\n")
+
+
+def _handle_capsules() -> None:
+    capsules = get_all_capsules()
+    if not capsules:
+        _print("Aucune capsule créée.\n")
+        return
+    from datetime import datetime as _dt
+    now = _dt.now().isoformat()
+    _print(f"--- Capsules ({len(capsules)}) ---")
+    for c in capsules:
+        status = "ouverte ✓" if c["opened"] else ("EN ATTENTE" if c["open_at"] > now else "DUE !")
+        src = " (auto)" if c.get("source") == "auto" else ""
+        _print(f"  #{c['id']} [{status}] {c['open_at'][:10]} — {c['content'][:60]}{src}")
+    _print()
+    action = _input("(s)upprimer / Entrée=rien : ").lower()
+    if action == "s":
+        cid_str = _input("ID : ")
+        if cid_str.isdigit():
+            if delete_capsule(int(cid_str)):
+                _print("✓ Supprimée.\n")
+            else:
+                _print("ID introuvable.\n")
+
+
+def _show_due_capsules() -> None:
+    due = get_due_capsules()
+    if not due:
+        return
+    for c in due:
+        _print("\n" + "=" * 50)
+        _print(f"  📬 CAPSULE du {c['created_at'][:10]}")
+        _print(f"  {c['content']}")
+        if c.get("ai_note"):
+            _print(f"  → {c['ai_note']}")
+        _print("=" * 50)
+        mark_opened(c["id"])
+    _print()
+
+
 # ── Rapport / Export ───────────────────────────────────────────────────────────
 
 def _handle_rapport() -> None:
@@ -609,6 +684,7 @@ def main() -> None:
 
     init_db()
     _header()
+    _show_due_capsules()
     start_session()
 
     briefing = get_startup_briefing(timeout=8.0)
@@ -666,6 +742,12 @@ def main() -> None:
             _handle_revision()
         elif lower == "/personnes":
             _handle_people()
+        elif lower == "/reflect":
+            _handle_reflect()
+        elif lower.startswith("/capsule") and not lower.startswith("/capsules"):
+            _handle_add_capsule(user_input[8:])
+        elif lower == "/capsules":
+            _handle_capsules()
         else:
             _status("...")
             try:

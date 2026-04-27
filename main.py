@@ -21,6 +21,14 @@ from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn
 from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
+from moiai.capsule import (
+    add_capsule,
+    delete_capsule,
+    get_all_capsules,
+    get_due_capsules,
+    mark_opened,
+    parse_delay,
+)
 from moiai.chat import finish_turn, get_startup_briefing, get_stats, start_session, stream_response
 from moiai.condenser import condense_narrative
 from moiai.extractor import extract_and_store, extract_from_messages
@@ -85,6 +93,8 @@ COMMANDS = {
     "/bilan":               "Bilan de vie — auto-évaluation par domaine (1-5)",
     "/révision":            "Détecter les contradictions dans ta mémoire",
     "/personnes":           "Afficher les personnes de ton entourage",
+    "/capsule <texte>":     "Créer une capsule temporelle (ex: dans 2 semaines)",
+    "/capsules":            "Lister toutes les capsules",
     "/rapport":             "Exporter le profil complet en Markdown",
     "/export":              "Exporter toute la mémoire en JSON",
     "/stats":               "Statistiques de mémoire",
@@ -760,6 +770,107 @@ def _handle_people() -> None:
         console.print()
 
 
+# ── Capsules ───────────────────────────────────────────────────────────────────
+
+def _handle_add_capsule(args: str) -> None:
+    args = args.strip()
+    if not args:
+        console.print(
+            "[yellow]Usage :[/yellow] /capsule <message> dans <n> jours|semaines|mois\n"
+            "[dim]Exemples :[/dim]\n"
+            "  /capsule mon entretien chez Google dans 3 jours\n"
+            "  /capsule vérifier mon objectif sport dans 1 mois\n"
+        )
+        return
+
+    open_at = parse_delay(args)
+    if not open_at:
+        # No delay in text — ask
+        delay_str = Prompt.ask(
+            "[dim]Dans combien de temps ? (ex: dans 2 semaines / 2025-06-01)[/dim]"
+        ).strip()
+        open_at = parse_delay(delay_str)
+        if not open_at:
+            console.print("[red]Délai non reconnu.[/red]\n")
+            return
+        content = args
+    else:
+        import re
+        content = re.sub(
+            r"\s+dans\s+\d+\s+(jour|jours|semaine|semaines|mois|an|ans).*$", "", args
+        ).strip()
+        if not content:
+            content = args
+
+    cid = add_capsule(content, open_at)
+    date_str = open_at.strftime("%d/%m/%Y")
+    console.print(
+        f"[green]✓ Capsule #{cid} créée.[/green] "
+        f"S'ouvrira le [bold]{date_str}[/bold]\n"
+    )
+
+
+def _handle_capsules() -> None:
+    capsules = get_all_capsules()
+    if not capsules:
+        console.print("[dim]Aucune capsule créée.[/dim]\n")
+        return
+
+    table = Table(show_header=True, box=None, padding=(0, 1))
+    table.add_column("ID", style="dim", width=5)
+    table.add_column("Message")
+    table.add_column("S'ouvre le", width=13)
+    table.add_column("Statut", width=10)
+    table.add_column("Source", style="dim", width=8)
+
+    from datetime import datetime as _dt
+    now = _dt.now().isoformat()
+
+    for c in capsules:
+        status = "[green]ouverte ✓[/green]" if c["opened"] else (
+            "[yellow]en attente[/yellow]" if c["open_at"] > now else "[bold red]due ![/bold red]"
+        )
+        date_str = c["open_at"][:10]
+        src = "auto" if c.get("source") == "auto" else "toi"
+        table.add_row(str(c["id"]), c["content"][:60], date_str, status, src)
+
+    console.print(Panel(
+        table,
+        title=f"[bold]Capsules temporelles ({len(capsules)})[/bold]",
+        border_style="magenta",
+    ))
+
+    action = Prompt.ask(
+        "\n[dim][bold]s[/bold]upprimer / Entrée=rien[/dim]", default=""
+    ).strip().lower()
+    if action == "s":
+        cid_str = Prompt.ask("[dim]ID[/dim]").strip()
+        if cid_str.isdigit():
+            if delete_capsule(int(cid_str)):
+                console.print("[green]✓ Supprimée.[/green]\n")
+            else:
+                console.print("[red]ID introuvable.[/red]\n")
+    else:
+        console.print()
+
+
+def _show_due_capsules() -> None:
+    """Show capsules that are due and mark them as opened."""
+    due = get_due_capsules()
+    if not due:
+        return
+    for c in due:
+        note = f"\n[dim italic]{c['ai_note']}[/dim italic]" if c.get("ai_note") else ""
+        src = " [dim](créée automatiquement)[/dim]" if c.get("source") == "auto" else ""
+        console.print(Panel(
+            f"[bold]{c['content']}[/bold]{note}",
+            title=f"[bold magenta]📬 Capsule du {c['created_at'][:10]}[/bold magenta]{src}",
+            border_style="magenta",
+        ))
+        mark_opened(c["id"])
+    console.print()
+
+
 # ── Background extraction ──────────────────────────────────────────────────────
 
 def _extract_async(user_msg: str, assistant_msg: str) -> None:
@@ -783,6 +894,7 @@ def main() -> None:
 
     init_db()
     _header()
+    _show_due_capsules()
     start_session()
 
     briefing = get_startup_briefing(timeout=6.0)
@@ -845,6 +957,10 @@ def main() -> None:
             _handle_revision()
         elif lower == "/personnes":
             _handle_people()
+        elif lower.startswith("/capsule") and not lower.startswith("/capsules"):
+            _handle_add_capsule(user_input[8:])
+        elif lower == "/capsules":
+            _handle_capsules()
         else:
             # ── Streaming chat response ────────────────────────────────────
             full_reply = ""
