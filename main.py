@@ -7,25 +7,28 @@ Lancement : python main.py
 import os
 import sys
 import threading
+from pathlib import Path
 
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
+from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
 from rich.prompt import Prompt
-from rich.text import Text
 
 from moiai.chat import chat, get_stats
-from moiai.extractor import extract_and_store
-from moiai.memory import init_db, build_knowledge_summary, get_all_facts, get_profile
+from moiai.extractor import extract_and_store, extract_from_messages
+from moiai.importer import load_file
+from moiai.memory import init_db, get_all_facts, get_profile
 
 console = Console()
 
 COMMANDS = {
-    "/profil":   "Afficher ce que je sais de toi",
-    "/faits":    "Lister tous les faits mémorisés",
-    "/stats":    "Statistiques de la session",
-    "/aide":     "Afficher cette aide",
-    "/quitter":  "Quitter",
+    "/profil":          "Afficher ce que je sais de toi",
+    "/faits":           "Lister tous les faits mémorisés",
+    "/stats":           "Statistiques de la session",
+    "/import <fichier>":"Importer un fichier (WhatsApp, Instagram, Telegram, txt)",
+    "/aide":            "Afficher cette aide",
+    "/quitter":         "Quitter",
 }
 
 
@@ -41,7 +44,7 @@ def _header() -> None:
 def _show_help() -> None:
     lines = ["[bold]Commandes disponibles :[/bold]\n"]
     for cmd, desc in COMMANDS.items():
-        lines.append(f"  [cyan]{cmd:<12}[/cyan] {desc}")
+        lines.append(f"  [cyan]{cmd:<25}[/cyan] {desc}")
     console.print("\n".join(lines) + "\n")
 
 
@@ -87,8 +90,87 @@ def _show_stats() -> None:
     )
 
 
+def _handle_import(args: str) -> None:
+    filepath = args.strip().strip('"').strip("'")
+    if not filepath:
+        console.print("[yellow]Usage :[/yellow] /import <chemin/vers/fichier>\n")
+        return
+
+    path = Path(filepath).expanduser().resolve()
+    if not path.exists():
+        console.print(f"[red]Fichier introuvable :[/red] {path}\n")
+        return
+
+    # Detect format first
+    from moiai.importer import detect_format
+    fmt = detect_format(path)
+    console.print(f"[dim]Format détecté : [bold]{fmt}[/bold][/dim]")
+
+    # For WhatsApp/Instagram/Telegram ask for username
+    user_name: str | None = None
+    if fmt in ("whatsapp", "instagram", "instagram_zip", "instagram_multi", "telegram", "telegram_zip"):
+        senders_hint = ""
+        # Quick peek at senders
+        try:
+            _, senders, _ = load_file(path, user_name=None)
+            if senders:
+                senders_hint = "  Participants trouvés : " + ", ".join(f"[cyan]{s}[/cyan]" for s in senders[:8])
+                if len(senders) > 8:
+                    senders_hint += f" et {len(senders)-8} autres"
+        except Exception:
+            pass
+        if senders_hint:
+            console.print(senders_hint)
+        user_name_input = Prompt.ask(
+            "[bold]Ton nom dans ce fichier[/bold] (laisser vide = tous les messages)",
+            default="",
+        ).strip()
+        user_name = user_name_input if user_name_input else None
+
+    # Load messages
+    try:
+        messages, _, _ = load_file(path, user_name=user_name)
+    except Exception as e:
+        console.print(f"[red]Erreur de lecture :[/red] {e}\n")
+        return
+
+    if not messages:
+        console.print("[yellow]Aucun message trouvé dans ce fichier.[/yellow]\n")
+        return
+
+    console.print(f"[dim]{len(messages)} messages chargés — extraction en cours...[/dim]")
+
+    total_facts = 0
+    errors = 0
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TaskProgressColumn(),
+        console=console,
+        transient=True,
+    ) as progress:
+        task = progress.add_task("Analyse...", total=None)
+
+        def on_progress(current: int, total: int) -> None:
+            progress.update(task, total=total, completed=current,
+                            description=f"Bloc {current}/{total}")
+
+        try:
+            total_facts = extract_from_messages(messages, progress_callback=on_progress)
+        except Exception as e:
+            errors += 1
+            console.print(f"[red]Erreur extraction :[/red] {e}\n")
+
+    if not errors:
+        console.print(
+            f"[green]✓[/green] Import terminé — "
+            f"[bold]{total_facts}[/bold] fait(s) mémorisé(s) depuis [cyan]{path.name}[/cyan]\n"
+        )
+
+
 def _extract_async(user_msg: str, assistant_msg: str) -> None:
-    """Run extraction in background so the CLI stays responsive."""
     try:
         n = extract_and_store(user_msg, assistant_msg)
         if n:
@@ -119,21 +201,25 @@ def main() -> None:
         if not user_input:
             continue
 
-        cmd = user_input.lower()
-        if cmd in ("/quitter", "/exit", "/quit", "exit", "quit"):
+        cmd_lower = user_input.lower()
+
+        if cmd_lower in ("/quitter", "/exit", "/quit", "exit", "quit"):
             console.print("[dim]À bientôt.[/dim]")
             break
-        elif cmd == "/aide":
+        elif cmd_lower == "/aide":
             _show_help()
             continue
-        elif cmd == "/profil":
+        elif cmd_lower == "/profil":
             _show_profile()
             continue
-        elif cmd == "/faits":
+        elif cmd_lower == "/faits":
             _show_facts()
             continue
-        elif cmd == "/stats":
+        elif cmd_lower == "/stats":
             _show_stats()
+            continue
+        elif user_input.lower().startswith("/import"):
+            _handle_import(user_input[7:])
             continue
 
         with console.status("[dim]Réflexion...[/dim]", spinner="dots"):
@@ -149,7 +235,6 @@ def main() -> None:
             border_style="blue",
         ))
 
-        # Extract personal info in background
         threading.Thread(
             target=_extract_async,
             args=(user_input, reply),
