@@ -1,12 +1,15 @@
 """
 Conversation engine — maintains context, injects personal knowledge, calls Claude.
+Auto-triggers conversation summarization when history grows long.
 """
 
 import anthropic
 
+from .condenser import maybe_summarize_conversations
 from .memory import (
-    build_knowledge_summary,
+    build_smart_context,
     count_messages,
+    get_conversation_summaries,
     load_recent_messages,
     save_message,
 )
@@ -18,13 +21,14 @@ Tu es le double artificiel personnel de l'utilisateur — une IA qui le connaît
 profondément et apprend de lui en permanence.
 
 Ton rôle :
-- Converser naturellement, comme un alter ego bienveillant et intelligent.
-- Utiliser et rappeler ce que tu sais de lui quand c'est pertinent.
-- Poser des questions de suivi pour mieux le comprendre.
+- Converser naturellement, comme un alter ego bienveillant, direct et intelligent.
+- Utiliser et rappeler ce que tu sais de lui quand c'est pertinent, sans être lourd.
+- Poser des questions de suivi précises pour mieux le comprendre.
 - Ne jamais oublier ce qu'il t'a confié lors des sessions précédentes.
-- Répondre dans la langue de l'utilisateur.
+- Répondre dans la langue de l'utilisateur (français par défaut).
+- Être honnête, y compris si quelque chose va à l'encontre de ses intérêts.
 
-{knowledge}
+{context}
 """
 
 
@@ -35,16 +39,15 @@ def _get_client() -> anthropic.Anthropic:
     return _client
 
 
-def _build_system_prompt() -> str:
-    knowledge = build_knowledge_summary()
-    return _SYSTEM_BASE.format(knowledge=knowledge if knowledge else "")
-
-
 def chat(user_input: str) -> str:
     save_message("user", user_input)
 
-    history = load_recent_messages(limit=40)
-    system_prompt = _build_system_prompt()
+    # Load recent active messages (unsummarized)
+    history = load_recent_messages(limit=30)
+
+    # Build smart context: narrative + summaries + relevant facts
+    context = build_smart_context(recent_messages=history)
+    system_prompt = _SYSTEM_BASE.format(context=context if context else "")
 
     response = _get_client().messages.create(
         model="claude-sonnet-4-6",
@@ -55,10 +58,16 @@ def chat(user_input: str) -> str:
 
     reply = response.content[0].text
     save_message("assistant", reply)
+
+    # Auto-summarize old conversations in background (called after response)
+    maybe_summarize_conversations()
+
     return reply
 
 
 def get_stats() -> dict:
+    summaries = get_conversation_summaries(limit=100)
     return {
         "messages": count_messages(),
+        "summaries": len(summaries),
     }

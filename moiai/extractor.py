@@ -4,7 +4,6 @@ from the conversation and merge them into persistent memory.
 """
 
 import json
-import math
 from typing import Callable
 
 import anthropic
