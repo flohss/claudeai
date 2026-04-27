@@ -12,6 +12,10 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
+# Ensure the directory containing this script is on the path
+# (needed for Pydroid 3 and other environments where cwd != script dir)
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
 try:
     from rich.console import Console
     from rich.markdown import Markdown

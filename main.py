@@ -11,6 +11,8 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
 from rich.console import Console
 from rich.live import Live
 from rich.markdown import Markdown
