@@ -19,9 +19,16 @@ from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn
 from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
-from moiai.chat import finish_turn, get_stats, start_session, stream_response
+from moiai.chat import finish_turn, get_startup_briefing, get_stats, start_session, stream_response
 from moiai.condenser import condense_narrative
 from moiai.extractor import extract_and_store, extract_from_messages
+from moiai.goals import (
+    GOAL_STATUSES,
+    add_goal,
+    delete_goal,
+    get_all_goals,
+    update_goal_status,
+)
 from moiai.importer import load_file
 from moiai.memory import (
     CERTAINTY_BADGE,
@@ -41,6 +48,16 @@ from moiai.memory import (
     search_facts,
     update_fact,
 )
+from moiai.people import delete_person, get_all_people, get_person_by_id
+from moiai.reflect import (
+    LIFE_DOMAINS,
+    find_contradictions,
+    generate_reflection,
+    get_latest_domain_scores,
+    resolve_contradiction,
+    save_domain_scores,
+    store_contradiction,
+)
 
 console = Console()
 
@@ -58,13 +75,32 @@ COMMANDS = {
     "/oublie <ID|terme>":   "Supprimer un fait ou une entrée profil",
     "/edit <ID> <texte>":   "Corriger le texte d'un fait",
     "/historique [n]":      "Afficher les n derniers échanges (défaut 10)",
-    "/import <fichier>":    "Importer un fichier (WhatsApp, Instagram, Telegram, txt)",
+    "/import <fichier>":    "Importer un fichier (WhatsApp, Instagram, Telegram, txt, pdf)",
     "/condenser":           "Fusionner la mémoire en narration personnelle",
+    "/reflect":             "Analyse psychologique de ton profil (pattern, angles morts)",
+    "/objectif <texte>":    "Ajouter un objectif",
+    "/objectifs":           "Lister et gérer les objectifs",
+    "/bilan":               "Bilan de vie — auto-évaluation par domaine (1-5)",
+    "/révision":            "Détecter les contradictions dans ta mémoire",
+    "/personnes":           "Afficher les personnes de ton entourage",
     "/rapport":             "Exporter le profil complet en Markdown",
     "/export":              "Exporter toute la mémoire en JSON",
     "/stats":               "Statistiques de mémoire",
     "/aide":                "Afficher cette aide",
     "/quitter":             "Quitter",
+}
+
+_GOAL_STATUS_COLOR = {
+    "active":    "green",
+    "achieved":  "cyan",
+    "abandoned": "red",
+    "paused":    "yellow",
+}
+_GOAL_STATUS_LABEL = {
+    "active":    "actif",
+    "achieved":  "atteint ✓",
+    "abandoned": "abandonné",
+    "paused":    "en pause",
 }
 
 
@@ -510,6 +546,218 @@ def _handle_import(args: str) -> None:
     )
 
 
+# ── Reflect ────────────────────────────────────────────────────────────────────
+
+def _handle_reflect() -> None:
+    with console.status("[dim]Analyse psychologique en cours...[/dim]", spinner="dots"):
+        try:
+            text = generate_reflection()
+        except Exception as e:
+            console.print(f"[red]Erreur :[/red] {e}\n")
+            return
+    console.print(Panel(
+        Markdown(text),
+        title="[bold]Analyse — patterns & angles morts[/bold]",
+        border_style="magenta",
+    ))
+    console.print()
+
+
+# ── Goals ──────────────────────────────────────────────────────────────────────
+
+def _handle_add_goal(args: str) -> None:
+    text = args.strip()
+    if not text:
+        console.print("[yellow]Usage :[/yellow] /objectif <texte de l'objectif>\n")
+        return
+    deadline = None
+    dl_inp = Prompt.ask("[dim]Échéance (optionnel, ex: 2025-06-01)[/dim]", default="").strip()
+    if dl_inp:
+        deadline = dl_inp
+    gid = add_goal(text, deadline=deadline, source="user")
+    console.print(f"[green]✓ Objectif #{gid} ajouté.[/green]\n")
+
+
+def _handle_goals() -> None:
+    goals = get_all_goals()
+    if not goals:
+        console.print("[dim]Aucun objectif enregistré.[/dim]\n")
+        return
+
+    table = Table(show_header=True, box=None, padding=(0, 1))
+    table.add_column("ID", style="dim", width=5)
+    table.add_column("Objectif")
+    table.add_column("Statut", width=14)
+    table.add_column("Échéance", width=12, style="dim")
+    table.add_column("Source", width=10, style="dim")
+
+    for g in goals:
+        status = g.get("status", "active")
+        color = _GOAL_STATUS_COLOR.get(status, "white")
+        label = _GOAL_STATUS_LABEL.get(status, status)
+        dl = g.get("deadline", "") or ""
+        dl = dl[:10] if dl else "—"
+        src = "extrait" if g.get("source") == "extracted" else "toi"
+        table.add_row(
+            str(g["id"]),
+            g["text"],
+            f"[{color}]{label}[/{color}]",
+            dl,
+            src,
+        )
+
+    console.print(Panel(table, title="[bold]Objectifs[/bold]", border_style="cyan"))
+
+    action = Prompt.ask(
+        "\n[dim]Action : [bold]a[/bold]tteint / [bold]p[/bold]ause / [bold]x[/bold] abandonner / "
+        "[bold]s[/bold]upprimer / Entrée=rien[/dim]",
+        default="",
+    ).strip().lower()
+
+    if not action:
+        console.print()
+        return
+
+    gid_str = Prompt.ask("[dim]ID de l'objectif[/dim]").strip()
+    if not gid_str.isdigit():
+        console.print("[yellow]ID invalide.[/yellow]\n")
+        return
+    gid = int(gid_str)
+
+    if action == "a":
+        update_goal_status(gid, "achieved")
+        console.print(f"[cyan]✓ Objectif #{gid} marqué atteint.[/cyan]\n")
+    elif action == "p":
+        update_goal_status(gid, "paused")
+        console.print(f"[yellow]⏸ Objectif #{gid} mis en pause.[/yellow]\n")
+    elif action == "x":
+        update_goal_status(gid, "abandoned")
+        console.print(f"[red]✗ Objectif #{gid} abandonné.[/red]\n")
+    elif action == "s":
+        if delete_goal(gid):
+            console.print(f"[green]✓ Objectif #{gid} supprimé.[/green]\n")
+        else:
+            console.print(f"[red]Objectif #{gid} introuvable.[/red]\n")
+    else:
+        console.print("[dim]Action non reconnue.[/dim]\n")
+
+
+# ── Bilan ──────────────────────────────────────────────────────────────────────
+
+def _handle_bilan() -> None:
+    console.print(Panel(
+        "[bold]Bilan de vie — auto-évaluation[/bold]\n"
+        "[dim]Note chaque domaine de 1 (très insatisfaisant) à 5 (excellent).[/dim]",
+        border_style="magenta",
+    ))
+
+    last = get_latest_domain_scores()
+    scores: dict[str, int] = {}
+
+    for domain in LIFE_DOMAINS:
+        prev = last.get(domain)
+        hint = f"  [dim](précédent : {prev}/5)[/dim]" if prev is not None else ""
+        console.print(f"  [cyan]{domain}[/cyan]{hint}")
+        while True:
+            raw = Prompt.ask("  → Note (1-5)", default=str(prev or 3)).strip()
+            if raw.isdigit() and 1 <= int(raw) <= 5:
+                scores[domain] = int(raw)
+                break
+            console.print("  [yellow]Entre un chiffre entre 1 et 5.[/yellow]")
+
+    save_domain_scores(scores)
+
+    lines = ["## Bilan de vie\n"]
+    for domain, score in scores.items():
+        bar = "█" * score + "░" * (5 - score)
+        prev = last.get(domain)
+        delta = ""
+        if prev is not None:
+            diff = score - prev
+            if diff > 0:
+                delta = f"  [green]+{diff}[/green]"
+            elif diff < 0:
+                delta = f"  [red]{diff}[/red]"
+        lines.append(f"  {domain:<28} {bar} {score}/5{delta}")
+
+    console.print(Panel(
+        "\n".join(lines),
+        title="[bold]Résultat[/bold]",
+        border_style="magenta",
+    ))
+    console.print("[green]✓ Bilan sauvegardé.[/green]\n")
+
+
+# ── Révision (contradictions) ──────────────────────────────────────────────────
+
+def _handle_revision() -> None:
+    with console.status("[dim]Analyse des contradictions...[/dim]", spinner="dots"):
+        try:
+            contras = find_contradictions()
+        except Exception as e:
+            console.print(f"[red]Erreur :[/red] {e}\n")
+            return
+
+    if not contras:
+        console.print("[green]✓ Aucune contradiction détectée.[/green]\n")
+        return
+
+    console.print(f"[yellow]{len(contras)} contradiction(s) détectée(s) :[/yellow]\n")
+
+    for i, c in enumerate(contras, 1):
+        console.print(Panel(
+            f"[bold]Fait 1 :[/bold] {c.get('fact1', '—')}\n"
+            f"[bold]Fait 2 :[/bold] {c.get('fact2', '—')}\n\n"
+            f"[dim]{c.get('explanation', '')}[/dim]",
+            title=f"[yellow]Contradiction #{i}[/yellow]",
+            border_style="yellow",
+        ))
+        store_contradiction(None, None, c.get("explanation", ""))
+
+    console.print("[dim]Contradictions enregistrées. Utilise /faits pour corriger.[/dim]\n")
+
+
+# ── Personnes ──────────────────────────────────────────────────────────────────
+
+def _handle_people() -> None:
+    people = get_all_people()
+    if not people:
+        console.print("[dim]Aucune personne mémorisée.[/dim]\n")
+        return
+
+    table = Table(show_header=True, box=None, padding=(0, 1))
+    table.add_column("ID", style="dim", width=5)
+    table.add_column("Nom", style="bold cyan", width=20)
+    table.add_column("Relation", width=15)
+    table.add_column("Notes")
+    table.add_column("Vu", style="dim", width=12)
+
+    for p in people:
+        rel = p.get("relation") or "—"
+        notes = (p.get("notes") or "")[:60]
+        if len(p.get("notes") or "") > 60:
+            notes += "…"
+        last = (p.get("last_mentioned") or "")[:10]
+        table.add_row(str(p["id"]), p["name"], rel, notes, last)
+
+    console.print(Panel(table, title=f"[bold]Personnes ({len(people)})[/bold]", border_style="cyan"))
+
+    action = Prompt.ask(
+        "\n[dim][bold]s[/bold]upprimer un profil / Entrée=rien[/dim]",
+        default="",
+    ).strip().lower()
+
+    if action == "s":
+        pid_str = Prompt.ask("[dim]ID[/dim]").strip()
+        if pid_str.isdigit():
+            if delete_person(int(pid_str)):
+                console.print(f"[green]✓ Supprimé.[/green]\n")
+            else:
+                console.print("[red]ID introuvable.[/red]\n")
+    else:
+        console.print()
+
+
 # ── Background extraction ──────────────────────────────────────────────────────
 
 def _extract_async(user_msg: str, assistant_msg: str) -> None:
@@ -533,7 +781,16 @@ def main() -> None:
 
     init_db()
     _header()
-    start_session()  # warm curiosity cache in background
+    start_session()
+
+    briefing = get_startup_briefing(timeout=6.0)
+    if briefing:
+        console.print(Panel(
+            briefing,
+            title="[bold blue]Moi.AI[/bold blue]",
+            border_style="blue",
+        ))
+        console.print()
 
     while True:
         try:
@@ -574,6 +831,18 @@ def main() -> None:
             _handle_history(user_input[11:])
         elif lower.startswith("/import"):
             _handle_import(user_input[7:])
+        elif lower == "/reflect":
+            _handle_reflect()
+        elif lower.startswith("/objectif") and not lower.startswith("/objectifs"):
+            _handle_add_goal(user_input[9:])
+        elif lower == "/objectifs":
+            _handle_goals()
+        elif lower in ("/bilan", "/bilan de vie"):
+            _handle_bilan()
+        elif lower in ("/révision", "/revision"):
+            _handle_revision()
+        elif lower == "/personnes":
+            _handle_people()
         else:
             # ── Streaming chat response ────────────────────────────────────
             full_reply = ""

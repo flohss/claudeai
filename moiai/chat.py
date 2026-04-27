@@ -154,6 +154,26 @@ def stream_response(user_input: str) -> Iterator[str]:
     return stream_chat(history, system_blocks=system_blocks, model=MODEL_CHAT)
 
 
+def chat_complete(user_input: str) -> str:
+    """Non-streaming version — returns full reply at once. For Android/simple terminals."""
+    from .api import chat_complete as _api_chat
+    save_message("user", user_input)
+
+    total = count_messages()
+    history = load_recent_messages(limit=30)
+    context = _build_full_context(history)
+
+    try:
+        curiosity = build_curiosity_block(total_messages=total)
+    except Exception:
+        curiosity = ""
+
+    system_blocks = _build_system_blocks(context, curiosity)
+    reply = _api_chat(history, system_blocks=system_blocks, model=MODEL_CHAT)
+    finish_turn(reply)
+    return reply
+
+
 def finish_turn(reply: str) -> None:
     """Persist assistant reply and trigger background tasks."""
     save_message("assistant", reply)
