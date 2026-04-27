@@ -11,8 +11,14 @@ from pathlib import Path
 # ── Format detection ───────────────────────────────────────────────────────────
 
 def detect_format(path: Path) -> str:
-    """Return one of: 'whatsapp', 'instagram', 'telegram', 'text'."""
+    """Return one of: 'whatsapp', 'instagram', 'telegram', 'pdf', 'markdown', 'text'."""
     suffix = path.suffix.lower()
+
+    if suffix == ".pdf":
+        return "pdf"
+
+    if suffix in (".md", ".markdown"):
+        return "markdown"
 
     if suffix == ".zip":
         with zipfile.ZipFile(path) as z:
@@ -236,8 +242,39 @@ def parse_telegram_zip(path: Path, user_name: str | None = None) -> tuple[list[s
 def parse_plain_text(path: Path) -> tuple[list[str], list[str]]:
     with open(path, encoding="utf-8", errors="replace") as f:
         content = f.read()
-    # Split by paragraph (double newline)
     paragraphs = [p.strip() for p in re.split(r"\n{2,}", content) if p.strip()]
+    return paragraphs, []
+
+
+def parse_markdown(path: Path) -> tuple[list[str], list[str]]:
+    """Parse a Markdown file (journal, Obsidian note, etc.) into paragraphs."""
+    with open(path, encoding="utf-8", errors="replace") as f:
+        content = f.read()
+    # Strip code blocks (not personal info)
+    content = re.sub(r"```[\s\S]*?```", "", content)
+    content = re.sub(r"`[^`]+`", "", content)
+    # Split by heading or double newline
+    paragraphs = [p.strip() for p in re.split(r"\n{2,}|(?=\n#{1,3} )", content) if p.strip()]
+    return paragraphs, []
+
+
+def parse_pdf(path: Path) -> tuple[list[str], list[str]]:
+    """Extract text from a PDF using pypdf (pure Python, no system deps)."""
+    try:
+        import pypdf
+    except ImportError:
+        raise ImportError(
+            "pypdf n'est pas installé. Lance : pip install pypdf"
+        )
+
+    reader = pypdf.PdfReader(str(path))
+    paragraphs: list[str] = []
+    for page in reader.pages:
+        text = page.extract_text() or ""
+        for para in re.split(r"\n{2,}", text):
+            para = para.strip()
+            if para and len(para) > 20:
+                paragraphs.append(para)
     return paragraphs, []
 
 
@@ -268,6 +305,10 @@ def load_file(path: Path, user_name: str | None = None) -> tuple[list[str], list
         msgs, senders = parse_telegram(path, user_name)
     elif fmt == "telegram_zip":
         msgs, senders = parse_telegram_zip(path, user_name)
+    elif fmt == "pdf":
+        msgs, senders = parse_pdf(path)
+    elif fmt == "markdown":
+        msgs, senders = parse_markdown(path)
     else:
         msgs, senders = parse_plain_text(path)
         fmt = "text"

@@ -1,13 +1,15 @@
 """
 Profile extraction engine — uses Haiku (fast/cheap) to pull personal facts,
-certainty levels, and current mood from each exchange.
+certainty levels, mood, named people, and goals from each exchange.
 """
 
 import json
 from typing import Callable
 
 from .api import MODEL_FAST, complete
+from .goals import add_extracted_goals
 from .memory import CERTAINTY_LEVELS, VALID_CATEGORIES, add_facts, log_mood, update_profile
+from .people import upsert_person
 
 # ── Prompts ────────────────────────────────────────────────────────────────────
 
@@ -28,14 +30,18 @@ Retourne UNIQUEMENT ce JSON :
   ],
   "mood": {
     "valence": "positive|neutral|negative|mixed",
-    "state": "description courte de l'état émotionnel en 5 mots max",
+    "state": "description courte en 5 mots max",
     "intensity": 3
-  }
+  },
+  "people": [
+    {"name": "Prénom", "relation": "frère|ami|collègue|…", "note": "info utile"}
+  ],
+  "goals": ["objectif formulé clairement"]
 }
 
-Catégories valides : identité, famille, relations, travail, éducation, localisation,
-santé, psychologie, valeurs, croyances, loisirs, habitudes, projets, finances,
-alimentation, humeur, autre.
+Catégories valides pour facts : identité, famille, relations, travail, éducation,
+localisation, santé, psychologie, valeurs, croyances, loisirs, habitudes, projets,
+finances, alimentation, humeur, autre.
 
 Règles sur la certitude :
 - "certain"   : affirmé clairement ("je suis développeur", "j'ai 32 ans")
@@ -45,11 +51,13 @@ Règles sur la certitude :
 
 CRITIQUE : le texte du fait DOIT refléter la certitude.
 Ne jamais écrire "a le TDAH" si l'utilisateur dit "je pense être TDAH".
-Écrire à la place : "pense peut-être avoir le TDAH (non diagnostiqué)".
+Écrire : "pense peut-être avoir le TDAH (non diagnostiqué)".
 
 profile_updates = uniquement faits certains et stables (nom, âge, ville, métier).
-mood.intensity : 1 (très faible) à 5 (très intense). 3 si neutre ou incertain.
-Si rien à extraire : {"profile_updates": {}, "facts": [], "mood": {"valence": "neutral", "state": "", "intensity": 3}}.
+people = uniquement les personnes AUTRES que l'utilisateur mentionnées par leur prénom/nom.
+goals = intentions ou objectifs déclarés ("veux apprendre le piano", "objectif : perdre 5kg").
+mood.intensity : 1 (très faible) à 5 (très intense). 3 si neutre.
+Si rien à extraire dans un champ, retourner liste/objet vide.
 Aucun texte hors du JSON.
 
 Échange :
@@ -67,7 +75,11 @@ Retourne UNIQUEMENT ce JSON :
       "fact": "fait rédigé avec le bon degré de certitude",
       "certainty": "certain|probable|hypothèse|réfuté"
     }
-  ]
+  ],
+  "people": [
+    {"name": "Prénom", "relation": "relation", "note": "info utile"}
+  ],
+  "goals": ["objectif clairement formulé"]
 }
 
 Catégories valides : identité, famille, relations, travail, éducation, localisation,
@@ -75,10 +87,9 @@ santé, psychologie, valeurs, croyances, loisirs, habitudes, projets, finances,
 alimentation, humeur, autre.
 
 Règles certitude : certain=affirmé, probable=tendance, hypothèse=supposition, réfuté=annulé.
-Texte du fait DOIT refléter la certitude (jamais "a le TDAH" si c'est une hypothèse).
+Texte du fait DOIT refléter la certitude.
 profile_updates = uniquement faits certains et stables.
-Si rien : {"profile_updates": {}, "facts": []}.
-Aucun texte hors du JSON.
+Si rien dans un champ : liste/objet vide. Aucun texte hors du JSON.
 
 Messages :
 """
@@ -102,18 +113,17 @@ def _parse_json(raw: str) -> dict:
 
 
 def _apply_extraction(data: dict, store_mood: bool = False) -> int:
-    """Persist profile_updates, facts, and optionally mood. Returns fact count."""
+    """Persist all extracted fields. Returns inserted fact count."""
+    # Profile (only certain, stable facts)
     for key, value in data.get("profile_updates", {}).items():
         if key and value:
             update_profile(str(key), str(value))
 
-    raw_facts = data.get("facts", [])
-    valid_facts = [
-        f for f in raw_facts
-        if f.get("category") and f.get("fact")
-    ]
-    inserted = add_facts(valid_facts) if valid_facts else 0
+    # Facts
+    raw_facts = [f for f in data.get("facts", []) if f.get("category") and f.get("fact")]
+    inserted = add_facts(raw_facts) if raw_facts else 0
 
+    # Mood
     if store_mood:
         mood = data.get("mood", {})
         valence = mood.get("valence", "")
@@ -122,13 +132,28 @@ def _apply_extraction(data: dict, store_mood: bool = False) -> int:
         if valence and state:
             log_mood(valence, state, intensity)
 
+    # People
+    for p in data.get("people", []):
+        name = p.get("name", "").strip()
+        if name and len(name) >= 2:
+            upsert_person(
+                name=name,
+                relation=p.get("relation"),
+                note=p.get("note"),
+            )
+
+    # Goals
+    goal_texts = [g.strip() for g in data.get("goals", []) if isinstance(g, str) and g.strip()]
+    if goal_texts:
+        add_extracted_goals(goal_texts)
+
     return inserted
 
 
 # ── Single-exchange extraction ─────────────────────────────────────────────────
 
 def extract_and_store(user_msg: str, assistant_msg: str) -> int:
-    """Extract facts + mood from one conversation exchange. Returns inserted fact count."""
+    """Extract facts, mood, people, goals from one exchange. Returns inserted fact count."""
     exchange = f"Utilisateur : {user_msg}\nAssistant : {assistant_msg}"
     raw = complete(_EXTRACTION_PROMPT + exchange, system=_SYSTEM, model=MODEL_FAST)
     data = _parse_json(raw)
@@ -159,8 +184,8 @@ def extract_from_messages(
     progress_callback: Callable[[int, int], None] | None = None,
 ) -> int:
     """
-    Extract facts from a list of messages (imported file).
-    Chunks by word count and calls Claude Haiku on each. Returns total inserted.
+    Extract from a list of messages (imported file).
+    Chunks by word count, calls Haiku on each. Returns total inserted facts.
     """
     if not messages:
         return 0
