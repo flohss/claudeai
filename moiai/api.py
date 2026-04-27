@@ -8,6 +8,7 @@ from collections.abc import Iterator
 from typing import Any
 
 import anthropic
+import httpx
 from anthropic import APIConnectionError, APIStatusError, RateLimitError
 
 # ── Model routing ──────────────────────────────────────────────────────────────
@@ -25,7 +26,14 @@ _client: anthropic.Anthropic | None = None
 def get_client() -> anthropic.Anthropic:
     global _client
     if _client is None:
-        _client = anthropic.Anthropic(timeout=60.0)
+        _client = anthropic.Anthropic(
+            timeout=httpx.Timeout(
+                connect=10.0,   # max time to establish connection
+                read=600.0,     # max idle time between stream chunks (10 min)
+                write=30.0,
+                pool=10.0,
+            )
+        )
     return _client
 
 
