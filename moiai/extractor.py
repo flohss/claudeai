@@ -8,8 +8,33 @@ from typing import Callable
 
 from .api import MODEL_FAST, complete
 from .goals import add_extracted_goals
-from .memory import CERTAINTY_LEVELS, VALID_CATEGORIES, add_facts, log_mood, update_profile
+from .memory import CERTAINTY_LEVELS, VALID_CATEGORIES, add_facts, get_all_facts, get_profile, log_mood, update_profile
 from .people import upsert_person
+
+_CERTAINTY_BADGE = {"certain": "●", "probable": "◐", "hypothèse": "○", "réfuté": "✕"}
+
+# Categories most likely to cause confusion with named entities
+_ENTITY_CATEGORIES = {"identité", "famille", "relations", "loisirs", "habitudes", "autre"}
+
+
+def _build_known_context() -> str:
+    """Compact summary of already-known facts to help Haiku avoid duplicates and misinterpretations."""
+    profile = get_profile()
+    facts = get_all_facts()
+
+    lines: list[str] = []
+
+    for k, v in list(profile.items())[:6]:
+        lines.append(f"- {k} : {v}")
+
+    entity_facts = [f for f in facts if f.get("category", "") in _ENTITY_CATEGORIES]
+    for f in entity_facts[:20]:
+        badge = _CERTAINTY_BADGE.get(f.get("certainty", "certain"), "●")
+        lines.append(f"- [{f['category']}] {badge} {f['fact']}")
+
+    if not lines:
+        return ""
+    return "Contexte déjà connu (utilise-le pour interpréter et éviter les doublons) :\n" + "\n".join(lines)
 
 # ── Prompts ────────────────────────────────────────────────────────────────────
 
@@ -69,10 +94,13 @@ capsules = événements futurs concrets mentionnés (entretien, voyage, rendez-v
   décision à prendre). days = délai estimé en jours avant l'événement.
   note = la question naturelle à poser à ce moment-là.
   Ne créer une capsule QUE si l'événement est précis et daté/délai estimable.
+ANTI-DOUBLON : Si un fait est déjà présent dans le contexte connu ci-dessous
+(même sens, formulation différente), ne pas le recréer. Utilise le contexte
+pour interpréter correctement les références ambiguës (ex: un prénom peut
+désigner un animal de compagnie déjà connu).
 Si rien à extraire dans un champ, retourner liste/objet vide.
 Aucun texte hors du JSON.
 
-Échange :
 """
 
 _BATCH_PROMPT = """\
@@ -178,11 +206,13 @@ def _apply_extraction(data: dict, store_mood: bool = False) -> int:
 
 def extract_and_store(user_msg: str, assistant_msg: str) -> int:
     """Extract facts, mood, people, goals from one exchange. Returns inserted fact count."""
+    known = _build_known_context()
+    known_block = f"{known}\n\n" if known else ""
     exchange = (
         f"[UTILISATEUR — extraire d'ici]\n{user_msg}\n\n"
         f"[ASSISTANT — ignorer pour l'extraction]\n{assistant_msg}"
     )
-    raw = complete(_EXTRACTION_PROMPT + exchange, system=_SYSTEM, model=MODEL_FAST)
+    raw = complete(_EXTRACTION_PROMPT + known_block + exchange, system=_SYSTEM, model=MODEL_FAST)
     data = _parse_json(raw)
     return _apply_extraction(data, store_mood=True)
 

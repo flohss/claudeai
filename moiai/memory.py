@@ -11,7 +11,7 @@ from pathlib import Path
 
 DB_PATH = Path(__file__).parent / "data" / "memory.db"
 
-_DEDUP_THRESHOLD = 0.82
+_DEDUP_THRESHOLD = 0.75
 
 CERTAINTY_LEVELS = ("certain", "probable", "hypothèse", "réfuté")
 CERTAINTY_BADGE = {
