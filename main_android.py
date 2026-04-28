@@ -139,6 +139,7 @@ COMMANDS_HELP = """
 /stats        Statistiques
 /aide         Cette aide
 /cle          Configurer ou modifier la clé API
+/reset        Effacer toute la mémoire et repartir de zéro
 /quitter      Quitter
 """
 
@@ -743,6 +744,27 @@ def _handle_api_key() -> None:
     _print("✓ Clé mise à jour et sauvegardée dans .env\n")
 
 
+# ── Reset ─────────────────────────────────────────────────────────────────────
+
+def _handle_reset() -> None:
+    from moiai.memory import DB_PATH
+    _print("ATTENTION — Cette action supprime définitivement :")
+    _print("  • Toutes les conversations et faits mémorisés")
+    _print("  • Le profil, narration, humeurs, objectifs, personnes, capsules")
+    _print()
+    if not _confirm("Confirmer la suppression totale ?"):
+        _print("Annulé.\n")
+        return
+    if not _confirm("Vraiment ? C'est irréversible."):
+        _print("Annulé.\n")
+        return
+    try:
+        DB_PATH.unlink(missing_ok=True)
+        _print("✓ Mémoire effacée. Redémarre l'application pour repartir de zéro.\n")
+    except Exception as e:
+        _print(f"Erreur : {e}\n")
+
+
 # ── Welcome screen (first session) ────────────────────────────────────────────
 
 def _show_welcome() -> None:
@@ -835,6 +857,8 @@ def main() -> None:
             _print(COMMANDS_HELP)
         elif lower in ("/cle", "/clé"):
             _handle_api_key()
+        elif lower == "/reset":
+            _handle_reset()
         elif lower == "/profil":
             _show_profile()
         elif lower.startswith("/faits"):

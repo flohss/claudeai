@@ -103,6 +103,7 @@ COMMANDS = {
     "/stats":               "Statistiques de mémoire",
     "/aide":                "Afficher cette aide",
     "/cle":                 "Configurer ou modifier la clé API Anthropic",
+    "/reset":               "Effacer toute la mémoire et repartir de zéro",
     "/quitter":             "Quitter",
 }
 
@@ -990,6 +991,30 @@ def _handle_api_key() -> None:
     console.print("[green]✓ Clé mise à jour et sauvegardée dans .env[/green]\n")
 
 
+# ── Reset ─────────────────────────────────────────────────────────────────────
+
+def _handle_reset() -> None:
+    from moiai.memory import DB_PATH
+    console.print(
+        "[bold red]ATTENTION[/bold red] — Cette action supprime définitivement :\n"
+        "  • Toutes les conversations\n"
+        "  • Tous les faits mémorisés\n"
+        "  • Le profil, la narration, les humeurs\n"
+        "  • Les objectifs, personnes et capsules\n"
+    )
+    if not Confirm.ask("[bold red]Confirmer la suppression totale ?[/bold red]", default=False):
+        console.print("[dim]Annulé.\n[/dim]")
+        return
+    if not Confirm.ask("[bold red]Vraiment ? C'est irréversible.[/bold red]", default=False):
+        console.print("[dim]Annulé.\n[/dim]")
+        return
+    try:
+        DB_PATH.unlink(missing_ok=True)
+        console.print("[green]✓ Mémoire effacée. Redémarre l'application pour repartir de zéro.[/green]\n")
+    except Exception as e:
+        console.print(f"[red]Erreur :[/red] {e}\n")
+
+
 # ── Welcome screen (first session) ────────────────────────────────────────────
 
 def _show_welcome() -> None:
@@ -1098,6 +1123,8 @@ def main() -> None:
             _show_help()
         elif lower in ("/cle", "/clé"):
             _handle_api_key()
+        elif lower == "/reset":
+            _handle_reset()
         elif lower == "/profil":
             _show_profile()
         elif lower.startswith("/faits"):
