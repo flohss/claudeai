@@ -30,6 +30,7 @@ from moiai.capsule import (
     parse_delay,
 )
 from moiai.chat import finish_turn, get_startup_briefing, get_stats, start_session, stream_response
+from moiai.memory import count_messages as _count_messages
 from moiai.condenser import condense_narrative
 from moiai.extractor import extract_and_store, extract_from_messages
 from moiai.goals import (
@@ -101,6 +102,7 @@ COMMANDS = {
     "/export":              "Exporter toute la mémoire en JSON",
     "/stats":               "Statistiques de mémoire",
     "/aide":                "Afficher cette aide",
+    "/cle":                 "Configurer ou modifier la clé API Anthropic",
     "/quitter":             "Quitter",
 }
 
@@ -963,7 +965,50 @@ def _show_due_capsules() -> None:
     console.print()
 
 
-# ── Background extraction ──────────────────────────────────────────────────────
+# ── API key management ─────────────────────────────────────────────────────────
+
+def _handle_api_key() -> None:
+    current = os.environ.get("ANTHROPIC_API_KEY", "")
+    if current:
+        masked = current[:12] + "..." + current[-4:]
+        console.print(f"Clé actuelle : [dim]{masked}[/dim]")
+    else:
+        console.print("[yellow]Aucune clé configurée.[/yellow]")
+
+    key = Prompt.ask(
+        "[bold]Nouvelle clé API[/bold] (Entrée pour annuler)", default=""
+    ).strip()
+    if not key:
+        console.print("[dim]Annulé.\n[/dim]")
+        return
+    if not (key.startswith("sk-ant-") and len(key) >= 60):
+        console.print("[red]Clé invalide (doit commencer par sk-ant- et faire 60+ caractères).[/red]\n")
+        return
+    os.environ["ANTHROPIC_API_KEY"] = key
+    env_path = Path(__file__).parent / ".env"
+    env_path.write_text(f"ANTHROPIC_API_KEY={key}\n", encoding="utf-8")
+    console.print("[green]✓ Clé mise à jour et sauvegardée dans .env[/green]\n")
+
+
+# ── Welcome screen (first session) ────────────────────────────────────────────
+
+def _show_welcome() -> None:
+    console.print(Panel(
+        "[bold cyan]Bienvenue sur Moi.AI[/bold cyan] — ton double personnel artificiel.\n\n"
+        "Je vais apprendre à te connaître au fil de nos conversations.\n"
+        "Pour démarrer vite, quelques options :\n\n"
+        "  [cyan]/import <fichier>[/cyan]    Importer WhatsApp, Instagram, Telegram, PDF…\n"
+        "  [cyan]/objectif <texte>[/cyan]    Déclarer un objectif\n"
+        "  [cyan]/bilan[/cyan]               Faire ton bilan de vie (note 1-5 par domaine)\n"
+        "  [cyan]/cle[/cyan]                 Configurer ou modifier ta clé API\n"
+        "  [cyan]/aide[/cyan]                Voir toutes les commandes\n\n"
+        "[dim]Ou commence simplement à parler — je vais apprendre à te connaître.[/dim]",
+        title="[bold]Première session[/bold]",
+        border_style="cyan",
+    ))
+    console.print()
+
+
 
 def _extract_async(user_msg: str, assistant_msg: str) -> None:
     try:
@@ -1019,17 +1064,20 @@ def main() -> None:
 
     init_db()
     _header()
-    _show_due_capsules()
-    start_session()
 
-    briefing = get_startup_briefing(timeout=6.0)
-    if briefing:
-        console.print(Panel(
-            briefing,
-            title="[bold blue]Moi.AI[/bold blue]",
-            border_style="blue",
-        ))
-        console.print()
+    if _count_messages() == 0:
+        _show_welcome()
+    else:
+        _show_due_capsules()
+        start_session()
+        briefing = get_startup_briefing(timeout=6.0)
+        if briefing:
+            console.print(Panel(
+                briefing,
+                title="[bold blue]Moi.AI[/bold blue]",
+                border_style="blue",
+            ))
+            console.print()
 
     while True:
         try:
@@ -1048,6 +1096,8 @@ def main() -> None:
             break
         elif lower == "/aide":
             _show_help()
+        elif lower in ("/cle", "/clé"):
+            _handle_api_key()
         elif lower == "/profil":
             _show_profile()
         elif lower.startswith("/faits"):

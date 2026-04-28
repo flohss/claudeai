@@ -27,6 +27,7 @@ except ImportError:
     _RICH = False
 
 from moiai.chat import chat_complete, finish_turn, get_startup_briefing, get_stats, start_session
+from moiai.memory import count_messages as _count_messages
 from moiai.capsule import (
     add_capsule,
     delete_capsule,
@@ -137,6 +138,7 @@ COMMANDS_HELP = """
 /export       Export JSON
 /stats        Statistiques
 /aide         Cette aide
+/cle          Configurer ou modifier la clé API
 /quitter      Quitter
 """
 
@@ -719,6 +721,48 @@ def _handle_import(args: str) -> None:
     _print(f"✓ {n} fait(s) mémorisé(s) depuis {path.name}\n")
 
 
+# ── API key management ─────────────────────────────────────────────────────────
+
+def _handle_api_key() -> None:
+    current = os.environ.get("ANTHROPIC_API_KEY", "")
+    if current:
+        masked = current[:12] + "..." + current[-4:]
+        _print(f"Clé actuelle : {masked}")
+    else:
+        _print("Aucune clé configurée.")
+    key = _input("Nouvelle clé API (Entrée pour annuler) : ").strip()
+    if not key:
+        _print("Annulé.\n")
+        return
+    if not (key.startswith("sk-ant-") and len(key) >= 60):
+        _print("Clé invalide (doit commencer par sk-ant- et faire 60+ caractères).\n")
+        return
+    os.environ["ANTHROPIC_API_KEY"] = key
+    env_path = Path(__file__).parent / ".env"
+    env_path.write_text(f"ANTHROPIC_API_KEY={key}\n", encoding="utf-8")
+    _print("✓ Clé mise à jour et sauvegardée dans .env\n")
+
+
+# ── Welcome screen (first session) ────────────────────────────────────────────
+
+def _show_welcome() -> None:
+    _print("=" * 50)
+    _print("  Bienvenue sur Moi.AI")
+    _print("  Ton double personnel artificiel")
+    _print("=" * 50)
+    _print("""
+Pour démarrer vite :
+
+  /import <fichier>   Importer WhatsApp, Instagram, Telegram, PDF...
+  /objectif <texte>   Déclarer un objectif
+  /bilan              Faire ton bilan de vie (note 1-5 par domaine)
+  /cle                Configurer ou modifier ta clé API
+  /aide               Voir toutes les commandes
+
+Ou commence simplement à parler — je vais apprendre à te connaître.
+""")
+
+
 # ── Background extraction ──────────────────────────────────────────────────────
 
 def _extract_async(user_msg: str, assistant_msg: str) -> None:
@@ -761,13 +805,16 @@ def main() -> None:
             _print(f"✓ Clé sauvegardée dans {env_path}")
 
     init_db()
-    _header()
-    _show_due_capsules()
-    start_session()
 
-    briefing = get_startup_briefing(timeout=8.0)
-    if briefing:
-        _panel(briefing, "Moi.AI")
+    if _count_messages() == 0:
+        _show_welcome()
+    else:
+        _header()
+        _show_due_capsules()
+        start_session()
+        briefing = get_startup_briefing(timeout=8.0)
+        if briefing:
+            _panel(briefing, "Moi.AI")
 
     while True:
         try:
@@ -786,6 +833,8 @@ def main() -> None:
             break
         elif lower == "/aide":
             _print(COMMANDS_HELP)
+        elif lower in ("/cle", "/clé"):
+            _handle_api_key()
         elif lower == "/profil":
             _show_profile()
         elif lower.startswith("/faits"):
