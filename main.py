@@ -884,9 +884,14 @@ def _extract_async(user_msg: str, assistant_msg: str) -> None:
 
 # ── Main loop ──────────────────────────────────────────────────────────────────
 
+def _is_valid_key(key: str) -> bool:
+    """A real Anthropic key starts with sk-ant- and is at least 60 chars long."""
+    return bool(key) and key.startswith("sk-ant-") and len(key) >= 60
+
+
 def _ensure_api_key() -> None:
     """Load API key from .env, env var, or ask the user. Offer to save it."""
-    if os.environ.get("ANTHROPIC_API_KEY"):
+    if _is_valid_key(os.environ.get("ANTHROPIC_API_KEY", "")):
         return
 
     # Try .env in script directory or cwd
@@ -895,18 +900,18 @@ def _ensure_api_key() -> None:
             for line in env_path.read_text(encoding="utf-8").splitlines():
                 if line.startswith("ANTHROPIC_API_KEY="):
                     key = line.split("=", 1)[1].strip().strip('"').strip("'")
-                    if key and not key.startswith("REMPLACE"):
+                    if _is_valid_key(key):
                         os.environ["ANTHROPIC_API_KEY"] = key
                         return
             break
 
     console.print(
-        "[yellow]Aucune clé API Anthropic trouvée.[/yellow]\n"
+        "[yellow]Aucune clé API valide trouvée.[/yellow]\n"
         "[dim]Obtiens ta clé sur [bold]console.anthropic.com[/bold][/dim]\n"
     )
     key = Prompt.ask("[bold]Clé API Anthropic[/bold] (sk-ant-...)").strip()
-    if not key:
-        console.print("[red]Clé vide — abandon.[/red]")
+    if not _is_valid_key(key):
+        console.print("[red]Clé invalide (doit commencer par sk-ant- et faire 60+ caractères).[/red]")
         sys.exit(1)
 
     os.environ["ANTHROPIC_API_KEY"] = key

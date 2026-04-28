@@ -665,23 +665,25 @@ def _extract_async(user_msg: str, assistant_msg: str) -> None:
 # ── Main loop ──────────────────────────────────────────────────────────────────
 
 def main() -> None:
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        for env_path in (Path(__file__).parent / ".env", Path(".env")):
-            if env_path.exists():
-                for line in env_path.read_text(encoding="utf-8").splitlines():
-                    if line.startswith("ANTHROPIC_API_KEY="):
-                        key = line.split("=", 1)[1].strip().strip('"').strip("'")
-                        if key and not key.startswith("REMPLACE"):
-                            os.environ["ANTHROPIC_API_KEY"] = key
-                        break
-                break
+    def _is_valid_key(k: str) -> bool:
+        return bool(k) and k.startswith("sk-ant-") and len(k) >= 60
 
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        _print("Aucune clé API Anthropic trouvée.")
+    for env_path in (Path(__file__).parent / ".env", Path(".env")):
+        if env_path.exists():
+            for line in env_path.read_text(encoding="utf-8").splitlines():
+                if line.startswith("ANTHROPIC_API_KEY="):
+                    key = line.split("=", 1)[1].strip().strip('"').strip("'")
+                    if _is_valid_key(key):
+                        os.environ["ANTHROPIC_API_KEY"] = key
+                    break
+            break
+
+    if not _is_valid_key(os.environ.get("ANTHROPIC_API_KEY", "")):
+        _print("Aucune clé API valide trouvée.")
         _print("Obtiens ta clé sur console.anthropic.com")
         key = _input("Clé API (sk-ant-...) : ").strip()
-        if not key:
-            _print("Clé vide — abandon.")
+        if not _is_valid_key(key):
+            _print("Clé invalide — abandon.")
             sys.exit(1)
         os.environ["ANTHROPIC_API_KEY"] = key
         save = _input("Sauvegarder dans .env ? (o/n) : ").lower()
