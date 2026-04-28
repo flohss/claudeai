@@ -56,6 +56,11 @@ CRITIQUE : le texte du fait DOIT refléter la certitude.
 Ne jamais écrire "a le TDAH" si l'utilisateur dit "je pense être TDAH".
 Écrire : "pense peut-être avoir le TDAH (non diagnostiqué)".
 
+RÈGLE ABSOLUE : Extrais UNIQUEMENT les informations que l'Utilisateur affirme
+sur lui-même. Ignore tout ce que dit l'Assistant — même s'il reformule, résume
+ou déduit quelque chose sur l'utilisateur. Seules les déclarations directes de
+l'Utilisateur comptent comme source de faits.
+
 profile_updates = uniquement faits certains et stables (nom, âge, ville, métier).
 people = uniquement les personnes AUTRES que l'utilisateur mentionnées par leur prénom/nom.
 goals = intentions ou objectifs déclarés ("veux apprendre le piano", "objectif : perdre 5kg").
@@ -173,7 +178,10 @@ def _apply_extraction(data: dict, store_mood: bool = False) -> int:
 
 def extract_and_store(user_msg: str, assistant_msg: str) -> int:
     """Extract facts, mood, people, goals from one exchange. Returns inserted fact count."""
-    exchange = f"Utilisateur : {user_msg}\nAssistant : {assistant_msg}"
+    exchange = (
+        f"[UTILISATEUR — extraire d'ici]\n{user_msg}\n\n"
+        f"[ASSISTANT — ignorer pour l'extraction]\n{assistant_msg}"
+    )
     raw = complete(_EXTRACTION_PROMPT + exchange, system=_SYSTEM, model=MODEL_FAST)
     data = _parse_json(raw)
     return _apply_extraction(data, store_mood=True)
