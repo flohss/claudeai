@@ -51,6 +51,7 @@ from moiai.memory import (
     get_fact_by_id,
     get_latest_narrative,
     get_profile,
+    get_mood_by_day,
     get_recent_mood,
     get_stale_facts,
     init_db,
@@ -87,6 +88,7 @@ COMMANDS = {
     "/historique [n]":      "Afficher les n derniers échanges (défaut 10)",
     "/import <fichier>":    "Importer un fichier (WhatsApp, Instagram, Telegram, txt, pdf)",
     "/condenser":           "Fusionner la mémoire en narration personnelle",
+    "/humeur":              "Graphique d'humeur sur les 30 derniers jours",
     "/reflect":             "Analyse psychologique de ton profil (pattern, angles morts)",
     "/objectif <texte>":    "Ajouter un objectif",
     "/objectifs":           "Lister et gérer les objectifs",
@@ -558,6 +560,96 @@ def _handle_import(args: str) -> None:
     )
 
 
+# ── Mood chart ────────────────────────────────────────────────────────────────
+
+_BLOCKS = "▁▂▃▄▅▆▇█"
+_MOOD_COLOR = {"positive": "green", "negative": "red", "mixed": "yellow", "neutral": "dim"}
+_MOOD_LABEL = {"positive": "positive", "negative": "négative", "mixed": "mixte", "neutral": "neutre"}
+
+
+def _mood_score(valence: str, intensity: int) -> float:
+    i = max(1, min(5, intensity or 3))
+    if valence == "positive":
+        return 2.5 + i * 0.5   # 3.0 – 5.0
+    if valence == "negative":
+        return 3.5 - i * 0.5   # 1.0 – 3.0
+    return 3.0                  # neutral / mixed
+
+
+def _score_to_block(score: float) -> str:
+    idx = min(7, max(0, round((score - 1) / 4 * 7)))
+    return _BLOCKS[idx]
+
+
+def _handle_mood_chart() -> None:
+    from datetime import date, timedelta as td
+
+    entries = get_mood_by_day(days=30)
+    if not entries:
+        console.print("[dim]Aucune humeur enregistrée — parle-moi un peu ![/dim]\n")
+        return
+
+    day_map = {e["day"]: e for e in entries}
+    today = date.today()
+    all_days = [(today - td(days=29 - i)).isoformat() for i in range(30)]
+
+    # ── Sparkline ──────────────────────────────────────────────────────────────
+    spark = ""
+    for d in all_days:
+        if d in day_map:
+            e = day_map[d]
+            s = _mood_score(e["valence"], e["intensity"])
+            color = _MOOD_COLOR.get(e["valence"], "white")
+            spark += f"[{color}]{_score_to_block(s)}[/{color}]"
+        else:
+            spark += "[dim]·[/dim]"
+
+    label_l = (today - td(days=29)).strftime("%-d %b")
+    label_r = today.strftime("%-d %b")
+    padding = 30 - len(label_l) - len(label_r)
+
+    # ── Stats ──────────────────────────────────────────────────────────────────
+    scores = [_mood_score(e["valence"], e["intensity"]) for e in entries]
+    avg = sum(scores) / len(scores)
+    avg_color = "green" if avg >= 3.5 else ("red" if avg < 2.5 else "yellow")
+
+    valence_counts: dict[str, int] = {}
+    for e in entries:
+        valence_counts[e["valence"]] = valence_counts.get(e["valence"], 0) + 1
+    dominant = max(valence_counts, key=valence_counts.get)
+
+    # ── Recent entries table ───────────────────────────────────────────────────
+    recent = get_recent_mood(limit=8)
+    table = Table(show_header=True, box=None, padding=(0, 1))
+    table.add_column("Date", style="dim", width=11)
+    table.add_column("Valence", width=11)
+    table.add_column("État")
+    table.add_column("Intensité", width=13)
+
+    for m in recent:
+        color = _MOOD_COLOR.get(m["valence"], "white")
+        intensity_bar = "●" * m["intensity"] + "○" * (5 - m["intensity"])
+        table.add_row(
+            m["timestamp"][:10],
+            f"[{color}]{_MOOD_LABEL.get(m['valence'], m['valence'])}[/{color}]",
+            m["state"],
+            f"[{color}]{intensity_bar}[/{color}]",
+        )
+
+    content = (
+        f"{spark}\n"
+        f"[dim]{label_l}{' ' * padding}{label_r}[/dim]\n\n"
+        f"Moyenne : [{avg_color}]{_score_to_block(avg)} {avg:.1f}/5[/{avg_color}]  •  "
+        f"Tendance : [{_MOOD_COLOR.get(dominant, 'white')}]{_MOOD_LABEL.get(dominant, dominant)}"
+        f"[/{_MOOD_COLOR.get(dominant, 'white')}]  •  "
+        f"[dim]{len(entries)} jour(s) sur 30[/dim]"
+    )
+
+    console.print(Panel(content, title="[bold]Humeur — 30 derniers jours[/bold]", border_style="cyan"))
+    console.print(Panel(table, title="[bold]Entrées récentes[/bold]", border_style="dim"))
+    console.print()
+
+
 # ── Reflect ────────────────────────────────────────────────────────────────────
 
 def _handle_reflect() -> None:
@@ -978,6 +1070,8 @@ def main() -> None:
             _handle_history(user_input[11:])
         elif lower.startswith("/import"):
             _handle_import(user_input[7:])
+        elif lower == "/humeur":
+            _handle_mood_chart()
         elif lower == "/reflect":
             _handle_reflect()
         elif lower.startswith("/objectif") and not lower.startswith("/objectifs"):

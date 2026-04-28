@@ -56,6 +56,7 @@ from moiai.memory import (
     get_fact_by_id,
     get_latest_narrative,
     get_profile,
+    get_mood_by_day,
     get_recent_mood,
     get_stale_facts,
     init_db,
@@ -123,6 +124,7 @@ COMMANDS_HELP = """
 /historique   Derniers échanges
 /import fic   Importer un fichier
 /condenser    Fusionner la mémoire
+/humeur       Graphique d'humeur sur 30 jours
 /reflect      Analyse psychologique
 /objectif X   Ajouter un objectif
 /objectifs    Lister les objectifs
@@ -330,6 +332,72 @@ def _handle_condense() -> None:
         return
     _panel(narrative, "Narration personnelle")
     _print("✓ Narration sauvegardée.\n")
+
+
+# ── Mood chart ────────────────────────────────────────────────────────────────
+
+_BLOCKS = "▁▂▃▄▅▆▇█"
+_MOOD_COLOR_LABEL = {
+    "positive": "positive", "negative": "négative",
+    "mixed": "mixte", "neutral": "neutre",
+}
+
+
+def _mood_score(valence: str, intensity: int) -> float:
+    i = max(1, min(5, intensity or 3))
+    if valence == "positive":
+        return 2.5 + i * 0.5
+    if valence == "negative":
+        return 3.5 - i * 0.5
+    return 3.0
+
+
+def _handle_mood_chart() -> None:
+    from datetime import date, timedelta as td
+
+    entries = get_mood_by_day(days=30)
+    if not entries:
+        _print("Aucune humeur enregistrée — parle-moi un peu !\n")
+        return
+
+    day_map = {e["day"]: e for e in entries}
+    today = date.today()
+    all_days = [(today - td(days=29 - i)).isoformat() for i in range(30)]
+
+    spark = ""
+    for d in all_days:
+        if d in day_map:
+            e = day_map[d]
+            s = _mood_score(e["valence"], e["intensity"])
+            idx = min(7, max(0, round((s - 1) / 4 * 7)))
+            spark += _BLOCKS[idx]
+        else:
+            spark += "·"
+
+    scores = [_mood_score(e["valence"], e["intensity"]) for e in entries]
+    avg = sum(scores) / len(scores)
+
+    valence_counts: dict[str, int] = {}
+    for e in entries:
+        valence_counts[e["valence"]] = valence_counts.get(e["valence"], 0) + 1
+    dominant = max(valence_counts, key=valence_counts.get)
+
+    label_l = (today - td(days=29)).strftime("%d/%m")
+    label_r = today.strftime("%d/%m")
+
+    _print(f"\n--- Humeur — 30 derniers jours ---")
+    _print(spark)
+    _print(f"{label_l}{'':>22}{label_r}")
+    _print(f"\nMoyenne : {avg:.1f}/5  •  Tendance : {_MOOD_COLOR_LABEL.get(dominant, dominant)}")
+    _print(f"Jours enregistrés : {len(entries)}/30\n")
+
+    _print("--- Entrées récentes ---")
+    recent = get_recent_mood(limit=8)
+    for m in recent:
+        bar = "●" * m["intensity"] + "○" * (5 - m["intensity"])
+        label = _MOOD_COLOR_LABEL.get(m["valence"], m["valence"])
+        _print(f"  {m['timestamp'][:10]}  {label:<10}  {m['state']:<20}  {bar}")
+    _print()
 
 
 # ── Reflect ────────────────────────────────────────────────────────────────────
@@ -752,6 +820,8 @@ def main() -> None:
             _handle_revision()
         elif lower == "/personnes":
             _handle_people()
+        elif lower == "/humeur":
+            _handle_mood_chart()
         elif lower == "/reflect":
             _handle_reflect()
         elif lower.startswith("/capsule") and not lower.startswith("/capsules"):

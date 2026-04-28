@@ -465,6 +465,23 @@ def get_mood_summary() -> str:
     return state_desc
 
 
+def get_mood_by_day(days: int = 30) -> list[dict]:
+    """Return the last mood entry per day for the past N days."""
+    cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT DATE(timestamp) as day, valence, state, intensity "
+            "FROM mood_log WHERE timestamp > ? ORDER BY timestamp",
+            (cutoff,),
+        ).fetchall()
+
+    by_day: dict[str, dict] = {}
+    for r in rows:
+        by_day[r["day"]] = dict(r)  # keep last entry of each day
+
+    return [by_day[d] for d in sorted(by_day)]
+
+
 # ── Narrative ──────────────────────────────────────────────────────────────────
 
 def save_narrative(content: str) -> None:
