@@ -884,13 +884,41 @@ def _extract_async(user_msg: str, assistant_msg: str) -> None:
 
 # ── Main loop ──────────────────────────────────────────────────────────────────
 
-def main() -> None:
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        console.print(
-            "[red]Erreur :[/red] [bold]ANTHROPIC_API_KEY[/bold] non définie.\n"
-            "Lance : [cyan]export ANTHROPIC_API_KEY=sk-...[/cyan]"
-        )
+def _ensure_api_key() -> None:
+    """Load API key from .env, env var, or ask the user. Offer to save it."""
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        return
+
+    # Try .env in script directory or cwd
+    for env_path in (Path(__file__).parent / ".env", Path(".env")):
+        if env_path.exists():
+            for line in env_path.read_text(encoding="utf-8").splitlines():
+                if line.startswith("ANTHROPIC_API_KEY="):
+                    key = line.split("=", 1)[1].strip().strip('"').strip("'")
+                    if key and not key.startswith("REMPLACE"):
+                        os.environ["ANTHROPIC_API_KEY"] = key
+                        return
+            break
+
+    console.print(
+        "[yellow]Aucune clé API Anthropic trouvée.[/yellow]\n"
+        "[dim]Obtiens ta clé sur [bold]console.anthropic.com[/bold][/dim]\n"
+    )
+    key = Prompt.ask("[bold]Clé API Anthropic[/bold] (sk-ant-...)").strip()
+    if not key:
+        console.print("[red]Clé vide — abandon.[/red]")
         sys.exit(1)
+
+    os.environ["ANTHROPIC_API_KEY"] = key
+
+    if Confirm.ask("Sauvegarder dans [bold].env[/bold] pour ne plus la redemander ?", default=True):
+        env_path = Path(__file__).parent / ".env"
+        env_path.write_text(f"ANTHROPIC_API_KEY={key}\n", encoding="utf-8")
+        console.print(f"[green]✓ Clé sauvegardée dans[/green] [bold]{env_path}[/bold]\n")
+
+
+def main() -> None:
+    _ensure_api_key()
 
     init_db()
     _header()

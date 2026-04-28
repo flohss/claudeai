@@ -666,21 +666,29 @@ def _extract_async(user_msg: str, assistant_msg: str) -> None:
 
 def main() -> None:
     if not os.environ.get("ANTHROPIC_API_KEY"):
-        # Try loading from .env file in current directory
-        env_path = Path(".env")
-        if env_path.exists():
-            for line in env_path.read_text().splitlines():
-                if line.startswith("ANTHROPIC_API_KEY="):
-                    os.environ["ANTHROPIC_API_KEY"] = line.split("=", 1)[1].strip().strip('"').strip("'")
-                    break
+        for env_path in (Path(__file__).parent / ".env", Path(".env")):
+            if env_path.exists():
+                for line in env_path.read_text(encoding="utf-8").splitlines():
+                    if line.startswith("ANTHROPIC_API_KEY="):
+                        key = line.split("=", 1)[1].strip().strip('"').strip("'")
+                        if key and not key.startswith("REMPLACE"):
+                            os.environ["ANTHROPIC_API_KEY"] = key
+                        break
+                break
 
     if not os.environ.get("ANTHROPIC_API_KEY"):
-        key = _input("Clé API Anthropic (sk-...) : ").strip()
-        if key:
-            os.environ["ANTHROPIC_API_KEY"] = key
-        else:
-            _print("Erreur : ANTHROPIC_API_KEY non définie.")
+        _print("Aucune clé API Anthropic trouvée.")
+        _print("Obtiens ta clé sur console.anthropic.com")
+        key = _input("Clé API (sk-ant-...) : ").strip()
+        if not key:
+            _print("Clé vide — abandon.")
             sys.exit(1)
+        os.environ["ANTHROPIC_API_KEY"] = key
+        save = _input("Sauvegarder dans .env ? (o/n) : ").lower()
+        if save in ("o", "oui", "y", "yes"):
+            env_path = Path(__file__).parent / ".env"
+            env_path.write_text(f"ANTHROPIC_API_KEY={key}\n", encoding="utf-8")
+            _print(f"✓ Clé sauvegardée dans {env_path}")
 
     init_db()
     _header()
