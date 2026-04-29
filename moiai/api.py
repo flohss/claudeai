@@ -21,7 +21,7 @@ MODEL_FAST = "claude-haiku-4-5-20251001"  # extraction, curiosity, summarization
 
 _PRICING: dict[str, dict[str, float]] = {
     MODEL_CHAT: {"input": 3.0, "output": 15.0, "cache_read": 0.30, "cache_write": 3.75},
-    MODEL_FAST: {"input": 0.80, "output": 4.0,  "cache_read": 0.08, "cache_write": 1.00},
+    MODEL_FAST: {"input": 1.00, "output": 5.0,  "cache_read": 0.10, "cache_write": 1.25},
 }
 
 # ── Session cost tracking ──────────────────────────────────────────────────────
