@@ -890,8 +890,25 @@ def _handle_questions(domain_arg: str = "") -> None:
 
 # ── Analyser ───────────────────────────────────────────────────────────────────
 
+def _extract_contradiction_pairs(report: str) -> list[tuple[int, int]]:
+    """Extract pairs of fact IDs from the Incohérences section of the report."""
+    import re
+    section = re.search(r"## Incohérences.*?(?=\n##|\Z)", report, re.DOTALL | re.IGNORECASE)
+    if not section:
+        return []
+    pairs: list[tuple[int, int]] = []
+    for line in section.group(0).splitlines():
+        ids = re.findall(r"#(\d+)", line)
+        if len(ids) >= 2:
+            try:
+                pairs.append((int(ids[0]), int(ids[1])))
+            except ValueError:
+                pass
+    return pairs
+
+
 def _handle_analyser() -> None:
-    """A posteriori audit of all stored facts."""
+    """A posteriori audit of all stored facts, with interactive contradiction resolution."""
     from moiai.analyser import analyse_facts
     facts_count = len(get_all_facts())
     if facts_count == 0:
@@ -912,6 +929,38 @@ def _handle_analyser() -> None:
     ))
     _print_cost()
     console.print()
+
+    # ── Interactive contradiction resolution ───────────────────────────────────
+    pairs = _extract_contradiction_pairs(report)
+    if not pairs:
+        return
+
+    console.print(f"[yellow]{len(pairs)} contradiction(s) à résoudre :[/yellow]\n")
+    for id1, id2 in pairs:
+        f1 = get_fact_by_id(id1)
+        f2 = get_fact_by_id(id2)
+        if not f1 or not f2:
+            continue
+
+        console.print(Panel(
+            f"[bold cyan]1.[/bold cyan] #{id1} · {f1['category']} · {f1['fact']}\n"
+            f"[bold cyan]2.[/bold cyan] #{id2} · {f2['category']} · {f2['fact']}",
+            title="[yellow]Contradiction[/yellow]",
+            border_style="yellow",
+        ))
+        choice = Prompt.ask(
+            "  Supprimer",
+            choices=["1", "2", "ignorer"],
+            default="ignorer",
+        )
+        if choice == "1":
+            delete_fact(id1)
+            console.print(f"[green]✓[/green] Fait #{id1} supprimé.\n")
+        elif choice == "2":
+            delete_fact(id2)
+            console.print(f"[green]✓[/green] Fait #{id2} supprimé.\n")
+        else:
+            console.print("[dim]Ignoré.[/dim]\n")
 
 
 # ── Reflect ────────────────────────────────────────────────────────────────────
