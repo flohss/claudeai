@@ -61,6 +61,14 @@ from moiai.memory import (
     update_fact,
 )
 from moiai.people import delete_person, get_all_people, get_person_by_id
+from moiai.questioner import (
+    INTERVIEW_DOMAINS,
+    generate_question,
+    get_coverage_report,
+    get_total_questions_asked,
+    log_question,
+    stream_reaction_and_question,
+)
 from moiai.reflect import (
     LIFE_DOMAINS,
     find_contradictions,
@@ -98,6 +106,7 @@ COMMANDS = {
     "/personnes":           "Afficher les personnes de ton entourage",
     "/capsule <texte>":     "Créer une capsule temporelle (ex: dans 2 semaines)",
     "/capsules":            "Lister toutes les capsules",
+    "/questions":           "Mode interview — questions sur ta vie pour construire ta mémoire",
     "/rapport":             "Exporter le profil complet en Markdown",
     "/export":              "Exporter toute la mémoire en JSON",
     "/stats":               "Statistiques de mémoire",
@@ -653,6 +662,138 @@ def _handle_mood_chart() -> None:
     console.print()
 
 
+# ── Questions / Life interview ─────────────────────────────────────────────────
+
+def _handle_questions() -> None:
+    """Structured life interview — asks targeted questions to build personal memory."""
+    report = get_coverage_report()
+    facts = get_all_facts()
+    profile = get_profile()
+
+    # ── Coverage table ─────────────────────────────────────────────────────────
+    cov_table = Table(show_header=True, box=None, padding=(0, 2))
+    cov_table.add_column("Domaine", style="bold", min_width=24)
+    cov_table.add_column("Faits", width=5, justify="right")
+    cov_table.add_column("Couverture", width=22)
+
+    for d in report:
+        fc = min(d["fact_count"], 10)
+        bar = "[cyan]" + "█" * fc + "[/cyan][dim]" + "░" * (10 - fc) + "[/dim]"
+        label_color = "dim" if d["fact_count"] == 0 else "white"
+        cov_table.add_row(
+            f"[{label_color}]{d['label']}[/{label_color}]",
+            str(d["fact_count"]),
+            bar,
+        )
+
+    console.print()
+    console.print(Panel(
+        cov_table,
+        title="[bold]Mode Interview — couverture de ta mémoire de vie[/bold]",
+        border_style="cyan",
+        subtitle=f"[dim]{get_total_questions_asked()} question(s) posée(s) au total[/dim]",
+    ))
+    console.print(Panel(
+        "Je vais te poser des questions sur ta vie pour construire ta mémoire.\n"
+        "Réponds librement — comme tu parlerais à un ami. Aucune bonne ou mauvaise réponse.\n"
+        "[dim]Tape [bold]stop[/bold] ou laisse vide pour terminer à tout moment.[/dim]",
+        border_style="dim",
+    ))
+    console.print()
+
+    domain_idx = 0
+    questions_in_domain = 0
+    MAX_PER_DOMAIN = 3
+    facts_before = len(facts)
+    session_count = 0
+
+    # Generate and show the first question
+    domain = report[domain_idx]
+    with console.status("[dim]Préparation de la première question...[/dim]", spinner="dots"):
+        question = generate_question(domain, profile, facts)
+
+    console.print(f"[dim][{domain['label']}][/dim]")
+    console.print(f"[bold cyan]{question}[/bold cyan]")
+    console.print()
+
+    while True:
+        try:
+            answer = Prompt.ask("[bold green]Toi[/bold green]").strip()
+        except (KeyboardInterrupt, EOFError):
+            break
+
+        if not answer or answer.lower() in ("stop", "fin", "exit", "quitter", "q"):
+            break
+
+        # Log the question asked + count
+        log_question(domain["key"], question)
+        session_count += 1
+
+        # Extract facts from answer (user only, no assistant msg)
+        try:
+            n = extract_and_store(answer, "")
+            if n:
+                console.print(f"[dim]  ✦ {n} souvenir(s) mémorisé(s)[/dim]")
+        except Exception:
+            pass
+
+        # Refresh facts + advance domain if needed
+        facts = get_all_facts()
+        questions_in_domain += 1
+        if questions_in_domain >= MAX_PER_DOMAIN:
+            domain_idx = (domain_idx + 1) % len(report)
+            questions_in_domain = 0
+
+        domain = report[domain_idx]
+
+        # Generate next question while user reads current output
+        with console.status("[dim]Réflexion...[/dim]", spinner="dots"):
+            next_question = generate_question(domain, profile, facts)
+
+        prev_question = question
+        question = next_question
+
+        # Stream: warm reaction to answer + natural transition to next question
+        console.print()
+        full_reply = ""
+        try:
+            stream = stream_reaction_and_question(
+                domain_label=domain["label"],
+                prev_question=prev_question,
+                answer=answer,
+                next_question=question,
+            )
+            with Live(
+                Panel("", title="[bold blue]Moi.AI[/bold blue]", border_style="blue"),
+                console=console,
+                refresh_per_second=15,
+                vertical_overflow="visible",
+            ) as live:
+                for chunk in stream:
+                    full_reply += chunk
+                    live.update(Panel(
+                        Markdown(full_reply),
+                        title="[bold blue]Moi.AI[/bold blue]",
+                        border_style="blue",
+                    ))
+        except Exception:
+            # Fallback: show question directly without streaming reaction
+            console.print(f"[dim][{domain['label']}][/dim]")
+            console.print(f"[bold cyan]{question}[/bold cyan]")
+
+        console.print()
+
+    # Session summary
+    facts_added = len(get_all_facts()) - facts_before
+    console.print(Panel(
+        f"[bold]Session terminée[/bold] — {session_count} question(s) posée(s)  •  "
+        f"[bold cyan]{facts_added}[/bold cyan] nouveau(x) souvenir(s) mémorisé(s).\n"
+        "[dim]Continue à parler ou reviens avec [bold]/questions[/bold] pour une nouvelle session.[/dim]",
+        border_style="cyan",
+    ))
+    console.print()
+
+
 # ── Reflect ────────────────────────────────────────────────────────────────────
 
 def _handle_reflect() -> None:
@@ -1157,6 +1298,8 @@ def main() -> None:
             _handle_import(user_input[7:])
         elif lower == "/humeur":
             _handle_mood_chart()
+        elif lower == "/questions":
+            _handle_questions()
         elif lower == "/reflect":
             _handle_reflect()
         elif lower.startswith("/objectif") and not lower.startswith("/objectifs"):
