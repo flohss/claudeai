@@ -63,10 +63,16 @@ from moiai.memory import (
 )
 from moiai.people import delete_person, get_all_people, get_person_by_id
 from moiai.questioner import (
+    DEPTH_LEVELS,
+    DEPTH_THRESHOLD,
     INTERVIEW_DOMAINS,
     generate_question,
+    generate_session_narrative,
     get_coverage_report,
+    get_last_session_info,
     get_total_questions_asked,
+    find_domain_by_arg,
+    is_sensitive_answer,
     log_question,
     stream_reaction_and_question,
 )
@@ -665,11 +671,12 @@ def _handle_mood_chart() -> None:
 
 # ── Questions / Life interview ─────────────────────────────────────────────────
 
-def _handle_questions() -> None:
+def _handle_questions(domain_arg: str = "") -> None:
     """Structured life interview — asks targeted questions to build personal memory."""
     report = get_coverage_report()
     facts = get_all_facts()
     profile = get_profile()
+    session_id = datetime.now().strftime("%Y%m%dT%H%M%S")
 
     # ── Coverage table ─────────────────────────────────────────────────────────
     cov_table = Table(show_header=True, box=None, padding=(0, 2))
@@ -688,31 +695,60 @@ def _handle_questions() -> None:
         )
 
     console.print()
+    total_q = get_total_questions_asked()
+    last_session = get_last_session_info()
+
     console.print(Panel(
         cov_table,
-        title="[bold]Mode Interview — couverture de ta mémoire de vie[/bold]",
+        title="[bold]Mode Interview — mémoire de vie[/bold]",
         border_style="cyan",
-        subtitle=f"[dim]{get_total_questions_asked()} question(s) posée(s) au total[/dim]",
+        subtitle=f"[dim]{total_q} question(s) posée(s) au total[/dim]",
     ))
-    console.print(Panel(
+
+    # Pre-session briefing
+    briefing_lines = (
         "Je vais te poser des questions sur ta vie pour construire ta mémoire.\n"
         "Réponds librement — comme tu parlerais à un ami. Aucune bonne ou mauvaise réponse.\n"
-        "[dim]Tape [bold]suivant[/bold] pour changer de domaine  •  [bold]stop[/bold] pour terminer.[/dim]",
-        border_style="dim",
-    ))
+    )
+    if last_session:
+        domains_str = " · ".join(last_session["domains"][:3])
+        briefing_lines += (
+            f"[dim]Dernière session : {last_session['started']}  •  "
+            f"{last_session['count']} question(s)  •  {domains_str}[/dim]\n"
+        )
+    briefing_lines += (
+        "[dim][bold]suivant[/bold] = changer de domaine  •  "
+        "[bold]stop[/bold] = terminer  •  "
+        "[bold]/questions <domaine>[/bold] = cibler un domaine[/dim]"
+    )
+    console.print(Panel(briefing_lines, border_style="dim"))
     console.print()
 
-    domain_idx = 0
-    questions_in_domain = 0
+    # ── Resolve starting domain ────────────────────────────────────────────────
+    start_domain = find_domain_by_arg(domain_arg) if domain_arg else None
+    if start_domain:
+        # Put the requested domain first in report order
+        domain_idx = next(
+            (i for i, d in enumerate(report) if d["key"] == start_domain["key"]), 0
+        )
+        console.print(f"[dim]Domaine sélectionné : [bold]{start_domain['label']}[/bold][/dim]\n")
+    else:
+        domain_idx = 0
+
+    # ── Session state ──────────────────────────────────────────────────────────
+    depth = 0          # 0=factuel, 1=émotionnel, 2=identitaire
+    depth_count = 0    # questions answered at current depth
     facts_before = len(facts)
     session_count = 0
+    session_transcript: list[dict] = []  # {domain, q, a} — full session history
 
-    # Generate and show the first question
+    # Generate and display first question
     domain = report[domain_idx]
+    depth_info = DEPTH_LEVELS[depth]
     with console.status("[dim]Préparation de la première question...[/dim]", spinner="dots"):
-        question = generate_question(domain, profile, facts)
+        question = generate_question(domain, profile, facts, session_transcript, depth)
 
-    console.print(f"[dim][{domain['label']}][/dim]")
+    console.print(f"[dim][{domain['label']}  {depth_info['display']}][/dim]")
     console.print(f"[bold cyan]{question}[/bold cyan]")
     console.print()
 
@@ -725,23 +761,28 @@ def _handle_questions() -> None:
         if not answer or answer.lower() in ("stop", "fin", "exit", "quitter", "q"):
             break
 
-        # "suivant" — move to next domain without answering
+        # "suivant" — move to next domain, reset depth
         if answer.lower() in ("suivant", "next", "autre", "changer"):
             domain_idx = (domain_idx + 1) % len(report)
-            questions_in_domain = 0
+            depth = 0
+            depth_count = 0
             domain = report[domain_idx]
+            depth_info = DEPTH_LEVELS[depth]
+            console.print(f"\n[dim]── {domain['label']} ──[/dim]")
             with console.status("[dim]Changement de domaine...[/dim]", spinner="dots"):
-                question = generate_question(domain, profile, facts)
-            console.print(f"[dim][{domain['label']}][/dim]")
+                question = generate_question(domain, profile, facts, session_transcript, depth)
+            console.print(f"[dim][{domain['label']}  {depth_info['display']}][/dim]")
             console.print(f"[bold cyan]{question}[/bold cyan]")
             console.print()
             continue
 
-        # Log the question asked + count
-        log_question(domain["key"], question)
+        # Detect sensitive topic
+        sensitive = is_sensitive_answer(answer)
+
+        # Log question + extract facts
+        log_question(domain["key"], question, session_id=session_id, depth=depth)
         session_count += 1
 
-        # Extract facts from answer (user only, no assistant msg)
         try:
             n = extract_and_store(answer, "")
             if n:
@@ -749,18 +790,28 @@ def _handle_questions() -> None:
         except Exception:
             pass
 
+        # Add to session transcript
+        session_transcript.append({"domain": domain["label"], "q": question, "a": answer})
+
         # Refresh facts
         facts = get_all_facts()
-        questions_in_domain += 1
 
-        # Stay in the same domain — Haiku generates the next question for this domain
+        # Depth escalation
+        depth_count += 1
+        if depth_count >= DEPTH_THRESHOLD and depth < 2:
+            depth += 1
+            depth_count = 0
+
+        depth_info = DEPTH_LEVELS[depth]
+
+        # Generate next question (with full session context + new depth)
         with console.status("[dim]Réflexion...[/dim]", spinner="dots"):
-            next_question = generate_question(domain, profile, facts)
+            next_question = generate_question(domain, profile, facts, session_transcript, depth)
 
         prev_question = question
         question = next_question
 
-        # Stream: warm reaction to answer + natural transition to next question
+        # Stream: warm reaction + next question (with session context)
         console.print()
         full_reply = ""
         try:
@@ -769,9 +820,15 @@ def _handle_questions() -> None:
                 prev_question=prev_question,
                 answer=answer,
                 next_question=question,
+                session_transcript=session_transcript[:-1],  # exclude current exchange
+                sensitive=sensitive,
             )
             with Live(
-                Panel("", title="[bold blue]Moi.AI[/bold blue]", border_style="blue"),
+                Panel(
+                    "",
+                    title=f"[bold blue]Moi.AI[/bold blue]  [dim]{depth_info['display']}[/dim]",
+                    border_style="blue",
+                ),
                 console=console,
                 refresh_per_second=15,
                 vertical_overflow="visible",
@@ -780,25 +837,41 @@ def _handle_questions() -> None:
                     full_reply += chunk
                     live.update(Panel(
                         Markdown(full_reply),
-                        title="[bold blue]Moi.AI[/bold blue]",
+                        title=f"[bold blue]Moi.AI[/bold blue]  [dim]{depth_info['display']}[/dim]",
                         border_style="blue",
                     ))
         except Exception:
-            # Fallback: show question directly without streaming reaction
-            console.print(f"[dim][{domain['label']}][/dim]")
+            console.print(f"[dim][{domain['label']}  {depth_info['display']}][/dim]")
             console.print(f"[bold cyan]{question}[/bold cyan]")
 
         console.print()
 
-    # Session summary
+    # ── End-of-session ─────────────────────────────────────────────────────────
     facts_added = len(get_all_facts()) - facts_before
+
     console.print(Panel(
-        f"[bold]Session terminée[/bold] — {session_count} question(s) posée(s)  •  "
-        f"[bold cyan]{facts_added}[/bold cyan] nouveau(x) souvenir(s) mémorisé(s).\n"
-        "[dim]Continue à parler ou reviens avec [bold]/questions[/bold] pour une nouvelle session.[/dim]",
+        f"[bold]Session terminée[/bold] — {session_count} question(s)  •  "
+        f"[bold cyan]{facts_added}[/bold cyan] souvenir(s) mémorisé(s).\n"
+        "[dim]Reviens avec [bold]/questions[/bold] pour continuer à construire ta mémoire.[/dim]",
         border_style="cyan",
     ))
     console.print()
+
+    # Generate session narrative if there's enough material
+    if len(session_transcript) >= 3:
+        console.print("[dim]Génération du récit de session...[/dim]")
+        try:
+            narrative = generate_session_narrative(session_transcript)
+            if narrative:
+                console.print()
+                console.print(Panel(
+                    Markdown(narrative),
+                    title="[bold]Ce que tu m'as partagé aujourd'hui[/bold]",
+                    border_style="magenta",
+                ))
+                console.print()
+        except Exception:
+            pass
 
 
 # ── Reflect ────────────────────────────────────────────────────────────────────
@@ -1305,8 +1378,8 @@ def main() -> None:
             _handle_import(user_input[7:])
         elif lower == "/humeur":
             _handle_mood_chart()
-        elif lower == "/questions":
-            _handle_questions()
+        elif lower.startswith("/questions"):
+            _handle_questions(user_input[10:].strip())
         elif lower == "/reflect":
             _handle_reflect()
         elif lower.startswith("/objectif") and not lower.startswith("/objectifs"):
