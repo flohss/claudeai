@@ -105,6 +105,7 @@ COMMANDS = {
     "/import <fichier>":    "Importer un fichier (WhatsApp, Instagram, Telegram, txt, pdf)",
     "/condenser":           "Fusionner la mémoire en narration personnelle",
     "/humeur":              "Graphique d'humeur sur les 30 derniers jours",
+    "/analyser":            "Audit complet de la mémoire — cohérence, lacunes, patterns, qualité",
     "/reflect":             "Analyse psychologique de ton profil (pattern, angles morts)",
     "/objectif <texte>":    "Ajouter un objectif",
     "/objectifs":           "Lister et gérer les objectifs",
@@ -887,6 +888,32 @@ def _handle_questions(domain_arg: str = "") -> None:
             pass
 
 
+# ── Analyser ───────────────────────────────────────────────────────────────────
+
+def _handle_analyser() -> None:
+    """A posteriori audit of all stored facts."""
+    from moiai.analyser import analyse_facts
+    facts_count = len(get_all_facts())
+    if facts_count == 0:
+        console.print("[dim]Aucun fait mémorisé. Commence à parler pour construire ta mémoire.[/dim]\n")
+        return
+    with console.status(
+        f"[dim]Analyse de {facts_count} fait(s) en cours...[/dim]", spinner="dots"
+    ):
+        try:
+            report = analyse_facts()
+        except Exception as e:
+            console.print(f"[red]Erreur :[/red] {e}\n")
+            return
+    console.print(Panel(
+        Markdown(report),
+        title="[bold]Audit de mémoire — analyse a posteriori[/bold]",
+        border_style="cyan",
+    ))
+    _print_cost()
+    console.print()
+
+
 # ── Reflect ────────────────────────────────────────────────────────────────────
 
 def _handle_reflect() -> None:
@@ -1396,6 +1423,8 @@ def main() -> None:
             _handle_mood_chart()
         elif lower.startswith("/questions"):
             _handle_questions(user_input[10:].strip())
+        elif lower == "/analyser":
+            _handle_analyser()
         elif lower == "/reflect":
             _handle_reflect()
         elif lower.startswith("/objectif") and not lower.startswith("/objectifs"):
