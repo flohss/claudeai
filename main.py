@@ -106,11 +106,9 @@ COMMANDS = {
     "/condenser":           "Fusionner la mémoire en narration personnelle",
     "/humeur":              "Graphique d'humeur sur les 30 derniers jours",
     "/analyser":            "Audit complet de la mémoire — cohérence, lacunes, patterns, qualité",
-    "/reflect":             "Analyse psychologique de ton profil (pattern, angles morts)",
-    "/objectif <texte>":    "Ajouter un objectif",
+    "/reflect":             "Analyse psychologique de ton profil (pattern, angles morts)",    "/objectif <texte>":    "Ajouter un objectif",
     "/objectifs":           "Lister et gérer les objectifs",
     "/bilan":               "Bilan de vie — auto-évaluation par domaine (1-5)",
-    "/révision":            "Détecter les contradictions dans ta mémoire",
     "/personnes":           "Afficher les personnes de ton entourage",
     "/capsule <texte>":     "Créer une capsule temporelle (ex: dans 2 semaines)",
     "/capsules":            "Lister toutes les capsules",
@@ -1108,34 +1106,6 @@ def _handle_bilan() -> None:
 
 # ── Révision (contradictions) ──────────────────────────────────────────────────
 
-def _handle_revision() -> None:
-    with console.status("[dim]Analyse des contradictions...[/dim]", spinner="dots"):
-        try:
-            contras = find_contradictions()
-        except Exception as e:
-            console.print(f"[red]Erreur :[/red] {e}\n")
-            return
-
-    if not contras:
-        console.print("[green]✓ Aucune contradiction détectée.[/green]\n")
-        return
-
-    console.print(f"[yellow]{len(contras)} contradiction(s) détectée(s) :[/yellow]\n")
-
-    for i, c in enumerate(contras, 1):
-        console.print(Panel(
-            f"[bold]Fait 1 :[/bold] {c.get('fact1', '—')}\n"
-            f"[bold]Fait 2 :[/bold] {c.get('fact2', '—')}\n\n"
-            f"[dim]{c.get('explanation', '')}[/dim]",
-            title=f"[yellow]Contradiction #{i}[/yellow]",
-            border_style="yellow",
-        ))
-        store_contradiction(None, None, c.get("explanation", ""))
-
-    _print_cost()
-    console.print("[dim]Contradictions enregistrées. Utilise /faits pour corriger.[/dim]\n")
-
-
 # ── Personnes ──────────────────────────────────────────────────────────────────
 
 def _handle_people() -> None:
@@ -1482,8 +1452,6 @@ def main() -> None:
             _handle_goals()
         elif lower in ("/bilan", "/bilan de vie"):
             _handle_bilan()
-        elif lower in ("/révision", "/revision"):
-            _handle_revision()
         elif lower == "/personnes":
             _handle_people()
         elif lower.startswith("/capsule") and not lower.startswith("/capsules"):
