@@ -30,6 +30,7 @@ from moiai.capsule import (
     parse_delay,
 )
 from moiai.chat import finish_turn, get_startup_briefing, get_stats, start_session, stream_response
+from moiai.api import get_last_call_cost, get_session_cost
 from moiai.memory import count_messages as _count_messages
 from moiai.condenser import condense_narrative
 from moiai.extractor import extract_and_store, extract_from_messages
@@ -1346,6 +1347,12 @@ def main() -> None:
                 continue
 
             finish_turn(full_reply)
+
+            last = get_last_call_cost()
+            total = get_session_cost()
+            console.print(
+                f"[dim]  réponse : ${last:.4f}  ·  session : ${total:.4f}[/dim]"
+            )
 
             threading.Thread(
                 target=_extract_async,

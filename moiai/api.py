@@ -1,6 +1,6 @@
 """
 Central API layer — single Anthropic client with retry, model routing,
-timeout configuration, and prompt-caching helpers.
+timeout configuration, prompt-caching helpers, and cost tracking.
 """
 
 import time
@@ -12,11 +12,54 @@ import httpx
 from anthropic import APIConnectionError, APIStatusError, RateLimitError
 
 # ── Model routing ──────────────────────────────────────────────────────────────
-# Use Haiku for cheap/fast tasks, Sonnet for quality-critical ones.
 
 MODEL_CHAT = "claude-sonnet-4-6"
 MODEL_SMART = "claude-sonnet-4-6"   # condensation, narrative
 MODEL_FAST = "claude-haiku-4-5-20251001"  # extraction, curiosity, summarization
+
+# ── Pricing (USD per million tokens) ──────────────────────────────────────────
+
+_PRICING: dict[str, dict[str, float]] = {
+    MODEL_CHAT: {"input": 3.0, "output": 15.0, "cache_read": 0.30, "cache_write": 3.75},
+    MODEL_FAST: {"input": 0.80, "output": 4.0,  "cache_read": 0.08, "cache_write": 1.00},
+}
+
+# ── Session cost tracking ──────────────────────────────────────────────────────
+
+_session_cost: float = 0.0
+_last_call_cost: float = 0.0
+
+
+def _compute_cost(usage: Any, model: str) -> float:
+    p = _PRICING.get(model, _PRICING[MODEL_CHAT])
+    return (
+        getattr(usage, "input_tokens", 0)            * p["input"]
+        + getattr(usage, "output_tokens", 0)         * p["output"]
+        + getattr(usage, "cache_read_input_tokens", 0)    * p["cache_read"]
+        + getattr(usage, "cache_creation_input_tokens", 0) * p["cache_write"]
+    ) / 1_000_000
+
+
+def _track(usage: Any, model: str) -> None:
+    global _session_cost, _last_call_cost
+    cost = _compute_cost(usage, model)
+    _last_call_cost = cost
+    _session_cost += cost
+
+
+def get_last_call_cost() -> float:
+    return _last_call_cost
+
+
+def get_session_cost() -> float:
+    return _session_cost
+
+
+def reset_session_cost() -> None:
+    global _session_cost, _last_call_cost
+    _session_cost = 0.0
+    _last_call_cost = 0.0
+
 
 # ── Client singleton ───────────────────────────────────────────────────────────
 
@@ -28,8 +71,8 @@ def get_client() -> anthropic.Anthropic:
     if _client is None:
         _client = anthropic.Anthropic(
             timeout=httpx.Timeout(
-                connect=10.0,   # max time to establish connection
-                read=600.0,     # max idle time between stream chunks (10 min)
+                connect=10.0,
+                read=600.0,
                 write=30.0,
                 pool=10.0,
             )
@@ -40,10 +83,6 @@ def get_client() -> anthropic.Anthropic:
 # ── Retry decorator ────────────────────────────────────────────────────────────
 
 def call_with_retry(fn, max_attempts: int = 3, base_delay: float = 2.0):
-    """
-    Call fn() with exponential-backoff retry on transient errors.
-    Retries on: RateLimitError, APIConnectionError, 5xx APIStatusError.
-    """
     last_exc: Exception | None = None
     for attempt in range(max_attempts):
         try:
@@ -83,6 +122,7 @@ def complete(
             messages=[{"role": "user", "content": prompt}],
         )
     response = call_with_retry(_call)
+    _track(response.usage, model)
     return response.content[0].text
 
 
@@ -95,11 +135,6 @@ def chat_complete(
     model: str = MODEL_CHAT,
     max_tokens: int = 2048,
 ) -> str:
-    """
-    Multi-turn chat with cached system prompt support.
-    system_blocks: list of Anthropic content blocks, e.g.:
-      [{"type": "text", "text": "...", "cache_control": {"type": "ephemeral"}}]
-    """
     def _call():
         return get_client().messages.create(
             model=model,
@@ -108,6 +143,7 @@ def chat_complete(
             messages=messages,
         )
     response = call_with_retry(_call)
+    _track(response.usage, model)
     return response.content[0].text
 
 
@@ -120,10 +156,7 @@ def stream_chat(
     model: str = MODEL_CHAT,
     max_tokens: int = 2048,
 ) -> Iterator[str]:
-    """
-    Stream a chat response token by token.
-    Yields text deltas. Raises on API error (no retry — stream can't retry mid-flight).
-    """
+    """Stream a chat response token by token. Tracks cost after stream ends."""
     with get_client().messages.stream(
         model=model,
         max_tokens=max_tokens,
@@ -131,15 +164,14 @@ def stream_chat(
         messages=messages,
     ) as stream:
         yield from stream.text_stream
+        _track(stream.get_final_message().usage, model)
 
 
 # ── Prompt caching helpers ─────────────────────────────────────────────────────
 
 def cached_block(text: str) -> dict:
-    """Wrap a text block with ephemeral cache control."""
     return {"type": "text", "text": text, "cache_control": {"type": "ephemeral"}}
 
 
 def plain_block(text: str) -> dict:
-    """Plain text block (not cached)."""
     return {"type": "text", "text": text}
