@@ -296,6 +296,9 @@ Profil connu :
 Faits déjà connus sur ce domaine :
 {known_facts}
 
+Faits RÉFUTÉS / corrigés (NE JAMAIS mentionner ni utiliser ces informations) :
+{refuted_facts}
+
 Échanges récents de cette session (utilise-les pour créer une continuité naturelle) :
 {session_context}
 
@@ -327,11 +330,19 @@ def generate_question(
     if facts is None:
         facts = get_all_facts()
 
-    domain_facts = [f["fact"] for f in facts if f.get("category") in domain["categories"]]
+    domain_facts_valid = [
+        f["fact"] for f in facts
+        if f.get("category") in domain["categories"] and f.get("certainty") != "réfuté"
+    ]
+    domain_facts_refuted = [
+        f["fact"] for f in facts
+        if f.get("category") in domain["categories"] and f.get("certainty") == "réfuté"
+    ]
     asked = get_asked_questions(domain["key"])
 
     profile_lines = "\n".join(f"- {k} : {v}" for k, v in list(profile.items())[:8]) or "Aucun"
-    known_lines = "\n".join(f"- {f}" for f in domain_facts[:12]) or "Aucun"
+    known_lines = "\n".join(f"- {f}" for f in domain_facts_valid[:12]) or "Aucun"
+    refuted_lines = "\n".join(f"- {f}" for f in domain_facts_refuted[:8])
     asked_lines = "\n".join(f"- {q}" for q in asked[:20]) or "Aucune"
 
     # Build session context from recent transcript (last 5 exchanges)
@@ -351,6 +362,7 @@ def generate_question(
         description=domain["description"],
         profile=profile_lines,
         known_facts=known_lines,
+        refuted_facts=refuted_lines or "Aucun",
         session_context=session_lines,
         asked=asked_lines,
         depth_instruction=depth_instruction,
