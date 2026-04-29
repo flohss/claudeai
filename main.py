@@ -266,6 +266,15 @@ def _show_stats() -> None:
     console.print()
 
 
+# ── Cost display helper ────────────────────────────────────────────────────────
+
+def _print_cost() -> None:
+    last = get_last_call_cost()
+    total = get_session_cost()
+    if last > 0:
+        console.print(f"[dim]  réponse : ${last:.4f}  ·  session : ${total:.4f}[/dim]")
+
+
 # ── Search ─────────────────────────────────────────────────────────────────────
 
 def _handle_search(args: str) -> None:
@@ -440,7 +449,9 @@ def _handle_condense() -> None:
         title="[bold]Narration personnelle condensée[/bold]",
         border_style="cyan",
     ))
-    console.print("[green]✓ Narration sauvegardée.[/green]\n")
+    console.print("[green]✓ Narration sauvegardée.[/green]")
+    _print_cost()
+    console.print()
 
 
 # ── Rapport ────────────────────────────────────────────────────────────────────
@@ -574,9 +585,9 @@ def _handle_import(args: str) -> None:
             console.print(f"[red]Erreur extraction :[/red] {e}\n")
             return
 
-    console.print(
-        f"[green]✓[/green] {n} fait(s) mémorisé(s) depuis [cyan]{path.name}[/cyan]\n"
-    )
+    console.print(f"[green]✓[/green] {n} fait(s) mémorisé(s) depuis [cyan]{path.name}[/cyan]")
+    _print_cost()
+    console.print()
 
 
 # ── Mood chart ────────────────────────────────────────────────────────────────
@@ -844,6 +855,7 @@ def _handle_questions(domain_arg: str = "") -> None:
             console.print(f"[dim][{domain['label']}  {depth_info['display']}][/dim]")
             console.print(f"[bold cyan]{question}[/bold cyan]")
 
+        _print_cost()
         console.print()
 
     # ── End-of-session ─────────────────────────────────────────────────────────
@@ -869,6 +881,7 @@ def _handle_questions(domain_arg: str = "") -> None:
                     title="[bold]Ce que tu m'as partagé aujourd'hui[/bold]",
                     border_style="magenta",
                 ))
+                _print_cost()
                 console.print()
         except Exception:
             pass
@@ -888,6 +901,7 @@ def _handle_reflect() -> None:
         title="[bold]Analyse — patterns & angles morts[/bold]",
         border_style="magenta",
     ))
+    _print_cost()
     console.print()
 
 
@@ -1042,6 +1056,7 @@ def _handle_revision() -> None:
         ))
         store_contradiction(None, None, c.get("explanation", ""))
 
+    _print_cost()
     console.print("[dim]Contradictions enregistrées. Utilise /faits pour corriger.[/dim]\n")
 
 
@@ -1331,6 +1346,7 @@ def main() -> None:
                 title="[bold blue]Moi.AI[/bold blue]",
                 border_style="blue",
             ))
+            _print_cost()
             console.print()
 
     while True:
