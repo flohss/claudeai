@@ -1019,14 +1019,22 @@ def _handle_reset() -> None:
 
 def _show_welcome() -> None:
     console.print(Panel(
-        "[bold cyan]Bienvenue sur Moi.AI[/bold cyan] — ton double personnel artificiel.\n\n"
-        "Je vais apprendre à te connaître au fil de nos conversations.\n"
-        "Pour démarrer vite, quelques options :\n\n"
+        "[bold cyan]Bienvenue sur Moi.AI[/bold cyan] — ton assistant personnel local.\n\n"
+        "Moi.AI est un outil qui apprend à te connaître au fil de tes conversations.\n"
+        "Il mémorise des faits sur toi, tes proches, tes objectifs, ton humeur —\n"
+        "et s'en souvient à chaque session pour être vraiment utile.\n\n"
+        "[bold]🔒 100 % local et privé[/bold]\n"
+        "Toutes tes données sont stockées sur ton appareil uniquement,\n"
+        "dans une base SQLite ([dim]moiai/data/memory.db[/dim]).\n"
+        "Rien n'est envoyé à l'extérieur — sauf tes messages à l'API Anthropic\n"
+        "pour générer les réponses (comme n'importe quel chat IA).\n"
+        "Anthropic ne conserve pas tes données de conversation.\n\n"
+        "[bold]Pour démarrer :[/bold]\n"
         "  [cyan]/import <fichier>[/cyan]    Importer WhatsApp, Instagram, Telegram, PDF…\n"
         "  [cyan]/objectif <texte>[/cyan]    Déclarer un objectif\n"
         "  [cyan]/bilan[/cyan]               Faire ton bilan de vie (note 1-5 par domaine)\n"
         "  [cyan]/cle[/cyan]                 Configurer ou modifier ta clé API\n"
-        "  [cyan]/aide[/cyan]                Voir toutes les commandes\n\n"
+        "  [cyan]/aide[/cyan]                Voir toutes les commandes disponibles\n\n"
         "[dim]Ou commence simplement à parler — je vais apprendre à te connaître.[/dim]",
         title="[bold]Première session[/bold]",
         border_style="cyan",
