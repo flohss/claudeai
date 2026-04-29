@@ -696,14 +696,13 @@ def _handle_questions() -> None:
     console.print(Panel(
         "Je vais te poser des questions sur ta vie pour construire ta mémoire.\n"
         "Réponds librement — comme tu parlerais à un ami. Aucune bonne ou mauvaise réponse.\n"
-        "[dim]Tape [bold]stop[/bold] ou laisse vide pour terminer à tout moment.[/dim]",
+        "[dim]Tape [bold]suivant[/bold] pour changer de domaine  •  [bold]stop[/bold] pour terminer.[/dim]",
         border_style="dim",
     ))
     console.print()
 
     domain_idx = 0
     questions_in_domain = 0
-    MAX_PER_DOMAIN = 3
     facts_before = len(facts)
     session_count = 0
 
@@ -725,6 +724,18 @@ def _handle_questions() -> None:
         if not answer or answer.lower() in ("stop", "fin", "exit", "quitter", "q"):
             break
 
+        # "suivant" — move to next domain without answering
+        if answer.lower() in ("suivant", "next", "autre", "changer"):
+            domain_idx = (domain_idx + 1) % len(report)
+            questions_in_domain = 0
+            domain = report[domain_idx]
+            with console.status("[dim]Changement de domaine...[/dim]", spinner="dots"):
+                question = generate_question(domain, profile, facts)
+            console.print(f"[dim][{domain['label']}][/dim]")
+            console.print(f"[bold cyan]{question}[/bold cyan]")
+            console.print()
+            continue
+
         # Log the question asked + count
         log_question(domain["key"], question)
         session_count += 1
@@ -737,16 +748,11 @@ def _handle_questions() -> None:
         except Exception:
             pass
 
-        # Refresh facts + advance domain if needed
+        # Refresh facts
         facts = get_all_facts()
         questions_in_domain += 1
-        if questions_in_domain >= MAX_PER_DOMAIN:
-            domain_idx = (domain_idx + 1) % len(report)
-            questions_in_domain = 0
 
-        domain = report[domain_idx]
-
-        # Generate next question while user reads current output
+        # Stay in the same domain — Haiku generates the next question for this domain
         with console.status("[dim]Réflexion...[/dim]", spinner="dots"):
             next_question = generate_question(domain, profile, facts)
 
