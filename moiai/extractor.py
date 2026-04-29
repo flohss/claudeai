@@ -77,6 +77,13 @@ Règles sur la certitude :
 - "hypothèse" : auto-hypothèse, suspicion, diagnostic possible ("je pense être TDAH")
 - "réfuté"    : explicitement annulé ou contredit
 
+CORRECTION EXPLICITE : Si l'utilisateur corrige une information ("c'est 2001 pas 2011",
+"non je n'ai pas X", "en fait c'est Y et non Z"), extraire DEUX faits :
+1. Le fait correct avec certainty="certain"
+2. La version erronée (la valeur corrigée) avec certainty="réfuté" — pour invalider l'ancienne
+Exemple : "2001, pas 2011" → [{fact:"emménagement en 2001", certainty:"certain"},
+                               {fact:"emménagement en 2011", certainty:"réfuté"}]
+
 CRITIQUE : le texte du fait DOIT refléter la certitude.
 Ne jamais écrire "a le TDAH" si l'utilisateur dit "je pense être TDAH".
 Écrire : "pense peut-être avoir le TDAH (non diagnostiqué)".

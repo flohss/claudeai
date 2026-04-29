@@ -259,6 +259,9 @@ def _normalize_category(cat: str) -> str:
     return c if c in VALID_CATEGORIES else "autre"
 
 
+_REFUTE_THRESHOLD = 0.40  # lower threshold for finding facts to mark as réfuté
+
+
 def _fact_is_duplicate(fact_text: str, existing: list[str]) -> bool:
     fact_lower = fact_text.lower()
     for ex in existing:
@@ -267,11 +270,43 @@ def _fact_is_duplicate(fact_text: str, existing: list[str]) -> bool:
     return False
 
 
+def _find_fact_to_refute(refuted_text: str, existing_rows: list) -> int | None:
+    """Find an existing non-réfuté fact that the refuted_text is correcting.
+
+    Uses word-overlap + fuzzy ratio so short correction fragments ("2011")
+    can match longer existing facts ("a emménagé le 1er avril 2011...").
+    Returns the fact ID or None.
+    """
+    text_lower = refuted_text.lower()
+    # Meaningful words (len > 2, not common stop words)
+    _STOP = {"les", "des", "une", "avec", "dans", "sur", "par", "que", "qui", "pas", "non"}
+    words = [w for w in text_lower.split() if len(w) > 2 and w not in _STOP]
+
+    best_id: int | None = None
+    best_score: float = _REFUTE_THRESHOLD
+
+    for row in existing_rows:
+        if row["certainty"] == "réfuté":
+            continue
+        fact_lower = row["fact"].lower()
+
+        fuzzy = difflib.SequenceMatcher(None, text_lower, fact_lower).ratio()
+        word_hits = sum(1 for w in words if w in fact_lower)
+        word_score = (word_hits / max(len(words), 1)) * 0.85
+
+        score = max(fuzzy, word_score)
+        if score > best_score:
+            best_score = score
+            best_id = row["id"]
+
+    return best_id
+
+
 def add_facts(facts: list[dict]) -> int:
     now = datetime.now().isoformat()
     with _connect() as conn:
         existing_rows = conn.execute(
-            "SELECT fact, certainty FROM facts WHERE deleted_at IS NULL"
+            "SELECT id, fact, certainty FROM facts WHERE deleted_at IS NULL"
         ).fetchall()
         existing_texts = [r["fact"] for r in existing_rows]
 
@@ -285,6 +320,25 @@ def add_facts(facts: list[dict]) -> int:
             if certainty not in CERTAINTY_LEVELS:
                 certainty = "certain"
 
+            # ── Réfuté: find and update the wrong existing fact ────────────────
+            if certainty == "réfuté":
+                target_id = _find_fact_to_refute(text, existing_rows)
+                if target_id:
+                    conn.execute(
+                        "UPDATE facts SET certainty = 'réfuté', last_confirmed = ? WHERE id = ?",
+                        (now, target_id),
+                    )
+                else:
+                    # No match found — insert as réfuté marker for future dedup
+                    conn.execute(
+                        "INSERT INTO facts (category, fact, certainty, source, last_confirmed, timestamp) "
+                        "VALUES (?, ?, 'réfuté', ?, ?, ?)",
+                        (category, text, f.get("source", ""), now, now),
+                    )
+                    existing_texts.append(text)
+                continue
+
+            # ── Normal dedup ───────────────────────────────────────────────────
             if _fact_is_duplicate(text, existing_texts):
                 conn.execute(
                     "UPDATE facts SET confirmed = confirmed + 1, last_confirmed = ?, "
