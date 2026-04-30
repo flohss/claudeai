@@ -1241,11 +1241,12 @@ def _handle_backup() -> None:
 
     # Try accessible locations in order: /sdcard, ~/Documents, home, then fallback to DB dir
     candidates = [
-        Path("/sdcard/Documents"),
+        Path("/sdcard/Download"),
+        Path("/storage/emulated/0/Download"),
+        Path("/sdcard/Downloads"),
+        Path("/storage/emulated/0/Downloads"),
         Path("/sdcard"),
-        Path("/storage/emulated/0/Documents"),
         Path("/storage/emulated/0"),
-        Path.home() / "Documents",
         Path.home(),
         _DB_PATH.parent,
     ]
