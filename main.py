@@ -6,6 +6,8 @@ Lancement : python main.py
 
 import json
 import os
+import shutil
+import sqlite3
 import sys
 import threading
 from datetime import datetime
@@ -42,6 +44,7 @@ from moiai.goals import (
     update_goal_status,
 )
 from moiai.importer import load_file
+from moiai.memory import DB_PATH as _DB_PATH
 from moiai.memory import (
     CERTAINTY_BADGE,
     CERTAINTY_LEVELS,
@@ -117,6 +120,8 @@ COMMANDS = {
     "/export":              "Exporter toute la mémoire en JSON",
     "/stats":               "Statistiques de mémoire",
     "/aide":                "Afficher cette aide",
+    "/backup":              "Sauvegarder toute la mémoire dans un fichier .db",
+    "/restaurer <fichier>": "Restaurer une sauvegarde (remplace la mémoire actuelle)",
     "/cle":                 "Configurer ou modifier la clé API Anthropic",
     "/reset":               "Effacer toute la mémoire et repartir de zéro",
     "/quitter":             "Quitter",
@@ -1225,6 +1230,82 @@ def _show_due_capsules() -> None:
     console.print()
 
 
+# ── Backup & restore ───────────────────────────────────────────────────────────
+
+def _handle_backup() -> None:
+    if not _DB_PATH.exists():
+        console.print("[yellow]Aucune mémoire à sauvegarder.[/yellow]\n")
+        return
+    backup_dir = _DB_PATH.parent
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    dest = backup_dir / f"backup_{timestamp}.db"
+    try:
+        # Use SQLite backup API for a safe hot-copy (no corruption risk)
+        src_conn = sqlite3.connect(_DB_PATH)
+        dst_conn = sqlite3.connect(dest)
+        src_conn.backup(dst_conn)
+        src_conn.close()
+        dst_conn.close()
+    except Exception as e:
+        console.print(f"[red]Erreur backup :[/red] {e}\n")
+        return
+    size_kb = dest.stat().st_size // 1024
+    console.print(
+        f"[green]✓ Sauvegarde créée :[/green] [bold]{dest}[/bold]\n"
+        f"[dim]  {size_kb} Ko — copie ce fichier sur Google Drive ou par email pour le conserver.[/dim]\n"
+    )
+
+
+def _handle_restore(args: str) -> None:
+    filepath = args.strip().strip('"').strip("'")
+    if not filepath:
+        console.print("[yellow]Usage :[/yellow] /restaurer <chemin/vers/backup.db>\n")
+        return
+    src = Path(filepath).expanduser().resolve()
+    if not src.exists():
+        console.print(f"[red]Fichier introuvable :[/red] {src}\n")
+        return
+    # Validate it's a SQLite DB
+    try:
+        conn = sqlite3.connect(src)
+        conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        conn.close()
+    except Exception:
+        console.print("[red]Fichier invalide — ce n'est pas une base SQLite.[/red]\n")
+        return
+
+    console.print(Panel(
+        f"[bold yellow]Attention[/bold yellow] — cette opération va remplacer toute ta mémoire actuelle\n"
+        f"par le contenu de [bold]{src.name}[/bold].\n"
+        f"[dim]La mémoire actuelle sera perdue (sauf si tu as fait un /backup avant).[/dim]",
+        border_style="yellow",
+    ))
+    if not Confirm.ask("[bold]Confirmer la restauration ?[/bold]", default=False):
+        console.print("[dim]Annulé.[/dim]\n")
+        return
+
+    # Safety backup of current DB before overwriting
+    if _DB_PATH.exists():
+        safety = _DB_PATH.parent / f"backup_avant_restauration_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
+        try:
+            shutil.copy2(_DB_PATH, safety)
+            console.print(f"[dim]Sauvegarde de sécurité créée : {safety.name}[/dim]")
+        except Exception:
+            pass
+
+    try:
+        src_conn = sqlite3.connect(src)
+        dst_conn = sqlite3.connect(_DB_PATH)
+        src_conn.backup(dst_conn)
+        src_conn.close()
+        dst_conn.close()
+    except Exception as e:
+        console.print(f"[red]Erreur restauration :[/red] {e}\n")
+        return
+
+    console.print("[green]✓ Mémoire restaurée.[/green] Relance l'application pour que les changements prennent effet.\n")
+
+
 # ── API key management ─────────────────────────────────────────────────────────
 
 def _handle_api_key() -> None:
@@ -1389,6 +1470,10 @@ def main() -> None:
             break
         elif lower == "/aide":
             _show_help()
+        elif lower == "/backup":
+            _handle_backup()
+        elif lower.startswith("/restaurer"):
+            _handle_restore(user_input[10:])
         elif lower in ("/cle", "/clé"):
             _handle_api_key()
         elif lower == "/reset":
