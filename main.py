@@ -688,32 +688,9 @@ def _handle_questions(domain_arg: str = "") -> None:
     profile = get_profile()
     session_id = datetime.now().strftime("%Y%m%dT%H%M%S")
 
-    # ── Coverage table ─────────────────────────────────────────────────────────
-    cov_table = Table(show_header=True, box=None, padding=(0, 2))
-    cov_table.add_column("Domaine", style="bold", min_width=24)
-    cov_table.add_column("Faits", width=5, justify="right")
-    cov_table.add_column("Couverture", width=22)
-
-    for d in report:
-        fc = min(d["fact_count"], 10)
-        bar = "[cyan]" + "█" * fc + "[/cyan][dim]" + "░" * (10 - fc) + "[/dim]"
-        label_color = "dim" if d["fact_count"] == 0 else "white"
-        cov_table.add_row(
-            f"[{label_color}]{d['label']}[/{label_color}]",
-            str(d["fact_count"]),
-            bar,
-        )
-
     console.print()
     total_q = get_total_questions_asked()
     last_session = get_last_session_info()
-
-    console.print(Panel(
-        cov_table,
-        title="[bold]Mode Interview — mémoire de vie[/bold]",
-        border_style="cyan",
-        subtitle=f"[dim]{total_q} question(s) posée(s) au total[/dim]",
-    ))
 
     # Pre-session briefing
     briefing_lines = (
