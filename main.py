@@ -122,6 +122,7 @@ COMMANDS = {
     "/aide":                "Afficher cette aide",
     "/backup":              "Sauvegarder toute la mémoire dans un fichier .db",
     "/restaurer <fichier>": "Restaurer une sauvegarde (remplace la mémoire actuelle)",
+    "/restart":             "Redémarrer l'application",
     "/cle":                 "Configurer ou modifier la clé API Anthropic",
     "/reset":               "Effacer toute la mémoire et repartir de zéro",
     "/quitter":             "Quitter",
@@ -1488,6 +1489,9 @@ def main() -> None:
             _show_help()
         elif lower == "/backup":
             _handle_backup()
+        elif lower == "/restart":
+            console.print("[dim]Redémarrage...[/dim]")
+            os.execv(sys.executable, [sys.executable] + sys.argv)
         elif lower.startswith("/restaurer"):
             _handle_restore(user_input[10:])
         elif lower in ("/cle", "/clé"):
