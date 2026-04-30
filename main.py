@@ -1236,11 +1236,24 @@ def _handle_backup() -> None:
     if not _DB_PATH.exists():
         console.print("[yellow]Aucune mémoire à sauvegarder.[/yellow]\n")
         return
-    backup_dir = _DB_PATH.parent
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    dest = backup_dir / f"backup_{timestamp}.db"
+    filename = f"moiai_backup_{timestamp}.db"
+
+    # Try accessible locations in order: /sdcard, ~/Documents, home, then fallback to DB dir
+    candidates = [
+        Path("/sdcard/Documents"),
+        Path("/sdcard"),
+        Path("/storage/emulated/0/Documents"),
+        Path("/storage/emulated/0"),
+        Path.home() / "Documents",
+        Path.home(),
+        _DB_PATH.parent,
+    ]
+    dest_dir = next((p for p in candidates if p.exists() and os.access(p, os.W_OK)), _DB_PATH.parent)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / filename
+
     try:
-        # Use SQLite backup API for a safe hot-copy (no corruption risk)
         src_conn = sqlite3.connect(_DB_PATH)
         dst_conn = sqlite3.connect(dest)
         src_conn.backup(dst_conn)
@@ -1249,10 +1262,12 @@ def _handle_backup() -> None:
     except Exception as e:
         console.print(f"[red]Erreur backup :[/red] {e}\n")
         return
+
     size_kb = dest.stat().st_size // 1024
     console.print(
-        f"[green]✓ Sauvegarde créée :[/green] [bold]{dest}[/bold]\n"
-        f"[dim]  {size_kb} Ko — copie ce fichier sur Google Drive ou par email pour le conserver.[/dim]\n"
+        f"[green]✓ Sauvegarde créée[/green]\n"
+        f"[bold]{dest}[/bold]\n"
+        f"[dim]{size_kb} Ko — visible dans le gestionnaire de fichiers Android.[/dim]\n"
     )
 
 
