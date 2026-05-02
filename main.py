@@ -57,6 +57,7 @@ from moiai.memory import (
     get_latest_narrative,
     get_profile,
     get_mood_by_day,
+    get_recent_facts,
     get_recent_mood,
     get_stale_facts,
     init_db,
@@ -103,6 +104,7 @@ COMMANDS = {
     "/faits [cat]":         "Lister les faits (filtrable par catégorie)",
     "/cherche <terme>":     "Recherche plein-texte dans la mémoire",
     "/oublie <ID|terme>":   "Supprimer un fait ou une entrée profil",
+    "/récent [n]":          "Faits mémorisés ces n dernières minutes (défaut 30) — supprimer ceux indésirables",
     "/supprimer <ID>":      "Supprimer un fait par ID",
     "/corriger <ID>":       "Corriger le texte d'un fait (interactif)",
     "/réfuter <ID>":        "Marquer un fait comme réfuté",
@@ -412,6 +414,66 @@ def _handle_edit(args: str) -> None:
             console.print(f"[green]✓ Fait mis à jour.[/green]\n")
         else:
             console.print("[red]Mise à jour échouée.[/red]\n")
+
+
+# ── Récent ────────────────────────────────────────────────────────────────────
+
+def _handle_recent(args: str) -> None:
+    minutes = 30
+    if args.strip().isdigit():
+        minutes = max(1, min(1440, int(args.strip())))
+
+    facts = get_recent_facts(minutes=minutes)
+    if not facts:
+        console.print(f"[dim]Aucun fait enregistré dans les {minutes} dernières minutes.[/dim]\n")
+        return
+
+    table = Table(show_header=True, box=None, padding=(0, 1))
+    table.add_column("ID", style="dim", width=5)
+    table.add_column(" ", width=2, no_wrap=True)
+    table.add_column("Catégorie", style="cyan", width=14)
+    table.add_column("Fait")
+    table.add_column("Heure", style="dim", width=8)
+
+    for f in facts:
+        certainty = f.get("certainty", "certain")
+        badge = CERTAINTY_BADGE.get(certainty, "●")
+        color = _CERTAINTY_COLOR.get(certainty, "white")
+        heure = f["timestamp"][11:16]
+        table.add_row(
+            str(f["id"]),
+            f"[{color}]{badge}[/{color}]",
+            f["category"],
+            f"[{color}]{f['fact']}[/{color}]",
+            heure,
+        )
+
+    console.print(Panel(
+        table,
+        title=f"[bold]{len(facts)} fait(s) mémorisé(s) — {minutes} dernières minutes[/bold]",
+        border_style="cyan",
+    ))
+
+    raw = Prompt.ask(
+        "[dim]IDs à supprimer (ex: [bold]12 34[/bold]) ou Entrée pour tout garder[/dim]",
+        default="",
+    ).strip()
+
+    if not raw:
+        console.print("[dim]Aucune suppression.[/dim]\n")
+        return
+
+    deleted = []
+    for token in raw.split():
+        if token.isdigit():
+            fid = int(token)
+            if delete_fact(fid):
+                deleted.append(fid)
+
+    if deleted:
+        console.print(f"[green]✓ Supprimé :[/green] #{', #'.join(str(x) for x in deleted)}\n")
+    else:
+        console.print("[yellow]Aucun ID valide trouvé.[/yellow]\n")
 
 
 # ── Supprimer / Corriger / Réfuter ────────────────────────────────────────────
@@ -1690,6 +1752,8 @@ def main() -> None:
             _handle_search(user_input[8:])
         elif lower.startswith("/oublie"):
             _handle_forget(user_input[7:])
+        elif lower.startswith("/récent") or lower.startswith("/recent"):
+            _handle_recent(user_input.split(None, 1)[1] if " " in user_input else "")
         elif lower.startswith("/supprimer"):
             _handle_supprimer(user_input[10:])
         elif lower.startswith("/corriger"):

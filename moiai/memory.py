@@ -418,6 +418,19 @@ def delete_fact(fact_id: int) -> bool:
     return soft_delete_fact(fact_id)
 
 
+def get_recent_facts(minutes: int = 30) -> list[dict]:
+    """Return facts added in the last N minutes, ordered most recent first."""
+    cutoff = (datetime.now() - timedelta(minutes=minutes)).isoformat()
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT id, category, fact, certainty, timestamp "
+            "FROM facts WHERE deleted_at IS NULL AND timestamp >= ? "
+            "ORDER BY timestamp DESC",
+            (cutoff,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def get_stale_facts(days: int = _STALE_DAYS) -> list[dict]:
     cutoff = (datetime.now() - timedelta(days=days)).isoformat()
     with _connect() as conn:
