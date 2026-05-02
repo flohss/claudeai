@@ -486,10 +486,9 @@ def _handle_fusionner() -> None:
             console.print(f"[red]Erreur :[/red] {e}\n")
             return
 
-    _print_cost()
-
     if not candidates:
         console.print("[green]✓ Aucune redondance détectée — ta mémoire est bien organisée.[/green]\n")
+        _print_cost()
         return
 
     console.print(f"[yellow]{len(candidates)} fusion(s) suggérée(s) :[/yellow]\n")
@@ -558,9 +557,11 @@ def _handle_fusionner() -> None:
         merged_count += 1
 
     if merged_count:
-        console.print(f"[green]✓ {merged_count} fusion(s) effectuée(s).[/green]\n")
+        console.print(f"[green]✓ {merged_count} fusion(s) effectuée(s).[/green]")
     else:
-        console.print("[dim]Aucune fusion effectuée.[/dim]\n")
+        console.print("[dim]Aucune fusion effectuée.[/dim]")
+    _print_cost()
+    console.print()
 
 
 def _handle_refuter(args: str) -> None:
