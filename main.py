@@ -106,6 +106,7 @@ COMMANDS = {
     "/supprimer <ID>":      "Supprimer un fait par ID",
     "/corriger <ID>":       "Corriger le texte d'un fait (interactif)",
     "/réfuter <ID>":        "Marquer un fait comme réfuté",
+    "/fusionner":           "Détecter et fusionner les faits redondants (assisté par IA)",
     "/edit <ID> <texte>":   "Corriger le texte d'un fait (inline)",
     "/historique [n]":      "Afficher les n derniers échanges (défaut 10)",
     "/import <fichier>":    "Importer un fichier (WhatsApp, Instagram, Telegram, txt, pdf)",
@@ -462,6 +463,104 @@ def _handle_corriger(args: str) -> None:
         console.print(f"[green]✓ Fait #{f['id']} corrigé.[/green]\n")
     else:
         console.print("[red]Mise à jour échouée.[/red]\n")
+
+
+def _handle_fusionner() -> None:
+    """AI-assisted fact merger: detects overlapping facts and proposes consolidations."""
+    from moiai.merger import suggest_merges
+    from datetime import datetime as _dt
+
+    facts = get_all_facts()
+    active = [f for f in facts if f.get("certainty") != "réfuté"]
+    if len(active) < 2:
+        console.print("[dim]Pas assez de faits pour détecter des fusions.[/dim]\n")
+        return
+
+    with console.status(
+        f"[dim]Analyse de {len(active)} faits en recherche de redondances...[/dim]",
+        spinner="dots",
+    ):
+        try:
+            candidates = suggest_merges(facts)
+        except Exception as e:
+            console.print(f"[red]Erreur :[/red] {e}\n")
+            return
+
+    _print_cost()
+
+    if not candidates:
+        console.print("[green]✓ Aucune redondance détectée — ta mémoire est bien organisée.[/green]\n")
+        return
+
+    console.print(f"[yellow]{len(candidates)} fusion(s) suggérée(s) :[/yellow]\n")
+
+    merged_count = 0
+    id_to_fact = {f["id"]: f for f in facts}
+
+    for i, cand in enumerate(candidates, 1):
+        ids = cand["ids"]
+        merged_text = cand["merged"]
+        category = cand["category"]
+        reason = cand.get("reason", "")
+
+        # Build display of original facts
+        originals = []
+        for fid in ids:
+            f = id_to_fact.get(fid)
+            if f:
+                badge = CERTAINTY_BADGE.get(f.get("certainty", "certain"), "●")
+                color = _CERTAINTY_COLOR.get(f.get("certainty", "certain"), "white")
+                originals.append(
+                    f"  [dim]#{fid}[/dim] [{color}]{badge} {f['fact']}[/{color}]"
+                )
+
+        reason_line = f"[dim italic]{reason}[/dim italic]\n" if reason else ""
+        panel_content = (
+            reason_line
+            + "\n".join(originals)
+            + f"\n\n[bold]→ Fusion proposée :[/bold] [cyan]{merged_text}[/cyan]"
+        )
+
+        console.print(Panel(
+            panel_content,
+            title=f"[bold yellow]Fusion {i}/{len(candidates)}[/bold yellow]  [dim]{category}[/dim]",
+            border_style="yellow",
+        ))
+
+        action = Prompt.ask(
+            "  [bold]o[/bold]ui  [bold]e[/bold]diter  [bold]n[/bold]on",
+            choices=["o", "e", "n"],
+            default="n",
+        ).strip().lower()
+
+        if action == "n":
+            console.print("[dim]Ignoré.[/dim]\n")
+            continue
+
+        if action == "e":
+            new_text = Prompt.ask(
+                "[bold]Texte fusionné[/bold]", default=merged_text
+            ).strip()
+            if not new_text:
+                console.print("[dim]Ignoré.[/dim]\n")
+                continue
+            merged_text = new_text
+
+        # Insert merged fact then soft-delete originals
+        from moiai.memory import add_facts, soft_delete_fact
+        add_facts([{"category": category, "fact": merged_text, "certainty": "certain"}])
+        for fid in ids:
+            soft_delete_fact(fid)
+
+        console.print(
+            f"[green]✓ Fait fusionné.[/green]  [dim]#{', #'.join(str(x) for x in ids)} supprimés.[/dim]\n"
+        )
+        merged_count += 1
+
+    if merged_count:
+        console.print(f"[green]✓ {merged_count} fusion(s) effectuée(s).[/green]\n")
+    else:
+        console.print("[dim]Aucune fusion effectuée.[/dim]\n")
 
 
 def _handle_refuter(args: str) -> None:
@@ -1596,6 +1695,8 @@ def main() -> None:
             _handle_corriger(user_input[9:])
         elif lower.startswith("/réfuter") or lower.startswith("/refuter"):
             _handle_refuter(user_input.split(None, 1)[1] if " " in user_input else "")
+        elif lower == "/fusionner":
+            _handle_fusionner()
         elif lower.startswith("/edit"):
             _handle_edit(user_input[5:])
         elif lower.startswith("/historique"):
