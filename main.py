@@ -1638,11 +1638,12 @@ def _show_welcome() -> None:
 
 
 
-def _extract_async(user_msg: str, assistant_msg: str) -> None:
+def _extract_async(user_msg: str, assistant_msg: str, sensitive: bool = False) -> None:
     try:
         n = extract_and_store(user_msg, assistant_msg)
-        if n:
-            console.print(f"[dim]  ✦ {n} nouveau(x) fait(s) mémorisé(s)[/dim]")
+        # Silent if sensitive context or only 1-2 incidental facts
+        if n >= 3 and not sensitive:
+            console.print(f"[dim]  ✦ {n} souvenirs mémorisés[/dim]")
     except Exception:
         pass
 
@@ -1819,9 +1820,10 @@ def main() -> None:
                 f"[dim]  réponse : ${last:.4f}  ·  session : ${total:.4f}[/dim]"
             )
 
+            sensitive = is_sensitive_answer(user_input)
             threading.Thread(
                 target=_extract_async,
-                args=(user_input, full_reply),
+                args=(user_input, full_reply, sensitive),
                 daemon=True,
             ).start()
 
