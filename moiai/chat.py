@@ -108,14 +108,28 @@ Les faits marqués ○ sont des hypothèses, ◐ des probabilités, ● des cert
 """
 
 
+_FRENCH_DAYS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
+_FRENCH_MONTHS = [
+    "janvier", "février", "mars", "avril", "mai", "juin",
+    "juillet", "août", "septembre", "octobre", "novembre", "décembre",
+]
+
+
+def _current_date_line() -> str:
+    now = datetime.now()
+    day = _FRENCH_DAYS[now.weekday()]
+    month = _FRENCH_MONTHS[now.month - 1]
+    return f"Aujourd'hui : {day} {now.day} {month} {now.year}, {now.strftime('%H:%M')}."
+
+
 def _build_system_blocks(context: str, curiosity: str) -> list[dict]:
     """
     3-block system prompt:
-    1. Static instructions (not cached, always the same)
+    1. Static instructions + current date (not cached)
     2. Personal context — CACHED (large, changes slowly)
     3. Curiosity block (changes per turn, not cached)
     """
-    blocks: list[dict] = [plain_block(_INSTRUCTIONS)]
+    blocks: list[dict] = [plain_block(_current_date_line() + "\n\n" + _INSTRUCTIONS)]
     if context:
         blocks.append(cached_block(context))
     if curiosity:
