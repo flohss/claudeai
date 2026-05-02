@@ -103,7 +103,10 @@ COMMANDS = {
     "/faits [cat]":         "Lister les faits (filtrable par catégorie)",
     "/cherche <terme>":     "Recherche plein-texte dans la mémoire",
     "/oublie <ID|terme>":   "Supprimer un fait ou une entrée profil",
-    "/edit <ID> <texte>":   "Corriger le texte d'un fait",
+    "/supprimer <ID>":      "Supprimer un fait par ID",
+    "/corriger <ID>":       "Corriger le texte d'un fait (interactif)",
+    "/réfuter <ID>":        "Marquer un fait comme réfuté",
+    "/edit <ID> <texte>":   "Corriger le texte d'un fait (inline)",
     "/historique [n]":      "Afficher les n derniers échanges (défaut 10)",
     "/import <fichier>":    "Importer un fichier (WhatsApp, Instagram, Telegram, txt, pdf)",
     "/condenser":           "Fusionner la mémoire en narration personnelle",
@@ -408,6 +411,79 @@ def _handle_edit(args: str) -> None:
             console.print(f"[green]✓ Fait mis à jour.[/green]\n")
         else:
             console.print("[red]Mise à jour échouée.[/red]\n")
+
+
+# ── Supprimer / Corriger / Réfuter ────────────────────────────────────────────
+
+def _handle_supprimer(args: str) -> None:
+    query = args.strip()
+    if not query or not query.isdigit():
+        console.print("[yellow]Usage :[/yellow] /supprimer <ID>\n")
+        return
+    f = get_fact_by_id(int(query))
+    if not f:
+        console.print(f"[red]Aucun fait avec l'ID {query}.[/red]\n")
+        return
+    certainty = f.get("certainty", "certain")
+    color = _CERTAINTY_COLOR.get(certainty, "white")
+    badge = CERTAINTY_BADGE.get(certainty, "●")
+    console.print(
+        f"[dim]#{f['id']}[/dim]  [{color}]{badge}[/{color}]  "
+        f"[{f['category']}]  [{color}]{f['fact']}[/{color}]"
+    )
+    if Confirm.ask("Supprimer ?", default=False):
+        delete_fact(f["id"])
+        console.print(f"[green]✓ Fait #{f['id']} supprimé.[/green]\n")
+    else:
+        console.print("[dim]Annulé.[/dim]\n")
+
+
+def _handle_corriger(args: str) -> None:
+    query = args.strip()
+    if not query or not query.isdigit():
+        console.print("[yellow]Usage :[/yellow] /corriger <ID>\n")
+        return
+    f = get_fact_by_id(int(query))
+    if not f:
+        console.print(f"[red]Aucun fait avec l'ID {query}.[/red]\n")
+        return
+    certainty = f.get("certainty", "certain")
+    color = _CERTAINTY_COLOR.get(certainty, "white")
+    badge = CERTAINTY_BADGE.get(certainty, "●")
+    console.print(
+        f"[dim]Actuel :[/dim]  [{color}]{badge}[/{color}]  [{color}]{f['fact']}[/{color}]  "
+        f"[dim]({certainty})[/dim]"
+    )
+    new_text = Prompt.ask("[bold]Nouveau texte[/bold] (Entrée = annuler)", default="").strip()
+    if not new_text:
+        console.print("[dim]Annulé.[/dim]\n")
+        return
+    if update_fact(f["id"], new_text=new_text):
+        console.print(f"[green]✓ Fait #{f['id']} corrigé.[/green]\n")
+    else:
+        console.print("[red]Mise à jour échouée.[/red]\n")
+
+
+def _handle_refuter(args: str) -> None:
+    query = args.strip()
+    if not query or not query.isdigit():
+        console.print("[yellow]Usage :[/yellow] /réfuter <ID>\n")
+        return
+    f = get_fact_by_id(int(query))
+    if not f:
+        console.print(f"[red]Aucun fait avec l'ID {query}.[/red]\n")
+        return
+    if f.get("certainty") == "réfuté":
+        console.print(f"[dim]Fait #{f['id']} est déjà marqué réfuté.[/dim]\n")
+        return
+    certainty = f.get("certainty", "certain")
+    color = _CERTAINTY_COLOR.get(certainty, "white")
+    console.print(f"[dim]#{f['id']}[/dim]  [{color}]{f['fact']}[/{color}]  [dim]({certainty})[/dim]")
+    if Confirm.ask("Marquer comme réfuté ?", default=False):
+        update_fact(f["id"], new_certainty="réfuté")
+        console.print(f"[green]✓ Fait #{f['id']} marqué réfuté.[/green]\n")
+    else:
+        console.print("[dim]Annulé.[/dim]\n")
 
 
 # ── History ────────────────────────────────────────────────────────────────────
@@ -1514,6 +1590,12 @@ def main() -> None:
             _handle_search(user_input[8:])
         elif lower.startswith("/oublie"):
             _handle_forget(user_input[7:])
+        elif lower.startswith("/supprimer"):
+            _handle_supprimer(user_input[10:])
+        elif lower.startswith("/corriger"):
+            _handle_corriger(user_input[9:])
+        elif lower.startswith("/réfuter") or lower.startswith("/refuter"):
+            _handle_refuter(user_input.split(None, 1)[1] if " " in user_input else "")
         elif lower.startswith("/edit"):
             _handle_edit(user_input[5:])
         elif lower.startswith("/historique"):
