@@ -697,6 +697,23 @@ def _handle_condense() -> None:
     console.print()
 
 
+# ── Download folder helper ─────────────────────────────────────────────────────
+
+def _best_export_dir() -> Path:
+    """Return the most accessible export directory (Android Download first, then home)."""
+    candidates = [
+        Path("/sdcard/Download"),
+        Path("/storage/emulated/0/Download"),
+        Path("/sdcard/Downloads"),
+        Path("/storage/emulated/0/Downloads"),
+        Path("/sdcard"),
+        Path("/storage/emulated/0"),
+        Path.home(),
+        _DB_PATH.parent,
+    ]
+    return next((p for p in candidates if p.exists() and os.access(p, os.W_OK)), Path.home())
+
+
 # ── Rapport ────────────────────────────────────────────────────────────────────
 
 def _handle_rapport() -> None:
@@ -744,7 +761,8 @@ def _handle_rapport() -> None:
     ]
 
     text = "\n".join(lines)
-    path = Path("rapport_moiai.md")
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    path = _best_export_dir() / f"moiai_rapport_{timestamp}.md"
     path.write_text(text, encoding="utf-8")
 
     console.print(Panel(
@@ -766,7 +784,8 @@ def _handle_export() -> None:
         "mood_log": get_recent_mood(limit=50),
         "conversation_summaries": get_conversation_summaries(limit=20),
     }
-    path = Path("export_moiai.json")
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    path = _best_export_dir() / f"moiai_export_{timestamp}.json"
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     console.print(f"[green]✓ Export JSON sauvegardé dans[/green] [bold]{path}[/bold]\n")
 
