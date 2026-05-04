@@ -299,14 +299,15 @@ def _print_debug() -> None:
     tok_table.add_column("Tokens", justify="right")
     tok_table.add_column("Coût (USD)", justify="right", style="cyan")
 
+    cache_write = u.get("cache_write_tokens", 0)
     rows = [
-        ("Input",        u.get("input_tokens", 0),       c.get("input", 0)),
-        ("Output",       u.get("output_tokens", 0),       c.get("output", 0)),
-        ("Cache write",  u.get("cache_write_tokens", 0),  c.get("cache_write", 0)),
-        ("Cache read ✓", cache_saved,                     c.get("cache_read", 0)),
+        ("Input",        u.get("input_tokens", 0),  c.get("input", 0),       "white"),
+        ("Output",       u.get("output_tokens", 0), c.get("output", 0),      "white"),
+        ("Cache write" + (" ⚠ contexte modifié" if cache_write and cache_saved == 0 else ""),
+                         cache_write,                c.get("cache_write", 0), "yellow" if cache_write else "white"),
+        ("Cache read ✓", cache_saved,                c.get("cache_read", 0), "green" if cache_saved else "dim"),
     ]
-    for label, tok, cost in rows:
-        color = "green" if label.startswith("Cache read") and tok > 0 else "white"
+    for label, tok, cost, color in rows:
         tok_table.add_row(
             f"[{color}]{label}[/{color}]",
             f"[{color}]{tok:,}[/{color}]",

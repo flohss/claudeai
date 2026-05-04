@@ -80,6 +80,9 @@ def get_last_debug() -> dict:
     return _last_debug
 
 
+_debug_chat_only: bool = True  # only capture main chat calls, not background extraction
+
+
 def _store_debug(model: str, system_blocks, messages, response_text: str, usage) -> None:
     p = _PRICING.get(model, _PRICING[MODEL_CHAT])
     input_tok   = getattr(usage, "input_tokens", 0)
@@ -169,7 +172,7 @@ def complete(
     response = call_with_retry(_call)
     _track(response.usage, model)
     text = response.content[0].text
-    if _debug_enabled:
+    if _debug_enabled and not _debug_chat_only:
         _store_debug(model, [{"type": "text", "text": system}],
                      [{"role": "user", "content": prompt}], text, response.usage)
     return text
@@ -194,7 +197,7 @@ def chat_complete(
     response = call_with_retry(_call)
     _track(response.usage, model)
     text = response.content[0].text
-    if _debug_enabled:
+    if _debug_enabled and not _debug_chat_only:
         _store_debug(model, system_blocks, messages, text, response.usage)
     return text
 
@@ -221,7 +224,7 @@ def stream_chat(
             yield chunk
         usage = stream.get_final_message().usage
         _track(usage, model)
-        if _debug_enabled:
+        if _debug_enabled:  # always capture stream_chat — it's always the main chat
             _store_debug(model, system_blocks, messages, full_text, usage)
 
 
