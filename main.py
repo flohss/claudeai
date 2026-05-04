@@ -1471,6 +1471,40 @@ def _handle_capsules() -> None:
         console.print()
 
 
+# ── Auto-backup (silent) ───────────────────────────────────────────────────────
+
+_AUTO_BACKUP_EVERY = 20   # messages between periodic auto-backups
+_AUTO_BACKUP_KEEP  = 5    # number of auto-backup files to keep
+
+
+def _auto_backup(silent: bool = True) -> None:
+    """Create a silent auto-backup in the Download folder. Keeps last N files."""
+    if not _DB_PATH.exists():
+        return
+    dest_dir = _best_export_dir()
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    dest = dest_dir / f"moiai_auto_{timestamp}.db"
+    try:
+        src_conn = sqlite3.connect(_DB_PATH)
+        dst_conn = sqlite3.connect(dest)
+        src_conn.backup(dst_conn)
+        src_conn.close()
+        dst_conn.close()
+    except Exception:
+        return
+
+    # Rotate: delete oldest auto-backups beyond the keep limit
+    try:
+        auto_files = sorted(dest_dir.glob("moiai_auto_*.db"))
+        for old in auto_files[:-_AUTO_BACKUP_KEEP]:
+            old.unlink(missing_ok=True)
+    except Exception:
+        pass
+
+    if not silent:
+        console.print(f"[dim]  💾 Auto-backup → {dest.name}[/dim]")
+
+
 def _show_due_capsules() -> None:
     """Show capsules that are due and mark them as opened."""
     due = get_due_capsules()
@@ -1728,11 +1762,14 @@ def main() -> None:
             _print_cost()
             console.print()
 
+    session_msg_count = 0
+
     while True:
         try:
             user_input = Prompt.ask("[bold green]Toi[/bold green]").strip()
         except (KeyboardInterrupt, EOFError):
             console.print("\n[dim]À bientôt.[/dim]")
+            _auto_backup()
             break
 
         if not user_input:
@@ -1742,6 +1779,7 @@ def main() -> None:
 
         if lower in ("/quitter", "/exit", "/quit", "exit", "quit"):
             console.print("[dim]À bientôt.[/dim]")
+            _auto_backup()
             break
         elif lower == "/aide":
             _show_help()
@@ -1845,6 +1883,10 @@ def main() -> None:
                 args=(user_input, full_reply, sensitive),
                 daemon=True,
             ).start()
+
+            session_msg_count += 1
+            if session_msg_count % _AUTO_BACKUP_EVERY == 0:
+                threading.Thread(target=_auto_backup, daemon=True).start()
 
 
 if __name__ == "__main__":
