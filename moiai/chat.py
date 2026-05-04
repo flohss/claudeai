@@ -119,7 +119,7 @@ def _current_date_line() -> str:
     now = datetime.now()
     day = _FRENCH_DAYS[now.weekday()]
     month = _FRENCH_MONTHS[now.month - 1]
-    return f"Aujourd'hui : {day} {now.day} {month} {now.year}, {now.strftime('%H:%M')}."
+    return f"Aujourd'hui : {day} {now.day} {month} {now.year}."
 
 
 def _build_system_blocks(context: str, curiosity: str) -> list[dict]:
