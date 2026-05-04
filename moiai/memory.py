@@ -614,11 +614,6 @@ def build_smart_context(recent_messages: list[dict] | None = None) -> str:
             lines.append(f"- {s}")
         lines.append("")
 
-    # 3. Current mood
-    mood = get_mood_summary()
-    if mood:
-        lines.append(f"## Humeur récente détectée\n{mood}\n")
-
     # 4. Profile
     profile = get_profile()
     if profile:

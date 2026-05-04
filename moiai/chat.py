@@ -125,11 +125,18 @@ def _current_date_line() -> str:
 def _build_system_blocks(context: str, curiosity: str) -> list[dict]:
     """
     3-block system prompt:
-    1. Static instructions + current date (not cached)
-    2. Personal context — CACHED (large, changes slowly)
+    1. Date + mood + static instructions (not cached — changes per session/turn)
+    2. Personal context — CACHED (facts, profile, narrative — changes slowly)
     3. Curiosity block (changes per turn, not cached)
     """
-    blocks: list[dict] = [plain_block(_current_date_line() + "\n\n" + _INSTRUCTIONS)]
+    mood = get_recent_mood(limit=1)
+    mood_line = ""
+    if mood:
+        m = mood[0]
+        mood_line = f"Humeur récente : {m['valence']} — {m['state']}\n"
+
+    header = _current_date_line() + "\n" + mood_line + "\n"
+    blocks: list[dict] = [plain_block(header + _INSTRUCTIONS)]
     if context:
         blocks.append(cached_block(context))
     if curiosity:
