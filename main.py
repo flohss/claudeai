@@ -1941,11 +1941,37 @@ def _ensure_api_key() -> None:
         console.print(f"[green]✓ Clé sauvegardée dans[/green] [bold]{env_path}[/bold]\n")
 
 
+def _check_updates_bg() -> tuple[int, str]:
+    """Return (n_commits_behind, branch). Runs in background thread."""
+    import subprocess as _sp
+    def _run(cmd):
+        r = _sp.run(cmd, capture_output=True, text=True, cwd=Path(__file__).parent)
+        return (r.stdout + r.stderr).strip()
+    try:
+        branch = _run(["git", "rev-parse", "--abbrev-ref", "HEAD"])
+        _run(["git", "fetch", "origin", branch, "--quiet"])
+        local  = _run(["git", "rev-parse", "HEAD"])
+        remote = _run(["git", "rev-parse", f"origin/{branch}"])
+        if local == remote:
+            return 0, branch
+        count = _run(["git", "rev-list", "--count", f"HEAD..origin/{branch}"])
+        return int(count or 0), branch
+    except Exception:
+        return 0, ""
+
+
 def main() -> None:
     _ensure_api_key()
 
     init_db()
     _header()
+
+    # Check for updates in background — result shown after startup
+    _update_result: list = [None]
+    def _bg_update():
+        _update_result[0] = _check_updates_bg()
+    update_thread = threading.Thread(target=_bg_update, daemon=True)
+    update_thread.start()
 
     if _count_messages() == 0:
         _show_welcome()
@@ -1961,6 +1987,15 @@ def main() -> None:
             ))
             _print_cost()
             console.print()
+
+    # Show update notification if ready (wait max 3s)
+    update_thread.join(timeout=3.0)
+    if _update_result[0] and _update_result[0][0] > 0:
+        n, branch = _update_result[0]
+        console.print(
+            f"[cyan]  ↑ {n} mise(s) à jour disponible(s)[/cyan]  "
+            f"[dim]→ tape [bold]/màj[/bold] pour installer[/dim]\n"
+        )
 
     session_msg_count = 0
     voice_mode = False
