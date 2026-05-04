@@ -129,14 +129,7 @@ def _build_system_blocks(context: str, curiosity: str) -> list[dict]:
     2. Personal context — CACHED (facts, profile, narrative — changes slowly)
     3. Curiosity block (changes per turn, not cached)
     """
-    mood = get_recent_mood(limit=1)
-    mood_line = ""
-    if mood:
-        m = mood[0]
-        mood_line = f"Humeur récente : {m['valence']} — {m['state']}\n"
-
-    header = _current_date_line() + "\n" + mood_line + "\n"
-    blocks: list[dict] = [plain_block(header + _INSTRUCTIONS)]
+    blocks: list[dict] = [plain_block(_current_date_line() + "\n\n" + _INSTRUCTIONS)]
     if context:
         blocks.append(cached_block(context))
     if curiosity:
