@@ -134,6 +134,7 @@ COMMANDS = {
     "/voix":                "Activer / désactiver la saisie vocale (nécessite Termux:API)",
     "/tts":                 "Activer / désactiver la synthèse vocale des réponses (nécessite Termux:API)",
     "/debug":               "Activer / désactiver le mode débogage (affiche requêtes, tokens, coûts)",
+    "/màj":                 "Vérifier et installer les mises à jour",
     "/restart":             "Redémarrer l'application",
     "/cle":                 "Configurer ou modifier la clé API Anthropic",
     "/reset":               "Effacer toute la mémoire et repartir de zéro",
@@ -1606,6 +1607,66 @@ def _show_due_capsules() -> None:
 
 # ── Backup & restore ───────────────────────────────────────────────────────────
 
+def _handle_update() -> None:
+    """Check for updates on the remote branch and apply them."""
+    import subprocess as _sp
+
+    def _run(cmd: list[str]) -> tuple[int, str]:
+        r = _sp.run(cmd, capture_output=True, text=True, cwd=Path(__file__).parent)
+        return r.returncode, (r.stdout + r.stderr).strip()
+
+    # Detect current branch
+    _, branch = _run(["git", "rev-parse", "--abbrev-ref", "HEAD"])
+    if not branch:
+        console.print("[red]Impossible de détecter la branche git.[/red]\n")
+        return
+
+    console.print(f"[dim]Branche : [bold]{branch}[/bold] — vérification des mises à jour...[/dim]")
+
+    # Fetch remote quietly
+    code, out = _run(["git", "fetch", "origin", branch])
+    if code != 0:
+        console.print(f"[red]Erreur réseau :[/red] {out}\n")
+        return
+
+    # Compare local vs remote
+    _, local_sha  = _run(["git", "rev-parse", "HEAD"])
+    _, remote_sha = _run(["git", "rev-parse", f"origin/{branch}"])
+
+    if local_sha == remote_sha:
+        console.print("[green]✓ Application déjà à jour.[/green]\n")
+        return
+
+    # Show what changed
+    _, log = _run([
+        "git", "log", "--oneline", "--no-decorate",
+        f"HEAD..origin/{branch}",
+    ])
+    if log:
+        table = Table(show_header=False, box=None, padding=(0, 1))
+        table.add_column(style="dim", width=8)
+        table.add_column()
+        for line in log.splitlines():
+            parts = line.split(" ", 1)
+            table.add_row(parts[0], parts[1] if len(parts) > 1 else "")
+        console.print(Panel(table, title="[bold]Mises à jour disponibles[/bold]", border_style="cyan"))
+
+    if not Confirm.ask("Installer les mises à jour ?", default=True):
+        console.print("[dim]Annulé.[/dim]\n")
+        return
+
+    code, out = _run(["git", "pull", "origin", branch])
+    if code != 0:
+        console.print(f"[red]Erreur lors du pull :[/red] {out}\n")
+        return
+
+    console.print("[green]✓ Mises à jour installées.[/green]")
+    if Confirm.ask("Redémarrer maintenant pour appliquer les changements ?", default=True):
+        console.print("[dim]Redémarrage...[/dim]")
+        os.execv(sys.executable, [sys.executable] + sys.argv)
+    console.print()
+
+
 def _handle_backup() -> None:
     if not _DB_PATH.exists():
         console.print("[yellow]Aucune mémoire à sauvegarder.[/yellow]\n")
@@ -1977,6 +2038,8 @@ def main() -> None:
                     console.print("[dim]Mode vocal désactivé.[/dim]\n")
         elif lower == "/backup":
             _handle_backup()
+        elif lower in ("/màj", "/maj"):
+            _handle_update()
         elif lower == "/restart":
             console.print("[dim]Redémarrage...[/dim]")
             os.execv(sys.executable, [sys.executable] + sys.argv)
