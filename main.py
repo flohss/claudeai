@@ -103,7 +103,7 @@ _CERTAINTY_COLOR = {
 }
 
 COMMANDS = {
-    "/profil":              "Afficher profil + narration",
+
     "/faits [cat]":         "Lister les faits (filtrable par catégorie)",
     "/cherche <terme>":     "Recherche plein-texte dans la mémoire",
     "/oublie <ID|terme>":   "Supprimer un fait ou une entrée profil",
@@ -178,34 +178,6 @@ def _show_help() -> None:
 
 
 # ── Profile ────────────────────────────────────────────────────────────────────
-
-def _show_profile() -> None:
-    narrative = get_latest_narrative()
-    profile = get_profile()
-    mood = get_recent_mood(limit=1)
-
-    if narrative:
-        console.print(Panel(
-            Markdown(narrative),
-            title="[bold]Narration personnelle[/bold]",
-            border_style="cyan",
-        ))
-
-    if mood:
-        m = mood[0]
-        badge = {"positive": "🟢", "negative": "🔴", "mixed": "🟡", "neutral": "⚪"}.get(m["valence"], "⚪")
-        console.print(f"[dim]Humeur récente : {badge} {m['state']}[/dim]")
-
-    if profile:
-        table = Table(show_header=False, box=None, padding=(0, 2))
-        table.add_column(style="cyan bold", no_wrap=True)
-        table.add_column()
-        for k, v in profile.items():
-            table.add_row(k, v)
-        console.print(Panel(table, title="[bold]Profil[/bold]", border_style="blue"))
-    elif not narrative:
-        console.print("[dim]Aucun profil enregistré pour l'instant.[/dim]")
-    console.print()
 
 
 # ── Facts ──────────────────────────────────────────────────────────────────────
@@ -2022,8 +1994,6 @@ def main() -> None:
             _handle_api_key()
         elif lower == "/reset":
             _handle_reset()
-        elif lower == "/profil":
-            _show_profile()
         elif lower.startswith("/faits"):
             _show_facts(user_input[6:])
         elif lower == "/stats":
