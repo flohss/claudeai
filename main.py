@@ -64,7 +64,7 @@ from moiai.memory import (
     get_recent_mood,
     get_stale_facts,
     init_db,
-    load_conversation_history,
+
     search_facts,
     update_fact,
 )
@@ -112,8 +112,6 @@ COMMANDS = {
     "/corriger <ID>":       "Corriger le texte d'un fait (interactif)",
     "/réfuter <ID>":        "Marquer un fait comme réfuté",
     "/fusionner":           "Détecter et fusionner les faits redondants (assisté par IA)",
-    "/edit <ID> <texte>":   "Corriger le texte d'un fait (inline)",
-    "/historique [n]":      "Afficher les n derniers échanges (défaut 10)",
     "/import <fichier>":    "Importer un fichier (WhatsApp, Instagram, Telegram, txt, pdf)",
     "/condenser":           "Fusionner la mémoire en narration personnelle",
     "/humeur":              "Graphique d'humeur sur les 30 derniers jours",
@@ -468,37 +466,6 @@ def _handle_forget(args: str) -> None:
 
 # ── Edit ───────────────────────────────────────────────────────────────────────
 
-def _handle_edit(args: str) -> None:
-    parts = args.strip().split(None, 1)
-    if len(parts) < 2 or not parts[0].isdigit():
-        console.print("[yellow]Usage :[/yellow] /edit <ID> <nouveau texte>\n")
-        console.print("[dim]Astuce : /edit 42 certain  — pour changer uniquement la certitude[/dim]\n")
-        return
-
-    fact_id = int(parts[0])
-    new_text = parts[1].strip()
-    f = get_fact_by_id(fact_id)
-    if not f:
-        console.print(f"[red]Aucun fait avec l'ID {fact_id}.[/red]\n")
-        return
-
-    console.print(f"[dim]Actuel :[/dim] {f['fact']}  [dim]({f.get('certainty','certain')})[/dim]")
-
-    # Detect if the user is just changing the certainty
-    if new_text.lower() in CERTAINTY_LEVELS:
-        ok = update_fact(fact_id, new_certainty=new_text.lower())
-        if ok:
-            console.print(f"[green]✓ Certitude mise à jour → {new_text}.[/green]\n")
-        else:
-            console.print("[red]Mise à jour échouée.[/red]\n")
-    else:
-        ok = update_fact(fact_id, new_text=new_text)
-        if ok:
-            console.print(f"[green]✓ Fait mis à jour.[/green]\n")
-        else:
-            console.print("[red]Mise à jour échouée.[/red]\n")
-
-
 # ── Récent ────────────────────────────────────────────────────────────────────
 
 def _handle_recent(args: str) -> None:
@@ -730,35 +697,6 @@ def _handle_refuter(args: str) -> None:
     else:
         console.print("[dim]Annulé.[/dim]\n")
 
-
-# ── History ────────────────────────────────────────────────────────────────────
-
-def _handle_history(args: str) -> None:
-    n = 10
-    if args.strip().isdigit():
-        n = min(int(args.strip()), 100)
-
-    history = load_conversation_history(limit=n)
-    if not history:
-        console.print("[dim]Aucun échange enregistré.[/dim]\n")
-        return
-
-    for msg in history:
-        role = msg["role"]
-        ts = msg["timestamp"][:16].replace("T", " ")
-        if role == "user":
-            console.print(Panel(
-                msg["content"],
-                title=f"[bold green]Toi[/bold green]  [dim]{ts}[/dim]",
-                border_style="green",
-            ))
-        else:
-            console.print(Panel(
-                Markdown(msg["content"]),
-                title=f"[bold blue]Moi.AI[/bold blue]  [dim]{ts}[/dim]",
-                border_style="blue",
-            ))
-    console.print()
 
 
 # ── Condense ───────────────────────────────────────────────────────────────────
@@ -2110,10 +2048,6 @@ def main() -> None:
             _handle_refuter(user_input.split(None, 1)[1] if " " in user_input else "")
         elif lower == "/fusionner":
             _handle_fusionner()
-        elif lower.startswith("/edit"):
-            _handle_edit(user_input[5:])
-        elif lower.startswith("/historique"):
-            _handle_history(user_input[11:])
         elif lower.startswith("/import"):
             _handle_import(user_input[7:])
         elif lower == "/humeur":
