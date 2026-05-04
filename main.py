@@ -1831,9 +1831,8 @@ def _show_welcome() -> None:
 def _extract_async(user_msg: str, assistant_msg: str, sensitive: bool = False) -> None:
     try:
         n = extract_and_store(user_msg, assistant_msg)
-        # Silent if sensitive context or only 1-2 incidental facts
-        if n >= 3 and not sensitive:
-            console.print(f"[dim]  ✦ {n} souvenirs mémorisés[/dim]")
+        if n:
+            console.print(f"[dim]  ✦ {n} souvenir(s) mémorisé(s)[/dim]")
     except Exception:
         pass
 
