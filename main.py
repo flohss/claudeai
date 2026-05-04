@@ -36,6 +36,7 @@ from moiai.api import get_last_call_cost, get_session_cost
 from moiai.memory import count_messages as _count_messages
 from moiai.condenser import condense_narrative
 from moiai.extractor import extract_and_store, extract_from_messages
+from moiai.voice import is_available as _voice_available, transcribe as _voice_transcribe
 from moiai.goals import (
     GOAL_STATUSES,
     add_goal,
@@ -128,6 +129,7 @@ COMMANDS = {
     "/aide":                "Afficher cette aide",
     "/backup":              "Sauvegarder toute la mémoire dans un fichier .db",
     "/restaurer":           "Restaurer un backup (liste les fichiers disponibles automatiquement)",
+    "/voix":                "Activer / désactiver la saisie vocale (nécessite Termux:API)",
     "/restart":             "Redémarrer l'application",
     "/cle":                 "Configurer ou modifier la clé API Anthropic",
     "/reset":               "Effacer toute la mémoire et repartir de zéro",
@@ -1820,10 +1822,27 @@ def main() -> None:
             console.print()
 
     session_msg_count = 0
+    voice_mode = False
 
     while True:
         try:
-            user_input = Prompt.ask("[bold green]Toi[/bold green]").strip()
+            if voice_mode:
+                console.print("[bold green]Toi[/bold green] [dim cyan]🎤 Entrée = parler  •  texte = taper[/dim cyan]")
+                raw = input().strip()
+                if not raw:
+                    # Trigger voice capture
+                    console.print("[dim cyan]Écoute...[/dim cyan]", end="\r")
+                    transcribed = _voice_transcribe()
+                    if transcribed:
+                        console.print(f"[bold green]Toi (voix)[/bold green] {transcribed}")
+                        user_input = transcribed
+                    else:
+                        console.print("[yellow]Rien capturé — réessaie ou tape ton message.[/yellow]")
+                        continue
+                else:
+                    user_input = raw
+            else:
+                user_input = Prompt.ask("[bold green]Toi[/bold green]").strip()
         except (KeyboardInterrupt, EOFError):
             console.print("\n[dim]À bientôt.[/dim]")
             _auto_backup()
@@ -1840,6 +1859,19 @@ def main() -> None:
             break
         elif lower == "/aide":
             _show_help()
+        elif lower == "/voix":
+            if not _voice_available():
+                console.print(
+                    "[yellow]Saisie vocale non disponible.[/yellow]\n"
+                    "[dim]Il faut installer [bold]Termux:API[/bold] depuis F-Droid "
+                    "puis lancer : [bold]pkg install termux-api[/bold][/dim]\n"
+                )
+            else:
+                voice_mode = not voice_mode
+                if voice_mode:
+                    console.print("[cyan]🎤 Mode vocal activé[/cyan] — appuie sur Entrée pour parler, tape pour écrire.\n")
+                else:
+                    console.print("[dim]Mode vocal désactivé.[/dim]\n")
         elif lower == "/backup":
             _handle_backup()
         elif lower == "/restart":
