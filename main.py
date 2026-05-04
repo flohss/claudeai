@@ -1561,20 +1561,13 @@ def _handle_update() -> None:
             table.add_row(parts[0], parts[1] if len(parts) > 1 else "")
         console.print(Panel(table, title="[bold]Mises à jour disponibles[/bold]", border_style="cyan"))
 
-    if not Confirm.ask("Installer les mises à jour ?", default=True):
-        console.print("[dim]Annulé.[/dim]\n")
-        return
-
     code, out = _run(["git", "pull", "origin", branch])
     if code != 0:
         console.print(f"[red]Erreur lors du pull :[/red] {out}\n")
         return
 
-    console.print("[green]✓ Mises à jour installées.[/green]")
-    if Confirm.ask("Redémarrer maintenant pour appliquer les changements ?", default=True):
-        console.print("[dim]Redémarrage...[/dim]")
-        os.execv(sys.executable, [sys.executable] + sys.argv)
-    console.print()
+    console.print("[green]✓ Mises à jour installées. Redémarrage...[/green]")
+    os.execv(sys.executable, [sys.executable] + sys.argv)
 
 
 def _handle_backup() -> None:
