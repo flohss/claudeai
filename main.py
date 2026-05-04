@@ -33,6 +33,7 @@ from moiai.capsule import (
 )
 from moiai.chat import finish_turn, get_startup_briefing, get_stats, start_session, stream_response
 from moiai.api import get_last_call_cost, get_session_cost
+from moiai.api import get_debug_enabled, get_last_debug, set_debug as _set_debug
 from moiai.memory import count_messages as _count_messages
 from moiai.condenser import condense_narrative
 from moiai.extractor import extract_and_store, extract_from_messages
@@ -130,6 +131,7 @@ COMMANDS = {
     "/backup":              "Sauvegarder toute la mémoire dans un fichier .db",
     "/restaurer":           "Restaurer un backup (liste les fichiers disponibles automatiquement)",
     "/voix":                "Activer / désactiver la saisie vocale (nécessite Termux:API)",
+    "/debug":               "Activer / désactiver le mode débogage (affiche requêtes, tokens, coûts)",
     "/restart":             "Redémarrer l'application",
     "/cle":                 "Configurer ou modifier la clé API Anthropic",
     "/reset":               "Effacer toute la mémoire et repartir de zéro",
@@ -276,6 +278,81 @@ def _show_stats() -> None:
             table.add_row(f"  {cat}", str(n))
 
     console.print(Panel(table, title="[bold]Statistiques[/bold]", border_style="dim"))
+    console.print()
+
+
+# ── Debug display ─────────────────────────────────────────────────────────────
+
+def _print_debug() -> None:
+    d = get_last_debug()
+    if not d:
+        return
+
+    # ── Token & cost table ─────────────────────────────────────────────────────
+    u = d.get("usage", {})
+    c = d.get("cost", {})
+    total_cost = sum(c.values())
+    cache_saved = u.get("cache_read_tokens", 0)
+
+    tok_table = Table(show_header=True, box=None, padding=(0, 2))
+    tok_table.add_column("Type", style="dim")
+    tok_table.add_column("Tokens", justify="right")
+    tok_table.add_column("Coût (USD)", justify="right", style="cyan")
+
+    rows = [
+        ("Input",        u.get("input_tokens", 0),       c.get("input", 0)),
+        ("Output",       u.get("output_tokens", 0),       c.get("output", 0)),
+        ("Cache write",  u.get("cache_write_tokens", 0),  c.get("cache_write", 0)),
+        ("Cache read ✓", cache_saved,                     c.get("cache_read", 0)),
+    ]
+    for label, tok, cost in rows:
+        color = "green" if label.startswith("Cache read") and tok > 0 else "white"
+        tok_table.add_row(
+            f"[{color}]{label}[/{color}]",
+            f"[{color}]{tok:,}[/{color}]",
+            f"[{color}]${cost:.6f}[/{color}]",
+        )
+    tok_table.add_row("[bold]TOTAL[/bold]", "", f"[bold cyan]${total_cost:.6f}[/bold cyan]")
+
+    console.print(Panel(tok_table, title=f"[bold]Debug — {d.get('model','')}[/bold]",
+                        border_style="dim yellow"))
+
+    # ── System blocks ──────────────────────────────────────────────────────────
+    for i, blk in enumerate(d.get("system_blocks", []), 1):
+        text = blk.get("text", "") if isinstance(blk, dict) else str(blk)
+        cached = "● cache" if isinstance(blk, dict) and "cache_control" in blk else ""
+        preview = text[:600] + (" […]" if len(text) > 600 else "")
+        console.print(Panel(
+            preview,
+            title=f"[dim]Système bloc {i}  {cached}  ({len(text)} car.)[/dim]",
+            border_style="dim",
+        ))
+
+    # ── Messages sent ──────────────────────────────────────────────────────────
+    msgs = d.get("messages", [])
+    if msgs:
+        lines = []
+        for m in msgs[-6:]:
+            role = m.get("role", "?")
+            content = m.get("content", "")
+            if isinstance(content, list):
+                content = " ".join(b.get("text", "") for b in content if isinstance(b, dict))
+            preview = content[:200].replace("\n", " ")
+            color = "green" if role == "user" else "blue"
+            lines.append(f"[{color}]{role}[/{color}] {preview}")
+        console.print(Panel(
+            "\n".join(lines),
+            title=f"[dim]Messages envoyés ({len(msgs)} — 6 derniers affichés)[/dim]",
+            border_style="dim",
+        ))
+
+    # ── Response ───────────────────────────────────────────────────────────────
+    response = d.get("response", "")
+    console.print(Panel(
+        response[:400] + (" […]" if len(response) > 400 else ""),
+        title="[dim]Réponse reçue[/dim]",
+        border_style="dim",
+    ))
     console.print()
 
 
@@ -1859,6 +1936,10 @@ def main() -> None:
             break
         elif lower == "/aide":
             _show_help()
+        elif lower == "/debug":
+            _set_debug(not get_debug_enabled())
+            state = "[yellow]activé[/yellow]" if get_debug_enabled() else "[dim]désactivé[/dim]"
+            console.print(f"Mode débogage {state}.\n")
         elif lower == "/voix":
             if not _voice_available():
                 console.print(
@@ -1965,6 +2046,9 @@ def main() -> None:
             console.print(
                 f"[dim]  réponse : ${last:.4f}  ·  session : ${total:.4f}[/dim]"
             )
+
+            if get_debug_enabled():
+                _print_debug()
 
             sensitive = is_sensitive_answer(user_input)
             threading.Thread(

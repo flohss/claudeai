@@ -61,6 +61,51 @@ def reset_session_cost() -> None:
     _last_call_cost = 0.0
 
 
+# ── Debug mode ─────────────────────────────────────────────────────────────────
+
+_debug_enabled: bool = False
+_last_debug: dict = {}
+
+
+def set_debug(enabled: bool) -> None:
+    global _debug_enabled
+    _debug_enabled = enabled
+
+
+def get_debug_enabled() -> bool:
+    return _debug_enabled
+
+
+def get_last_debug() -> dict:
+    return _last_debug
+
+
+def _store_debug(model: str, system_blocks, messages, response_text: str, usage) -> None:
+    p = _PRICING.get(model, _PRICING[MODEL_CHAT])
+    input_tok   = getattr(usage, "input_tokens", 0)
+    output_tok  = getattr(usage, "output_tokens", 0)
+    cache_read  = getattr(usage, "cache_read_input_tokens", 0)
+    cache_write = getattr(usage, "cache_creation_input_tokens", 0)
+    _last_debug.update({
+        "model":        model,
+        "system_blocks": system_blocks,
+        "messages":     messages,
+        "response":     response_text,
+        "usage": {
+            "input_tokens":        input_tok,
+            "output_tokens":       output_tok,
+            "cache_read_tokens":   cache_read,
+            "cache_write_tokens":  cache_write,
+        },
+        "cost": {
+            "input":       input_tok   * p["input"]       / 1_000_000,
+            "output":      output_tok  * p["output"]      / 1_000_000,
+            "cache_read":  cache_read  * p["cache_read"]  / 1_000_000,
+            "cache_write": cache_write * p["cache_write"] / 1_000_000,
+        },
+    })
+
+
 # ── Client singleton ───────────────────────────────────────────────────────────
 
 _client: anthropic.Anthropic | None = None
@@ -123,7 +168,11 @@ def complete(
         )
     response = call_with_retry(_call)
     _track(response.usage, model)
-    return response.content[0].text
+    text = response.content[0].text
+    if _debug_enabled:
+        _store_debug(model, [{"type": "text", "text": system}],
+                     [{"role": "user", "content": prompt}], text, response.usage)
+    return text
 
 
 # ── Chat completion (multi-turn) ───────────────────────────────────────────────
@@ -144,7 +193,10 @@ def chat_complete(
         )
     response = call_with_retry(_call)
     _track(response.usage, model)
-    return response.content[0].text
+    text = response.content[0].text
+    if _debug_enabled:
+        _store_debug(model, system_blocks, messages, text, response.usage)
+    return text
 
 
 # ── Streaming chat ─────────────────────────────────────────────────────────────
@@ -157,14 +209,20 @@ def stream_chat(
     max_tokens: int = 2048,
 ) -> Iterator[str]:
     """Stream a chat response token by token. Tracks cost after stream ends."""
+    full_text = ""
     with get_client().messages.stream(
         model=model,
         max_tokens=max_tokens,
         system=system_blocks,
         messages=messages,
     ) as stream:
-        yield from stream.text_stream
-        _track(stream.get_final_message().usage, model)
+        for chunk in stream.text_stream:
+            full_text += chunk
+            yield chunk
+        usage = stream.get_final_message().usage
+        _track(usage, model)
+        if _debug_enabled:
+            _store_debug(model, system_blocks, messages, full_text, usage)
 
 
 # ── Prompt caching helpers ─────────────────────────────────────────────────────
