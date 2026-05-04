@@ -1661,11 +1661,12 @@ def _find_backups() -> list[Path]:
     for d in search_dirs:
         if not d.exists():
             continue
-        for f in sorted(d.glob("moiai_*.db"), reverse=True):
-            if f.resolve() not in seen:
-                seen.add(f.resolve())
+        for f in d.glob("moiai_*.db"):
+            resolved = f.resolve()
+            if resolved not in seen:
+                seen.add(resolved)
                 found.append(f)
-    return found
+    return sorted(found, key=lambda f: f.stat().st_mtime, reverse=True)
 
 
 def _handle_restore(args: str) -> None:
