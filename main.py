@@ -127,7 +127,7 @@ COMMANDS = {
     "/stats":               "Statistiques de mémoire",
     "/aide":                "Afficher cette aide",
     "/backup":              "Sauvegarder toute la mémoire dans un fichier .db",
-    "/restaurer <fichier>": "Restaurer une sauvegarde (remplace la mémoire actuelle)",
+    "/restaurer":           "Restaurer un backup (liste les fichiers disponibles automatiquement)",
     "/restart":             "Redémarrer l'application",
     "/cle":                 "Configurer ou modifier la clé API Anthropic",
     "/reset":               "Effacer toute la mémoire et repartir de zéro",
@@ -1564,15 +1564,72 @@ def _handle_backup() -> None:
     )
 
 
+def _find_backups() -> list[Path]:
+    """Scan Download folders and DB dir for moiai backup files, most recent first."""
+    search_dirs = [
+        Path("/sdcard/Download"),
+        Path("/storage/emulated/0/Download"),
+        Path("/sdcard/Downloads"),
+        Path("/storage/emulated/0/Downloads"),
+        Path("/sdcard"),
+        Path("/storage/emulated/0"),
+        Path.home(),
+        _DB_PATH.parent,
+    ]
+    seen: set[Path] = set()
+    found: list[Path] = []
+    for d in search_dirs:
+        if not d.exists():
+            continue
+        for f in sorted(d.glob("moiai_*.db"), reverse=True):
+            if f.resolve() not in seen:
+                seen.add(f.resolve())
+                found.append(f)
+    return found
+
+
 def _handle_restore(args: str) -> None:
     filepath = args.strip().strip('"').strip("'")
+
     if not filepath:
-        console.print("[yellow]Usage :[/yellow] /restaurer <chemin/vers/backup.db>\n")
-        return
-    src = Path(filepath).expanduser().resolve()
-    if not src.exists():
-        console.print(f"[red]Fichier introuvable :[/red] {src}\n")
-        return
+        # Interactive mode: list available backups
+        backups = _find_backups()
+        if not backups:
+            console.print("[yellow]Aucun fichier de backup trouvé dans le dossier Download.[/yellow]\n")
+            console.print("[dim]Usage manuel :[/dim] /restaurer <chemin/vers/backup.db>\n")
+            return
+
+        table = Table(show_header=True, box=None, padding=(0, 1))
+        table.add_column("#", style="dim", width=4)
+        table.add_column("Fichier", style="cyan")
+        table.add_column("Taille", width=8, style="dim")
+        table.add_column("Date", width=17, style="dim")
+
+        for i, f in enumerate(backups, 1):
+            size_kb = f.stat().st_size // 1024
+            mtime = datetime.fromtimestamp(f.stat().st_mtime).strftime("%d/%m/%Y %H:%M")
+            table.add_row(str(i), f.name, f"{size_kb} Ko", mtime)
+
+        console.print(Panel(table, title="[bold]Backups disponibles[/bold]", border_style="cyan"))
+
+        choice = Prompt.ask(
+            f"[dim]Numéro à restaurer (1-{len(backups)}) ou Entrée pour annuler[/dim]",
+            default="",
+        ).strip()
+
+        if not choice:
+            console.print("[dim]Annulé.[/dim]\n")
+            return
+        if not choice.isdigit() or not (1 <= int(choice) <= len(backups)):
+            console.print("[yellow]Numéro invalide.[/yellow]\n")
+            return
+
+        src = backups[int(choice) - 1]
+    else:
+        src = Path(filepath).expanduser().resolve()
+        if not src.exists():
+            console.print(f"[red]Fichier introuvable :[/red] {src}\n")
+            return
     # Validate it's a SQLite DB
     try:
         conn = sqlite3.connect(src)
