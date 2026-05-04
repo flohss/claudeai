@@ -38,6 +38,7 @@ from moiai.memory import count_messages as _count_messages
 from moiai.condenser import condense_narrative
 from moiai.extractor import extract_and_store, extract_from_messages
 from moiai.voice import is_available as _voice_available, transcribe as _voice_transcribe
+from moiai.voice import is_tts_available as _tts_available, speak as _tts_speak, stop_speaking as _tts_stop
 from moiai.goals import (
     GOAL_STATUSES,
     add_goal,
@@ -131,6 +132,7 @@ COMMANDS = {
     "/backup":              "Sauvegarder toute la mémoire dans un fichier .db",
     "/restaurer":           "Restaurer un backup (liste les fichiers disponibles automatiquement)",
     "/voix":                "Activer / désactiver la saisie vocale (nécessite Termux:API)",
+    "/tts":                 "Activer / désactiver la synthèse vocale des réponses (nécessite Termux:API)",
     "/debug":               "Activer / désactiver le mode débogage (affiche requêtes, tokens, coûts)",
     "/restart":             "Redémarrer l'application",
     "/cle":                 "Configurer ou modifier la clé API Anthropic",
@@ -1901,6 +1903,7 @@ def main() -> None:
 
     session_msg_count = 0
     voice_mode = False
+    tts_mode = False
 
     while True:
         try:
@@ -1926,6 +1929,9 @@ def main() -> None:
             _auto_backup()
             break
 
+        if tts_mode:
+            _tts_stop()
+
         if not user_input:
             continue
 
@@ -1941,6 +1947,21 @@ def main() -> None:
             _set_debug(not get_debug_enabled())
             state = "[yellow]activé[/yellow]" if get_debug_enabled() else "[dim]désactivé[/dim]"
             console.print(f"Mode débogage {state}.\n")
+        elif lower == "/tts":
+            if not _tts_available():
+                console.print(
+                    "[yellow]Synthèse vocale non disponible.[/yellow]\n"
+                    "[dim]Il faut [bold]Termux:API[/bold] depuis F-Droid "
+                    "et [bold]pkg install termux-api[/bold][/dim]\n"
+                )
+            else:
+                tts_mode = not tts_mode
+                if tts_mode:
+                    console.print("[cyan]🔊 Synthèse vocale activée[/cyan] — les réponses seront lues à voix haute.\n"
+                                  "[dim]Tape n'importe quoi et appuie sur Entrée pour interrompre.[/dim]\n")
+                else:
+                    _tts_stop()
+                    console.print("[dim]Synthèse vocale désactivée.[/dim]\n")
         elif lower == "/voix":
             if not _voice_available():
                 console.print(
@@ -2050,6 +2071,9 @@ def main() -> None:
 
             if get_debug_enabled():
                 _print_debug()
+
+            if tts_mode:
+                threading.Thread(target=_tts_speak, args=(full_reply,), daemon=True).start()
 
             sensitive = is_sensitive_answer(user_input)
             threading.Thread(
