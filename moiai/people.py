@@ -153,12 +153,28 @@ def delete_person(pid: int) -> bool:
 
 def get_people_context(limit: int = 8) -> str:
     """Compact people summary for context injection."""
+    from .memory import get_all_facts
     people = get_all_people()
     if not people:
         return ""
+
+    all_facts = get_all_facts()
+    active_facts = [f for f in all_facts if f.get("certainty") != "réfuté"]
+
     lines = ["## Personnes dans ta vie"]
     for p in people[:limit]:
         rel = f" ({p['relation']})" if p.get("relation") else ""
-        note = f" — {p['notes'][:80]}" if p.get("notes") else ""
-        lines.append(f"- **{p['name']}**{rel}{note}")
+        note = f" — {p['notes'][:200]}" if p.get("notes") else ""
+
+        # Pull facts that mention this person's first name
+        first_name = p["name"].split()[0].lower()
+        related = [
+            f["fact"] for f in active_facts
+            if first_name in f["fact"].lower()
+        ][:4]
+        facts_str = ""
+        if related:
+            facts_str = "\n    " + "\n    ".join(f"· {r}" for r in related)
+
+        lines.append(f"- **{p['name']}**{rel}{note}{facts_str}")
     return "\n".join(lines)
