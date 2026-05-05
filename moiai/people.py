@@ -26,6 +26,14 @@ def _ensure_table() -> None:
         """)
 
 
+def _normalize_name(name: str) -> str:
+    """First word title-cased, remaining words uppercased (last name convention)."""
+    parts = name.strip().split()
+    if len(parts) <= 1:
+        return name.strip().title()
+    return parts[0].title() + " " + " ".join(p.upper() for p in parts[1:])
+
+
 def _find_by_name(conn: sqlite3.Connection, name: str) -> dict | None:
     rows = conn.execute(
         "SELECT id, name, relation, notes, last_mentioned FROM people "
@@ -45,6 +53,7 @@ def _find_by_name(conn: sqlite3.Connection, name: str) -> dict | None:
 def upsert_person(name: str, relation: str | None = None, note: str | None = None) -> int:
     """Insert or update a person. Returns the person's ID."""
     _ensure_table()
+    name = _normalize_name(name)
     now = datetime.now().isoformat()
     with _connect() as conn:
         existing = _find_by_name(conn, name)
@@ -123,7 +132,7 @@ def update_person(pid: int, name: str | None = None, relation: str | None = None
     params: list = []
     if name:
         updates.append("name = ?")
-        params.append(name)
+        params.append(_normalize_name(name))
     if relation is not None:
         updates.append("relation = ?")
         params.append(relation)
