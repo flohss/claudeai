@@ -109,6 +109,7 @@ from moiai.memory import (
     update_fact,
 )
 from moiai.people import delete_person, get_all_people, get_person_by_id, merge_people, update_person
+from moiai.models_config import AVAILABLE_MODELS, ROLES, load as _load_models, save as _save_models
 from moiai.questioner import (
     DEPTH_LEVELS,
     DEPTH_THRESHOLD,
@@ -169,6 +170,7 @@ COMMANDS = {
     "/voix":                "Activer / désactiver la saisie vocale (nécessite Termux:API)",
     "/tts":                 "Activer / désactiver la synthèse vocale des réponses (nécessite Termux:API)",
     "/debug":               "Activer / désactiver le mode débogage (affiche requêtes, tokens, coûts)",
+    "/modèle":              "Choisir quel modèle IA fait quoi (conversation, extraction, narration)",
     "/màj":                 "Vérifier et installer les mises à jour",
     "/restart":             "Redémarrer l'application",
     "/cle":                 "Configurer ou modifier la clé API Anthropic",
@@ -1645,6 +1647,83 @@ def _show_due_capsules() -> None:
     console.print()
 
 
+# ── Model config ───────────────────────────────────────────────────────────────
+
+_ROLE_KEYS = ["chat", "smart", "fast"]
+_ROLE_LABELS = {"chat": "Conversation", "smart": "Narration/condensation", "fast": "Extraction/résumés"}
+
+
+def _handle_model() -> None:
+    import moiai.api as _api
+
+    config = _load_models()
+    model_ids = list(AVAILABLE_MODELS.keys())
+
+    # Build display table
+    table = Table(show_header=True, box=None, padding=(0, 2))
+    table.add_column("#", style="dim", width=2)
+    table.add_column("Rôle", style="cyan", no_wrap=True)
+    table.add_column("Modèle actuel", style="white")
+    table.add_column("Description du rôle", style="dim")
+
+    for i, role in enumerate(_ROLE_KEYS, 1):
+        current = config.get(role, "")
+        label = AVAILABLE_MODELS.get(current, current)
+        table.add_row(str(i), _ROLE_LABELS[role], label.split("—")[0].strip(), ROLES[role])
+
+    console.print(Panel(table, title="[bold]Configuration des modèles[/bold]", border_style="cyan"))
+
+    # Model list legend
+    console.print("[dim]Modèles disponibles :[/dim]")
+    for idx, (mid, desc) in enumerate(AVAILABLE_MODELS.items(), 1):
+        console.print(f"  [bold cyan]{idx}[/bold cyan]  {desc}")
+    console.print()
+
+    changed = False
+    for i, role in enumerate(_ROLE_KEYS, 1):
+        current = config.get(role, "")
+        current_idx = model_ids.index(current) + 1 if current in model_ids else "?"
+        raw = Prompt.ask(
+            f"[cyan]{_ROLE_LABELS[role]}[/cyan] (actuel : {current_idx}) — numéro ou Entrée pour garder",
+            default="",
+        ).strip()
+        if not raw:
+            continue
+        if raw.isdigit() and 1 <= int(raw) <= len(model_ids):
+            chosen = model_ids[int(raw) - 1]
+            if chosen != current:
+                config[role] = chosen
+                changed = True
+                console.print(f"  [green]✓[/green] {_ROLE_LABELS[role]} → {chosen}")
+        else:
+            console.print("[yellow]Numéro invalide, ignoré.[/yellow]")
+
+    if not changed:
+        console.print("[dim]Aucun changement.\n[/dim]")
+        return
+
+    _save_models(config)
+
+    # Apply immediately in the running session by updating api module variables
+    _api.MODEL_CHAT = config["chat"]
+    _api.MODEL_SMART = config["smart"]
+    _api.MODEL_FAST = config["fast"]
+    # Propagate to submodules that imported the constants
+    for _mod_name in ("moiai.extractor", "moiai.merger", "moiai.condenser",
+                      "moiai.curiosity", "moiai.reflect", "moiai.questioner",
+                      "moiai.analyser", "moiai.chat"):
+        import importlib as _il
+        _m = _il.import_module(_mod_name)
+        if hasattr(_m, "MODEL_CHAT"):
+            _m.MODEL_CHAT = config["chat"]
+        if hasattr(_m, "MODEL_SMART"):
+            _m.MODEL_SMART = config["smart"]
+        if hasattr(_m, "MODEL_FAST"):
+            _m.MODEL_FAST = config["fast"]
+
+    console.print("[green]✓ Configuration sauvegardée et appliquée immédiatement.[/green]\n")
+
+
 # ── Backup & restore ───────────────────────────────────────────────────────────
 
 def _handle_update() -> None:
@@ -2091,6 +2170,8 @@ def main() -> None:
                     console.print("[dim]Mode vocal désactivé.[/dim]\n")
         elif lower == "/backup":
             _handle_backup()
+        elif lower in ("/modèle", "/modele"):
+            _handle_model()
         elif lower in ("/màj", "/maj"):
             _handle_update()
         elif lower == "/restart":

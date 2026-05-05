@@ -17,6 +17,16 @@ MODEL_CHAT = "claude-sonnet-4-6"
 MODEL_SMART = "claude-sonnet-4-6"   # condensation, narrative
 MODEL_FAST = "claude-haiku-4-5-20251001"  # extraction, curiosity, summarization
 
+# Override with user config (if any) — must come before PRICING dict
+try:
+    from .models_config import load as _load_mc
+    _mc = _load_mc()
+    MODEL_CHAT = _mc.get("chat", MODEL_CHAT)
+    MODEL_SMART = _mc.get("smart", MODEL_SMART)
+    MODEL_FAST = _mc.get("fast", MODEL_FAST)
+except Exception:
+    pass
+
 # ── Pricing (USD per million tokens) ──────────────────────────────────────────
 
 _PRICING: dict[str, dict[str, float]] = {
