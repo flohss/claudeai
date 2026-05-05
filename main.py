@@ -150,7 +150,7 @@ COMMANDS = {
     "/récent [n]":          "Faits mémorisés ces n dernières minutes (défaut 30) — supprimer ceux indésirables",
     "/supprimer <ID>":      "Supprimer un fait par ID",
     "/corriger <ID>":       "Corriger le texte d'un fait (interactif)",
-    "/réfuter <ID>":        "Marquer un fait comme réfuté",
+
     "/fusionner":           "Détecter et fusionner les faits redondants (assisté par IA)",
     "/import <fichier>":    "Importer un fichier (WhatsApp, Instagram, Telegram, txt, pdf)",
     "/condenser":           "Fusionner la mémoire en narration personnelle",
@@ -795,26 +795,6 @@ def _handle_fusionner() -> None:
     console.print()
 
 
-def _handle_refuter(args: str) -> None:
-    query = args.strip()
-    if not query or not query.isdigit():
-        console.print("[yellow]Usage :[/yellow] /réfuter <ID>\n")
-        return
-    f = get_fact_by_id(int(query))
-    if not f:
-        console.print(f"[red]Aucun fait avec l'ID {query}.[/red]\n")
-        return
-    if f.get("certainty") == "réfuté":
-        console.print(f"[dim]Fait #{f['id']} est déjà marqué réfuté.[/dim]\n")
-        return
-    certainty = f.get("certainty", "certain")
-    color = _CERTAINTY_COLOR.get(certainty, "white")
-    console.print(f"[dim]#{f['id']}[/dim]  [{color}]{f['fact']}[/{color}]  [dim]({certainty})[/dim]")
-    if Confirm.ask("Marquer comme réfuté ?", default=False):
-        update_fact(f["id"], new_certainty="réfuté")
-        console.print(f"[green]✓ Fait #{f['id']} marqué réfuté.[/green]\n")
-    else:
-        console.print("[dim]Annulé.[/dim]\n")
 
 
 
@@ -2155,8 +2135,7 @@ def main() -> None:
             _handle_supprimer(user_input[10:])
         elif lower.startswith("/corriger"):
             _handle_corriger(user_input[9:])
-        elif lower.startswith("/réfuter") or lower.startswith("/refuter"):
-            _handle_refuter(user_input.split(None, 1)[1] if " " in user_input else "")
+
         elif lower == "/fusionner":
             _handle_fusionner()
         elif lower.startswith("/import"):
