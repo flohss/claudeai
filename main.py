@@ -1901,8 +1901,7 @@ def main() -> None:
         _show_welcome()
     else:
         _show_due_capsules()
-        if after_update:
-            _show_last_exchange()
+        _show_last_exchange()
         start_session()
         briefing = get_startup_briefing(timeout=6.0)
         if briefing:
