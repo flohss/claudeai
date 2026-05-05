@@ -108,7 +108,7 @@ from moiai.memory import (
     search_facts,
     update_fact,
 )
-from moiai.people import delete_person, get_all_people, get_person_by_id, merge_people
+from moiai.people import delete_person, get_all_people, get_person_by_id, merge_people, update_person
 from moiai.questioner import (
     DEPTH_LEVELS,
     DEPTH_THRESHOLD,
@@ -1474,11 +1474,24 @@ def _handle_people() -> None:
     console.print(Panel(table, title=f"[bold]Personnes ({len(people)})[/bold]", border_style="cyan"))
 
     action = Prompt.ask(
-        "\n[dim][bold]s[/bold]upprimer  [bold]f[/bold]usionner les doublons  Entrée=rien[/dim]",
+        "\n[dim][bold]e[/bold]diter  [bold]s[/bold]upprimer  [bold]f[/bold]usionner les doublons  Entrée=rien[/dim]",
         default="",
     ).strip().lower()
 
-    if action == "s":
+    if action == "e":
+        pid_str = Prompt.ask("[dim]ID[/dim]").strip()
+        if not pid_str.isdigit():
+            console.print("[yellow]ID invalide.[/yellow]\n")
+            return
+        p = get_person_by_id(int(pid_str))
+        if not p:
+            console.print("[red]ID introuvable.[/red]\n")
+            return
+        new_name = Prompt.ask(f"[dim]Nom[/dim]", default=p["name"]).strip()
+        new_rel = Prompt.ask(f"[dim]Relation[/dim]", default=p.get("relation") or "").strip()
+        update_person(int(pid_str), name=new_name or None, relation=new_rel)
+        console.print(f"[green]✓ Personne #{pid_str} mise à jour.[/green]\n")
+    elif action == "s":
         pid_str = Prompt.ask("[dim]ID[/dim]").strip()
         if pid_str.isdigit():
             if delete_person(int(pid_str)):

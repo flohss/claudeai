@@ -117,6 +117,24 @@ def merge_people(pid_keep: int, pid_delete: int) -> bool:
     return True
 
 
+def update_person(pid: int, name: str | None = None, relation: str | None = None) -> bool:
+    _ensure_table()
+    updates: list[str] = []
+    params: list = []
+    if name:
+        updates.append("name = ?")
+        params.append(name)
+    if relation is not None:
+        updates.append("relation = ?")
+        params.append(relation)
+    if not updates:
+        return False
+    params.append(pid)
+    with _connect() as conn:
+        cur = conn.execute(f"UPDATE people SET {', '.join(updates)} WHERE id = ?", params)
+    return cur.rowcount > 0
+
+
 def delete_person(pid: int) -> bool:
     _ensure_table()
     with _connect() as conn:
