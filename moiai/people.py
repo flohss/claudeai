@@ -52,7 +52,7 @@ def upsert_person(name: str, relation: str | None = None, note: str | None = Non
             pid = existing["id"]
             updates: list[str] = ["last_mentioned = ?"]
             params: list = [now]
-            if relation and not existing.get("relation"):
+            if relation:
                 updates.append("relation = ?")
                 params.append(relation)
             if note:
