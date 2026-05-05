@@ -30,9 +30,12 @@ except Exception:
 # ── Pricing (USD per million tokens) ──────────────────────────────────────────
 
 _PRICING: dict[str, dict[str, float]] = {
-    MODEL_CHAT: {"input": 3.0, "output": 15.0, "cache_read": 0.30, "cache_write": 3.75},
-    MODEL_FAST: {"input": 1.00, "output": 5.0,  "cache_read": 0.10, "cache_write": 1.25},
+    "claude-opus-4-7":           {"input": 15.0, "output": 75.0, "cache_read": 1.50, "cache_write": 18.75},
+    "claude-sonnet-4-6":         {"input": 3.0,  "output": 15.0, "cache_read": 0.30, "cache_write": 3.75},
+    "claude-haiku-4-5-20251001": {"input": 1.00, "output": 5.0,  "cache_read": 0.10, "cache_write": 1.25},
 }
+
+_PRICING_FALLBACK = _PRICING["claude-sonnet-4-6"]
 
 # ── Session cost tracking ──────────────────────────────────────────────────────
 
@@ -41,7 +44,7 @@ _last_call_cost: float = 0.0
 
 
 def _compute_cost(usage: Any, model: str) -> float:
-    p = _PRICING.get(model, _PRICING[MODEL_CHAT])
+    p = _PRICING.get(model, _PRICING_FALLBACK)
     return (
         getattr(usage, "input_tokens", 0)            * p["input"]
         + getattr(usage, "output_tokens", 0)         * p["output"]
@@ -103,7 +106,7 @@ _debug_chat_only: bool = True  # only capture main chat calls, not background ex
 
 
 def _store_debug(model: str, system_blocks, messages, response_text: str, usage) -> None:
-    p = _PRICING.get(model, _PRICING[MODEL_CHAT])
+    p = _PRICING.get(model, _PRICING_FALLBACK)
     input_tok   = getattr(usage, "input_tokens", 0)
     output_tok  = getattr(usage, "output_tokens", 0)
     cache_read  = getattr(usage, "cache_read_input_tokens", 0)
