@@ -302,10 +302,16 @@ def generate_weekly_summary() -> str:
 _BRIEFING_SYSTEM = "Tu es un double personnel attentionné. Réponds en français, sois bref et naturel."
 
 _BRIEFING_PROMPT = """\
-L'utilisateur revient après une absence de {gap}. Génère un message d'accueil court (2-3 phrases max).
+L'utilisateur revient après une absence de {gap}. Date et heure actuelles : {now}.
+Génère un message d'accueil court (2-3 phrases max).
 
 Objectif : montrer que tu te souviens, sans faire un rapport. Une phrase de reconnexion
 + une question sur le fil le plus important laissé ouvert.
+
+RÈGLE CRITIQUE : Si un fil ouvert mentionne un événement futur (pas encore passé par
+rapport à la date actuelle), ne demande pas "comment ça s'est passé" — mentionne-le
+avec anticipation ("tu as X bientôt, comment tu te sens ?").
+Ne demande "comment ça s'est passé" que pour des événements clairement passés.
 
 Informations disponibles :
 Fils ouverts : {threads}
@@ -313,8 +319,7 @@ Objectifs actifs : {goals}
 Humeur lors de la dernière session : {last_mood}
 Faits récents intéressants : {recent_facts}
 
-Ton message doit sembler naturel, pas robotique. Exemple de bon ton :
-"Content de te revoir ! Tu avais un entretien hier — comment ça s'est passé ?"
+Ton message doit sembler naturel, pas robotique.
 """
 
 
@@ -338,12 +343,16 @@ def generate_startup_briefing(
     else:
         gap = f"{int(gap_hours / 168)} semaine(s)"
 
+    from datetime import datetime as _dt
+    now_str = _dt.now().strftime("%A %d/%m/%Y %Hh")
+
     threads_str = " | ".join(open_threads[:3]) if open_threads else "aucun"
     goals_str = " | ".join(active_goals[:3]) if active_goals else "aucun"
     recent_str = " | ".join(recent_facts[:3]) if recent_facts else "aucun"
 
     prompt = _BRIEFING_PROMPT.format(
         gap=gap,
+        now=now_str,
         threads=threads_str,
         goals=goals_str,
         last_mood=last_mood or "non enregistrée",
