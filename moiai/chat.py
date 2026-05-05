@@ -11,6 +11,7 @@ from .api import MODEL_CHAT, cached_block, plain_block, stream_chat
 from .condenser import maybe_summarize_conversations
 from .curiosity import build_curiosity_block, warm_cache
 from .goals import get_goals_context
+from .settings import get as _cfg
 from .memory import (
     build_smart_context,
     count_messages,
@@ -144,7 +145,7 @@ def _build_full_context(history: list[dict]) -> str:
     base = build_smart_context(recent_messages=None)
     extras: list[str] = []
 
-    people_ctx = get_people_context(limit=8)
+    people_ctx = get_people_context()
     if people_ctx:
         extras.append(people_ctx)
 
@@ -172,7 +173,7 @@ def stream_response(user_input: str) -> Iterator[str]:
     save_message("user", user_input)
 
     total = count_messages()
-    history = load_recent_messages(limit=30)
+    history = load_recent_messages(limit=_cfg("messages_historique"))
     context = _build_full_context(history)
 
     try:
@@ -190,7 +191,7 @@ def chat_complete(user_input: str) -> str:
     save_message("user", user_input)
 
     total = count_messages()
-    history = load_recent_messages(limit=30)
+    history = load_recent_messages(limit=_cfg("messages_historique"))
     context = _build_full_context(history)
 
     try:

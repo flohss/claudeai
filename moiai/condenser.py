@@ -4,6 +4,7 @@ into summaries, using retry-wrapped API calls.
 """
 
 from .api import MODEL_FAST, MODEL_SMART, complete
+from .settings import get as _cfg
 from .memory import (
     count_unsummarized_messages,
     get_all_facts,
@@ -15,7 +16,7 @@ from .memory import (
     save_narrative,
 )
 
-AUTO_SUMMARIZE_THRESHOLD = 80
+AUTO_SUMMARIZE_THRESHOLD = 80  # fallback only — runtime value read from settings
 
 _NARRATIVE_SYSTEM = "Tu es un biographe expert. Rédige uniquement la narration demandée, sans commentaires."
 
@@ -104,8 +105,11 @@ def summarize_old_conversations(after_id: int = 0) -> str | None:
 
 def maybe_summarize_conversations() -> bool:
     """Auto-trigger summarization when history grows long. Returns True if triggered."""
+    threshold = _cfg("seuil_auto_résumé")
+    if threshold == 0:
+        return False
     count = count_unsummarized_messages()
-    if count >= AUTO_SUMMARIZE_THRESHOLD:
+    if count >= threshold:
         last_id = get_last_message_id()
         cutoff = last_id - 20
         if cutoff > 0:

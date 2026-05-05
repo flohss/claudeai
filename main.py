@@ -110,6 +110,7 @@ from moiai.memory import (
 )
 from moiai.people import delete_person, get_all_people, get_person_by_id, merge_people, update_person
 from moiai.models_config import AVAILABLE_MODELS, ROLES, load as _load_models, save as _save_models
+from moiai.settings import DEFAULTS as _SETTINGS_DEFAULTS, PARAMS as _SETTINGS_PARAMS, load as _load_settings, save as _save_settings, get as _get_setting
 from moiai.questioner import (
     DEPTH_LEVELS,
     DEPTH_THRESHOLD,
@@ -171,6 +172,7 @@ COMMANDS = {
     "/tts":                 "Activer / désactiver la synthèse vocale des réponses (nécessite Termux:API)",
     "/debug":               "Activer / désactiver le mode débogage (affiche requêtes, tokens, coûts)",
     "/modèle":              "Choisir quel modèle IA fait quoi (conversation, extraction, narration)",
+    "/paramètres":          "Ajuster la taille du contexte (personnes, faits, historique…)",
     "/màj":                 "Vérifier et installer les mises à jour",
     "/restart":             "Redémarrer l'application",
     "/cle":                 "Configurer ou modifier la clé API Anthropic",
@@ -1647,6 +1649,92 @@ def _show_due_capsules() -> None:
     console.print()
 
 
+# ── Context settings ───────────────────────────────────────────────────────────
+
+def _handle_settings() -> None:
+    from moiai.memory import get_all_facts
+    from moiai.people import get_all_people
+
+    config = _load_settings()
+    n_facts   = len(get_all_facts())
+    n_people  = len(get_all_people())
+
+    # Hints dynamiques avec les chiffres réels de la base
+    hints_override = {
+        "personnes_contexte": f"tu en as {n_people} en base",
+        "faits_contexte":     f"tu en as {n_facts} en base",
+    }
+
+    keys = list(_SETTINGS_PARAMS.keys())
+
+    # ── Affichage ──────────────────────────────────────────────────────────────
+    table = Table(show_header=True, box=None, padding=(0, 2))
+    table.add_column("#",          style="dim",   width=2)
+    table.add_column("Paramètre",  style="cyan",  no_wrap=True)
+    table.add_column("Valeur",     style="bold white", width=7)
+    table.add_column("Défaut",     style="dim",   width=7)
+    table.add_column("Note",       style="dim")
+
+    for i, key in enumerate(keys, 1):
+        label, hint, mn, mx = _SETTINGS_PARAMS[key]
+        val     = config.get(key, _SETTINGS_DEFAULTS[key])
+        default = _SETTINGS_DEFAULTS[key]
+        note    = hints_override.get(key, hint)
+        changed = "[yellow]●[/yellow] " if val != default else "  "
+        table.add_row(
+            str(i),
+            label,
+            f"{changed}{val}",
+            str(default),
+            note,
+        )
+
+    console.print(Panel(
+        table,
+        title="[bold]Paramètres de contexte[/bold]",
+        border_style="cyan",
+    ))
+    console.print(
+        "[dim]⚠ Plus de contexte = plus de tokens = coût plus élevé.[/dim]\n"
+        "[dim]Entrée sans valeur = garder l'actuel. [bold]r[/bold] = remettre la valeur par défaut.[/dim]\n"
+    )
+
+    changed_any = False
+    for i, key in enumerate(keys, 1):
+        label, hint, mn, mx = _SETTINGS_PARAMS[key]
+        cur = config.get(key, _SETTINGS_DEFAULTS[key])
+        raw = Prompt.ask(
+            f"[cyan]{i}. {label}[/cyan] [dim](actuel: {cur}, min: {mn}, max: {mx})[/dim]",
+            default="",
+        ).strip().lower()
+
+        if not raw:
+            continue
+        if raw == "r":
+            new_val = _SETTINGS_DEFAULTS[key]
+            config[key] = new_val
+            changed_any = True
+            console.print(f"  [green]✓[/green] Remis à {new_val}")
+            continue
+        if raw.isdigit() or (raw.lstrip("-").isdigit()):
+            new_val = int(raw)
+            if mn <= new_val <= mx:
+                config[key] = new_val
+                changed_any = True
+                console.print(f"  [green]✓[/green] {label} → {new_val}")
+            else:
+                console.print(f"  [yellow]Hors limite ({mn}–{mx}), ignoré.[/yellow]")
+        else:
+            console.print("  [yellow]Valeur invalide, ignorée.[/yellow]")
+
+    if not changed_any:
+        console.print("[dim]Aucun changement.\n[/dim]")
+        return
+
+    _save_settings(config)
+    console.print("[green]✓ Paramètres sauvegardés et appliqués immédiatement.[/green]\n")
+
+
 # ── Model config ───────────────────────────────────────────────────────────────
 
 _ROLE_KEYS = ["chat", "smart", "fast"]
@@ -2203,6 +2291,8 @@ def main() -> None:
                     console.print("[dim]Mode vocal désactivé.[/dim]\n")
         elif lower == "/backup":
             _handle_backup()
+        elif lower in ("/paramètres", "/parametres"):
+            _handle_settings()
         elif lower in ("/modèle", "/modele"):
             _handle_model()
         elif lower in ("/màj", "/maj"):

@@ -9,6 +9,8 @@ import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from .settings import get as _cfg
+
 DB_PATH = Path(__file__).parent / "data" / "memory.db"
 
 _DEDUP_THRESHOLD = 0.75
@@ -634,7 +636,7 @@ def build_smart_context(recent_messages: list[dict] | None = None) -> str:
         lines.append("")
 
     # 2. Conversation summaries
-    summaries = get_conversation_summaries(limit=3)
+    summaries = get_conversation_summaries(limit=_cfg("résumés_contexte"))
     if summaries:
         lines.append("## Résumés des conversations passées")
         for s in summaries:
@@ -662,7 +664,7 @@ def build_smart_context(recent_messages: list[dict] | None = None) -> str:
                 reverse=True,
             )
 
-        top = active[:60]
+        top = active[:_cfg("faits_contexte")]
         by_cat: dict[str, list[tuple[str, str]]] = {}
         for f in top:
             by_cat.setdefault(f["category"], []).append((f["fact"], f.get("certainty", "certain")))

@@ -151,30 +151,36 @@ def delete_person(pid: int) -> bool:
     return cur.rowcount > 0
 
 
-def get_people_context(limit: int = 8) -> str:
+def get_people_context(limit: int | None = None) -> str:
     """Compact people summary for context injection."""
     from .memory import get_all_facts
+    from .settings import get as _cfg
+    if limit is None:
+        limit = _cfg("personnes_contexte")
+    notes_len = _cfg("notes_longueur")
+    facts_per = _cfg("faits_par_personne")
+
     people = get_all_people()
     if not people:
         return ""
 
-    all_facts = get_all_facts()
+    all_facts = get_all_facts() if facts_per > 0 else []
     active_facts = [f for f in all_facts if f.get("certainty") != "réfuté"]
 
     lines = ["## Personnes dans ta vie"]
     for p in people[:limit]:
         rel = f" ({p['relation']})" if p.get("relation") else ""
-        note = f" — {p['notes'][:200]}" if p.get("notes") else ""
+        note = f" — {p['notes'][:notes_len]}" if p.get("notes") else ""
 
-        # Pull facts that mention this person's first name
-        first_name = p["name"].split()[0].lower()
-        related = [
-            f["fact"] for f in active_facts
-            if first_name in f["fact"].lower()
-        ][:4]
         facts_str = ""
-        if related:
-            facts_str = "\n    " + "\n    ".join(f"· {r}" for r in related)
+        if facts_per > 0:
+            first_name = p["name"].split()[0].lower()
+            related = [
+                f["fact"] for f in active_facts
+                if first_name in f["fact"].lower()
+            ][:facts_per]
+            if related:
+                facts_str = "\n    " + "\n    ".join(f"· {r}" for r in related)
 
         lines.append(f"- **{p['name']}**{rel}{note}{facts_str}")
     return "\n".join(lines)
