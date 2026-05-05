@@ -64,7 +64,7 @@ from moiai.memory import (
     get_recent_mood,
     get_stale_facts,
     init_db,
-    load_recent_messages,
+
     search_facts,
     update_fact,
 )
@@ -1567,8 +1567,7 @@ def _handle_update() -> None:
         return
 
     console.print("[green]✓ Mises à jour installées. Redémarrage...[/green]")
-    args = [a for a in sys.argv if a != "--after-update"] + ["--after-update"]
-    os.execv(sys.executable, [sys.executable] + args)
+    os.execv(sys.executable, [sys.executable] + sys.argv)
 
 
 def _handle_backup() -> None:
@@ -1864,28 +1863,9 @@ def _check_updates_bg() -> tuple[int, str]:
         return 0, ""
 
 
-def _show_last_exchange() -> None:
-    """Show last user question and assistant reply after a restart."""
-    msgs = load_recent_messages(limit=10)
-    last_user = next((m["content"] for m in reversed(msgs) if m["role"] == "user"), None)
-    last_asst = next((m["content"] for m in reversed(msgs) if m["role"] == "assistant"), None)
-    if not last_user and not last_asst:
-        return
-    console.print("[dim]— dernier échange avant redémarrage —[/dim]")
-    if last_user:
-        console.print(Panel(last_user, title="[bold green]Toi[/bold green]", border_style="green"))
-    if last_asst:
-        preview = last_asst if len(last_asst) <= 300 else last_asst[:300].rstrip() + "…"
-        console.print(Panel(Markdown(preview), title="[bold blue]Moi.AI[/bold blue]", border_style="blue"))
-    console.print()
-
 
 def main() -> None:
     _ensure_api_key()
-
-    after_update = "--after-update" in sys.argv
-    if after_update:
-        sys.argv = [a for a in sys.argv if a != "--after-update"]
 
     init_db()
     _header()
@@ -1901,7 +1881,6 @@ def main() -> None:
         _show_welcome()
     else:
         _show_due_capsules()
-        _show_last_exchange()
         start_session()
         briefing = get_startup_briefing(timeout=6.0)
         if briefing:
