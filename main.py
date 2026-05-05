@@ -6,12 +6,45 @@ Lancement : python main.py
 
 import json
 import os
+import platform
 import shutil
 import sqlite3
 import sys
 import threading
 from datetime import datetime
 from pathlib import Path
+
+_PLATFORM = platform.system()  # "Linux", "Darwin", "Windows"
+_IS_TERMUX = bool(os.environ.get("TERMUX_VERSION")) or shutil.which("termux-tts-speak") is not None
+
+
+def _platform_dirs() -> list[Path]:
+    """Return candidate export/backup directories, most accessible first."""
+    if _IS_TERMUX:
+        return [
+            Path("/sdcard/Download"),
+            Path("/storage/emulated/0/Download"),
+            Path("/sdcard/Downloads"),
+            Path("/storage/emulated/0/Downloads"),
+            Path("/sdcard"),
+            Path("/storage/emulated/0"),
+            Path.home(),
+        ]
+    if _PLATFORM == "Darwin":
+        return [Path.home() / "Documents", Path.home() / "Desktop", Path.home()]
+    if _PLATFORM == "Windows":
+        return [Path.home() / "Documents", Path.home() / "Desktop", Path.home()]
+    return [Path.home()]
+
+
+def _restart() -> None:
+    """Restart the current process cleanly, cross-platform."""
+    if _PLATFORM == "Windows":
+        import subprocess as _sp
+        _sp.Popen([sys.executable] + sys.argv)
+        sys.exit(0)
+    else:
+        os.execv(sys.executable, [sys.executable] + sys.argv)
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -693,17 +726,8 @@ def _handle_condense() -> None:
 # ── Download folder helper ─────────────────────────────────────────────────────
 
 def _best_export_dir() -> Path:
-    """Return the most accessible export directory (Android Download first, then home)."""
-    candidates = [
-        Path("/sdcard/Download"),
-        Path("/storage/emulated/0/Download"),
-        Path("/sdcard/Downloads"),
-        Path("/storage/emulated/0/Downloads"),
-        Path("/sdcard"),
-        Path("/storage/emulated/0"),
-        Path.home(),
-        _DB_PATH.parent,
-    ]
+    """Return the most accessible export directory."""
+    candidates = _platform_dirs() + [_DB_PATH.parent]
     return next((p for p in candidates if p.exists() and os.access(p, os.W_OK)), Path.home())
 
 
@@ -1567,7 +1591,7 @@ def _handle_update() -> None:
         return
 
     console.print("[green]✓ Mises à jour installées. Redémarrage...[/green]")
-    os.execv(sys.executable, [sys.executable] + sys.argv)
+    _restart()
 
 
 def _handle_backup() -> None:
@@ -1577,17 +1601,7 @@ def _handle_backup() -> None:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"moiai_backup_{timestamp}.db"
 
-    # Try accessible locations in order: /sdcard, ~/Documents, home, then fallback to DB dir
-    candidates = [
-        Path("/sdcard/Download"),
-        Path("/storage/emulated/0/Download"),
-        Path("/sdcard/Downloads"),
-        Path("/storage/emulated/0/Downloads"),
-        Path("/sdcard"),
-        Path("/storage/emulated/0"),
-        Path.home(),
-        _DB_PATH.parent,
-    ]
+    candidates = _platform_dirs() + [_DB_PATH.parent]
     dest_dir = next((p for p in candidates if p.exists() and os.access(p, os.W_OK)), _DB_PATH.parent)
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest = dest_dir / filename
@@ -1611,17 +1625,8 @@ def _handle_backup() -> None:
 
 
 def _find_backups() -> list[Path]:
-    """Scan Download folders and DB dir for moiai backup files, most recent first."""
-    search_dirs = [
-        Path("/sdcard/Download"),
-        Path("/storage/emulated/0/Download"),
-        Path("/sdcard/Downloads"),
-        Path("/storage/emulated/0/Downloads"),
-        Path("/sdcard"),
-        Path("/storage/emulated/0"),
-        Path.home(),
-        _DB_PATH.parent,
-    ]
+    """Scan export/backup directories for moiai backup files, most recent first."""
+    search_dirs = _platform_dirs() + [_DB_PATH.parent]
     seen: set[Path] = set()
     found: list[Path] = []
     for d in search_dirs:
@@ -1977,7 +1982,7 @@ def main() -> None:
             _handle_update()
         elif lower == "/restart":
             console.print("[dim]Redémarrage...[/dim]")
-            os.execv(sys.executable, [sys.executable] + sys.argv)
+            _restart()
         elif lower.startswith("/restaurer"):
             _handle_restore(user_input[10:])
         elif lower in ("/cle", "/clé"):
