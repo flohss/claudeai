@@ -107,7 +107,7 @@ from moiai.memory import (
     search_facts,
     update_fact,
 )
-from moiai.people import delete_person, get_all_people, get_person_by_id
+from moiai.people import delete_person, get_all_people, get_person_by_id, merge_people
 from moiai.questioner import (
     DEPTH_LEVELS,
     DEPTH_THRESHOLD,
@@ -1453,7 +1453,7 @@ def _handle_people() -> None:
     console.print(Panel(table, title=f"[bold]Personnes ({len(people)})[/bold]", border_style="cyan"))
 
     action = Prompt.ask(
-        "\n[dim][bold]s[/bold]upprimer un profil / Entrée=rien[/dim]",
+        "\n[dim][bold]s[/bold]upprimer  [bold]f[/bold]usionner les doublons  Entrée=rien[/dim]",
         default="",
     ).strip().lower()
 
@@ -1464,6 +1464,31 @@ def _handle_people() -> None:
                 console.print(f"[green]✓ Supprimé.[/green]\n")
             else:
                 console.print("[red]ID introuvable.[/red]\n")
+    elif action == "f":
+        from moiai.merger import suggest_people_merges
+        with console.status("[dim]Analyse des doublons...[/dim]", spinner="dots"):
+            suggestions = suggest_people_merges(people)
+        if not suggestions:
+            console.print("[dim]Aucun doublon détecté.[/dim]\n")
+            return
+        applied = 0
+        for s in suggestions:
+            pk, pd = s["pid_keep"], s["pid_delete"]
+            keep = get_person_by_id(pk)
+            drop = get_person_by_id(pd)
+            if not keep or not drop:
+                continue
+            console.print(Panel(
+                f"[bold cyan]{keep['name']}[/bold cyan] ← absorbe → [bold cyan]{drop['name']}[/bold cyan]\n"
+                f"[dim]{s['reason']}[/dim]",
+                border_style="cyan",
+            ))
+            if Confirm.ask("Fusionner ?", default=True):
+                merge_people(pk, pd)
+                console.print("[green]✓ Fusionné.[/green]")
+                applied += 1
+        _print_cost()
+        console.print(f"[green]{applied} fusion(s) appliquée(s).[/green]\n" if applied else "[dim]Aucune fusion appliquée.[/dim]\n")
     else:
         console.print()
 

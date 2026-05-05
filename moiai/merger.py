@@ -91,3 +91,61 @@ def suggest_merges(facts: list[dict]) -> list[dict]:
                       "reason": c.get("reason", "")})
 
     return valid
+
+
+_PEOPLE_SYSTEM = "Tu es un extracteur JSON silencieux. Réponds uniquement en JSON valide."
+
+_PEOPLE_PROMPT = """\
+Voici une liste de personnes mémorisées. Identifie celles qui semblent être la même
+personne sous des noms différents (prénom seul vs nom complet, alias, doublon).
+
+PERSONNES :
+{people_block}
+
+Retourne UNIQUEMENT ce JSON (tableau, potentiellement vide) :
+[
+  {{
+    "pid_keep": 12,
+    "pid_delete": 34,
+    "reason": "même personne — prénom seul vs nom complet"
+  }}
+]
+
+Règles :
+- Ne propose une fusion que si tu es quasi-certain qu'il s'agit de la même personne.
+- pid_keep = l'entrée avec le plus d'informations (nom complet, notes plus riches).
+- Maximum 5 suggestions.
+- Si aucun doublon évident : retourner [].
+- Aucun texte hors du JSON.
+"""
+
+
+def suggest_people_merges(people: list[dict]) -> list[dict]:
+    """Detect duplicate/alias person entries. Returns [{pid_keep, pid_delete, reason}]."""
+    if len(people) < 2:
+        return []
+
+    lines = []
+    for p in people:
+        rel = f" ({p['relation']})" if p.get("relation") else ""
+        notes = f" — {p['notes'][:80]}" if p.get("notes") else ""
+        lines.append(f"#{p['id']} {p['name']}{rel}{notes}")
+
+    prompt = _PEOPLE_PROMPT.format(people_block="\n".join(lines))
+    raw = complete(prompt, system=_PEOPLE_SYSTEM, model=MODEL_FAST, max_tokens=512)
+    candidates = _parse_json(raw)
+
+    valid = []
+    seen: set[int] = set()
+    all_ids = {p["id"] for p in people}
+    for c in candidates:
+        pk, pd = c.get("pid_keep"), c.get("pid_delete")
+        if not isinstance(pk, int) or not isinstance(pd, int):
+            continue
+        if pk not in all_ids or pd not in all_ids or pk == pd:
+            continue
+        if pk in seen or pd in seen:
+            continue
+        seen.update([pk, pd])
+        valid.append({"pid_keep": pk, "pid_delete": pd, "reason": c.get("reason", "")})
+    return valid

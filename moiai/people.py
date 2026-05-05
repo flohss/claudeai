@@ -92,6 +92,31 @@ def get_person_by_id(pid: int) -> dict | None:
     return dict(row) if row else None
 
 
+def merge_people(pid_keep: int, pid_delete: int) -> bool:
+    """Merge pid_delete into pid_keep: combine notes, keep best relation, delete duplicate."""
+    _ensure_table()
+    with _connect() as conn:
+        keep = conn.execute(
+            "SELECT id, name, relation, notes FROM people WHERE id = ?", (pid_keep,)
+        ).fetchone()
+        drop = conn.execute(
+            "SELECT id, name, relation, notes FROM people WHERE id = ?", (pid_delete,)
+        ).fetchone()
+        if not keep or not drop:
+            return False
+
+        relation = keep["relation"] or drop["relation"]
+        notes_parts = [p for p in [keep["notes"], drop["notes"]] if p]
+        notes = "\n".join(notes_parts)[:2000] if notes_parts else None
+
+        conn.execute(
+            "UPDATE people SET relation = ?, notes = ?, last_mentioned = ? WHERE id = ?",
+            (relation, notes, datetime.now().isoformat(), pid_keep),
+        )
+        conn.execute("DELETE FROM people WHERE id = ?", (pid_delete,))
+    return True
+
+
 def delete_person(pid: int) -> bool:
     _ensure_table()
     with _connect() as conn:
