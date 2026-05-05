@@ -64,7 +64,7 @@ from moiai.memory import (
     get_recent_mood,
     get_stale_facts,
     init_db,
-
+    load_recent_messages,
     search_facts,
     update_fact,
 )
