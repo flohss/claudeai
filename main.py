@@ -156,15 +156,12 @@ COMMANDS = {
     "/condenser":           "Fusionner la mémoire en narration personnelle",
     "/humeur":              "Graphique d'humeur sur les 30 derniers jours",
     "/analyser":            "Audit complet de la mémoire — cohérence, lacunes, patterns, qualité",
-    "/reflect":             "Analyse psychologique de ton profil (pattern, angles morts)",    "/objectif <texte>":    "Ajouter un objectif",
-    "/objectifs":           "Lister et gérer les objectifs",
+    "/reflect":             "Analyse psychologique de ton profil (pattern, angles morts)",    "/objectifs [texte]":   "Lister et gérer les objectifs — avec texte : ajouter",
     "/bilan":               "Bilan de vie — auto-évaluation par domaine (1-5)",
     "/personnes":           "Afficher les personnes de ton entourage",
-    "/capsule <texte>":     "Créer une capsule temporelle (ex: dans 2 semaines)",
-    "/capsules":            "Lister toutes les capsules",
+    "/capsules [texte]":    "Lister les capsules — avec texte : créer (ex: /capsules entretien dans 2 semaines)",
     "/questions":           "Mode interview — questions sur ta vie pour construire ta mémoire",
-    "/rapport":             "Exporter le profil complet en Markdown",
-    "/export":              "Exporter toute la mémoire en JSON",
+    "/export":              "Exporter la mémoire (markdown ou JSON au choix)",
     "/stats":               "Statistiques de mémoire",
     "/aide":                "Afficher cette aide",
     "/backup":              "Sauvegarder toute la mémoire dans un fichier .db",
@@ -827,78 +824,78 @@ def _best_export_dir() -> Path:
 
 # ── Rapport ────────────────────────────────────────────────────────────────────
 
-def _handle_rapport() -> None:
-    profile = get_profile()
-    facts = get_all_facts()
-    narrative = get_latest_narrative()
-    stats = get_stats()
-    mood = get_recent_mood(limit=5)
+def _handle_export() -> None:
+    fmt = Prompt.ask(
+        "[dim]Format : [bold]m[/bold]arkdown (rapport) / [bold]j[/bold]son[/dim]",
+        default="m",
+    ).strip().lower()
 
-    now = datetime.now().strftime("%Y-%m-%d %H:%M")
-    lines: list[str] = [f"# Rapport Moi.AI — {now}\n"]
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    if narrative:
-        lines += ["## Narration personnelle\n", narrative, ""]
+    if fmt == "j":
+        data = {
+            "exported_at": datetime.now().isoformat(),
+            "profile": get_profile(),
+            "facts": get_all_facts(),
+            "narrative": get_latest_narrative(),
+            "mood_log": get_recent_mood(limit=50),
+            "conversation_summaries": get_conversation_summaries(limit=20),
+        }
+        path = _best_export_dir() / f"moiai_export_{timestamp}.json"
+        path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        console.print(f"[green]✓ Export JSON sauvegardé dans[/green] [bold]{path}[/bold]\n")
+    else:
+        profile = get_profile()
+        facts = get_all_facts()
+        narrative = get_latest_narrative()
+        stats = get_stats()
+        mood = get_recent_mood(limit=5)
 
-    if mood:
-        lines.append("## Humeur récente\n")
-        for m in mood:
-            lines.append(f"- {m['timestamp'][:10]} : {m['valence']} — {m['state']}")
-        lines.append("")
+        now = datetime.now().strftime("%Y-%m-%d %H:%M")
+        lines: list[str] = [f"# Rapport Moi.AI — {now}\n"]
 
-    if profile:
-        lines.append("## Profil\n")
-        for k, v in profile.items():
-            lines.append(f"- **{k}** : {v}")
-        lines.append("")
+        if narrative:
+            lines += ["## Narration personnelle\n", narrative, ""]
 
-    if facts:
-        by_cat: dict[str, list[dict]] = {}
-        for f in facts:
-            by_cat.setdefault(f["category"], []).append(f)
-        lines.append("## Faits mémorisés\n")
-        for cat, items in sorted(by_cat.items()):
-            lines.append(f"### {cat}")
-            for f in items:
-                badge = CERTAINTY_BADGE.get(f.get("certainty", "certain"), "●")
-                lines.append(f"- {badge} {f['fact']}")
+        if mood:
+            lines.append("## Humeur récente\n")
+            for m in mood:
+                lines.append(f"- {m['timestamp'][:10]} : {m['valence']} — {m['state']}")
             lines.append("")
 
-    lines += [
-        "## Statistiques\n",
-        f"- Messages totaux : {stats['messages']}",
-        f"- Faits mémorisés : {len(facts)}",
-        f"- Entrées profil : {len(profile)}",
-    ]
+        if profile:
+            lines.append("## Profil\n")
+            for k, v in profile.items():
+                lines.append(f"- **{k}** : {v}")
+            lines.append("")
 
-    text = "\n".join(lines)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    path = _best_export_dir() / f"moiai_rapport_{timestamp}.md"
-    path.write_text(text, encoding="utf-8")
+        if facts:
+            by_cat: dict[str, list[dict]] = {}
+            for f in facts:
+                by_cat.setdefault(f["category"], []).append(f)
+            lines.append("## Faits mémorisés\n")
+            for cat, items in sorted(by_cat.items()):
+                lines.append(f"### {cat}")
+                for f in items:
+                    badge = CERTAINTY_BADGE.get(f.get("certainty", "certain"), "●")
+                    lines.append(f"- {badge} {f['fact']}")
+                lines.append("")
 
-    console.print(Panel(
-        Markdown(text[:2000] + ("\n\n[…]" if len(text) > 2000 else "")),
-        title="[bold]Rapport[/bold]",
-        border_style="cyan",
-    ))
-    console.print(f"[green]✓ Sauvegardé dans[/green] [bold]{path}[/bold]\n")
+        lines += [
+            "## Statistiques\n",
+            f"- Messages totaux : {stats['messages']}",
+            f"- Faits mémorisés : {len(facts)}",
+            f"- Entrées profil : {len(profile)}",
+        ]
 
-
-# ── Export JSON ────────────────────────────────────────────────────────────────
-
-def _handle_export() -> None:
-    data = {
-        "exported_at": datetime.now().isoformat(),
-        "profile": get_profile(),
-        "facts": get_all_facts(),
-        "narrative": get_latest_narrative(),
-        "mood_log": get_recent_mood(limit=50),
-        "conversation_summaries": get_conversation_summaries(limit=20),
-    }
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    path = _best_export_dir() / f"moiai_export_{timestamp}.json"
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    console.print(f"[green]✓ Export JSON sauvegardé dans[/green] [bold]{path}[/bold]\n")
+        text = "\n".join(lines)
+        path = _best_export_dir() / f"moiai_rapport_{timestamp}.md"
+        path.write_text(text, encoding="utf-8")
+        console.print(Panel(
+            Markdown(text[:2000] + ("\n\n[…]" if len(text) > 2000 else "")),
+            title="[bold]Rapport[/bold]", border_style="cyan",
+        ))
+        console.print(f"[green]✓ Sauvegardé dans[/green] [bold]{path}[/bold]\n")
 
 
 # ── Import ─────────────────────────────────────────────────────────────────────
@@ -1332,20 +1329,14 @@ def _handle_reflect() -> None:
 
 # ── Goals ──────────────────────────────────────────────────────────────────────
 
-def _handle_add_goal(args: str) -> None:
-    text = args.strip()
-    if not text:
-        console.print("[yellow]Usage :[/yellow] /objectif <texte de l'objectif>\n")
+def _handle_goals(args: str = "") -> None:
+    if args.strip():
+        text = args.strip()
+        dl_inp = Prompt.ask("[dim]Échéance (optionnel, ex: 2025-06-01)[/dim]", default="").strip()
+        gid = add_goal(text, deadline=dl_inp or None, source="user")
+        console.print(f"[green]✓ Objectif #{gid} ajouté.[/green]\n")
         return
-    deadline = None
-    dl_inp = Prompt.ask("[dim]Échéance (optionnel, ex: 2025-06-01)[/dim]", default="").strip()
-    if dl_inp:
-        deadline = dl_inp
-    gid = add_goal(text, deadline=deadline, source="user")
-    console.print(f"[green]✓ Objectif #{gid} ajouté.[/green]\n")
 
-
-def _handle_goals() -> None:
     goals = get_all_goals()
     if not goals:
         console.print("[dim]Aucun objectif enregistré.[/dim]\n")
@@ -1525,45 +1516,28 @@ def _handle_people() -> None:
 
 # ── Capsules ───────────────────────────────────────────────────────────────────
 
-def _handle_add_capsule(args: str) -> None:
+def _handle_capsules(args: str = "") -> None:
     args = args.strip()
-    if not args:
-        console.print(
-            "[yellow]Usage :[/yellow] /capsule <message> dans <n> jours|semaines|mois\n"
-            "[dim]Exemples :[/dim]\n"
-            "  /capsule mon entretien chez Google dans 3 jours\n"
-            "  /capsule vérifier mon objectif sport dans 1 mois\n"
-        )
+    if args:
+        open_at = parse_delay(args)
+        if not open_at:
+            delay_str = Prompt.ask(
+                "[dim]Dans combien de temps ? (ex: dans 2 semaines / 2025-06-01)[/dim]"
+            ).strip()
+            open_at = parse_delay(delay_str)
+            if not open_at:
+                console.print("[red]Délai non reconnu.[/red]\n")
+                return
+            content = args
+        else:
+            import re as _re
+            content = _re.sub(
+                r"\s+dans\s+\d+\s+(jour|jours|semaine|semaines|mois|an|ans).*$", "", args
+            ).strip() or args
+        cid = add_capsule(content, open_at)
+        console.print(f"[green]✓ Capsule #{cid} créée.[/green] S'ouvrira le [bold]{open_at.strftime('%d/%m/%Y')}[/bold]\n")
         return
 
-    open_at = parse_delay(args)
-    if not open_at:
-        # No delay in text — ask
-        delay_str = Prompt.ask(
-            "[dim]Dans combien de temps ? (ex: dans 2 semaines / 2025-06-01)[/dim]"
-        ).strip()
-        open_at = parse_delay(delay_str)
-        if not open_at:
-            console.print("[red]Délai non reconnu.[/red]\n")
-            return
-        content = args
-    else:
-        import re
-        content = re.sub(
-            r"\s+dans\s+\d+\s+(jour|jours|semaine|semaines|mois|an|ans).*$", "", args
-        ).strip()
-        if not content:
-            content = args
-
-    cid = add_capsule(content, open_at)
-    date_str = open_at.strftime("%d/%m/%Y")
-    console.print(
-        f"[green]✓ Capsule #{cid} créée.[/green] "
-        f"S'ouvrira le [bold]{date_str}[/bold]\n"
-    )
-
-
-def _handle_capsules() -> None:
     capsules = get_all_capsules()
     if not capsules:
         console.print("[dim]Aucune capsule créée.[/dim]\n")
@@ -2121,8 +2095,6 @@ def main() -> None:
             _show_stats()
         elif lower == "/condenser":
             _handle_condense()
-        elif lower == "/rapport":
-            _handle_rapport()
         elif lower == "/export":
             _handle_export()
         elif lower.startswith("/cherche"):
@@ -2148,18 +2120,14 @@ def main() -> None:
             _handle_analyser()
         elif lower == "/reflect":
             _handle_reflect()
-        elif lower.startswith("/objectif") and not lower.startswith("/objectifs"):
-            _handle_add_goal(user_input[9:])
-        elif lower == "/objectifs":
-            _handle_goals()
+        elif lower.startswith("/objectifs"):
+            _handle_goals(user_input[10:])
         elif lower in ("/bilan", "/bilan de vie"):
             _handle_bilan()
         elif lower == "/personnes":
             _handle_people()
-        elif lower.startswith("/capsule") and not lower.startswith("/capsules"):
-            _handle_add_capsule(user_input[8:])
-        elif lower == "/capsules":
-            _handle_capsules()
+        elif lower.startswith("/capsules"):
+            _handle_capsules(user_input[9:])
         else:
             # ── Streaming chat response ────────────────────────────────────
             full_reply = ""
