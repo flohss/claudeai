@@ -102,6 +102,7 @@ from moiai.memory import (
     get_recent_facts,
     get_recent_mood,
     get_stale_facts,
+    search_summaries,
     init_db,
 
     search_facts,
@@ -438,6 +439,36 @@ def _print_cost() -> None:
 
 # ── Search ─────────────────────────────────────────────────────────────────────
 
+def _semantic_search(query: str, facts: list[dict]) -> list[dict]:
+    """Ask Haiku to find semantically relevant facts not caught by FTS."""
+    from moiai.api import MODEL_FAST, complete
+    if not facts:
+        return []
+    lines = []
+    for f in facts:
+        badge = CERTAINTY_BADGE.get(f.get("certainty", "certain"), "●")
+        lines.append(f"#{f['id']} [{f['category']}] {badge} {f['fact']}")
+    prompt = (
+        f'Requête : "{query}"\n\n'
+        f"Parmi ces faits, lesquels sont pertinents pour cette requête — même sans correspondance "
+        f"exacte de mots-clés (sens, contexte, relation) ?\n\n"
+        + "\n".join(lines)
+        + '\n\nRetourne UNIQUEMENT un tableau JSON d\'IDs entiers. Exemple : [12, 34]. '
+          'Si aucun : [].'
+    )
+    import json as _json
+    raw = complete(prompt, system="Réponds uniquement en JSON valide.", model=MODEL_FAST, max_tokens=256)
+    raw = raw.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
+    try:
+        ids = _json.loads(raw)
+        if not isinstance(ids, list):
+            return []
+        id_set = {f["id"] for f in facts}
+        return [f for f in facts if f["id"] in ids and f["id"] in id_set]
+    except Exception:
+        return []
+
+
 def _handle_search(args: str) -> None:
     query = args.strip()
     if not query:
@@ -447,8 +478,19 @@ def _handle_search(args: str) -> None:
     results = search_facts(query, limit=25)
     facts = results["facts"]
     profile = results["profile"]
+    summaries = search_summaries(query, limit=3)
 
-    if not facts and not profile:
+    # Semantic fallback when FTS finds few results
+    semantic: list[dict] = []
+    if len(facts) < 3:
+        all_facts = get_all_facts()
+        fts_ids = {f["id"] for f in facts}
+        candidates = [f for f in all_facts if f["id"] not in fts_ids]
+        if candidates:
+            with console.status("[dim]Recherche sémantique...[/dim]", spinner="dots"):
+                semantic = _semantic_search(query, candidates)
+
+    if not facts and not profile and not summaries and not semantic:
         console.print(f"[dim]Aucun résultat pour « {query} ».[/dim]\n")
         return
 
@@ -460,29 +502,37 @@ def _handle_search(args: str) -> None:
             table.add_row(k, v)
         console.print(Panel(table, title="[bold]Profil[/bold]", border_style="blue"))
 
-    if facts:
+    all_matches = facts + semantic
+    if all_matches:
         table = Table(show_header=True, box=None, padding=(0, 1))
         table.add_column("ID", style="dim", width=5)
         table.add_column(" ", width=2, no_wrap=True)
         table.add_column("Catégorie", style="cyan", width=14)
         table.add_column("Fait")
+        table.add_column("", width=4)
         for f in facts:
             certainty = f.get("certainty", "certain")
             badge = CERTAINTY_BADGE.get(certainty, "●")
             color = _CERTAINTY_COLOR.get(certainty, "white")
-            table.add_row(
-                str(f["id"]),
-                f"[{color}]{badge}[/{color}]",
-                f["category"],
-                f"[{color}]{f['fact']}[/{color}]",
-            )
-        console.print(Panel(
-            table,
-            title=f"[bold]{len(facts)} fait(s) trouvé(s)[/bold]"
-            + ("[dim] (25 max)[/dim]" if len(facts) == 25 else ""),
-            border_style="dim",
-        ))
+            table.add_row(str(f["id"]), f"[{color}]{badge}[/{color}]",
+                          f["category"], f"[{color}]{f['fact']}[/{color}]", "")
+        for f in semantic:
+            certainty = f.get("certainty", "certain")
+            badge = CERTAINTY_BADGE.get(certainty, "●")
+            color = _CERTAINTY_COLOR.get(certainty, "white")
+            table.add_row(str(f["id"]), f"[{color}]{badge}[/{color}]",
+                          f["category"], f"[{color}]{f['fact']}[/{color}]", "[dim]~[/dim]")
+        title = f"[bold]{len(all_matches)} fait(s)[/bold]"
+        if semantic:
+            title += f"  [dim]({len(facts)} exacts + {len(semantic)} sémantiques ~)[/dim]"
+        console.print(Panel(table, title=title, border_style="dim"))
 
+    if summaries:
+        for s in summaries:
+            console.print(Panel(s[:300] + ("…" if len(s) > 300 else ""),
+                                title="[dim]Résumé de conversation[/dim]", border_style="dim"))
+
+    _print_cost()
     console.print()
 
 

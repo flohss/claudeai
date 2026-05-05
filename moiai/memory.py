@@ -492,6 +492,27 @@ def search_facts(query: str, limit: int = 30) -> dict:
     }
 
 
+def search_summaries(query: str, limit: int = 5) -> list[str]:
+    """Search conversation summaries and narrative for a query string."""
+    q = f"%{query.lower()}%"
+    results: list[str] = []
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT summary FROM conversation_summaries "
+            "WHERE LOWER(summary) LIKE ? ORDER BY id DESC LIMIT ?",
+            (q, limit),
+        ).fetchall()
+        results.extend(r["summary"] for r in rows)
+
+        row = conn.execute(
+            "SELECT content FROM narratives WHERE LOWER(content) LIKE ? ORDER BY id DESC LIMIT 1",
+            (q,),
+        ).fetchone()
+        if row:
+            results.append("[Narration] " + row["content"][:400])
+    return results
+
+
 # ── Mood log ───────────────────────────────────────────────────────────────────
 
 def log_mood(valence: str, state: str, intensity: int = 3) -> None:
