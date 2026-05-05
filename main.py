@@ -380,6 +380,8 @@ def _save_debug_log() -> Path | None:
         f"{len(entries)} échange(s) capturé(s)\n",
     ]
 
+    prev_blocks: list | None = None
+
     for i, d in enumerate(entries, 1):
         u = d.get("usage", {})
         c = d.get("cost", {})
@@ -393,12 +395,18 @@ def _save_debug_log() -> Path | None:
         lines.append(f"Coût    ${total:.6f}")
         lines.append("")
 
-        for j, blk in enumerate(d.get("system_blocks", []), 1):
-            text = blk.get("text", "") if isinstance(blk, dict) else str(blk)
-            cached = " [CACHED]" if isinstance(blk, dict) and "cache_control" in blk else ""
-            lines.append(f"[Système bloc {j}{cached} — {len(text)} car.]")
-            lines.append(text)
+        cur_blocks = d.get("system_blocks", [])
+        if cur_blocks == prev_blocks:
+            lines.append("[Système : identique à l'échange précédent]")
             lines.append("")
+        else:
+            for j, blk in enumerate(cur_blocks, 1):
+                text = blk.get("text", "") if isinstance(blk, dict) else str(blk)
+                cached = " [CACHED]" if isinstance(blk, dict) and "cache_control" in blk else ""
+                lines.append(f"[Système bloc {j}{cached} — {len(text)} car.]")
+                lines.append(text)
+                lines.append("")
+            prev_blocks = cur_blocks
 
         msgs = d.get("messages", [])
         lines.append(f"[Messages envoyés — {len(msgs)} au total, 6 derniers]")
