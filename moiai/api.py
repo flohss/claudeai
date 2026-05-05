@@ -65,6 +65,7 @@ def reset_session_cost() -> None:
 
 _debug_enabled: bool = False
 _last_debug: dict = {}
+_debug_log: list[dict] = []
 
 
 def set_debug(enabled: bool) -> None:
@@ -80,6 +81,14 @@ def get_last_debug() -> dict:
     return _last_debug
 
 
+def get_debug_log() -> list[dict]:
+    return list(_debug_log)
+
+
+def clear_debug_log() -> None:
+    _debug_log.clear()
+
+
 _debug_chat_only: bool = True  # only capture main chat calls, not background extraction
 
 
@@ -89,7 +98,7 @@ def _store_debug(model: str, system_blocks, messages, response_text: str, usage)
     output_tok  = getattr(usage, "output_tokens", 0)
     cache_read  = getattr(usage, "cache_read_input_tokens", 0)
     cache_write = getattr(usage, "cache_creation_input_tokens", 0)
-    _last_debug.update({
+    entry = {
         "model":        model,
         "system_blocks": system_blocks,
         "messages":     messages,
@@ -106,7 +115,10 @@ def _store_debug(model: str, system_blocks, messages, response_text: str, usage)
             "cache_read":  cache_read  * p["cache_read"]  / 1_000_000,
             "cache_write": cache_write * p["cache_write"] / 1_000_000,
         },
-    })
+    }
+    _last_debug.update(entry)
+    import copy
+    _debug_log.append(copy.deepcopy(entry))
 
 
 # ── Client singleton ───────────────────────────────────────────────────────────

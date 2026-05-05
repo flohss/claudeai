@@ -66,7 +66,13 @@ from moiai.capsule import (
 )
 from moiai.chat import finish_turn, get_startup_briefing, get_stats, start_session, stream_response
 from moiai.api import get_last_call_cost, get_session_cost
-from moiai.api import get_debug_enabled, get_last_debug, set_debug as _set_debug
+from moiai.api import (
+    clear_debug_log,
+    get_debug_enabled,
+    get_debug_log,
+    get_last_debug,
+    set_debug as _set_debug,
+)
 from moiai.memory import count_messages as _count_messages
 from moiai.condenser import condense_narrative
 from moiai.extractor import extract_and_store, extract_from_messages
@@ -361,6 +367,56 @@ def _print_debug() -> None:
         border_style="dim",
     ))
     console.print()
+
+
+def _save_debug_log() -> Path | None:
+    """Write accumulated debug entries to a plain-text file. Returns the path."""
+    entries = get_debug_log()
+    if not entries:
+        return None
+
+    lines: list[str] = [
+        f"=== SESSION DEBUG — {datetime.now().strftime('%Y-%m-%d %Hh%M')} ===",
+        f"{len(entries)} échange(s) capturé(s)\n",
+    ]
+
+    for i, d in enumerate(entries, 1):
+        u = d.get("usage", {})
+        c = d.get("cost", {})
+        total = sum(c.values())
+        lines.append(f"{'─' * 60}")
+        lines.append(f"Échange {i}  —  modèle : {d.get('model', '?')}")
+        lines.append(
+            f"Tokens  input={u.get('input_tokens',0):,}  output={u.get('output_tokens',0):,}"
+            f"  cache_read={u.get('cache_read_tokens',0):,}  cache_write={u.get('cache_write_tokens',0):,}"
+        )
+        lines.append(f"Coût    ${total:.6f}")
+        lines.append("")
+
+        for j, blk in enumerate(d.get("system_blocks", []), 1):
+            text = blk.get("text", "") if isinstance(blk, dict) else str(blk)
+            cached = " [CACHED]" if isinstance(blk, dict) and "cache_control" in blk else ""
+            lines.append(f"[Système bloc {j}{cached} — {len(text)} car.]")
+            lines.append(text)
+            lines.append("")
+
+        msgs = d.get("messages", [])
+        lines.append(f"[Messages envoyés — {len(msgs)} au total, 6 derniers]")
+        for m in msgs[-6:]:
+            role = m.get("role", "?")
+            content = m.get("content", "")
+            if isinstance(content, list):
+                content = " ".join(b.get("text", "") for b in content if isinstance(b, dict))
+            lines.append(f"{role.upper()}: {content[:300]}")
+        lines.append("")
+        lines.append(f"[Réponse]")
+        lines.append(d.get("response", ""))
+        lines.append("")
+
+    dest = _best_export_dir() / f"moiai_debug_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+    dest.write_text("\n".join(lines), encoding="utf-8")
+    clear_debug_log()
+    return dest
 
 
 # ── Cost display helper ────────────────────────────────────────────────────────
@@ -1945,9 +2001,16 @@ def main() -> None:
         elif lower == "/aide":
             _show_help()
         elif lower == "/debug":
-            _set_debug(not get_debug_enabled())
-            state = "[yellow]activé[/yellow]" if get_debug_enabled() else "[dim]désactivé[/dim]"
-            console.print(f"Mode débogage {state}.\n")
+            was_on = get_debug_enabled()
+            _set_debug(not was_on)
+            if get_debug_enabled():
+                console.print("[yellow]Mode débogage activé.[/yellow]\n")
+            else:
+                path = _save_debug_log()
+                if path:
+                    console.print(f"[dim]Mode débogage désactivé. Log sauvegardé → [bold]{path}[/bold][/dim]\n")
+                else:
+                    console.print("[dim]Mode débogage désactivé.[/dim]\n")
         elif lower == "/tts":
             if not _tts_available():
                 console.print(
