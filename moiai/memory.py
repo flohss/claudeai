@@ -497,19 +497,25 @@ def search_summaries(query: str, limit: int = 5) -> list[str]:
     q = f"%{query.lower()}%"
     results: list[str] = []
     with _connect() as conn:
-        rows = conn.execute(
-            "SELECT summary FROM conversation_summaries "
-            "WHERE LOWER(summary) LIKE ? ORDER BY id DESC LIMIT ?",
-            (q, limit),
-        ).fetchall()
-        results.extend(r["summary"] for r in rows)
+        try:
+            rows = conn.execute(
+                "SELECT summary FROM conversation_summaries "
+                "WHERE LOWER(summary) LIKE ? ORDER BY id DESC LIMIT ?",
+                (q, limit),
+            ).fetchall()
+            results.extend(r["summary"] for r in rows)
+        except sqlite3.OperationalError:
+            pass
 
-        row = conn.execute(
-            "SELECT content FROM narratives WHERE LOWER(content) LIKE ? ORDER BY id DESC LIMIT 1",
-            (q,),
-        ).fetchone()
-        if row:
-            results.append("[Narration] " + row["content"][:400])
+        try:
+            row = conn.execute(
+                "SELECT content FROM narratives WHERE LOWER(content) LIKE ? ORDER BY id DESC LIMIT 1",
+                (q,),
+            ).fetchone()
+            if row:
+                results.append("[Narration] " + row["content"][:400])
+        except sqlite3.OperationalError:
+            pass
     return results
 
 
