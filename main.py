@@ -1483,7 +1483,7 @@ def _handle_people() -> None:
                 f"[dim]{s['reason']}[/dim]",
                 border_style="cyan",
             ))
-            if Confirm.ask("Fusionner ?", default=True):
+            if Confirm.ask("Fusionner ?", default=False):
                 merge_people(pk, pd)
                 console.print("[green]✓ Fusionné.[/green]")
                 applied += 1
