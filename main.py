@@ -1892,14 +1892,10 @@ def main() -> None:
             _print_cost()
             console.print()
 
-    # Show update notification if ready (wait max 3s)
+    # Auto-install updates if available (wait max 3s for check)
     update_thread.join(timeout=3.0)
     if _update_result[0] and _update_result[0][0] > 0:
-        n, branch = _update_result[0]
-        console.print(
-            f"[cyan]  ↑ {n} mise(s) à jour disponible(s)[/cyan]  "
-            f"[dim]→ tape [bold]/màj[/bold] pour installer[/dim]\n"
-        )
+        _handle_update()
 
     session_msg_count = 0
     voice_mode = False
