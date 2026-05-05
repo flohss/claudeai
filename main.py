@@ -1910,6 +1910,39 @@ def _handle_restore(args: str) -> None:
 
 # ── API key management ─────────────────────────────────────────────────────────
 
+def _friendly_api_error(e: Exception) -> None:
+    """Display a human-readable message for known Anthropic API errors."""
+    import re
+    from anthropic import APIConnectionError, APIStatusError, RateLimitError
+
+    if isinstance(e, RateLimitError):
+        console.print("[yellow]⚠ Limite de débit atteinte — attends quelques secondes et réessaie.[/yellow]\n")
+        return
+
+    if isinstance(e, APIConnectionError):
+        console.print("[yellow]⚠ Impossible de joindre l'API Anthropic — vérifie ta connexion.[/yellow]\n")
+        return
+
+    if isinstance(e, APIStatusError):
+        msg = str(e)
+        if e.status_code == 400 and "usage limit" in msg.lower():
+            match = re.search(r"regain access on (.+?) UTC", msg)
+            when = match.group(1).strip() if match else "prochainement"
+            console.print(
+                f"[yellow]⚠ Limite d'utilisation API atteinte.[/yellow]\n"
+                f"[dim]Accès rétabli le {when} UTC.[/dim]\n"
+            )
+            return
+        if e.status_code == 401:
+            console.print("[yellow]⚠ Clé API invalide ou expirée — tape [bold]/cle[/bold] pour la corriger.[/yellow]\n")
+            return
+        if e.status_code >= 500:
+            console.print(f"[yellow]⚠ Erreur serveur Anthropic ({e.status_code}) — réessaie dans un moment.[/yellow]\n")
+            return
+
+    console.print(f"[red]Erreur {type(e).__name__} :[/red] {e}\n")
+
+
 def _handle_api_key() -> None:
     current = os.environ.get("ANTHROPIC_API_KEY", "")
     if current:
@@ -2241,8 +2274,7 @@ def main() -> None:
                             border_style="blue",
                         ))
             except Exception as e:
-                error_type = type(e).__name__
-                console.print(f"[red]Erreur {error_type} :[/red] {e}\n")
+                _friendly_api_error(e)
                 continue
 
             finish_turn(full_reply)
