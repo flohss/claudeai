@@ -146,6 +146,7 @@ _CERTAINTY_COLOR = {
 
 COMMANDS = {
 
+    "/profil":              "Afficher et modifier les clés du profil (nom, âge, ville…)",
     "/faits [cat]":         "Lister les faits (filtrable par catégorie)",
     "/cherche <terme>":     "Recherche plein-texte dans la mémoire",
     "/oublie <ID|terme>":   "Supprimer un fait ou une entrée profil",
@@ -220,6 +221,58 @@ def _show_help() -> None:
 
 
 # ── Profile ────────────────────────────────────────────────────────────────────
+
+def _handle_profile() -> None:
+    profile = get_profile()
+    if not profile:
+        console.print("[dim]Profil vide — les clés sont extraites automatiquement de tes conversations.[/dim]\n")
+        return
+
+    keys = list(profile.keys())
+
+    table = Table(show_header=True, box=None, padding=(0, 2))
+    table.add_column("#",     style="dim",  width=3)
+    table.add_column("Clé",   style="cyan", no_wrap=True)
+    table.add_column("Valeur", style="white")
+    for i, (k, v) in enumerate(profile.items(), 1):
+        table.add_row(str(i), k, v)
+
+    console.print(Panel(table, title="[bold]Profil[/bold]", border_style="cyan"))
+    console.print("[dim]Numéro = modifier · [bold]s<n>[/bold] = supprimer · Entrée = quitter[/dim]\n")
+
+    raw = Prompt.ask("[dim]Action[/dim]", default="").strip().lower()
+    if not raw:
+        return
+
+    # Delete: s1, s2…
+    if raw.startswith("s") and raw[1:].isdigit():
+        idx = int(raw[1:]) - 1
+        if 0 <= idx < len(keys):
+            key = keys[idx]
+            if Confirm.ask(f"Supprimer [bold]{key}[/bold] ?", default=False):
+                delete_profile_key(key)
+                console.print(f"[green]✓[/green] Clé [bold]{key}[/bold] supprimée.\n")
+        else:
+            console.print("[yellow]Numéro invalide.[/yellow]\n")
+        return
+
+    # Edit: number
+    if raw.isdigit():
+        idx = int(raw) - 1
+        if 0 <= idx < len(keys):
+            key = keys[idx]
+            current = profile[key]
+            new_val = Prompt.ask(f"[cyan]{key}[/cyan] (actuel : {current})", default=current).strip()
+            if new_val and new_val != current:
+                update_profile(key, new_val)
+                console.print(f"[green]✓[/green] [bold]{key}[/bold] → {new_val}\n")
+            else:
+                console.print("[dim]Inchangé.\n[/dim]")
+        else:
+            console.print("[yellow]Numéro invalide.[/yellow]\n")
+        return
+
+    console.print("[yellow]Commande non reconnue.[/yellow]\n")
 
 
 # ── Facts ──────────────────────────────────────────────────────────────────────
@@ -2379,6 +2432,8 @@ def main() -> None:
             _handle_api_key()
         elif lower == "/reset":
             _handle_reset()
+        elif lower == "/profil":
+            _handle_profile()
         elif lower.startswith("/faits"):
             _show_facts(user_input[6:])
         elif lower == "/stats":
