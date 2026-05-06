@@ -183,7 +183,7 @@ def stream_response(user_input: str) -> Iterator[str]:
     context = _build_full_context(history)
 
     try:
-        curiosity = build_curiosity_block(total_messages=total)
+        curiosity = build_curiosity_block(total_messages=total) if _cfg("curiosité_active") else ""
     except Exception:
         curiosity = ""
 
@@ -201,7 +201,7 @@ def chat_complete(user_input: str) -> str:
     context = _build_full_context(history)
 
     try:
-        curiosity = build_curiosity_block(total_messages=total)
+        curiosity = build_curiosity_block(total_messages=total) if _cfg("curiosité_active") else ""
     except Exception:
         curiosity = ""
 
