@@ -831,6 +831,7 @@ def _best_export_dir() -> Path:
 
 def _handle_summaries() -> None:
     from moiai.memory import get_all_conversation_summaries
+    from moiai.api import MODEL_FAST, complete
     summaries = get_all_conversation_summaries()
     if not summaries:
         console.print("[dim]Aucun résumé de conversation disponible.\n"
@@ -848,6 +849,34 @@ def _handle_summaries() -> None:
         console.print(f"[dim]── {i}/{len(summaries)}  {ts} ──[/dim]")
         console.print(Markdown(s["summary"]))
         console.print()
+
+    if len(summaries) < 2:
+        return
+
+    action = Prompt.ask(
+        "[dim][[bold]r[/bold]] Synthèse IA de l'ensemble  [[bold]Entrée[/bold]] Quitter[/dim]",
+        default="",
+    ).strip().lower()
+    if action != "r":
+        return
+
+    block = "\n\n".join(
+        f"[{s.get('timestamp', '')[:10]}] {s['summary']}" for s in summaries
+    )
+    prompt = (
+        "Voici une série de résumés de conversations passées entre un utilisateur et son IA personnelle.\n"
+        "Rédige une synthèse concise (10-15 lignes max) qui :\n"
+        "- Identifie les grands thèmes abordés au fil du temps\n"
+        "- Mentionne les événements marquants ou tournants\n"
+        "- Note les préoccupations récurrentes\n"
+        "Sois factuel, direct, sans introduction ni conclusion.\n\n"
+        f"RÉSUMÉS :\n{block}"
+    )
+    with console.status("[dim]Synthèse en cours...[/dim]", spinner="dots"):
+        result = complete(prompt, system="Tu es un assistant d'analyse biographique. Réponds en français, en prose.", model=MODEL_FAST, max_tokens=600)
+    console.print(Panel(Markdown(result), title="[bold]Synthèse des conversations[/bold]", border_style="cyan"))
+    _print_cost()
+    console.print()
 
 
 # ── Rapport ────────────────────────────────────────────────────────────────────
