@@ -156,6 +156,7 @@ COMMANDS = {
     "/fusionner":           "Détecter et fusionner les faits redondants (assisté par IA)",
     "/import <fichier>":    "Importer un fichier (WhatsApp, Instagram, Telegram, txt, pdf)",
     "/condenser":           "Fusionner la mémoire en narration personnelle",
+    "/résumés":             "Afficher les résumés des conversations anciennes",
     "/humeur":              "Graphique d'humeur sur les 30 derniers jours",
     "/analyser":            "Audit complet de la mémoire — cohérence, lacunes, patterns, qualité",
     "/reflect":             "Analyse psychologique de ton profil (pattern, angles morts)",    "/objectifs [texte]":   "Lister et gérer les objectifs — avec texte : ajouter",
@@ -824,6 +825,29 @@ def _best_export_dir() -> Path:
     """Return the most accessible export directory."""
     candidates = _platform_dirs() + [_DB_PATH.parent]
     return next((p for p in candidates if p.exists() and os.access(p, os.W_OK)), Path.home())
+
+
+# ── Conversation summaries ─────────────────────────────────────────────────────
+
+def _handle_summaries() -> None:
+    from moiai.memory import get_all_conversation_summaries
+    summaries = get_all_conversation_summaries()
+    if not summaries:
+        console.print("[dim]Aucun résumé de conversation disponible.\n"
+                      "Les résumés sont générés automatiquement tous les "
+                      f"{_get_setting('seuil_auto_résumé')} messages.[/dim]\n")
+        return
+
+    console.print(Panel(
+        f"[dim]{len(summaries)} résumé(s) de conversations anciennes — du plus ancien au plus récent[/dim]",
+        border_style="dim",
+        expand=False,
+    ))
+    for i, s in enumerate(summaries, 1):
+        ts = s.get("timestamp", "")[:10]
+        console.print(f"[dim]── {i}/{len(summaries)}  {ts} ──[/dim]")
+        console.print(Markdown(s["summary"]))
+        console.print()
 
 
 # ── Rapport ────────────────────────────────────────────────────────────────────
@@ -2312,6 +2336,8 @@ def main() -> None:
             _show_stats()
         elif lower == "/condenser":
             _handle_condense()
+        elif lower in ("/résumés", "/resumes"):
+            _handle_summaries()
         elif lower == "/export":
             _handle_export()
         elif lower.startswith("/cherche"):

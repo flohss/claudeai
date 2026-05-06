@@ -206,6 +206,15 @@ def get_conversation_summaries(limit: int = 5) -> list[str]:
     return [r["summary"] for r in reversed(rows)]
 
 
+def get_all_conversation_summaries() -> list[dict]:
+    """Return all summaries with id and timestamp, oldest first."""
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT id, summary, timestamp FROM conversation_summaries ORDER BY id ASC"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def count_unsummarized_messages() -> int:
     with _connect() as conn:
         return conn.execute(
