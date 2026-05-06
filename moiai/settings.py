@@ -18,7 +18,7 @@ PARAMS: dict[str, tuple[str, str, int, int]] = {
     "notes_longueur":      ("Longueur notes personnes (caractères)", "tronqué dans le contexte",    50,  1000),
     "seuil_auto_résumé":   ("Seuil résumé automatique (messages)",   "0 = désactivé",               0,   500),
     "contexte_unifié":     ("Contexte unifié (1=oui, 0=non)",        "nécessite /condenser d'abord", 0,   1),
-    "mots_portrait":       ("Mots du portrait unifié",               "défaut 750, max ~2000",       300, 2000),
+    "mots_portrait":       ("Mots du portrait unifié",               "défaut 750",                  300, 32000),
 }
 
 DEFAULTS: dict[str, int] = {
