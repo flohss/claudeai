@@ -860,16 +860,8 @@ def _handle_summaries() -> None:
     if action != "r":
         return
 
-    # Model picker
-    _model_ids = list(AVAILABLE_MODELS.keys())
-    console.print("[dim]Modèle pour la synthèse :[/dim]")
-    for idx, (mid, desc) in enumerate(AVAILABLE_MODELS.items(), 1):
-        console.print(f"  [bold cyan]{idx}[/bold cyan]  {desc}")
-    model_raw = Prompt.ask("[dim]Numéro (défaut : 3 — Haiku)[/dim]", default="3").strip()
-    if model_raw.isdigit() and 1 <= int(model_raw) <= len(_model_ids):
-        chosen_model = _model_ids[int(model_raw) - 1]
-    else:
-        chosen_model = MODEL_FAST
+    from moiai.models_config import get_model as _get_model
+    chosen_model = _get_model("analyse")
 
     block = "\n\n".join(
         f"[{s.get('timestamp', '')[:10]}] {s['summary']}" for s in summaries
@@ -1801,8 +1793,8 @@ def _handle_settings() -> None:
 
 # ── Model config ───────────────────────────────────────────────────────────────
 
-_ROLE_KEYS = ["chat", "smart", "fast"]
-_ROLE_LABELS = {"chat": "Conversation", "smart": "Narration/condensation", "fast": "Extraction/résumés"}
+_ROLE_KEYS = ["chat", "smart", "fast", "analyse"]
+_ROLE_LABELS = {"chat": "Conversation", "smart": "Narration/condensation", "fast": "Extraction/résumés", "analyse": "Synthèse /résumés"}
 
 
 def _handle_model() -> None:

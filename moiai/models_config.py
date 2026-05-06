@@ -17,15 +17,17 @@ AVAILABLE_MODELS: dict[str, str] = {
 
 # Roles and their human-readable descriptions
 ROLES: dict[str, str] = {
-    "chat":  "Conversation principale",
-    "smart": "Condensation / narration",
-    "fast":  "Extraction, curiosité, résumés, recherche",
+    "chat":    "Conversation principale",
+    "smart":   "Condensation / narration",
+    "fast":    "Extraction, curiosité, résumés, recherche",
+    "analyse": "Synthèse /résumés et analyses ponctuelles",
 }
 
 _DEFAULTS: dict[str, str] = {
-    "chat":  "claude-sonnet-4-6",
-    "smart": "claude-sonnet-4-6",
-    "fast":  "claude-haiku-4-5-20251001",
+    "chat":    "claude-sonnet-4-6",
+    "smart":   "claude-sonnet-4-6",
+    "fast":    "claude-haiku-4-5-20251001",
+    "analyse": "claude-haiku-4-5-20251001",
 }
 
 
