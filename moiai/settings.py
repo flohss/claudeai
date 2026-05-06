@@ -10,13 +10,14 @@ _CONFIG_PATH = Path(__file__).parent / "data" / "settings.json"
 
 # (label, hint, min, max)
 PARAMS: dict[str, tuple[str, str, int, int]] = {
-    "personnes_contexte":  ("Personnes dans le contexte",          "tu en as {people} en base",   1,  50),
-    "faits_contexte":      ("Faits dans le contexte",              "tu en as {facts} en base",     10, 200),
-    "messages_historique": ("Messages d'historique chargés",       "fenêtre de conversation",      10, 100),
-    "résumés_contexte":    ("Résumés de conversations anciens",    "3 résumés ≈ ~18 phrases",      0,  20),
-    "faits_par_personne":  ("Faits liés par personne",             "croisement nom ↔ faits",       0,  10),
-    "notes_longueur":      ("Longueur notes personnes (caractères)", "tronqué dans le contexte",   50, 1000),
-    "seuil_auto_résumé":   ("Seuil résumé automatique (messages)", "0 = désactivé",               0,  500),
+    "personnes_contexte":  ("Personnes dans le contexte",            "tu en as {people} en base",   1,   50),
+    "faits_contexte":      ("Faits dans le contexte",                "tu en as {facts} en base",    10,  200),
+    "messages_historique": ("Messages d'historique chargés",         "fenêtre de conversation",     10,  100),
+    "résumés_contexte":    ("Résumés de conversations anciens",      "3 résumés ≈ ~18 phrases",     0,   20),
+    "faits_par_personne":  ("Faits liés par personne",               "croisement nom ↔ faits",      0,   10),
+    "notes_longueur":      ("Longueur notes personnes (caractères)", "tronqué dans le contexte",    50,  1000),
+    "seuil_auto_résumé":   ("Seuil résumé automatique (messages)",   "0 = désactivé",               0,   500),
+    "contexte_unifié":     ("Contexte unifié (1=oui, 0=non)",        "nécessite /condenser d'abord", 0,   1),
 }
 
 DEFAULTS: dict[str, int] = {
@@ -27,6 +28,7 @@ DEFAULTS: dict[str, int] = {
     "faits_par_personne":  4,
     "notes_longueur":      200,
     "seuil_auto_résumé":   80,
+    "contexte_unifié":     0,
 }
 
 

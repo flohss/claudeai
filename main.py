@@ -803,17 +803,30 @@ def _handle_fusionner() -> None:
 # ── Condense ───────────────────────────────────────────────────────────────────
 
 def _handle_condense() -> None:
-    with console.status("[dim]Claude synthétise ton profil...[/dim]", spinner="dots"):
+    from moiai.condenser import condense_unified
+    unified = _get_setting("contexte_unifié")
+
+    if unified:
+        console.print(
+            "[dim]Mode contexte unifié activé — génération du document complet "
+            "(faits + personnes + objectifs + résumés)...[/dim]"
+        )
+        spinner_msg = "[dim]Claude génère le document unifié...[/dim]"
+        title = "[bold]Document de contexte unifié[/bold]"
+        fn = condense_unified
+    else:
+        spinner_msg = "[dim]Claude synthétise ton profil...[/dim]"
+        title = "[bold]Narration personnelle condensée[/bold]"
+        fn = condense_narrative
+
+    with console.status(spinner_msg, spinner="dots"):
         try:
-            narrative = condense_narrative()
+            narrative = fn()
         except Exception as e:
             console.print(f"[red]Erreur :[/red] {e}\n")
             return
-    console.print(Panel(
-        Markdown(narrative),
-        title="[bold]Narration personnelle condensée[/bold]",
-        border_style="cyan",
-    ))
+
+    console.print(Panel(Markdown(narrative), title=title, border_style="cyan"))
     console.print("[green]✓ Narration sauvegardée.[/green]")
     _print_cost()
     console.print()

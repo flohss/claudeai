@@ -39,6 +39,37 @@ Ne répète pas mot pour mot les faits — synthétise-les en portrait vivant.
 
 _NARRATIVE_UPDATE_INTRO = "\n\n---\nNarration précédente (à enrichir, pas à remplacer) :\n"
 
+_UNIFIED_SYSTEM = "Tu es un biographe expert. Rédige uniquement le document demandé, sans commentaires."
+
+_UNIFIED_PROMPT = """\
+Tu es un psychologue et biographe. Génère un document de connaissance complet et cohérent
+sur cet individu, à partir de toutes les données ci-dessous.
+
+Ce document sera utilisé comme contexte unique pour une IA personnelle — il doit être
+dense, précis, et couvrir tous les aspects de la vie de la personne.
+
+Structure obligatoire (prose, pas de bullet points) :
+
+**Identité & parcours** — qui il/elle est, d'où il/elle vient, formation, parcours pro
+
+**Personnalité & valeurs** — traits dominants, contradictions, forces, patterns comportementaux
+
+**Relations & entourage** — famille proche, amis, relations importantes, dynamiques clés
+
+**Vie quotidienne & habitudes** — travail, loisirs, santé, alimentation, rythme de vie
+
+**Projets & objectifs** — ce qu'il/elle poursuit en ce moment, aspirations
+
+**État actuel** — préoccupations récentes, humeur générale, sujets en cours
+
+Règles :
+- 600 à 900 mots
+- Prose fluide, pas de listes
+- Intégrer les hypothèses avec "semble", "aurait tendance à"
+- Utiliser le prénom si connu
+- Ne pas inventer — ne synthétiser que ce qui est dans les données
+"""
+
 _SUMMARIZE_SYSTEM = "Tu es un assistant de résumé. Réponds uniquement avec le résumé."
 
 _SUMMARIZE_PROMPT = """\
@@ -54,6 +85,19 @@ Réponds uniquement avec le résumé, sans introduction ni commentaire.
 """
 
 
+def _build_facts_block(facts: list[dict]) -> str:
+    active = [f for f in facts if f.get("certainty") != "réfuté"]
+    by_cat: dict[str, list[str]] = {}
+    for f in active:
+        badge = "○" if f.get("certainty") == "hypothèse" else "●"
+        by_cat.setdefault(f["category"], []).append(f"{badge} {f['fact']}")
+    lines = ["## Faits (● certain, ○ hypothèse)"]
+    for cat, items in by_cat.items():
+        lines.append(f"### {cat}")
+        lines.extend(f"- {i}" for i in items)
+    return "\n".join(lines)
+
+
 def condense_narrative() -> str:
     """Generate or update the condensed personal narrative. Returns the new text."""
     profile = get_profile()
@@ -63,18 +107,8 @@ def condense_narrative() -> str:
     parts: list[str] = []
     if profile:
         parts.append("## Profil\n" + "\n".join(f"- {k}: {v}" for k, v in profile.items()))
-
     if facts:
-        by_cat: dict[str, list[str]] = {}
-        for f in facts:
-            badge = "○" if f.get("certainty") == "hypothèse" else "●"
-            by_cat.setdefault(f["category"], []).append(f"{badge} {f['fact']}")
-        fact_lines = ["## Faits (● certain, ○ hypothèse)"]
-        for cat, items in by_cat.items():
-            fact_lines.append(f"### {cat}")
-            fact_lines.extend(f"- {i}" for i in items)
-        parts.append("\n".join(fact_lines))
-
+        parts.append(_build_facts_block(facts))
     if not parts:
         return ""
 
@@ -83,6 +117,59 @@ def condense_narrative() -> str:
         prompt += _NARRATIVE_UPDATE_INTRO + old_narrative
 
     narrative = complete(prompt, system=_NARRATIVE_SYSTEM, model=MODEL_SMART, max_tokens=2048)
+    narrative = narrative.strip()
+    save_narrative(narrative)
+    return narrative
+
+
+def condense_unified() -> str:
+    """
+    Generate a single unified context document merging facts, profile, people,
+    goals, and conversation summaries. Used when contexte_unifié=1.
+    """
+    from .goals import get_goals_context
+    from .people import get_all_people
+    from .memory import get_conversation_summaries
+
+    profile = get_profile()
+    facts = get_all_facts()
+    old_narrative = get_latest_narrative()
+
+    parts: list[str] = []
+
+    if profile:
+        parts.append("## Profil\n" + "\n".join(f"- {k}: {v}" for k, v in profile.items()))
+
+    if facts:
+        parts.append(_build_facts_block(facts))
+
+    people = get_all_people()
+    if people:
+        lines = ["## Personnes dans sa vie"]
+        for p in people[:30]:
+            rel = f" ({p['relation']})" if p.get("relation") else ""
+            note = f" — {p['notes'][:300]}" if p.get("notes") else ""
+            lines.append(f"- {p['name']}{rel}{note}")
+        parts.append("\n".join(lines))
+
+    goals_ctx = get_goals_context()
+    if goals_ctx:
+        parts.append(goals_ctx)
+
+    summaries = get_conversation_summaries(limit=5)
+    if summaries:
+        lines = ["## Conversations récentes (résumés)"]
+        lines.extend(f"- {s}" for s in summaries)
+        parts.append("\n".join(lines))
+
+    if old_narrative:
+        parts.append("## Narration précédente (à enrichir)\n" + old_narrative)
+
+    if not parts:
+        return ""
+
+    prompt = _UNIFIED_PROMPT + "\n\n" + "\n\n".join(parts)
+    narrative = complete(prompt, system=_UNIFIED_SYSTEM, model=MODEL_SMART, max_tokens=3000)
     narrative = narrative.strip()
     save_narrative(narrative)
     return narrative

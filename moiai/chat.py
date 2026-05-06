@@ -139,9 +139,15 @@ def _build_system_blocks(context: str, curiosity: str) -> list[dict]:
 
 
 def _build_full_context(history: list[dict]) -> str:
-    """Build context including people, goals, and bilan."""
-    # Pass None so facts use stable ordering (confirmed DESC) — keyword-based
-    # sorting would change every turn and break prompt caching.
+    """Build context. Uses unified narrative if contexte_unifié=1, else classic fragmented mode."""
+    if _cfg("contexte_unifié"):
+        narrative = get_latest_narrative()
+        if narrative:
+            return "# Ce que je sais de toi\n\n" + narrative
+        # No unified narrative yet — fall through to classic mode with a hint
+        # (user needs to run /condenser first)
+
+    # ── Classic mode ───────────────────────────────────────────────────────────
     base = build_smart_context(recent_messages=None)
     extras: list[str] = []
 
