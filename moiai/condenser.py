@@ -63,7 +63,7 @@ Structure obligatoire (prose, pas de bullet points) :
 **État actuel** — préoccupations récentes, humeur générale, sujets en cours
 
 Règles :
-- 600 à 900 mots
+- {mots_min} à {mots_max} mots
 - Prose fluide, pas de listes
 - Intégrer les hypothèses avec "semble", "aurait tendance à"
 - Utiliser le prénom si connu
@@ -168,8 +168,15 @@ def condense_unified() -> str:
     if not parts:
         return ""
 
-    prompt = _UNIFIED_PROMPT + "\n\n" + "\n\n".join(parts)
-    narrative = complete(prompt, system=_UNIFIED_SYSTEM, model=MODEL_SMART, max_tokens=3000)
+    target_words = _cfg("mots_portrait")
+    mots_min = max(300, target_words - 150)
+    mots_max = target_words + 150
+    # ~1.35 tokens per French word, +20% safety margin
+    max_tokens = min(8000, int(target_words * 1.35 * 1.2))
+
+    base_prompt = _UNIFIED_PROMPT.format(mots_min=mots_min, mots_max=mots_max)
+    prompt = base_prompt + "\n\n" + "\n\n".join(parts)
+    narrative = complete(prompt, system=_UNIFIED_SYSTEM, model=MODEL_SMART, max_tokens=max_tokens)
     narrative = narrative.strip()
     save_narrative(narrative)
     return narrative
