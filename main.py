@@ -860,6 +860,17 @@ def _handle_summaries() -> None:
     if action != "r":
         return
 
+    # Model picker
+    _model_ids = list(AVAILABLE_MODELS.keys())
+    console.print("[dim]Modèle pour la synthèse :[/dim]")
+    for idx, (mid, desc) in enumerate(AVAILABLE_MODELS.items(), 1):
+        console.print(f"  [bold cyan]{idx}[/bold cyan]  {desc}")
+    model_raw = Prompt.ask("[dim]Numéro (défaut : 3 — Haiku)[/dim]", default="3").strip()
+    if model_raw.isdigit() and 1 <= int(model_raw) <= len(_model_ids):
+        chosen_model = _model_ids[int(model_raw) - 1]
+    else:
+        chosen_model = MODEL_FAST
+
     block = "\n\n".join(
         f"[{s.get('timestamp', '')[:10]}] {s['summary']}" for s in summaries
     )
@@ -873,7 +884,7 @@ def _handle_summaries() -> None:
         f"RÉSUMÉS :\n{block}"
     )
     with console.status("[dim]Synthèse en cours...[/dim]", spinner="dots"):
-        result = complete(prompt, system="Tu es un assistant d'analyse biographique. Réponds en français, en prose.", model=MODEL_FAST, max_tokens=600)
+        result = complete(prompt, system="Tu es un assistant d'analyse biographique. Réponds en français, en prose.", model=chosen_model, max_tokens=600)
     console.print(Panel(Markdown(result), title="[bold]Synthèse des conversations[/bold]", border_style="cyan"))
     _print_cost()
     console.print()
