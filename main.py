@@ -1924,7 +1924,7 @@ def _handle_model() -> None:
     _api.MODEL_FAST = config["fast"]
     # Propagate to submodules that imported the constants
     for _mod_name in ("moiai.extractor", "moiai.merger", "moiai.condenser",
-                      "moiai.curiosity", "moiai.reflect", "moiai.questioner",
+                      "moiai.reflect", "moiai.questioner",
                       "moiai.analyser", "moiai.chat"):
         import importlib as _il
         _m = _il.import_module(_mod_name)

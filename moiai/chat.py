@@ -9,7 +9,6 @@ from datetime import datetime
 
 from .api import MODEL_CHAT, cached_block, plain_block, stream_chat
 from .condenser import maybe_summarize_conversations
-from .curiosity import build_curiosity_block, warm_cache
 from .goals import get_goals_context
 from .settings import get as _cfg
 from .memory import (
@@ -123,18 +122,15 @@ def _current_date_line() -> str:
     return f"Aujourd'hui : {day} {now.day} {month} {now.year}, {now.hour}h."
 
 
-def _build_system_blocks(context: str, curiosity: str) -> list[dict]:
+def _build_system_blocks(context: str) -> list[dict]:
     """
-    3-block system prompt:
-    1. Date + mood + static instructions (not cached — changes per session/turn)
+    2-block system prompt:
+    1. Date + static instructions (not cached — changes per hour)
     2. Personal context — CACHED (facts, profile, narrative — changes slowly)
-    3. Curiosity block (changes per turn, not cached)
     """
     blocks: list[dict] = [plain_block(_current_date_line() + "\n\n" + _INSTRUCTIONS)]
     if context:
         blocks.append(cached_block(context))
-    if curiosity:
-        blocks.append(plain_block(curiosity))
     return blocks
 
 
@@ -178,16 +174,9 @@ def stream_response(user_input: str) -> Iterator[str]:
     """Save user message, stream response. Call finish_turn() after consuming."""
     save_message("user", user_input)
 
-    total = count_messages()
     history = load_recent_messages(limit=_cfg("messages_historique"))
     context = _build_full_context(history)
-
-    try:
-        curiosity = build_curiosity_block(total_messages=total) if _cfg("curiosité_active") else ""
-    except Exception:
-        curiosity = ""
-
-    system_blocks = _build_system_blocks(context, curiosity)
+    system_blocks = _build_system_blocks(context)
     return stream_chat(history, system_blocks=system_blocks, model=MODEL_CHAT)
 
 
@@ -196,16 +185,9 @@ def chat_complete(user_input: str) -> str:
     from .api import chat_complete as _api_chat
     save_message("user", user_input)
 
-    total = count_messages()
     history = load_recent_messages(limit=_cfg("messages_historique"))
     context = _build_full_context(history)
-
-    try:
-        curiosity = build_curiosity_block(total_messages=total) if _cfg("curiosité_active") else ""
-    except Exception:
-        curiosity = ""
-
-    system_blocks = _build_system_blocks(context, curiosity)
+    system_blocks = _build_system_blocks(context)
     reply = _api_chat(history, system_blocks=system_blocks, model=MODEL_CHAT)
     finish_turn(reply)
     return reply
@@ -230,37 +212,39 @@ _briefing_ready = threading.Event()
 
 
 def start_session() -> None:
-    """
-    Called once at session start.
-    Warms curiosity cache and pre-generates the startup briefing — both in background.
-    Non-blocking: returns immediately.
-    """
+    """Called once at session start. Pre-generates the startup briefing in background."""
     global _session_start, _briefing_result
     _session_start = datetime.now()
     _briefing_result = None
     _briefing_ready.clear()
 
-    total = count_messages()
-    warm_cache(total)
-
     gap_hours = get_session_gap_hours()
+    total = count_messages()
     if gap_hours < 2 or total < 6:
         _briefing_ready.set()
         return
 
     def _generate():
+        import re as _re
         global _briefing_result
+        _OPEN_PAT = _re.compile(
+            r"\b(prépare?|essaie?|espère?|attend|cherche?|commence?|veut|voudrai[st]|"
+            r"aimerais?|envisage?|postule?|entretien|déménage?|prévu|bientôt|"
+            r"en cours|objectif|projet|lance?|démarre?)\b", _re.IGNORECASE
+        )
         try:
-            from .curiosity import _get_open_threads
             from .goals import get_active_goals
             from .memory import get_all_facts
             from .reflect import generate_startup_briefing
 
-            open_threads = _get_open_threads()
+            all_facts = get_all_facts()
+            open_threads = [
+                f["fact"] for f in all_facts
+                if _OPEN_PAT.search(f["fact"]) or f.get("certainty") == "hypothèse"
+            ][:6]
             active_goals = [g["text"] for g in get_active_goals()[:3]]
             mood_list = get_recent_mood(limit=1)
             last_mood = f"{mood_list[0]['valence']} — {mood_list[0]['state']}" if mood_list else ""
-            all_facts = get_all_facts()
             recent_certain = [
                 f["fact"] for f in all_facts
                 if f.get("certainty") in ("certain", "probable")
