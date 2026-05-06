@@ -716,7 +716,7 @@ def _handle_fusionner() -> None:
         try:
             candidates = suggest_merges(facts)
         except Exception as e:
-            console.print(f"[red]Erreur :[/red] {e}\n")
+            _friendly_api_error(e)
             return
 
     if not candidates:
@@ -823,7 +823,7 @@ def _handle_condense() -> None:
         try:
             narrative = fn()
         except Exception as e:
-            console.print(f"[red]Erreur :[/red] {e}\n")
+            _friendly_api_error(e)
             return
 
     console.print(Panel(Markdown(narrative), title=title, border_style="cyan"))
@@ -1339,7 +1339,7 @@ def _handle_analyser() -> None:
         try:
             report = analyse_facts()
         except Exception as e:
-            console.print(f"[red]Erreur :[/red] {e}\n")
+            _friendly_api_error(e)
             return
     console.print(Panel(
         Markdown(report),
@@ -1389,7 +1389,7 @@ def _handle_reflect() -> None:
         try:
             text = generate_reflection()
         except Exception as e:
-            console.print(f"[red]Erreur :[/red] {e}\n")
+            _friendly_api_error(e)
             return
     console.print(Panel(
         Markdown(text),
@@ -1574,7 +1574,11 @@ def _handle_people() -> None:
     elif action == "f":
         from moiai.merger import suggest_people_merges
         with console.status("[dim]Analyse des doublons...[/dim]", spinner="dots"):
-            suggestions = suggest_people_merges(people)
+            try:
+                suggestions = suggest_people_merges(people)
+            except Exception as e:
+                _friendly_api_error(e)
+                return
         if not suggestions:
             console.print("[dim]Aucun doublon détecté.[/dim]\n")
             return
