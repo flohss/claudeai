@@ -10,6 +10,7 @@ import pygame
 import random
 import sys
 import math
+import argparse
 
 pygame.init()
 
@@ -555,12 +556,23 @@ class KeyRepeat:
 #  MAIN LOOP
 # ─────────────────────────────────────────────────────
 def main():
-    screen = pygame.display.set_mode((WIN_W, WIN_H))
+    ap = argparse.ArgumentParser(description="Vintage Tetris")
+    ap.add_argument("--scale", type=float, default=1.0,
+                    help="Scale factor (e.g. 2 for 2x, useful on mobile/Termux:X11)")
+    args = ap.parse_args()
+    scale = max(0.5, min(4.0, args.scale))
+
+    # Internal surface always at native resolution; screen scales it up
+    canvas = pygame.Surface((WIN_W, WIN_H))
+    screen = pygame.display.set_mode(
+        (int(WIN_W * scale), int(WIN_H * scale)),
+        pygame.RESIZABLE,
+    )
     pygame.display.set_caption("TETRIS — Vintage Edition")
     pygame.key.set_repeat(0)   # we handle repeat ourselves
 
     game     = Game()
-    renderer = Renderer(screen)
+    renderer = Renderer(canvas)
     buttons  = make_buttons()
     pressed  = set()          # currently pressed touch buttons
     kr       = KeyRepeat()
@@ -568,6 +580,11 @@ def main():
 
     # touch finger tracking: finger_id → button name
     finger_map = {}
+
+    def _to_canvas(pos):
+        """Map screen coordinates → canvas coordinates."""
+        sw, sh = screen.get_size()
+        return (int(pos[0] * WIN_W / sw), int(pos[1] * WIN_H / sh))
 
     def _btn_hit(pos):
         for name, rect in buttons.items():
@@ -622,7 +639,7 @@ def main():
 
             # ── mouse (desktop touch simulation) ──
             elif ev.type == pygame.MOUSEBUTTONDOWN:
-                name = _btn_hit(ev.pos)
+                name = _btn_hit(_to_canvas(ev.pos))
                 if name:
                     pressed.add(name)
                     _do_action(name)
@@ -634,9 +651,10 @@ def main():
 
             # ── real touch ──
             elif ev.type == pygame.FINGERDOWN:
-                px = int(ev.x * WIN_W)
-                py = int(ev.y * WIN_H)
-                name = _btn_hit((px, py))
+                sw, sh = screen.get_size()
+                px = int(ev.x * sw * WIN_W / sw)
+                py = int(ev.y * sh * WIN_H / sh)
+                name = _btn_hit((int(ev.x * WIN_W), int(ev.y * WIN_H)))
                 if name:
                     finger_map[ev.finger_id] = name
                     pressed.add(name)
@@ -660,6 +678,10 @@ def main():
 
         # ── draw ───────────────────────────────────────
         renderer.frame(game, buttons, pressed)
+        if scale == 1.0:
+            screen.blit(canvas, (0, 0))
+        else:
+            pygame.transform.scale(canvas, screen.get_size(), screen)
         pygame.display.flip()
         clock.tick(60)
 
