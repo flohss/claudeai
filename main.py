@@ -199,10 +199,27 @@ _GOAL_STATUS_LABEL = {
 # ── Header ─────────────────────────────────────────────────────────────────────
 
 def _header() -> None:
+    import moiai.api as _api
+    mc = _load_models()
+    chat_m = mc.get("chat", _api.MODEL_CHAT)
+    fast_m = mc.get("fast", _api.MODEL_FAST)
+
+    def _short(m: str) -> str:
+        if "opus" in m:
+            return "Opus"
+        if "sonnet" in m:
+            return "Sonnet"
+        if "haiku" in m:
+            return "Haiku"
+        return m
+
     console.print(Panel(
         "[bold cyan]Moi.AI[/bold cyan]  —  ton double personnel artificiel\n"
         "[dim]Tape [bold]/aide[/bold] pour les commandes  •  "
-        "Les réponses s'affichent en temps réel[/dim]",
+        "Les réponses s'affichent en temps réel[/dim]\n"
+        f"[dim]Chat : [bold]{_short(chat_m)}[/bold]  ·  "
+        f"Extraction : [bold]{_short(fast_m)}[/bold]  ·  "
+        "[bold]/modèle[/bold] pour changer[/dim]",
         border_style="cyan",
         expand=False,
     ))
