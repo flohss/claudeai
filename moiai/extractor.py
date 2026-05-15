@@ -93,6 +93,16 @@ sur lui-même. Ignore tout ce que dit l'Assistant — même s'il reformule, rés
 ou déduit quelque chose sur l'utilisateur. Seules les déclarations directes de
 l'Utilisateur comptent comme source de faits.
 
+RÈGLE DE PRÉCISION — CRITIQUE :
+Le texte du fait DOIT conserver les détails spécifiques : noms propres, dates,
+lieux, actions concrètes, formulations originales. Ne JAMAIS remplacer un détail
+précis par un terme générique.
+MAUVAIS : "mère a eu un acte patriotique"
+BON     : "arrière-grand-mère maternelle a agité le drapeau français à la Libération"
+MAUVAIS : "a vécu une expérience difficile dans l'enfance"
+BON     : "a été confronté à [situation précise décrite] à l'âge de 10 ans"
+Si un fait contient un nom, une date, un lieu, un geste concret — le conserver mot pour mot.
+
 profile_updates = uniquement faits certains et stables (nom, âge, ville, métier).
 people = uniquement les personnes AUTRES que l'utilisateur mentionnées par leur prénom/nom.
 goals = intentions ou objectifs déclarés ("veux apprendre le piano", "objectif : perdre 5kg").
