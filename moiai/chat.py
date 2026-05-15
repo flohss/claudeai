@@ -12,9 +12,11 @@ from .condenser import maybe_summarize_conversations
 from .goals import get_goals_context
 from .settings import get as _cfg
 from .memory import (
+    CERTAINTY_BADGE,
     build_smart_context,
     count_messages,
     get_conversation_summaries,
+    get_dynamic_facts,
     get_latest_narrative,
     get_recent_mood,
     load_recent_messages,
@@ -122,16 +124,33 @@ def _current_date_line() -> str:
     return f"Aujourd'hui : {day} {now.day} {month} {now.year}, {now.hour}h."
 
 
-def _build_system_blocks(context: str) -> list[dict]:
+def _build_system_blocks(context: str, dynamic: str = "") -> list[dict]:
     """
-    2-block system prompt:
+    2-3 block system prompt:
     1. Date + static instructions (not cached — changes per hour)
-    2. Personal context — CACHED (facts, profile, narrative — changes slowly)
+    2. Personal context — CACHED (stable facts, profile, narrative)
+    3. Dynamic facts for this message — NOT CACHED (changes every turn)
     """
     blocks: list[dict] = [plain_block(_current_date_line() + "\n\n" + _INSTRUCTIONS)]
     if context:
         blocks.append(cached_block(context))
+    if dynamic:
+        blocks.append(plain_block(dynamic))
     return blocks
+
+
+def _build_dynamic_block(user_message: str) -> str:
+    limit = _cfg("faits_dynamiques")
+    if limit <= 0:
+        return ""
+    facts = get_dynamic_facts(user_message, limit=limit)
+    if not facts:
+        return ""
+    lines = ["## Souvenirs particulièrement pertinents pour ce message"]
+    for f in facts:
+        badge = CERTAINTY_BADGE.get(f.get("certainty", "certain"), "●")
+        lines.append(f"  {badge} [{f['category']}] {f['fact']}")
+    return "\n".join(lines)
 
 
 def _build_full_context(history: list[dict]) -> str:
@@ -176,7 +195,8 @@ def stream_response(user_input: str) -> Iterator[str]:
 
     history = load_recent_messages(limit=_cfg("messages_historique"))
     context = _build_full_context(history)
-    system_blocks = _build_system_blocks(context)
+    dynamic = _build_dynamic_block(user_input)
+    system_blocks = _build_system_blocks(context, dynamic)
     return stream_chat(history, system_blocks=system_blocks, model=MODEL_CHAT)
 
 
@@ -187,7 +207,8 @@ def chat_complete(user_input: str) -> str:
 
     history = load_recent_messages(limit=_cfg("messages_historique"))
     context = _build_full_context(history)
-    system_blocks = _build_system_blocks(context)
+    dynamic = _build_dynamic_block(user_input)
+    system_blocks = _build_system_blocks(context, dynamic)
     reply = _api_chat(history, system_blocks=system_blocks, model=MODEL_CHAT)
     finish_turn(reply)
     return reply

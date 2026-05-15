@@ -634,6 +634,30 @@ def _extract_keywords(messages: list[dict], min_len: int = 4) -> set[str]:
     return words
 
 
+def get_dynamic_facts(user_message: str, limit: int = 15) -> list[dict]:
+    """Return facts most relevant to the current user message — for dynamic context injection."""
+    import re as _re
+    stopwords = {
+        "que", "qui", "quoi", "dans", "avec", "pour", "sur", "par", "une", "des",
+        "les", "est", "sont", "cette", "cela", "mais", "donc", "alors", "aussi",
+        "très", "plus", "bien", "peut", "tout", "fait", "être", "avoir", "comme",
+        "moi", "toi", "lui", "elle", "nous", "vous", "leur", "eux", "mon", "ton",
+        "son", "notre", "votre", "mes", "tes", "ses", "nos", "vos", "ses",
+    }
+    words = {
+        w.lower().strip(".,!?;:\"'()")
+        for w in _re.split(r'\W+', user_message)
+        if len(w) >= 3
+    } - stopwords
+    if not words:
+        return []
+    all_facts = get_all_facts()
+    active = [f for f in all_facts if f.get("certainty") != "réfuté"]
+    scored = [(f, _score_relevance(f["fact"], words)) for f in active]
+    scored.sort(key=lambda x: x[1], reverse=True)
+    return [f for f, score in scored if score > 0][:limit]
+
+
 def build_smart_context(recent_messages: list[dict] | None = None) -> str:
     lines: list[str] = []
 

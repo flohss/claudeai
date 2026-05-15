@@ -19,6 +19,7 @@ PARAMS: dict[str, tuple[str, str, int, int]] = {
     "seuil_auto_résumé":   ("Seuil résumé automatique (messages)",   "0 = désactivé",               0,   500),
     "contexte_unifié":     ("Contexte unifié (1=oui, 0=non)",        "nécessite /condenser d'abord", 0,   1),
     "mots_portrait":       ("Mots du portrait unifié",               "défaut 750",                  300, 32000),
+    "faits_dynamiques":    ("Faits dynamiques par message",          "0 = désactivé",               0,   50),
 }
 
 DEFAULTS: dict[str, int] = {
@@ -31,6 +32,7 @@ DEFAULTS: dict[str, int] = {
     "seuil_auto_résumé":   80,
     "contexte_unifié":     0,
     "mots_portrait":       750,
+    "faits_dynamiques":    15,
 }
 
 
