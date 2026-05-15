@@ -103,6 +103,14 @@ MAUVAIS : "a vécu une expérience difficile dans l'enfance"
 BON     : "a été confronté à [situation précise décrite] à l'âge de 10 ans"
 Si un fait contient un nom, une date, un lieu, un geste concret — le conserver mot pour mot.
 
+RÈGLE DE VOIX NARRATIVE — CRITIQUE :
+Quand l'utilisateur écrit un texte adressé à une autre personne (hommage, lettre,
+discours), les pronoms possessifs ("ta", "ton", "sa", "son", "tes", "ses") renvoient
+à CETTE personne — pas à l'utilisateur.
+Exemple : dans un hommage à sa grand-mère, "ta maman" = la mère de la grand-mère
+(= l'arrière-grand-mère de l'utilisateur), pas la mère de l'utilisateur.
+Identifie à QUI le texte est adressé avant d'interpréter les pronoms.
+
 profile_updates = uniquement faits certains et stables (nom, âge, ville, métier).
 people = uniquement les personnes AUTRES que l'utilisateur mentionnées par leur prénom/nom.
 goals = intentions ou objectifs déclarés ("veux apprendre le piano", "objectif : perdre 5kg").
