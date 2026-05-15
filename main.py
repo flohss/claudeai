@@ -2151,7 +2151,10 @@ def _friendly_api_error(e: Exception) -> None:
             console.print("[yellow]⚠ Clé API invalide ou expirée — tape [bold]/cle[/bold] pour la corriger.[/yellow]\n")
             return
         if e.status_code >= 500:
-            console.print(f"[yellow]⚠ Erreur serveur Anthropic ({e.status_code}) — réessaie dans un moment.[/yellow]\n")
+            if "overloaded" in str(e).lower():
+                console.print("[yellow]⚠ Serveur Anthropic surchargé — réessaie dans quelques instants.[/yellow]\n")
+            else:
+                console.print(f"[yellow]⚠ Erreur serveur Anthropic ({e.status_code}) — réessaie dans un moment.[/yellow]\n")
             return
 
     console.print(f"[red]Erreur {type(e).__name__} :[/red] {e}\n")
