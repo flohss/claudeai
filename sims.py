@@ -162,6 +162,7 @@ class Sim:
         self.portfolio      = {}   # asset_id → valeur actuelle (float)
         self.portfolio_cost = {}   # asset_id → coût d'acquisition total
         self.portfolio_peak = 0.0  # valeur max atteinte (objectif investisseur)
+        self.freelance_earned = 0  # cumul des revenus freelance sur toute la vie
 
     @property
     def mood(self):
@@ -560,6 +561,7 @@ UNIVERSAL_GOAL_DEFS = {
     "vivre_longtemps": ("🧓",     "Vivre longtemps",        "survivre 50 jours"),
     "trouver_amour":   ("💑",     "Trouver l'amour",        "être en couple niv.4+"),
     "investisseur":    ("💹",     "Investisseur avisé",     "portefeuille ≥ $1000"),
+    "autoentrepreneur":("🧑‍💻",   "Auto-entrepreneur",      "≥ $500 en freelance"),
 }
 
 def check_goal(key, sim):
@@ -577,7 +579,8 @@ def check_goal(key, sim):
     if key == "proprietaire":   return sim.housing is not None
     if key == "vivre_longtemps":return sim.age >= 50
     if key == "trouver_amour":  return max(sim.relationship.level, getattr(sim, 'rel_peak_life', 0)) >= 4
-    if key == "investisseur":   return getattr(sim, 'portfolio_peak', 0.0) >= 1000.0
+    if key == "investisseur":      return getattr(sim, 'portfolio_peak', 0.0) >= 1000.0
+    if key == "autoentrepreneur":  return getattr(sim, 'freelance_earned', 0) >= 500
     return False
 
 class LifeGoals:
@@ -1615,6 +1618,7 @@ ACTIONS = [
     ("devoirs", "Aide aux devoirs", None, "👨‍👩‍👧 Famille"),
     ("acheter_maison",  "Acheter un bien immobilier",   None, "🏠 Immobilier"),
     ("vendre_maison",   "Vendre son bien immobilier",   None, "🏠 Immobilier"),
+    ("freelance",       "Mission freelance (4h)",        None, "💼 Travail & Carrière"),
     ("investir",        "Placer de l'argent",           None, "💹 Finance"),
     ("retirer_invest",  "Retirer un investissement",    None, "💹 Finance"),
     ("sauvegarder", "Sauvegarder la partie", None, "💾 Système"),
@@ -1636,6 +1640,7 @@ ACTION_DURATIONS = {
     "avoir_enfant": 0.0, "devoirs": 1.0, "sauvegarder": 0.0,
     "prendre_retraite": 0.5, "benevole": 4.0, "voyage": 4.0,
     "acheter_maison": 2.0, "vendre_maison": 1.0,
+    "freelance": 4.0,
     "investir": 1.0, "retirer_invest": 1.0,
     "travailler_partiel": 4.0,
 }
@@ -1749,6 +1754,12 @@ def get_available_actions(sim):
             if stage[1] in ("Enfant", "Adolescent"):
                 continue
             if not any(v > 0.5 for v in getattr(sim, 'portfolio', {}).values()):
+                continue
+        # Freelance : adultes uniquement, pas en burn-out
+        if key == "freelance":
+            if stage[1] in ("Enfant", "Adolescent"):
+                continue
+            if sim.days_burned_out > 0:
                 continue
         # Label dynamique pour devoirs : "Faire ses devoirs" quand on est jeune
         if key == "devoirs" and stage[1] in ("Enfant", "Adolescent"):
@@ -2568,6 +2579,7 @@ def action_sauvegarder(sim):
         "portfolio": sim.portfolio,
         "portfolio_cost": sim.portfolio_cost,
         "portfolio_peak": sim.portfolio_peak,
+        "freelance_earned": getattr(sim, 'freelance_earned', 0),
         "goals": {"keys": sim.goals.keys, "universal": sim.goals.universal},
         "traits": list(sim.traits.active),
         "relationship": {
@@ -3191,6 +3203,64 @@ def action_retirer_invest(sim):
     _cont()
 
 
+# Mapping compétence → type de mission freelance
+_FREELANCE_GIGS = {
+    "cuisine":   ("Traiteur à domicile",      "🍽",  30),
+    "sport":     ("Coach sportif",            "💪",  28),
+    "social":    ("Médiateur / Coach de vie", "🗣",   25),
+    "jardinage": ("Paysagiste",               "🌿",  22),
+    "jeux":      ("Testeur / Streamer",       "🎮",  20),
+    "travail":   ("Consultant indépendant",   "💡",  35),
+}
+
+def action_freelance(sim):
+    levels = sim.skills.levels
+    # Choisir la compétence avec le niveau le plus élevé (à égalité : ordre fixe)
+    best_skill = max(_FREELANCE_GIGS, key=lambda s: (levels.get(s, 0), s == "travail"))
+    best_level = levels.get(best_skill, 0)
+    gig_name, gig_emoji, base_pay = _FREELANCE_GIGS[best_skill]
+
+    # Revenu : base + 12 $/niveau de compétence
+    pay = base_pay + best_level * 12
+
+    if not AUTOPILOT:
+        clear()
+        print(f"\n {C.BOLD}🧑‍💻 Missions freelance disponibles{C.RESET}\n")
+        print(f" Meilleure compétence : {C.BOLD}{best_skill.capitalize()}{C.RESET} (Niv. {best_level})")
+        print(f"\n  1. {gig_emoji} {C.BOLD}{gig_name}{C.RESET}  —  {C.GREEN}+${pay}{C.RESET} pour 4h")
+        print(f"     Énergie : -15  Faim : -15  Social : +10  Stress : +4")
+        if best_level >= 3:
+            print(f"     {C.GREEN}Tu maîtrises ce domaine — la mission est épanouissante (+8 fun){C.RESET}")
+        else:
+            print(f"     {C.YELLOW}Peu d'expérience — la mission est fastidieuse (-5 fun){C.RESET}")
+        print(f"\n  0. Annuler")
+        try:
+            choice = int(input("\n Choisir (0–1) : ").strip())
+        except (ValueError, EOFError):
+            choice = 0
+        if choice != 1:
+            _cont()
+            return
+
+    slow_print(f"\n {C.YELLOW}Tu te lances dans une mission de {gig_emoji} {gig_name}...{C.RESET}", 0.02)
+
+    fun_delta = +8 if best_level >= 3 else -5
+    sim.modify(energie=-15, faim=-15, social=+10, fun=fun_delta)
+    sim.tick(4)
+    sim.stress = min(100, sim.stress + 4)
+
+    sim.money += pay
+    sim.freelance_earned = getattr(sim, 'freelance_earned', 0) + pay
+    slow_print(f" {C.GREEN}+${pay} gagnés ! Total freelance : ${sim.freelance_earned}{C.RESET}", 0.02)
+
+    lvl = sim.skills.gain(best_skill, 10)
+    if lvl:
+        slow_print(f" {C.GREEN}Compétence {best_skill.capitalize()} → Niv. {lvl} ! {gig_emoji}{C.RESET}", 0.02)
+
+    if not AUTOPILOT:
+        _cont()
+
+
 ACTION_FNS = {
     "manger": action_manger,
     "snack": action_snack,
@@ -3236,6 +3306,7 @@ ACTION_FNS = {
     "vendre_maison": action_vendre_maison,
     "investir": action_investir,
     "retirer_invest": action_retirer_invest,
+    "freelance": action_freelance,
 }
 
 # --- IA Autopilote ---
@@ -3522,6 +3593,19 @@ def ai_choose_action(sim):
     # ═══════════════════════════════════════════════════════════════
     if h.hp < 85 and sim.money >= 80:                                     return "medecin"
     if h.mental < 45 and sim.money >= 60:                                 return "psy"
+
+    # ═══════════════════════════════════════════════════════════════
+    # PRIORITÉ 4c : freelance — le week-end si compétence utile + besoin d'argent
+    # ═══════════════════════════════════════════════════════════════
+    if ("freelance" not in blocked
+            and is_weekend
+            and sim.days_burned_out == 0
+            and n["energie"] > 25
+            and n["faim"] > 20
+            and sim.money < 800):
+        _best_fl_level = max(sim.skills.levels.values(), default=0)
+        if _best_fl_level > 0:
+            return "freelance"
 
     # ═══════════════════════════════════════════════════════════════
     # PRIORITÉ 5 : récupération préventive (loisirs / social / sieste)
@@ -3909,6 +3993,7 @@ def _apply_legacy(heir, parent, chosen_child):
     heir.portfolio      = {k: v for k, v in parent.portfolio.items()}
     heir.portfolio_cost = {k: v for k, v in parent.portfolio_cost.items()}
     heir.portfolio_peak = parent.portfolio_peak
+    heir.freelance_earned = 0  # repart à zéro pour l'héritier
 
     # — Transmettre le pic de relation et nouveaux objectifs de vie —
     heir.rel_peak_life = parent.rel_peak_life
@@ -4752,6 +4837,7 @@ def load_game():
     sim.portfolio       = d.get("portfolio", {})
     sim.portfolio_cost  = d.get("portfolio_cost", {})
     sim.portfolio_peak  = d.get("portfolio_peak", 0.0)
+    sim.freelance_earned = d.get("freelance_earned", 0)
     if "goals" in d:
         sim.goals = LifeGoals(d["goals"]["keys"], d["goals"]["universal"])
     trait_ids = d.get("traits")
