@@ -156,6 +156,7 @@ class Sim:
         self.retired = False        # True après action prendre_retraite
         self.pension = 0            # montant quotidien de la pension ($/jour)
         self.housing = None         # None ou dict {property_id, purchase_price, loan_total, loan_remaining, daily_payment, days_missed}
+        self.friends = FriendNetwork(self.name)
 
     @property
     def mood(self):
@@ -477,6 +478,62 @@ class Relationship:
         self.level = 0
         self.partner_name = None
         self.affection = 0
+
+# --- Réseau social ---
+_FRIEND_POOL = [
+    "Marie", "Lucas", "Sophie", "Tom", "Emma", "Hugo", "Léa", "Nathan",
+    "Julie", "Mathis", "Chloé", "Antoine", "Camille", "Théo", "Inès",
+    "Raphaël", "Clara", "Baptiste", "Alice", "Nicolas", "Laura", "Pierre",
+    "Manon", "Julien", "Zoé", "Romain", "Amélie", "Simon", "Adrien",
+    "Pauline", "Victor", "Charlotte", "Florian", "Lucie", "Ethan", "Jade",
+]
+
+class FriendNetwork:
+    """Réseau de 3 amis nommés avec une affinité individuelle (0–100)."""
+
+    def __init__(self, sim_name=""):
+        pool = [n for n in _FRIEND_POOL if n != sim_name]
+        names = random.sample(pool, 3)
+        self.friends = [{"name": n, "affinity": random.randint(30, 55)} for n in names]
+
+    def _neediest(self):
+        return min(self.friends, key=lambda f: f["affinity"])
+
+    def call(self):
+        """Appeler l'ami le plus délaissé. Retourne (nom, gain)."""
+        f = self._neediest()
+        gain = random.randint(18, 28)
+        f["affinity"] = min(100, f["affinity"] + gain)
+        return f["name"], gain
+
+    def meet(self):
+        """Sortir avec les 2 amis les moins contactés. Retourne [(nom, gain), ...]."""
+        targets = sorted(self.friends, key=lambda f: f["affinity"])[:2]
+        results = []
+        for f in targets:
+            gain = random.randint(25, 35)
+            f["affinity"] = min(100, f["affinity"] + gain)
+            results.append((f["name"], gain))
+        return results
+
+    def tick_day(self):
+        for f in self.friends:
+            f["affinity"] = max(0, f["affinity"] - 2)
+
+    @property
+    def avg_affinity(self):
+        return sum(f["affinity"] for f in self.friends) / len(self.friends)
+
+    @property
+    def min_affinity(self):
+        return min(f["affinity"] for f in self.friends)
+
+    def mental_mod(self):
+        """Delta mental quotidien : réseau négligé → moral en berne ; solide → épanouissement."""
+        avg = self.avg_affinity
+        if avg < 25: return -2
+        if avg > 70: return +1
+        return 0
 
 # --- Compétences ---
 SKILLS_DEF = {
@@ -1331,6 +1388,14 @@ def show_status(sim):
         print(f" {C.BOLD}Relation :{C.RESET} {rel.emoji} {rel.label} avec {C.MAGENTA}{rel.partner_name}{C.RESET}"
               f" Affection {bar(rel.affection, length=10)}")
 
+    # Réseau d'amis
+    parts = []
+    for f in sim.friends.friends:
+        aff = f["affinity"]
+        col = C.GREEN if aff >= 60 else (C.YELLOW if aff >= 30 else C.RED)
+        parts.append(f"{col}{f['name']}{C.RESET} {bar(aff, length=6)}")
+    print(f" {C.BOLD}Amis     :{C.RESET} " + "   ".join(parts))
+
     if sim.pet:
         p = sim.pet
         if p.neglect_days > 0:
@@ -1716,6 +1781,12 @@ def action_dormir(sim):
                     slow_print(f" {C.RED}Stade terminal — consultation médicale d'urgence !{C.RESET}", 0.02)
     for child in sim.children:
         child.tick_day()
+    sim.friends.tick_day()
+    _friend_mod = sim.friends.mental_mod()
+    if _friend_mod:
+        sim.health.mental = max(0, min(100, sim.health.mental + _friend_mod))
+        if not AUTOPILOT and _friend_mod < 0:
+            slow_print(f" {C.YELLOW}😔 Tu te sens isolé(e) — tes amis te manquent.{C.RESET}", 0.02)
 
     # ── Pension de retraite ───────────────────────────────────────
     if getattr(sim, 'retired', False) and sim.pension > 0:
@@ -1882,7 +1953,11 @@ def action_sortir(sim):
         return
     meteo_mod = sim.weather.outdoor_mods.get("sortir", 0)
     soc_gain = int(50 * (1 + sim.skills.bonus('social')))
-    slow_print(f"\n {C.MAGENTA}Tu passes la soirée avec des amis ! 🎉{C.RESET}", 0.02)
+    met = sim.friends.meet()
+    names_str = " et ".join(n for n, _ in met)
+    slow_print(f"\n {C.MAGENTA}Tu passes la soirée avec {names_str} ! 🎉{C.RESET}", 0.02)
+    for fname, again in met:
+        slow_print(f" {C.GREEN}Affinité avec {fname} +{again}{C.RESET}", 0.02)
     if meteo_mod > 0:
         slow_print(f" {C.GREEN}La météo est parfaite pour sortir ! +{meteo_mod} Fun{C.RESET}", 0.02)
     elif meteo_mod < 0:
@@ -1895,8 +1970,10 @@ def action_sortir(sim):
     _cont()
 
 def action_appel(sim):
+    friend_name, aff_gain = sim.friends.call()
     soc_gain = int(25 * (1 + sim.skills.bonus('social')))
-    slow_print(f"\n {C.MAGENTA}Tu appelles un(e) ami(e) pour discuter... 📞{C.RESET}", 0.02)
+    slow_print(f"\n {C.MAGENTA}Tu appelles {friend_name}... 📞{C.RESET}", 0.02)
+    slow_print(f" {C.GREEN}Affinité avec {friend_name} +{aff_gain}{C.RESET}", 0.02)
     sim.modify(social=soc_gain, fun=+10, energie=-5)
     sim.tick(1)
     lvl = sim.skills.gain('social', 5)
@@ -2352,6 +2429,7 @@ def action_sauvegarder(sim):
         "retired": sim.retired,
         "pension": sim.pension,
         "housing": sim.housing,
+        "friends": sim.friends.friends,
         "traits": list(sim.traits.active),
         "relationship": {
             "level": sim.relationship.level,
@@ -3112,6 +3190,7 @@ def ai_choose_action(sim):
         return "sieste"
 
     if n["social"] < 42:                                                   return "appel"
+    if sim.friends.min_affinity < 20 and n["energie"] > 30:               return "appel"
 
     if n["fun"] < fun_thresh and "mediter" not in blocked:                return "mediter"
     if n["fun"] < fun_thresh - 10 and n["energie"] > 55 and n["faim"] > 45:
@@ -4059,6 +4138,9 @@ def load_game():
     sim.retired           = d.get("retired", False)
     sim.pension           = d.get("pension", 0)
     sim.housing           = d.get("housing", None)
+    if "friends" in d:
+        sim.friends = FriendNetwork.__new__(FriendNetwork)
+        sim.friends.friends = d["friends"]
     trait_ids = d.get("traits")
     if trait_ids:
         sim.traits = Traits(trait_ids)
