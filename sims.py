@@ -156,8 +156,9 @@ class Sim:
         self.retired = False        # True après action prendre_retraite
         self.pension = 0            # montant quotidien de la pension ($/jour)
         self.housing = None         # None ou dict {property_id, purchase_price, loan_total, loan_remaining, daily_payment, days_missed}
-        self.friends = FriendNetwork(self.name)
-        self.goals   = LifeGoals.from_sim(self)
+        self.friends       = FriendNetwork(self.name)
+        self.goals         = LifeGoals.from_sim(self)
+        self.rel_peak_life = 0   # pic de niveau de relation atteint (survit à l'héritage)
 
     @property
     def mood(self):
@@ -179,7 +180,7 @@ class Sim:
             "hygiene": -2 * hours,
             "fun": -3 * hours,
             "social": -3 * hours,
-            "vessie": -7 * hours,
+            "vessie": -4 * hours,
         }
         _, stage = get_stage(self.age)
         for need, mod in stage[3].items():
@@ -539,7 +540,7 @@ class FriendNetwork:
 # --- Objectifs de vie ---
 GOAL_DEFS = {
     # trait_key: (emoji, label, condition_courte)
-    "ambitieux":   ("🔥", "Sommet de carrière",   "25j trav. + salaire ×1.15"),
+    "ambitieux":   ("🔥", "Sommet de carrière",   "20j trav. + salaire ×1.10"),
     "paresseux":   ("😌", "Vie zen",              "stress ≤15 & mental ≥65"),
     "sociable":    ("🤝", "Réseau solide",         "couple + amis affinité ≥58"),
     "anxieux":     ("🧘", "Maîtriser l'anxiété",  "stress ≤10 à la fin"),
@@ -558,7 +559,7 @@ UNIVERSAL_GOAL_DEFS = {
 }
 
 def check_goal(key, sim):
-    if key == "ambitieux":      return bool(sim.job) and sim.job_days >= 25 and sim.salary_multiplier >= 1.15
+    if key == "ambitieux":      return bool(sim.job) and sim.job_days >= 20 and sim.salary_multiplier >= 1.10
     if key == "paresseux":      return sim.stress <= 15 and sim.health.mental >= 65
     if key == "sociable":       return sim.relationship.level >= 4 and sim.friends.avg_affinity >= 58
     if key == "anxieux":        return sim.stress <= 10
@@ -571,7 +572,7 @@ def check_goal(key, sim):
     if key == "fonder_famille": return sim.relationship.level >= 6 and len(sim.children) >= 1
     if key == "proprietaire":   return sim.housing is not None
     if key == "vivre_longtemps":return sim.age >= 50
-    if key == "trouver_amour":  return sim.relationship.level >= 4
+    if key == "trouver_amour":  return max(sim.relationship.level, getattr(sim, 'rel_peak_life', 0)) >= 4
     return False
 
 class LifeGoals:
@@ -2505,6 +2506,7 @@ def action_sauvegarder(sim):
         "pension": sim.pension,
         "housing": sim.housing,
         "friends": sim.friends.friends,
+        "rel_peak_life": sim.rel_peak_life,
         "goals": {"keys": sim.goals.keys, "universal": sim.goals.universal},
         "traits": list(sim.traits.active),
         "relationship": {
@@ -2556,6 +2558,7 @@ def action_flirter(sim):
         rel.gain_affection(15)
         new_stage = rel.try_advance()
         if new_stage:
+            sim.rel_peak_life = max(sim.rel_peak_life, rel.level)
             slow_print(f" {C.GREEN}Ta relation avec {rel.partner_name} évolue : {new_stage} ! 💫{C.RESET}", 0.02)
         else:
             slow_print(f" {C.CYAN}Bonne ambiance avec {rel.partner_name} ! (Affection {rel.affection}%){C.RESET}", 0.02)
@@ -2580,6 +2583,7 @@ def action_rendezvous(sim):
     rel.gain_affection(25)
     new_stage = rel.try_advance()
     if new_stage:
+        sim.rel_peak_life = max(sim.rel_peak_life, rel.level)
         slow_print(f" {C.GREEN}Ta relation évolue : {new_stage} ! 💫{C.RESET}", 0.02)
     else:
         slow_print(f" {C.CYAN}Belle soirée ! (Affection {rel.affection}%){C.RESET}", 0.02)
@@ -2613,6 +2617,7 @@ def action_proposer(sim):
     if random.randint(1, 100) <= 85:
         rel.level = 5
         rel.affection = 80
+        sim.rel_peak_life = max(sim.rel_peak_life, 5)
         slow_print(f" {C.GREEN}{rel.partner_name} accepte ! Vous êtes fiancé(e)s ! 💍{C.RESET}", 0.02)
         sim.modify(fun=+40, social=+30)
     else:
@@ -2631,6 +2636,7 @@ def action_marier(sim):
     sim.money -= min(cost, sim.money)
     rel.level = 6
     rel.affection = 90
+    sim.rel_peak_life = max(sim.rel_peak_life, 6)
     sim.modify(fun=+50, social=+40, energie=-10)
     slow_print(f" {C.GREEN}Félicitations ! Vous êtes marié(e)s avec {rel.partner_name} ! 🎊{C.RESET}", 0.02)
     slow_print(f" {C.GRAY}Coût de la cérémonie : ${cost}{C.RESET}", 0.02)
@@ -3075,7 +3081,7 @@ def ai_choose_action(sim):
         if n["energie"] < 60 and n["hygiene"] < 50 and n["energie"] > 20: return "douche"
         if n["energie"] < 60: return "sieste" if n["energie"] >= 35 else "dormir"
         if n["hygiene"] < 65: return "douche"
-        if n["vessie"] < 50:  return "toilettes"
+        if n["vessie"] < 55:  return "toilettes"
         # Seuils alignés sur le chemin actif (44/42) pour éviter drain mental en retraite
         if n["fun"] < 44 and "mediter" not in blocked:  return "mediter"
         if n["social"] < 42:  return "appel"
@@ -3123,7 +3129,7 @@ def ai_choose_action(sim):
         # Préparation pré-sleep : éviter famine/HP drain pendant le sleep
         if n["faim"]    < _faim_safe:    return "snack" if sim.money < 5 else "manger"
         if n["hygiene"] < _hygiene_safe: return "douche"
-        if n["vessie"]  < 30:            return "toilettes"
+        if n["vessie"]  < 45:            return "toilettes"
         # Garde social pré-sleep (8h tick -24 → social < 42 passerait sous 25 → mental -16)
         if n["social"] < 65 and sim.hour < 23:                             return "appel"
         if n["fun"]     < 50 and sim.hour < 23 and "mediter" not in blocked:
@@ -3237,8 +3243,9 @@ def ai_choose_action(sim):
                 if best[1] > cur_sal:
                     return "postuler"
 
-        # Seuils minimaux : juste assez pour tenir une journée de cours ou de travail
-        _can_work  = n["energie"] > 25 and n["faim"] > 20 and n["hygiene"] > 20
+        # Seuils minimaux : travailler coûte ~41 énergie total (direct + tick×2),
+        # donc il faut energie > 45 pour ne pas tomber à 0 pendant la journée.
+        _can_work  = n["energie"] > 45 and n["faim"] > 20 and n["hygiene"] > 20
         _can_study = n["energie"] > 20 and n["faim"] > 15
 
         # C) Études en cours → 7j/7, toutes priorités secondaires cèdent
@@ -3309,11 +3316,12 @@ def ai_choose_action(sim):
         if "tv" not in blocked:                                            return "tv"
 
     # ═══════════════════════════════════════════════════════════════
-    # PRIORITÉ 5b : vacances — soulager stress ou mental bas
+    # PRIORITÉ 5b : vacances — week-end + fun bas, ou mental en crise
     # ═══════════════════════════════════════════════════════════════
     if "voyage" not in blocked and sim.money >= 250:
-        if (sim.stress > 55 or sim.health.mental < 45) and sim.age % 7 >= 5:
-            return "voyage"
+        is_weekend_now = sim.age % 7 >= 5
+        if is_weekend_now and n["fun"] < 50:                 return "voyage"
+        if sim.health.mental < 40 and sim.money >= 600:      return "voyage"
 
     # ═══════════════════════════════════════════════════════════════
     # PRIORITÉ 5c : immobilier — acheter dès que les finances le permettent
@@ -3661,7 +3669,8 @@ def _apply_legacy(heir, parent, chosen_child):
         d_lbl, d_emoji, _, _ = STUDY_DOMAINS[dom]
         bonuses.append(f"🎓 Bourse {d_emoji} {d_lbl} : +${scholarship}")
 
-    # — Nouveaux objectifs de vie pour l'héritier —
+    # — Transmettre le pic de relation et nouveaux objectifs de vie —
+    heir.rel_peak_life = parent.rel_peak_life
     heir.goals = LifeGoals.from_sim(heir)
 
     return bonuses
@@ -3726,12 +3735,14 @@ def show_results(sim, cause=""):
 DEBUG_REPORT_FILE = "debug_report.txt"
 
 def _format_debug_report(results):
-    """Formate les résultats de simulation en rapport texte détaillé."""
+    """Formate les résultats de simulation en rapport texte enrichi."""
     from collections import Counter
+    from itertools import groupby as _groupby
+
     lines = []
-    W    = 70
+    W    = 78
     sep  = "=" * W
-    sep2 = "-" * W
+    sep2 = "─" * W
 
     lines += [sep,
               "  RAPPORT DÉBOGAGE — MODE AUTOPILOTE",
@@ -3743,112 +3754,251 @@ def _format_debug_report(results):
                    "vieillesse": "🕯 Vieillesse", "timeout": "⏱ Limite",
                    None: "✅ En vie"}
 
-    for r in results:
-        lines.append(f"\n{'─'*W}")
-        lines.append(f"  SIM #{r['sim']:02d} — {r['name']}  ({r['orient']})")
-        lines.append(f"{'─'*W}")
+    all_goal_defs = {**GOAL_DEFS, **UNIVERSAL_GOAL_DEFS}
 
-        # ── Résumé ──────────────────────────────────────────────
-        cstr = cause_label.get(r['cause'], r['cause'])
-        lines.append(f"  Survie    : {r['age']} jours  │  Fin : {cstr}  │  {r['generations']} gén.")
+    for r in results:
+        lines.append(f"\n{sep2}")
+        lines.append(f"  SIM #{r['sim']:02d} — {r['name']}  ({r['orient']})")
+        lines.append(sep2)
+
+        # ── Résumé ──────────────────────────────────────────────────
+        cstr = cause_label.get(r['cause'], str(r['cause']))
+        lines.append(f"  Survie    : {r['age']:3d} jours  │  Fin : {cstr}"
+                     f"  │  {r['generations']} gén.")
         lines.append(f"  Traits    : {', '.join(r['traits']) or '—'}")
 
+        # ── Carrière & Finances ─────────────────────────────────────
+        lines.append("")
         dip = r['diploma'] or 'Aucun'
         lines.append(f"  Carrière  : {r['job'] or 'Sans emploi'} — {r['job_days']} j. trav."
-                     f"  salaire ×{r['salary_mult']:.2f}")
+                     f"  ×{r['salary_mult']:.2f}")
         lines.append(f"  Diplôme   : {dip}")
-        lines.append(f"  Finances  : ${r['money']}  │  Pension : ${r['pension']}/j")
-        lines.append(f"  Santé     : HP={r['hp']}  │  Stress={r['stress']}")
-        lines.append(f"  Mental    : final={r['mental']}  moy={r['mental_avg']}  min={r['mental_min']}")
+        pen_str = f"  Pension ${r['pension']}/j" if r['pension'] else ""
+        hou_str = f"  Logement : {r['housing_name']}" if r['housing_name'] else "  Locataire"
+        lines.append(f"  Finances  : ${r['money']:>6}{pen_str}  │{hou_str}")
+
+        # ── Santé ───────────────────────────────────────────────────
+        lines.append("")
+        lines.append(f"  ── Santé ──────────────────────────────────────────────")
+        lines.append(f"  HP        : final={r['hp']:3d}  moy={r['hp_avg']:3d}  min={r['hp_min']:3d}")
+        crash = f"  ({r['mental_crash_days']}j sous 20)" if r['mental_crash_days'] else ""
+        lines.append(f"  Mental    : final={r['mental']:3d}  moy={r['mental_avg']:3d}"
+                     f"  min={r['mental_min']:3d}{crash}")
+        lines.append(f"  Stress    : final={r['stress']:3d}  moy={r['stress_avg']:3d}"
+                     f"  max={r['stress_max']:3d}")
+        if r['diseases_ever']:
+            active_str = ', '.join(r['diseases']) if r['diseases'] else 'aucune'
+            ever_str   = ', '.join(r['diseases_ever'])
+            lines.append(f"  Maladies  : actives=[{active_str}]")
+            lines.append(f"             contractées=[{ever_str}]")
+        bo_str = "  ⚠ BURNOUT contracté" if r['burnout_ever'] else ""
+        if bo_str:
+            lines.append(f"  Burnout   :{bo_str}")
+
+        # ── Besoins (tableau final / moy / min / crises) ────────────
+        lines.append("")
+        lines.append(f"  ── Besoins (final / moy / min / crises=0) ────────────")
+        need_labels = {
+            'faim': 'Faim    ', 'energie': 'Énergie ', 'hygiene': 'Hygiène ',
+            'fun':  'Fun     ', 'social':  'Social  ', 'vessie':  'Vessie  ',
+        }
+        for k, lbl in need_labels.items():
+            if k not in r['needs_stats']:
+                continue
+            ns = r['needs_stats'][k]
+            warn = f"  ⚠ {ns['crises']} crise(s)" if ns['crises'] > 0 else ""
+            # Mini graphe : bar sur moy
+            bar_len = ns['avg'] // 10
+            bar_str = "█" * bar_len + "░" * (10 - bar_len)
+            lines.append(f"    {lbl}: fin={ns['final']:3d}  moy={ns['avg']:3d}  "
+                         f"min={ns['min']:3d}  [{bar_str}]{warn}")
+        lines.append(f"  Tours avec besoin=0 : {r['needs_critical']}")
+
+        # ── Relations & Social ──────────────────────────────────────
+        lines.append("")
+        lines.append(f"  ── Relations & Social ────────────────────────────────")
         rel_str = r['relationship']
         if r['partner']:
             rel_str += f" avec {r['partner']}"
-        lines.append(f"  Vie soc.  : {rel_str}  │  Enfants : {r['children']}  │  Animal : {r['pet'] or 'Aucun'}")
-        if r['diseases']:
-            lines.append(f"  Maladies  : {', '.join(r['diseases'])}")
-        if r['skills']:
-            sk_str = "  ".join(f"{k}={v}" for k, v in sorted(r['skills'].items(), key=lambda x:-x[1]))
-            lines.append(f"  Compét.   : {sk_str}")
-        n = r['needs']
-        lines.append(f"  Besoins   : faim={n['faim']:3d}  énergie={n['energie']:3d}  "
-                     f"hygiene={n['hygiene']:3d}  fun={n['fun']:3d}  "
-                     f"social={n['social']:3d}  vessie={n['vessie']:3d}")
+        lines.append(f"  Relation  : {rel_str}  (pic niv.{r['rel_peak']})")
+        lines.append(f"  Amis      : affinité moy={r['friends_avg']:.1f}  min={r['friends_min']:.1f}")
+        lines.append(f"  Enfants   : {r['children']}  │  Animal : {r['pet'] or 'Aucun'}")
+        lines.append(f"  Vacances  : {r['vacations']} voyage(s)")
 
-        # ── Top actions ──────────────────────────────────────────
+        # ── Objectifs de vie ────────────────────────────────────────
+        if r['goals_max'] > 0:
+            lines.append("")
+            lines.append(f"  ── Objectifs de vie [{r['goals_score']}/{r['goals_max']}] ────────────────────")
+            for k in r['goals_achieved']:
+                em, lbl, hint = all_goal_defs[k]
+                lines.append(f"    ✅ {em} {lbl:30s}  ({hint})")
+            for k in r['goals_missed']:
+                em, lbl, hint = all_goal_defs[k]
+                lines.append(f"    ❌ {em} {lbl:30s}  ({hint})")
+
+        # ── Compétences ─────────────────────────────────────────────
+        if r['skills']:
+            lines.append("")
+            sk_str = "  ".join(f"{k}={v}" for k, v in
+                               sorted(r['skills'].items(), key=lambda x: -x[1]))
+            lines.append(f"  Compét.   : {sk_str}")
+
+        # ── Top actions ─────────────────────────────────────────────
+        lines.append("")
         total_a = sum(r['action_counts'].values())
-        top_a = sorted(r['action_counts'].items(), key=lambda x: -x[1])[:8]
-        lines.append(f"\n  Actions totales : {total_a}")
+        top_a   = sorted(r['action_counts'].items(), key=lambda x: -x[1])[:10]
+        lines.append(f"  ── Top actions ({total_a} décisions) ─────────────────────")
         for aname, cnt in top_a:
             pct = 100 * cnt // total_a
-            bar = "█" * (pct // 5)
+            bar = "█" * (pct // 4) + "░" * (25 - pct // 4)
             lines.append(f"    {aname:22s} {cnt:4d}  {pct:3d}%  {bar}")
 
-        # ── Historique jour par jour ─────────────────────────────
-        lines.append(f"\n  Historique :")
-        from itertools import groupby
-        days = {}
-        for day, hour, action, mental, needs in r['action_log']:
-            days.setdefault(day, []).append((hour, action, mental))
+        # ── Timeline journalière ─────────────────────────────────────
+        lines.append("")
+        lines.append(f"  ── Timeline journalière ──────────────────────────────")
+        lines.append(f"  {'Jour':>4}  {'HP':>3} {'M':>3} {'S':>3} {'$':>5}  "
+                     f"{'fai':>3} {'én':>3} {'hyg':>3} {'fun':>3} {'soc':>3} {'ves':>3}"
+                     f"  Séquence d'actions")
+        lines.append(f"  {'─'*4}  {'─'*3} {'─'*3} {'─'*3} {'─'*5}  "
+                     f"{'─'*3} {'─'*3} {'─'*3} {'─'*3} {'─'*3} {'─'*3}"
+                     f"  {'─'*20}")
 
-        for day in sorted(days.keys()):
-            entries = days[day]
-            # Compresser les répétitions : mediter mediter mediter → mediter×3
+        # Regrouper action_log par jour
+        day_actions: dict = {}
+        for entry in r['action_log']:
+            day = entry[0]
+            day_actions.setdefault(day, []).append(entry)
+
+        # Index des snapshots journaliers par jour
+        snap_by_day = {s['day']: s for s in r['daily_snaps']}
+
+        for day in sorted(day_actions.keys()):
+            entries = day_actions[day]
+            # Séquence compressée
             compressed = []
-            for action, grp in groupby(entries, key=lambda x: x[1]):
+            for action, grp in _groupby(entries, key=lambda x: x[2]):
                 grp_list = list(grp)
                 if len(grp_list) > 1:
                     compressed.append(f"{action}×{len(grp_list)}")
                 else:
                     compressed.append(action)
-            h_start = f"{entries[0][0]:05.2f}"
-            h_end   = f"{entries[-1][0]:05.2f}"
-            mental_at_end = entries[-1][2]
             seq = "  ".join(compressed)
-            lines.append(f"    J{day:03d} [{h_start}→{h_end}] m={mental_at_end:3d} │ {seq}")
 
-    # ═══════════════════════════════════════════════════════════
+            sn = snap_by_day.get(day)
+            if sn:
+                n  = sn['needs']
+                # Marquer les besoins critiques
+                def _nfmt(v):
+                    return f"{v:3d}" if v > 20 else f"!{v:2d}"
+                lines.append(
+                    f"  J{day:03d}  {sn['hp']:3d} {sn['mental']:3d} {sn['stress']:3d}"
+                    f" ${sn['money']:5d}  "
+                    f"{_nfmt(n.get('faim',0))} {_nfmt(n.get('energie',0))}"
+                    f" {_nfmt(n.get('hygiene',0))} {_nfmt(n.get('fun',0))}"
+                    f" {_nfmt(n.get('social',0))} {_nfmt(n.get('vessie',0))}"
+                    f"  {seq}"
+                )
+            else:
+                lines.append(f"  J{day:03d}  {'':3} {'':3} {'':3} {'':5}  {'':3} {'':3}"
+                             f" {'':3} {'':3} {'':3} {'':3}  {seq}")
+
+    # ═══════════════════════════════════════════════════════════════
     # STATISTIQUES GLOBALES
-    # ═══════════════════════════════════════════════════════════
+    # ═══════════════════════════════════════════════════════════════
     lines += ["", sep, "  STATISTIQUES GLOBALES", sep]
+    N = len(results)
 
     ages = [r['age'] for r in results]
-    lines.append(f"  Survie         : moy={sum(ages)/len(ages):.1f}j"
-                 f"  max={max(ages)}j (#{results[ages.index(max(ages))]['sim']})"
-                 f"  min={min(ages)}j (#{results[ages.index(min(ages))]['sim']})")
+    lines.append(f"  Survie         : moy={sum(ages)/N:.1f}j"
+                 f"  max={max(ages)}j (#{results[ages.index(max(ages))]['sim']:02d})"
+                 f"  min={min(ages)}j (#{results[ages.index(min(ages))]['sim']:02d})")
 
     causes = Counter(r['cause'] for r in results)
-    causes_str = "  ".join(f"{k or 'en vie'} ×{v}" for k, v in causes.most_common())
+    causes_str = "  ".join(f"{cause_label.get(k, str(k))} ×{v}" for k, v in causes.most_common())
     lines.append(f"  Causes de fin  : {causes_str}")
 
-    mentals_final = [r['mental'] for r in results]
-    mentals_avg   = [r['mental_avg'] for r in results]
-    mentals_min   = [r['mental_min'] for r in results]
-    lines.append(f"  Mental final   : moy={sum(mentals_final)/len(mentals_final):.1f}"
-                 f"  min={min(mentals_final)}  max={max(mentals_final)}")
-    lines.append(f"  Mental (vie)   : moy_moy={sum(mentals_avg)/len(mentals_avg):.1f}"
-                 f"  moy_min={sum(mentals_min)/len(mentals_min):.1f}")
+    # Mental
+    mf = [r['mental'] for r in results]
+    ma = [r['mental_avg'] for r in results]
+    mm = [r['mental_min'] for r in results]
+    mc = [r['mental_crash_days'] for r in results]
+    lines.append(f"  Mental final   : moy={sum(mf)/N:.1f}  min={min(mf)}  max={max(mf)}")
+    lines.append(f"  Mental (vie)   : moy_moy={sum(ma)/N:.1f}  moy_min={sum(mm)/N:.1f}"
+                 f"  crash_moy={sum(mc)/N:.1f}j/sim")
 
-    stresses = [r['stress'] for r in results]
-    lines.append(f"  Stress final   : moy={sum(stresses)/len(stresses):.1f}"
-                 f"  max={max(stresses)}")
+    # HP
+    hpf = [r['hp'] for r in results]
+    hpa = [r['hp_avg'] for r in results]
+    hpm = [r['hp_min'] for r in results]
+    lines.append(f"  HP final       : moy={sum(hpf)/N:.1f}  min={min(hpf)}  max={max(hpf)}")
+    lines.append(f"  HP (vie)       : moy_moy={sum(hpa)/N:.1f}  moy_min={sum(hpm)/N:.1f}")
 
+    # Stress
+    sf = [r['stress'] for r in results]
+    sa = [r['stress_avg'] for r in results]
+    sm = [r['stress_max'] for r in results]
+    lines.append(f"  Stress final   : moy={sum(sf)/N:.1f}  max={max(sf)}")
+    lines.append(f"  Stress (vie)   : moy_avg={sum(sa)/N:.1f}  moy_max={sum(sm)/N:.1f}")
+
+    # Besoins — santé globale par besoin
+    lines.append(f"\n  ── Santé des besoins (moy_min / moy_avg sur toutes sims) ──")
+    need_labels2 = ['faim', 'energie', 'hygiene', 'fun', 'social', 'vessie']
+    for k in need_labels2:
+        mins  = [r['needs_stats'][k]['min'] for r in results if k in r['needs_stats']]
+        avgs  = [r['needs_stats'][k]['avg'] for r in results if k in r['needs_stats']]
+        crs   = [r['needs_stats'][k]['crises'] for r in results if k in r['needs_stats']]
+        if not mins: continue
+        warn = f"  ⚠ total {sum(crs)} crises=0" if sum(crs) > 0 else ""
+        lines.append(f"    {k:8s}: moy_min={sum(mins)/len(mins):5.1f}"
+                     f"  moy_avg={sum(avgs)/len(avgs):5.1f}{warn}")
+
+    # Objectifs de vie — taux de complétion
+    lines.append(f"\n  ── Objectifs de vie ──────────────────────────────────")
+    all_goal_counts  = Counter()
+    all_miss_counts  = Counter()
+    goal_score_list  = [r['goals_score'] for r in results if r['goals_max'] > 0]
+    goal_max_list    = [r['goals_max']   for r in results if r['goals_max'] > 0]
+    for r in results:
+        for k in r.get('goals_achieved', []): all_goal_counts[k] += 1
+        for k in r.get('goals_missed',   []): all_miss_counts[k] += 1
+    all_goal_keys = set(all_goal_counts.keys()) | set(all_miss_counts.keys())
+    for k in sorted(all_goal_keys):
+        achieved = all_goal_counts.get(k, 0)
+        total_g  = achieved + all_miss_counts.get(k, 0)
+        pct      = int(100 * achieved / total_g) if total_g else 0
+        em, lbl, _ = all_goal_defs.get(k, ('', k, ''))
+        bar_g = "█" * (pct // 10) + "░" * (10 - pct // 10)
+        lines.append(f"    {em} {lbl:30s} {pct:3d}%  {bar_g}  ({achieved}/{total_g})")
+    if goal_score_list:
+        lines.append(f"  Score moyen    : {sum(goal_score_list)/len(goal_score_list):.1f}"
+                     f" / {sum(goal_max_list)/len(goal_max_list):.1f} objectifs")
+
+    # Finances
+    lines.append("")
+    moneys = [r['money'] for r in results]
+    lines.append(f"  Argent final   : moy=${sum(moneys)/N:.0f}"
+                 f"  min=${min(moneys)}  max=${max(moneys)}")
+    housing = sum(1 for r in results if r['housing_name'])
+    lines.append(f"  Propriétaires  : {housing}/{N}"
+                 f"  ({100*housing//N}%)")
     pensions = [r['pension'] for r in results if r['pension'] > 0]
     if pensions:
         lines.append(f"  Pensions       : moy=${sum(pensions)/len(pensions):.0f}/j"
-                     f"  min=${min(pensions)}/j  max=${max(pensions)}/j"
-                     f"  ({len(pensions)}/{len(results)} retraités)")
+                     f"  ({len(pensions)}/{N} retraités)")
     else:
         lines.append(f"  Pensions       : aucun retraité")
 
-    moneys = [r['money'] for r in results]
-    lines.append(f"  Argent final   : moy=${sum(moneys)/len(moneys):.0f}"
-                 f"  min=${min(moneys)}  max=${max(moneys)}")
+    # Vacances
+    vacs = [r['vacations'] for r in results]
+    lines.append(f"  Vacances       : moy={sum(vacs)/N:.1f}/sim"
+                 f"  max={max(vacs)}  sims sans voyage={sum(1 for v in vacs if v==0)}/{N}")
 
+    # Carrière
+    lines.append("")
     jobs = [r['job'] for r in results if r['job']]
     if jobs:
         top = Counter(jobs).most_common(5)
         lines.append(f"  Top jobs       : " + "  │  ".join(f"{j} ×{c}" for j, c in top))
-
     dips = [r['diploma'].split(' (')[0] for r in results if r['diploma']]
     if dips:
         top = Counter(dips).most_common(5)
@@ -3856,35 +4006,50 @@ def _format_debug_report(results):
     else:
         lines.append(f"  Diplômes       : aucun obtenu")
 
+    # Traits
     all_traits = []
-    for r in results:
-        all_traits.extend(r['traits'])
+    for r in results: all_traits.extend(r['traits'])
     if all_traits:
         top_t = Counter(all_traits).most_common(5)
         lines.append(f"  Top traits     : " + "  │  ".join(f"{t} ×{c}" for t, c in top_t))
 
-    married = sum(1 for r in results if "Marié" in r['relationship'])
-    burnout_count = sum(1 for r in results if 'burnout' in r['diseases'])
-    lines.append(f"  Mariés         : {married}/{len(results)}")
-    lines.append(f"  Burnout actif  : {burnout_count}/{len(results)}")
+    # Relations & Social
+    lines.append("")
+    married  = sum(1 for r in results if "Marié" in r['relationship'])
+    coupled  = sum(1 for r in results if r['rel_peak'] >= 4)
+    children = sum(r['children'] for r in results)
+    lines.append(f"  Relations      : mariés={married}/{N}  couple={coupled}/{N}"
+                 f"  enfants_total={children}")
+    friends_avgs = [r['friends_avg'] for r in results]
+    lines.append(f"  Amis (affinité): moy={sum(friends_avgs)/N:.1f}"
+                 f"  min={min(friends_avgs):.1f}")
 
-    all_diseases = []
-    for r in results:
-        all_diseases.extend(r['diseases'])
-    if all_diseases:
-        top_d = Counter(all_diseases).most_common(8)
-        lines.append(f"  Maladies       : " + "  ".join(f"{d} ×{c}" for d, c in top_d))
+    # Maladies & Burnout
+    lines.append("")
+    burnout_ever = sum(1 for r in results if r['burnout_ever'])
+    lines.append(f"  Burnout        : {burnout_ever}/{N} sims affectés")
+    all_diseases_ever = []
+    for r in results: all_diseases_ever.extend(r['diseases_ever'])
+    if all_diseases_ever:
+        top_d = Counter(all_diseases_ever).most_common(10)
+        lines.append(f"  Maladies (vie) : " + "  ".join(f"{d} ×{c}" for d, c in top_d))
+    all_diseases_fin = []
+    for r in results: all_diseases_fin.extend(r['diseases'])
+    if all_diseases_fin:
+        top_df = Counter(all_diseases_fin).most_common(8)
+        lines.append(f"  Maladies (fin) : " + "  ".join(f"{d} ×{c}" for d, c in top_df))
 
-    # Actions les plus fréquentes toutes sims confondues
+    # Actions globales
+    lines.append("")
     all_acts: Counter = Counter()
-    for r in results:
-        all_acts.update(r['action_counts'])
-    top_acts = all_acts.most_common(10)
-    total_all = all_acts.total()
-    lines.append(f"\n  Top actions (toutes sims, {total_all} total) :")
+    for r in results: all_acts.update(r['action_counts'])
+    top_acts   = all_acts.most_common(12)
+    total_all  = all_acts.total()
+    lines.append(f"  Top actions (toutes sims, {total_all} total) :")
     for aname, cnt in top_acts:
         pct = 100 * cnt // total_all
-        lines.append(f"    {aname:22s} {cnt:5d}  ({pct}%)")
+        bar = "█" * (pct // 3) + "░" * (33 - pct // 3)
+        lines.append(f"    {aname:22s} {cnt:5d}  {pct:3d}%  {bar}")
 
     lines.append(sep)
     return "\n".join(lines)
@@ -3974,18 +4139,38 @@ def debug_batch_run(n_sims=10, max_gen=5):
         final_cause = None
 
         # ── Instrumentation : capture des décisions IA ───────────────
-        action_log    = []   # [(day, hour, action, mental, needs_snap)]
+        # Tuple: (day, hour, action, mental, needs, hp, stress, rel_level, friends_avg)
+        action_log    = []
+        daily_snaps   = []   # un snapshot par jour (premier appel du jour)
+        diseases_seen = set()
+        _last_day     = [-1]
         _orig_ai      = _globs['ai_choose_action']
 
-        def _instrumented(s, _orig=_orig_ai, _log=action_log):
+        def _instrumented(s, _orig=_orig_ai, _log=action_log,
+                          _daily=daily_snaps, _ld=_last_day, _ds=diseases_seen):
             a = _orig(s)
+            _ds.update(s.health.diseases.keys())
             _log.append((
-                s.age,
-                round(s.hour, 2),
-                a,
+                s.age, round(s.hour, 2), a,
                 s.health.mental,
                 {k: round(v) for k, v in s.needs.items()},
+                s.health.hp,
+                s.stress,
+                s.relationship.level,
+                round(s.friends.avg_affinity, 1),
             ))
+            if s.age != _ld[0]:
+                _ld[0] = s.age
+                _daily.append({
+                    'day':     s.age,
+                    'mental':  s.health.mental,
+                    'hp':      s.health.hp,
+                    'stress':  s.stress,
+                    'needs':   {k: round(v) for k, v in s.needs.items()},
+                    'rel':     s.relationship.level,
+                    'money':   s.money,
+                    'friends': round(s.friends.avg_affinity, 1),
+                })
             return a
 
         _globs['ai_choose_action'] = _instrumented
@@ -4005,10 +4190,35 @@ def debug_batch_run(n_sims=10, max_gen=5):
             _globs['ai_choose_action'] = _orig_ai
 
         # ── Calcul de métriques ───────────────────────────────────────
-        mentals = [e[3] for e in action_log]
+        mentals      = [e[3] for e in action_log]
+        hps_log      = [e[5] for e in action_log]
+        stresses_log = [e[6] for e in action_log]
+        rels_log     = [e[7] for e in action_log]
+        friends_log  = [e[8] for e in action_log]
+
         action_counts = {}
         for e in action_log:
             action_counts[e[2]] = action_counts.get(e[2], 0) + 1
+
+        # Stats par besoin (final / moy / min / nb crises à 0)
+        needs_keys = list(sim.needs.keys())
+        needs_all  = {k: [e[4][k] for e in action_log if k in e[4]] for k in needs_keys}
+        needs_stats = {k: {
+            'final':  round(sim.needs[k]),
+            'avg':    round(sum(needs_all[k]) / len(needs_all[k])) if needs_all[k] else 0,
+            'min':    min(needs_all[k]) if needs_all[k] else 0,
+            'crises': sum(1 for v in needs_all[k] if v == 0),
+        } for k in needs_keys}
+
+        needs_critical    = sum(1 for e in action_log if any(v == 0 for v in e[4].values()))
+        mental_crash_days = len(set(e[0] for e in action_log if e[3] < 20))
+
+        goals_score    = sim.goals.score(sim)    if hasattr(sim, 'goals') else 0
+        goals_max      = sim.goals.max_score()   if hasattr(sim, 'goals') else 0
+        goals_achieved = ([k for k in sim.goals.all_keys() if     check_goal(k, sim)]
+                          if hasattr(sim, 'goals') else [])
+        goals_missed   = ([k for k in sim.goals.all_keys() if not check_goal(k, sim)]
+                          if hasattr(sim, 'goals') else [])
 
         results.append({
             "sim":          sim_num,
@@ -4025,20 +4235,40 @@ def debug_batch_run(n_sims=10, max_gen=5):
                              if sim.education.has_diploma() else None),
             "money":        sim.money,
             "pension":      sim.pension,
+            "housing_name": (get_property_data(sim.housing["property_id"])[1]
+                             if sim.housing else None),
             "hp":           sim.health.hp,
+            "hp_min":       min(hps_log)  if hps_log  else sim.health.hp,
+            "hp_avg":       round(sum(hps_log)  / len(hps_log))  if hps_log  else sim.health.hp,
             "mental":       sim.health.mental,
-            "mental_min":   min(mentals) if mentals else 0,
-            "mental_avg":   round(sum(mentals) / len(mentals)) if mentals else 0,
+            "mental_min":   min(mentals)  if mentals  else 0,
+            "mental_avg":   round(sum(mentals)  / len(mentals))  if mentals  else 0,
+            "mental_crash_days": mental_crash_days,
             "stress":       sim.stress,
+            "stress_max":   max(stresses_log) if stresses_log else 0,
+            "stress_avg":   round(sum(stresses_log)/len(stresses_log)) if stresses_log else 0,
+            "rel_peak":     max(rels_log) if rels_log else 0,
+            "friends_avg":  round(sum(friends_log)/len(friends_log), 1) if friends_log else 0,
+            "friends_min":  round(min(friends_log), 1) if friends_log else 0,
             "skills":       {k: v for k, v in sim.skills.levels.items() if v > 0},
             "relationship": sim.relationship.label,
             "partner":      sim.relationship.partner_name,
             "children":     len(sim.children),
             "pet":          (f"{sim.pet.name} ({sim.pet.species})" if sim.pet else None),
             "diseases":     list(sim.health.diseases.keys()),
+            "diseases_ever": sorted(diseases_seen),
+            "burnout_ever": "burnout" in diseases_seen,
             "needs":        {k: round(v) for k, v in sim.needs.items()},
+            "needs_stats":  needs_stats,
+            "needs_critical": needs_critical,
+            "vacations":    action_counts.get("voyage", 0),
+            "goals_score":  goals_score,
+            "goals_max":    goals_max,
+            "goals_achieved": goals_achieved,
+            "goals_missed":  goals_missed,
             "action_counts": action_counts,
             "action_log":   action_log,
+            "daily_snaps":  daily_snaps,
         })
 
     DEBUG_MODE = False
@@ -4277,6 +4507,7 @@ def load_game():
     if "friends" in d:
         sim.friends = FriendNetwork.__new__(FriendNetwork)
         sim.friends.friends = d["friends"]
+    sim.rel_peak_life = d.get("rel_peak_life", sim.relationship.level)
     if "goals" in d:
         sim.goals = LifeGoals(d["goals"]["keys"], d["goals"]["universal"])
     trait_ids = d.get("traits")
