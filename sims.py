@@ -157,6 +157,7 @@ class Sim:
         self.pension = 0            # montant quotidien de la pension ($/jour)
         self.housing = None         # None ou dict {property_id, purchase_price, loan_total, loan_remaining, daily_payment, days_missed}
         self.friends = FriendNetwork(self.name)
+        self.goals   = LifeGoals.from_sim(self)
 
     @property
     def mood(self):
@@ -534,6 +535,64 @@ class FriendNetwork:
         if avg < 25: return -2
         if avg > 70: return +1
         return 0
+
+# --- Objectifs de vie ---
+GOAL_DEFS = {
+    # trait_key: (emoji, label, condition_courte)
+    "ambitieux":   ("🔥", "Sommet de carrière",   "25j trav. + salaire ×1.15"),
+    "paresseux":   ("😌", "Vie zen",              "stress ≤15 & mental ≥65"),
+    "sociable":    ("🤝", "Réseau solide",         "couple + amis affinité ≥58"),
+    "anxieux":     ("🧘", "Maîtriser l'anxiété",  "stress ≤10 à la fin"),
+    "curieux":     ("🎓", "Décrocher un diplôme", "avoir un diplôme"),
+    "sportif":     ("💪", "Rester en forme",       "HP ≥80 à la fin"),
+    "gourmand":    ("👨‍🍳", "Devenir chef",         "cuisine niveau 8"),
+    "artistique":  ("🎨", "Vivre pour l'art",      "mental ≥75 & fun ≥60"),
+    "econome":     ("💰", "Bâtir un patrimoine",   "$2000+ en caisse"),
+    "malchanceux": ("🌟", "Surmonter les épreuves","survivre 40 jours"),
+}
+UNIVERSAL_GOAL_DEFS = {
+    "fonder_famille":  ("👨‍👩‍👧", "Fonder une famille",    "marié(e) + ≥1 enfant"),
+    "proprietaire":    ("🏠",     "Devenir propriétaire",  "posséder un bien"),
+    "vivre_longtemps": ("🧓",     "Vivre longtemps",        "survivre 50 jours"),
+    "trouver_amour":   ("💑",     "Trouver l'amour",        "être en couple niv.4+"),
+}
+
+def check_goal(key, sim):
+    if key == "ambitieux":      return bool(sim.job) and sim.job_days >= 25 and sim.salary_multiplier >= 1.15
+    if key == "paresseux":      return sim.stress <= 15 and sim.health.mental >= 65
+    if key == "sociable":       return sim.relationship.level >= 4 and sim.friends.avg_affinity >= 58
+    if key == "anxieux":        return sim.stress <= 10
+    if key == "curieux":        return sim.education.has_diploma()
+    if key == "sportif":        return sim.health.hp >= 80
+    if key == "gourmand":       return sim.skills.levels.get("cuisine", 0) >= 8
+    if key == "artistique":     return sim.health.mental >= 75 and sim.needs.get("fun", 0) >= 60
+    if key == "econome":        return sim.money >= 2000
+    if key == "malchanceux":    return sim.age >= 40
+    if key == "fonder_famille": return sim.relationship.level >= 6 and len(sim.children) >= 1
+    if key == "proprietaire":   return sim.housing is not None
+    if key == "vivre_longtemps":return sim.age >= 50
+    if key == "trouver_amour":  return sim.relationship.level >= 4
+    return False
+
+class LifeGoals:
+    def __init__(self, trait_keys, universal_key):
+        self.keys      = list(trait_keys)
+        self.universal = universal_key
+
+    @classmethod
+    def from_sim(cls, sim):
+        trait_keys    = [t for t in sim.traits.active if t in GOAL_DEFS]
+        universal_key = random.choice(list(UNIVERSAL_GOAL_DEFS.keys()))
+        return cls(trait_keys, universal_key)
+
+    def all_keys(self):
+        return self.keys + [self.universal]
+
+    def score(self, sim):
+        return sum(1 for k in self.all_keys() if check_goal(k, sim))
+
+    def max_score(self):
+        return len(self.all_keys())
 
 # --- Compétences ---
 SKILLS_DEF = {
@@ -1395,6 +1454,22 @@ def show_status(sim):
         col = C.GREEN if aff >= 60 else (C.YELLOW if aff >= 30 else C.RED)
         parts.append(f"{col}{f['name']}{C.RESET} {bar(aff, length=6)}")
     print(f" {C.BOLD}Amis     :{C.RESET} " + "   ".join(parts))
+
+    # Objectifs de vie
+    if hasattr(sim, 'goals'):
+        goal_parts = []
+        for k in sim.goals.all_keys():
+            defs = {**GOAL_DEFS, **UNIVERSAL_GOAL_DEFS}
+            emoji, label, _ = defs[k]
+            done = check_goal(k, sim)
+            col = C.GREEN if done else C.GRAY
+            tick = "✓" if done else "·"
+            goal_parts.append(f"{col}{tick} {emoji} {label}{C.RESET}")
+        score = sim.goals.score(sim)
+        mx    = sim.goals.max_score()
+        sc_col = C.GREEN if score == mx else (C.YELLOW if score > 0 else C.GRAY)
+        print(f" {C.BOLD}Objectifs:{C.RESET} " + "   ".join(goal_parts) +
+              f"   {sc_col}[{score}/{mx}]{C.RESET}")
 
     if sim.pet:
         p = sim.pet
@@ -2430,6 +2505,7 @@ def action_sauvegarder(sim):
         "pension": sim.pension,
         "housing": sim.housing,
         "friends": sim.friends.friends,
+        "goals": {"keys": sim.goals.keys, "universal": sim.goals.universal},
         "traits": list(sim.traits.active),
         "relationship": {
             "level": sim.relationship.level,
@@ -2727,23 +2803,59 @@ def action_benevole(sim):
     slow_print(f" {C.CYAN}Tu te sens utile et pleinement épanoui(e). 💚{C.RESET}", 0.02)
     _cont()
 
+_VOYAGE_TIERS = [
+    # (label, cost, stress_relief, mental_boost, friend_boost, fun_boost, destinations)
+    ("Week-end",   200, 15, 8,  8,  30, [("La mer",    "🏖"), ("La campagne", "🌿"), ("La montagne", "⛰"),
+                                          ("Un spa",    "🧖"), ("Un festival", "🎪")]),
+    ("France",     350, 25, 12, 12, 40, [("Paris",     "🗼"), ("Lyon",   "🦁"), ("Bordeaux",   "🍷"),
+                                          ("Marseille", "🌊"), ("Nice",   "☀"), ("Strasbourg", "🥨")]),
+    ("Étranger",   600, 40, 18, 18, 55, [("Tokyo",     "🗾"), ("New York","🗽"), ("Rome",       "🏛"),
+                                          ("Barcelone", "🌞"), ("Marrakech","🕌"), ("Amsterdam","🚲"),
+                                          ("Vienne",    "🎶"), ("Prague",  "🏰"), ("Lisbonne",  "🌊")]),
+]
+
 def action_voyage(sim):
-    if sim.money < 200:
-        slow_print(f"\n {C.RED}Il te faut au moins $200 pour partir en voyage.{C.RESET}", 0.02)
+    affordable = [t for t in _VOYAGE_TIERS if sim.money >= t[1] + 50]
+    if not affordable:
+        slow_print(f"\n {C.RED}Il te faut au moins $200 (+ 50 réserve) pour partir en voyage.{C.RESET}", 0.02)
         _cont()
         return
-    cost = min(random.randint(150, 300), sim.money - 50)
-    destinations = [
-        ("Paris", "🗼"), ("Rome", "🏛"), ("Lisbonne", "🌊"), ("Barcelone", "🌞"),
-        ("Prague", "🏰"), ("Amsterdam", "🚲"), ("Vienne", "🎶"),
-        ("Tokyo", "🗾"), ("New York", "🗽"), ("Marrakech", "🕌"),
-    ]
-    dest, emoji = random.choice(destinations)
-    slow_print(f"\n {C.CYAN}✈ Tu pars en voyage à {dest} {emoji}...{C.RESET}", 0.02)
+
+    if AUTOPILOT:
+        # IA choisit le palier le plus élevé abordable
+        tier = affordable[-1]
+    else:
+        slow_print(f"\n {C.CYAN}✈  Choisir le type de vacances :{C.RESET}", 0.02)
+        print()
+        for i, (lbl, cost, sr, mb, fb, fb2, dests) in enumerate(affordable, 1):
+            ok = f"{C.GREEN}✅{C.RESET}" if sim.money >= cost + 50 else f"{C.RED}❌{C.RESET}"
+            print(f" {C.CYAN}[{i}]{C.RESET} {lbl:12s}  {C.YELLOW}${cost}{C.RESET}  "
+                  f"Stress -{sr}  Mental +{mb}  Amis +{fb}  Fun +{fb2}  {ok}")
+        print(f"\n {C.CYAN}[0]{C.RESET} Annuler\n")
+        try:
+            choice = input(f" {C.BOLD}Vacances : {C.RESET}").strip()
+        except (EOFError, KeyboardInterrupt):
+            choice = "0"
+        if not choice.isdigit() or int(choice) == 0 or int(choice) > len(affordable):
+            slow_print(f" {C.GRAY}Voyage annulé.{C.RESET}", 0.02)
+            _cont()
+            return
+        tier = affordable[int(choice) - 1]
+
+    lbl, cost, stress_relief, mental_boost, friend_boost, fun_boost, dests = tier
+    dest, emoji = random.choice(dests)
+
+    slow_print(f"\n {C.CYAN}✈ Tu pars en {lbl.lower()} à {dest} {emoji}...{C.RESET}", 0.02)
     sim.money -= cost
-    sim.modify(fun=+40, social=+20, energie=-10, faim=-15)
+    sim.stress = max(0, sim.stress - stress_relief)
+    sim.health.mental = min(100, sim.health.mental + mental_boost)
+    sim.modify(fun=+fun_boost, social=+20, energie=-10, faim=-15)
+    for f in sim.friends.friends:
+        f["affinity"] = min(100, f["affinity"] + friend_boost)
     sim.tick(4)
     slow_print(f" {C.YELLOW}-${cost} — Dépenses de voyage{C.RESET}", 0.02)
+    slow_print(f" {C.GREEN}Stress -{stress_relief}  Mental +{mental_boost}  "
+               f"Amis +{friend_boost}  Fun +{fun_boost}{C.RESET}", 0.02)
     slow_print(f" {C.GREEN}Quel dépaysement ! Ces souvenirs resteront gravés... 🌍{C.RESET}", 0.02)
     _cont()
 
@@ -3197,7 +3309,14 @@ def ai_choose_action(sim):
         if "tv" not in blocked:                                            return "tv"
 
     # ═══════════════════════════════════════════════════════════════
-    # PRIORITÉ 5b : immobilier — acheter dès que les finances le permettent
+    # PRIORITÉ 5b : vacances — soulager stress ou mental bas
+    # ═══════════════════════════════════════════════════════════════
+    if "voyage" not in blocked and sim.money >= 250:
+        if (sim.stress > 55 or sim.health.mental < 45) and sim.age % 7 >= 5:
+            return "voyage"
+
+    # ═══════════════════════════════════════════════════════════════
+    # PRIORITÉ 5c : immobilier — acheter dès que les finances le permettent
     # ═══════════════════════════════════════════════════════════════
     if not getattr(sim, 'housing', None) and "acheter_maison" not in blocked:
         salary = next((sal for lbl, sal, *_ in JOBS if lbl == sim.job), 0)
@@ -3542,6 +3661,9 @@ def _apply_legacy(heir, parent, chosen_child):
         d_lbl, d_emoji, _, _ = STUDY_DOMAINS[dom]
         bonuses.append(f"🎓 Bourse {d_emoji} {d_lbl} : +${scholarship}")
 
+    # — Nouveaux objectifs de vie pour l'héritier —
+    heir.goals = LifeGoals.from_sim(heir)
+
     return bonuses
 
 
@@ -3584,7 +3706,21 @@ def show_results(sim, cause=""):
     rel = sim.relationship
     if not rel.is_single():
         print(f" Relation : {rel.emoji} {rel.label} avec {rel.partner_name}")
-    print(f" Humeur : {sim.mood_label()}\n")
+    print(f" Humeur : {sim.mood_label()}")
+    if hasattr(sim, 'goals'):
+        score = sim.goals.score(sim)
+        mx    = sim.goals.max_score()
+        print(f"\n {C.BOLD}── Objectifs de vie ──{C.RESET}")
+        defs = {**GOAL_DEFS, **UNIVERSAL_GOAL_DEFS}
+        for k in sim.goals.all_keys():
+            emoji, label, hint = defs[k]
+            done = check_goal(k, sim)
+            col  = C.GREEN if done else C.RED
+            tick = "✅" if done else "❌"
+            print(f"   {tick} {emoji} {label}  {C.GRAY}({hint}){C.RESET}")
+        sc_col = C.GREEN if score == mx else (C.YELLOW if score > 0 else C.RED)
+        print(f"\n   {sc_col}Score final : {score}/{mx} objectif(s) accompli(s){C.RESET}")
+    print()
 
 # --- Mode Débogage / Batch ---
 DEBUG_REPORT_FILE = "debug_report.txt"
@@ -4141,6 +4277,8 @@ def load_game():
     if "friends" in d:
         sim.friends = FriendNetwork.__new__(FriendNetwork)
         sim.friends.friends = d["friends"]
+    if "goals" in d:
+        sim.goals = LifeGoals(d["goals"]["keys"], d["goals"]["universal"])
     trait_ids = d.get("traits")
     if trait_ids:
         sim.traits = Traits(trait_ids)
