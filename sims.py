@@ -1980,6 +1980,11 @@ def action_dormir(sim):
 
     maybe_contract_disease(sim)
 
+    # Plancher post-sommeil : même très malade on récupère un minimum
+    # (évite le blocage perpétuel énergie=0 quand le decay maladie > +60)
+    if sim.health.hp > 0:
+        sim.needs["energie"] = max(sim.needs["energie"], 8)
+
     _cont()
 
 def action_sieste(sim):
@@ -3068,7 +3073,7 @@ def ai_choose_action(sim):
     if getattr(sim, 'retired', False):
         # Pré-sleep : même logique que pour les actifs après 22h
         if sim.hour >= 22:
-            if n["faim"]    < _faim_safe:    return "snack" if sim.money < 5 else "manger"
+            if n["faim"]    < _faim_safe:    return "manger" if n["energie"] > 2 else "snack"
             if n["hygiene"] < _hygiene_safe: return "douche"
             if n["social"] < 65 and sim.hour < 23:                         return "appel"
             if n["fun"]     < 50 and sim.hour < 23 and "mediter" not in blocked: return "mediter"
@@ -3127,7 +3132,7 @@ def ai_choose_action(sim):
 
     if sim.hour >= 22:
         # Préparation pré-sleep : éviter famine/HP drain pendant le sleep
-        if n["faim"]    < _faim_safe:    return "snack" if sim.money < 5 else "manger"
+        if n["faim"]    < _faim_safe:    return "manger" if n["energie"] > 2 else "snack"
         if n["hygiene"] < _hygiene_safe: return "douche"
         if n["vessie"]  < 45:            return "toilettes"
         # Garde social pré-sleep (8h tick -24 → social < 42 passerait sous 25 → mental -16)
@@ -3144,6 +3149,9 @@ def ai_choose_action(sim):
     _has_acute = any(DISEASES.get(k, ('','','',0,0,'inf'))[5] in ("inf", "trau", "ment")
                      for k in h.diseases)
     if _has_acute or h.has_fatal():
+        # Vessel en premier : n'est pas vérifié par PRIORITÉ 1 quand on est malade
+        if n["vessie"] < 45:                         return "toilettes"
+
         sleep_faim_cost = 60
         sleep_hyg_cost  = 10 + 8 * (2 + extra_h)
         faim_safe    = 15 + sleep_faim_cost
@@ -3161,17 +3169,20 @@ def ai_choose_action(sim):
         about_to_sleep = n["energie"] < 15
 
         if about_to_sleep:
-            if n["energie"] < 10 and sim.money >= 80:    return "medecin"
+            # medecin coûte tick(2h)=-4 énergie ; garde >4 pour éviter énergie=0
+            if n["energie"] > 4 and sim.money >= 80 and not h.has_fatal(): return "medecin"
             needs_meds_now = any(v is not None and v > 1 for v in h.diseases.values())
-            if n["energie"] < 10 and needs_meds_now and sim.money >= 20: return "medicament"
-            if n["faim"]    < faim_safe:             return "snack" if sim.money < 5 else "manger"
-            if n["hygiene"] < hygiene_safe:          return "douche"
+            if n["energie"] > 4 and needs_meds_now and sim.money >= 20:    return "medicament"
+            # snack (tick=0) préféré à manger (tick 2h=-4 énergie) avant le sommeil
+            if n["faim"]    < faim_safe:             return "snack"
+            if n["hygiene"] < hygiene_safe:          return "douche"  # net +3 énergie
             return "dormir"
 
         # Éveillé et malade → GUÉRIR
         if n["faim"]    < 45:                        return "snack" if sim.money < 5 else "manger"
         if n["hygiene"] < 45:                        return "douche"
-        if sim.money >= 80 and not h.has_fatal():    return "medecin"
+        # Garde énergie : medecin coûte -4 ; stopper à >12 pour laisser de la marge sieste
+        if sim.money >= 80 and not h.has_fatal() and n["energie"] > 12:    return "medecin"
         has_treatable = any(
             h.diseases.get(k) is not None and h.diseases[k] > 1
             and DISEASES.get(k, ('','','',0,0,'inf'))[5] in ("inf", "trau", "ment")
@@ -3195,9 +3206,9 @@ def ai_choose_action(sim):
     if n["hygiene"] < hygiene_thresh:                                     return "douche"
     if n["energie"] < energie_thresh:
         # Vérifier faim avant de dormir (sleep coûte 60 faim; dormir avec faim<75 → réveil à ~15)
-        if n["faim"] < _faim_safe:   return "snack" if sim.money < 5 else "manger"
+        if n["faim"] < _faim_safe:   return "manger" if n["energie"] > 2 else "snack"
         # Garde social pré-sleep urgence (même logique que 22h : 8h tick -24 social)
-        if n["social"] < 72 and n["energie"] > 20:                         return "appel"
+        if n["social"] < 72 and n["energie"] > 7:                          return "appel"
         if n["fun"] < 50 and "mediter" not in blocked and n["energie"] > 15: return "mediter"
         return "dormir"
 
