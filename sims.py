@@ -3084,7 +3084,7 @@ def ai_choose_action(sim):
         if n["vessie"] < 55:  return "toilettes"
         # Seuils alignés sur le chemin actif (44/42) pour éviter drain mental en retraite
         if n["fun"] < 44 and "mediter" not in blocked:  return "mediter"
-        if n["social"] < 42:  return "appel"
+        if n["social"] < 55:  return "appel"
         if h.is_sick():
             if sim.money >= 20: return "medicament"
             return "lire"
@@ -3189,7 +3189,7 @@ def ai_choose_action(sim):
     # après tick(8). Sans ce guard, energie < 20 force le sleep avec hygiene trop basse.
     # Douche saine : energie +5 (modify) puis tick -3 = net +2 → ne nuit pas à l'énergie.
     # ═══════════════════════════════════════════════════════════════
-    if n["vessie"]  < 30:                                                 return "toilettes"
+    if n["vessie"]  < 45:                                                 return "toilettes"
     if n["faim"]    < 50 and "manger" not in blocked:
         return "snack" if sim.money < 5 else "manger"
     if n["hygiene"] < hygiene_thresh:                                     return "douche"
@@ -3197,7 +3197,7 @@ def ai_choose_action(sim):
         # Vérifier faim avant de dormir (sleep coûte 60 faim; dormir avec faim<75 → réveil à ~15)
         if n["faim"] < _faim_safe:   return "snack" if sim.money < 5 else "manger"
         # Garde social pré-sleep urgence (même logique que 22h : 8h tick -24 social)
-        if n["social"] < 65 and n["energie"] > 20:                         return "appel"
+        if n["social"] < 72 and n["energie"] > 20:                         return "appel"
         if n["fun"] < 50 and "mediter" not in blocked and n["energie"] > 15: return "mediter"
         return "dormir"
 
@@ -3221,7 +3221,7 @@ def ai_choose_action(sim):
     # le double-shift (2e journée de travail dans la même journée).
     # ═══════════════════════════════════════════════════════════════
     if n["fun"] < fun_thresh and "mediter" not in blocked:                return "mediter"
-    if n["social"] < 42:                                                   return "appel"
+    if n["social"] < 55:                                                   return "appel"
 
     # ═══════════════════════════════════════════════════════════════
     # PRIORITÉ 3 : carrière & études — engagements fermes
@@ -3246,7 +3246,7 @@ def ai_choose_action(sim):
         # Seuils minimaux : travailler coûte ~41 énergie total (direct + tick×2),
         # donc il faut energie > 45 pour ne pas tomber à 0 pendant la journée.
         _can_work  = n["energie"] > 45 and n["faim"] > 20 and n["hygiene"] > 20
-        _can_study = n["energie"] > 20 and n["faim"] > 15
+        _can_study = n["energie"] > 40 and n["faim"] > 15
 
         # C) Études en cours → 7j/7, toutes priorités secondaires cèdent
         if edu.is_enrolled():
@@ -3308,7 +3308,7 @@ def ai_choose_action(sim):
     if n["energie"] < min(55, energie_work_min) and n["faim"] >= 20 and "sieste" not in blocked:
         return "sieste"
 
-    if n["social"] < 42:                                                   return "appel"
+    if n["social"] < 55:                                                   return "appel"
     if sim.friends.min_affinity < 20 and n["energie"] > 30:               return "appel"
 
     if n["fun"] < fun_thresh and "mediter" not in blocked:                return "mediter"
@@ -3320,7 +3320,7 @@ def ai_choose_action(sim):
     # ═══════════════════════════════════════════════════════════════
     if "voyage" not in blocked and sim.money >= 250:
         is_weekend_now = sim.age % 7 >= 5
-        if is_weekend_now and n["fun"] < 50:                 return "voyage"
+        if is_weekend_now and n["fun"] < 57:                 return "voyage"
         if sim.health.mental < 40 and sim.money >= 600:      return "voyage"
 
     # ═══════════════════════════════════════════════════════════════
@@ -3390,7 +3390,7 @@ def ai_choose_action(sim):
     if ("avoir_enfant" not in blocked
         and sim.relationship.level == 6
         and len(sim.children) < 3
-        and random.random() < 0.35):
+        and random.random() < 0.55):
         return "avoir_enfant"
     if sim.children and random.random() < 0.40:
         return "famille"
