@@ -158,7 +158,10 @@ class Sim:
         self.housing = None         # None ou dict {property_id, purchase_price, loan_total, loan_remaining, daily_payment, days_missed}
         self.friends       = FriendNetwork(self.name)
         self.goals         = LifeGoals.from_sim(self)
-        self.rel_peak_life = 0   # pic de niveau de relation atteint (survit à l'héritage)
+        self.rel_peak_life = 0     # pic de niveau de relation atteint (survit à l'héritage)
+        self.portfolio      = {}   # asset_id → valeur actuelle (float)
+        self.portfolio_cost = {}   # asset_id → coût d'acquisition total
+        self.portfolio_peak = 0.0  # valeur max atteinte (objectif investisseur)
 
     @property
     def mood(self):
@@ -556,6 +559,7 @@ UNIVERSAL_GOAL_DEFS = {
     "proprietaire":    ("🏠",     "Devenir propriétaire",  "posséder un bien"),
     "vivre_longtemps": ("🧓",     "Vivre longtemps",        "survivre 50 jours"),
     "trouver_amour":   ("💑",     "Trouver l'amour",        "être en couple niv.4+"),
+    "investisseur":    ("💹",     "Investisseur avisé",     "portefeuille ≥ $1000"),
 }
 
 def check_goal(key, sim):
@@ -573,6 +577,7 @@ def check_goal(key, sim):
     if key == "proprietaire":   return sim.housing is not None
     if key == "vivre_longtemps":return sim.age >= 50
     if key == "trouver_amour":  return max(sim.relationship.level, getattr(sim, 'rel_peak_life', 0)) >= 4
+    if key == "investisseur":   return getattr(sim, 'portfolio_peak', 0.0) >= 1000.0
     return False
 
 class LifeGoals:
@@ -1429,6 +1434,24 @@ def show_status(sim):
             else:
                 print(f" {C.BOLD}Logement :{C.RESET} {_hemoji} {_hnom}  {C.GREEN}✅ Propriétaire !{C.RESET}")
 
+    # Portefeuille d'investissements
+    _port = getattr(sim, 'portfolio', {})
+    _port_cost = getattr(sim, 'portfolio_cost', {})
+    _active = {k: v for k, v in _port.items() if v > 0.5}
+    if _active:
+        _parts = []
+        for _aid, _val in _active.items():
+            _nom, _emoji = MARKET_ASSETS.get(_aid, (_aid, "💹"))[:2]
+            _cost = _port_cost.get(_aid, _val)
+            _gain = _val - _cost
+            _gcol  = C.GREEN if _gain >= 0 else C.RED
+            _gsign = "+" if _gain >= 0 else ""
+            _parts.append(f"{_emoji} {_nom} {C.BOLD}${_val:.0f}{C.RESET} "
+                          f"{_gcol}({_gsign}${_gain:.0f}){C.RESET}")
+        _total = sum(_active.values())
+        print(f" {C.BOLD}Investis :{C.RESET} " + "  ".join(_parts)
+              + f"  {C.GRAY}Total ${_total:.0f}{C.RESET}")
+
     w = sim.weather
     print(f" {C.BOLD}Météo :{C.RESET} {w.emoji} {w.name}", end="")
     if w.daily_effects:
@@ -1590,8 +1613,10 @@ ACTIONS = [
     ("avoir_enfant", "Avoir un enfant", None, "👨‍👩‍👧 Famille"),
     ("famille", "Temps en famille", None, "👨‍👩‍👧 Famille"),
     ("devoirs", "Aide aux devoirs", None, "👨‍👩‍👧 Famille"),
-    ("acheter_maison", "Acheter un bien immobilier", None, "🏠 Immobilier"),
-    ("vendre_maison",  "Vendre son bien immobilier",  None, "🏠 Immobilier"),
+    ("acheter_maison",  "Acheter un bien immobilier",   None, "🏠 Immobilier"),
+    ("vendre_maison",   "Vendre son bien immobilier",   None, "🏠 Immobilier"),
+    ("investir",        "Placer de l'argent",           None, "💹 Finance"),
+    ("retirer_invest",  "Retirer un investissement",    None, "💹 Finance"),
     ("sauvegarder", "Sauvegarder la partie", None, "💾 Système"),
 ]
 
@@ -1611,7 +1636,16 @@ ACTION_DURATIONS = {
     "avoir_enfant": 0.0, "devoirs": 1.0, "sauvegarder": 0.0,
     "prendre_retraite": 0.5, "benevole": 4.0, "voyage": 4.0,
     "acheter_maison": 2.0, "vendre_maison": 1.0,
+    "investir": 1.0, "retirer_invest": 1.0,
     "travailler_partiel": 4.0,
+}
+
+# --- Investissements ---
+# id → (nom, emoji, rendement_moy/j, volatilité/j, mise_min, risque)
+MARKET_ASSETS = {
+    "livret_a": ("Livret A",  "🏦", 0.00020, 0.004, 100, "faible"),
+    "actions":  ("Bourse",    "📈", 0.00055, 0.035, 500, "moyen"),
+    "crypto":   ("Crypto",    "₿",  0.00100, 0.120, 200, "élevé"),
 }
 
 # --- Immobilier ---
@@ -1707,6 +1741,15 @@ def get_available_actions(sim):
         # Vente : uniquement si propriétaire
         if key == "vendre_maison" and not getattr(sim, 'housing', None):
             continue
+        # Investir : adultes seulement, pas Enfant/Adolescent
+        if key == "investir" and stage[1] in ("Enfant", "Adolescent"):
+            continue
+        # Retirer : uniquement si portefeuille non vide
+        if key == "retirer_invest":
+            if stage[1] in ("Enfant", "Adolescent"):
+                continue
+            if not any(v > 0.5 for v in getattr(sim, 'portfolio', {}).values()):
+                continue
         # Label dynamique pour devoirs : "Faire ses devoirs" quand on est jeune
         if key == "devoirs" and stage[1] in ("Enfant", "Adolescent"):
             entry = (key, "Faire ses devoirs (aide parentale)", fn, "📚 Études")
@@ -1979,6 +2022,16 @@ def action_dormir(sim):
             sim.modify(fun=-15, social=-10)
 
     maybe_contract_disease(sim)
+
+    # ── Fluctuation du marché financier (quotidienne) ────────────
+    for _aid, _val in list(sim.portfolio.items()):
+        if _val > 0.5 and _aid in MARKET_ASSETS:
+            _mean, _vol = MARKET_ASSETS[_aid][2], MARKET_ASSETS[_aid][3]
+            _change = random.gauss(_mean, _vol)
+            sim.portfolio[_aid] = round(max(0.0, _val * (1 + _change)), 2)
+    _ptotal = sum(sim.portfolio.values())
+    if _ptotal > sim.portfolio_peak:
+        sim.portfolio_peak = _ptotal
 
     # Plancher post-sommeil : même très malade on récupère un minimum
     # (évite le blocage perpétuel énergie=0 quand le decay maladie > +60)
@@ -2512,6 +2565,9 @@ def action_sauvegarder(sim):
         "housing": sim.housing,
         "friends": sim.friends.friends,
         "rel_peak_life": sim.rel_peak_life,
+        "portfolio": sim.portfolio,
+        "portfolio_cost": sim.portfolio_cost,
+        "portfolio_peak": sim.portfolio_peak,
         "goals": {"keys": sim.goals.keys, "universal": sim.goals.universal},
         "traits": list(sim.traits.active),
         "relationship": {
@@ -2981,6 +3037,160 @@ def action_vendre_maison(sim):
     _cont()
 
 
+def _do_investir(sim, asset_id, amount):
+    sim.portfolio[asset_id]      = sim.portfolio.get(asset_id, 0.0) + amount
+    sim.portfolio_cost[asset_id] = sim.portfolio_cost.get(asset_id, 0.0) + amount
+    sim.money -= amount
+    _ptotal = sum(sim.portfolio.values())
+    sim.portfolio_peak = max(sim.portfolio_peak, _ptotal)
+    nom, emoji = MARKET_ASSETS[asset_id][:2]
+    slow_print(f"\n {C.GREEN}💹 Investi ${amount} dans {emoji} {nom}.{C.RESET}", 0.02)
+    sim.modify(fun=+3)
+    sim.tick(1)
+
+
+def _do_retirer(sim, asset_id):
+    val  = sim.portfolio.get(asset_id, 0.0)
+    cost = sim.portfolio_cost.get(asset_id, val)
+    if val < 0.5:
+        return
+    nom, emoji = MARKET_ASSETS.get(asset_id, (asset_id, "💹"))[:2]
+    gain = val - cost
+    gcol  = C.GREEN if gain >= 0 else C.RED
+    gsign = "+" if gain >= 0 else ""
+    sim.money += int(val)
+    sim.portfolio[asset_id]      = 0.0
+    sim.portfolio_cost[asset_id] = 0.0
+    slow_print(f"\n {C.GREEN}💹 Retrait : +${int(val)} depuis {emoji} {nom}  "
+               f"{gcol}(P&L {gsign}${gain:.0f}){C.RESET}", 0.02)
+    sim.modify(fun=+3)
+    sim.tick(1)
+
+
+def action_investir(sim):
+    if AUTOPILOT:
+        money_free = sim.money - 500   # réserve de sécurité
+        if money_free <= 0:
+            return
+        port_total = sum(sim.portfolio.values())
+        target = sim.money * 0.25      # viser 25 % du capital investi
+        if port_total >= target:
+            return
+        # Choisir l'actif selon la santé financière
+        if money_free >= 500 and sim.health.hp > 70 and sim.stress < 40:
+            asset_id, min_invest = "actions", 500
+            amount = max(min_invest, min(int(money_free * 0.30), 1000))
+        else:
+            asset_id, min_invest = "livret_a", 100
+            amount = max(min_invest, min(int(money_free * 0.30), 500))
+        if amount > money_free:
+            return
+        _do_investir(sim, asset_id, amount)
+        return
+
+    # ── Mode joueur ────────────────────────────────────────────
+    clear()
+    print(f"\n {C.BOLD}💹 Investissements disponibles{C.RESET}")
+    print(f" Budget disponible : {C.GREEN}${sim.money}{C.RESET}  "
+          f"{C.GRAY}(réserve recommandée : $300){C.RESET}\n")
+
+    options = []
+    for aid, (nom, emoji, mean, vol, min_invest, risk) in MARKET_ASSETS.items():
+        cur  = sim.portfolio.get(aid, 0.0)
+        cost = sim.portfolio_cost.get(aid, 0.0)
+        risk_cols = {"faible": C.GREEN, "moyen": C.YELLOW, "élevé": C.RED}
+        rcol = risk_cols.get(risk, C.RESET)
+        port_str = ""
+        if cur > 0.5:
+            gain = cur - cost
+            gcol  = C.GREEN if gain >= 0 else C.RED
+            gsign = "+" if gain >= 0 else ""
+            port_str = f"  {C.GRAY}[actuel ${cur:.0f}  {gcol}{gsign}${gain:.0f}{C.RESET}{C.GRAY}]{C.RESET}"
+        print(f"  {C.BOLD}{len(options)+1}.{C.RESET} {emoji} {C.BOLD}{nom}{C.RESET}  "
+              f"Risque : {rcol}{risk}{C.RESET}  "
+              f"Rend. moy : {C.GREEN}+{mean*100:.2f}%/j{C.RESET}  "
+              f"Volatilité : ±{vol*100:.1f}%  "
+              f"Mise min : ${min_invest}{port_str}")
+        options.append((aid, min_invest))
+
+    print(f"\n  {C.BOLD}0.{C.RESET} Annuler")
+    try:
+        choice = int(input(f"\n Choisir (0-{len(options)}) : ").strip())
+    except (ValueError, EOFError):
+        choice = 0
+
+    if choice < 1 or choice > len(options):
+        _cont()
+        return
+
+    aid, min_invest = options[choice - 1]
+    free = max(0, sim.money - 300)
+    if free < min_invest:
+        slow_print(f"\n {C.RED}Fonds insuffisants (min ${min_invest}, réserve $300 gardée).{C.RESET}", 0.02)
+        _cont()
+        return
+
+    print(f"\n Montant (min ${min_invest} – max ${int(free)})"
+          f"  [{C.GRAY}Entrée = tout (${int(free)}){C.RESET}] :")
+    try:
+        raw    = input(" > $").strip()
+        amount = int(free) if not raw else int(raw)
+    except (ValueError, EOFError):
+        _cont()
+        return
+
+    if amount < min_invest or amount > sim.money:
+        slow_print(f"\n {C.RED}Montant invalide.{C.RESET}", 0.02)
+        _cont()
+        return
+
+    _do_investir(sim, aid, amount)
+    _cont()
+
+
+def action_retirer_invest(sim):
+    invested = {k: v for k, v in sim.portfolio.items() if v > 0.5}
+    if not invested:
+        slow_print(f"\n {C.YELLOW}Tu n'as aucun investissement actif.{C.RESET}", 0.02)
+        _cont()
+        return
+
+    if AUTOPILOT:
+        best = max(invested, key=lambda k: invested[k])
+        _do_retirer(sim, best)
+        return
+
+    # ── Mode joueur ────────────────────────────────────────────
+    clear()
+    print(f"\n {C.BOLD}💹 Ton portefeuille{C.RESET}\n")
+    options = []
+    for aid, val in invested.items():
+        nom, emoji = MARKET_ASSETS.get(aid, (aid, "💹"))[:2]
+        cost = sim.portfolio_cost.get(aid, val)
+        gain = val - cost
+        gain_pct = gain / cost * 100 if cost > 0 else 0
+        gcol  = C.GREEN if gain >= 0 else C.RED
+        gsign = "+" if gain >= 0 else ""
+        print(f"  {C.BOLD}{len(options)+1}.{C.RESET} {emoji} {nom}  "
+              f"Valeur : {C.BOLD}${val:.0f}{C.RESET}  "
+              f"Investi : ${cost:.0f}  "
+              f"P&L : {gcol}{gsign}${gain:.0f} ({gsign}{gain_pct:.1f}%){C.RESET}")
+        options.append(aid)
+
+    print(f"\n  {C.BOLD}0.{C.RESET} Annuler")
+    try:
+        choice = int(input(f"\n Retirer lequel (0-{len(options)}) : ").strip())
+    except (ValueError, EOFError):
+        choice = 0
+
+    if choice < 1 or choice > len(options):
+        _cont()
+        return
+
+    _do_retirer(sim, options[choice - 1])
+    _cont()
+
+
 ACTION_FNS = {
     "manger": action_manger,
     "snack": action_snack,
@@ -3024,6 +3234,8 @@ ACTION_FNS = {
     "voyage": action_voyage,
     "acheter_maison": action_acheter_maison,
     "vendre_maison": action_vendre_maison,
+    "investir": action_investir,
+    "retirer_invest": action_retirer_invest,
 }
 
 # --- IA Autopilote ---
@@ -3356,6 +3568,19 @@ def ai_choose_action(sim):
                         return "acheter_maison"
 
     # ═══════════════════════════════════════════════════════════════
+    # PRIORITÉ 5d : investissements
+    # ═══════════════════════════════════════════════════════════════
+    _port_total = sum(sim.portfolio.values())
+    # Retrait d'urgence : trésorerie < 300 et portefeuille positif
+    if sim.money < 300 and _port_total > 10 and "retirer_invest" not in blocked:
+        return "retirer_invest"
+    # Investir : argent confortable, pas de crise de santé
+    if ("investir" not in blocked and sim.money > 1000
+            and not h.is_sick() and sim.stress < 60
+            and _port_total < sim.money * 0.25):
+        return "investir"
+
+    # ═══════════════════════════════════════════════════════════════
     # PRIORITÉ 6 : vie amoureuse — progression déterministe
     # ═══════════════════════════════════════════════════════════════
     if "flirter" not in blocked:
@@ -3679,6 +3904,11 @@ def _apply_legacy(heir, parent, chosen_child):
         heir.money  += scholarship
         d_lbl, d_emoji, _, _ = STUDY_DOMAINS[dom]
         bonuses.append(f"🎓 Bourse {d_emoji} {d_lbl} : +${scholarship}")
+
+    # — Transmettre le portefeuille (héritage financier) —
+    heir.portfolio      = {k: v for k, v in parent.portfolio.items()}
+    heir.portfolio_cost = {k: v for k, v in parent.portfolio_cost.items()}
+    heir.portfolio_peak = parent.portfolio_peak
 
     # — Transmettre le pic de relation et nouveaux objectifs de vie —
     heir.rel_peak_life = parent.rel_peak_life
@@ -4518,7 +4748,10 @@ def load_game():
     if "friends" in d:
         sim.friends = FriendNetwork.__new__(FriendNetwork)
         sim.friends.friends = d["friends"]
-    sim.rel_peak_life = d.get("rel_peak_life", sim.relationship.level)
+    sim.rel_peak_life   = d.get("rel_peak_life", sim.relationship.level)
+    sim.portfolio       = d.get("portfolio", {})
+    sim.portfolio_cost  = d.get("portfolio_cost", {})
+    sim.portfolio_peak  = d.get("portfolio_peak", 0.0)
     if "goals" in d:
         sim.goals = LifeGoals(d["goals"]["keys"], d["goals"]["universal"])
     trait_ids = d.get("traits")
