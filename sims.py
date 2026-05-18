@@ -164,6 +164,8 @@ class Sim:
         self.portfolio_peak   = 0.0   # valeur max atteinte (objectif investisseur)
         self.freelance_earned = 0     # cumul des revenus freelance sur toute la vie
         self.last_market_event = None # dernière actualité de marché (affichage)
+        self.addictions       = {sub: _default_addiction_state() for sub in ADDICTIONS}
+        self.recovered_addictions = set()  # substances dont le sim s'est sevré
 
     @property
     def mood(self):
@@ -563,6 +565,7 @@ UNIVERSAL_GOAL_DEFS = {
     "trouver_amour":   ("💑",     "Trouver l'amour",        "être en couple niv.4+"),
     "investisseur":    ("💹",     "Investisseur avisé",     "portefeuille ≥ $1000"),
     "autoentrepreneur":("🧑‍💻",   "Auto-entrepreneur",      "≥ $500 en freelance"),
+    "sobre":           ("🧘",    "Vaincre une addiction",  "se sevrer d'une dépendance"),
 }
 
 def check_goal(key, sim):
@@ -582,6 +585,7 @@ def check_goal(key, sim):
     if key == "trouver_amour":  return max(sim.relationship.level, getattr(sim, 'rel_peak_life', 0)) >= 4
     if key == "investisseur":      return getattr(sim, 'portfolio_peak', 0.0) >= 1000.0
     if key == "autoentrepreneur":  return getattr(sim, 'freelance_earned', 0) >= 500
+    if key == "sobre":             return bool(getattr(sim, 'recovered_addictions', set()))
     return False
 
 class LifeGoals:
@@ -683,6 +687,8 @@ DISEASES = {
     "parkinson":    ("Maladie de Parkinson", "🤲", {"energie": -2, "fun": -2, "social": -1},      None,  220, "neuro"),
     # ── Mental ───────────────────────────────────────────────────
     "burnout":      ("Burn-out",             "😵", {"energie": -4, "fun": -3, "social": -2},        7,  120, "ment"),
+    # ── Liées aux addictions ──────────────────────────────────────
+    "cirrhose":     ("Cirrhose hépatique",   "🫀", {"energie": -2, "fun": -2, "faim": -1},        None, 350, "chr"),
 }
 
 class Health:
@@ -1544,6 +1550,22 @@ def show_status(sim):
         if parts:
             print(f" {C.RED}{C.BOLD}Maladies :{C.RESET} {' | '.join(parts)}")
 
+    # Addictions actives ou en cours de sevrage
+    _addict_parts = []
+    for sub, data in ADDICTIONS.items():
+        st = getattr(sim, 'addictions', {}).get(sub, {})
+        if st.get("addicted"):
+            dw = st["days_without"]
+            if dw > 0:
+                col = C.GREEN if dw >= 4 else C.YELLOW
+                _addict_parts.append(f"{data['emoji']} {col}sevrage {dw}/7j{C.RESET}")
+            else:
+                _addict_parts.append(f"{data['emoji']} {C.RED}dépendant(e){C.RESET}")
+        elif st.get("streak", 0) >= 2:
+            _addict_parts.append(f"{data['emoji']} {C.YELLOW}{st['streak']}/{data['seuil']}j{C.RESET}")
+    if _addict_parts:
+        print(f" {C.BOLD}Dépendances :{C.RESET} " + "  ".join(_addict_parts))
+
     if sim.children:
         kids_str = " ".join(f"{c.name} ({c.age_label})" for c in sim.children)
         print(f" {C.BOLD}Famille :{C.RESET} {kids_str}")
@@ -1590,6 +1612,9 @@ ACTIONS = [
     ("sieste", "Faire une sieste (2h)", None, "🍔 Besoins"),
     ("douche", "Prendre une douche", None, "🍔 Besoins"),
     ("toilettes", "Aller aux toilettes", None, "🍔 Besoins"),
+    ("boire_cafe",   "Boire un café ☕",        None, "🍔 Besoins"),
+    ("boire_alcool", "Boire un verre 🍺",       None, "🎮 Loisirs"),
+    ("fumer",        "Fumer une cigarette 🚬",  None, "🎮 Loisirs"),
     ("tv", "Regarder la TV", None, "🎮 Loisirs"),
     ("lire", "Lire un livre", None, "🎮 Loisirs"),
     ("sport", "Faire du sport (1h)", None, "🎮 Loisirs"),
@@ -1635,6 +1660,7 @@ ACTIONS = [
 ACTION_DURATIONS = {
     "toilettes": 0.25, "snack": 0.25, "nourrir": 0.25, "medicament": 0.25,
     "douche": 0.5,     "mediter": 0.5,  "rupture": 0.5,
+    "boire_cafe": 0.25, "fumer": 0.25, "boire_alcool": 1.0,
     "manger": 1.0,     "appel": 1.0,    "sport": 1.0,   "postuler": 1.0,
     "passer": 1.0,     "flirter": 1.0,  "proposer": 1.0,"adopter": 1.0,
     "jouer_pet": 1.0,  "medecin": 1.0,  "psy": 1.0,
@@ -1702,6 +1728,98 @@ MARKET_EVENTS = [
 ]
 # Probabilité globale de tirage d'un événement marché par nuit
 _MARKET_EVENT_CHANCE = 20  # 20% par nuit → ~1 événement tous les 5 jours
+
+# --- Addictions ---
+# seuil = nombre de jours consécutifs d'usage avant que l'addiction se déclare
+ADDICTIONS = {
+    "cafe": {
+        "nom": "Café", "emoji": "☕", "action": "boire_cafe",
+        "cout": 3,
+        "effets": {"energie": +15, "fun": +3},   # needs uniquement
+        "stress_delta": -5,                        # géré séparément
+        "duree": 0.25, "seuil": 5,
+        "sevrage": {"energie": -15, "fun": -12},
+        "sevrage_stress": +8,
+        "hp_par_jour": 0, "maladie": None, "maladie_seuil": 0,
+    },
+    "alcool": {
+        "nom": "Alcool", "emoji": "🍺", "action": "boire_alcool",
+        "cout": 15,
+        "effets": {"social": +20, "fun": +15, "energie": -5},
+        "stress_delta": -25,
+        "duree": 1.0, "seuil": 4,
+        "sevrage": {"fun": -20, "social": -15},
+        "sevrage_stress": +15,
+        "hp_par_jour": -2, "maladie": "cirrhose", "maladie_seuil": 20,
+    },
+    "tabac": {
+        "nom": "Tabac", "emoji": "🚬", "action": "fumer",
+        "cout": 8,
+        "effets": {"fun": +5, "energie": +3},
+        "stress_delta": -12,
+        "duree": 0.25, "seuil": 6,
+        "sevrage": {"fun": -10, "energie": -8},
+        "sevrage_stress": +15,
+        "hp_par_jour": -1, "maladie": "asthme", "maladie_seuil": 15,
+    },
+}
+
+def _default_addiction_state():
+    return {"streak": 0, "addicted": False, "days_since_used": 999,
+            "days_addicted": 0, "days_without": 0}
+
+def _process_addictions(sim):
+    """Traitement quotidien des addictions (appelé au moment du sommeil)."""
+    addict_msgs = []
+    for sub, data in ADDICTIONS.items():
+        st = sim.addictions.get(sub)
+        if st is None:
+            continue
+        used_today = (st["days_since_used"] == 0)
+        st["days_since_used"] += 1       # avance le compteur pour demain
+
+        if used_today:
+            st["streak"]       += 1
+            st["days_without"]  = 0
+            if st["addicted"]:
+                st["days_addicted"] += 1
+                if data["hp_par_jour"] < 0:
+                    sim.health.hp = max(1, sim.health.hp + data["hp_par_jour"])
+                mal = data["maladie"]
+                if mal and st["days_addicted"] >= data["maladie_seuil"] and mal not in sim.health.diseases:
+                    if random.randint(1, 10) <= 3:
+                        sim.health.get_sick(mal)
+                        addict_msgs.append(
+                            f" {C.RED}⚕ Ta consommation de {data['emoji']} {data['nom']} a causé : {DISEASES[mal][0]}{C.RESET}")
+            else:
+                if st["streak"] >= data["seuil"]:
+                    st["addicted"]     = True
+                    st["days_addicted"] = 1
+                    addict_msgs.append(
+                        f" {C.RED}⚠ Tu réalises que tu es devenu(e) dépendant(e) au "
+                        f"{data['emoji']} {data['nom']}...{C.RESET}")
+        else:
+            # Non consommé aujourd'hui
+            st["streak"] = max(0, st["streak"] - 1)
+            if st["addicted"]:
+                st["days_without"] += 1
+                severity = max(0.0, 1.0 - st["days_without"] / 7.0)
+                if severity > 0.05:
+                    sev_effects = {k: int(v * severity) for k, v in data["sevrage"].items() if int(v * severity) != 0}
+                    if sev_effects:
+                        sim.modify(**sev_effects)
+                    sev_stress = int(data.get("sevrage_stress", 0) * severity)
+                    if sev_stress:
+                        sim.stress = min(100, sim.stress + sev_stress)
+                if st["days_without"] >= 7:
+                    st["addicted"] = False
+                    sim.recovered_addictions.add(sub)
+                    addict_msgs.append(
+                        f" {C.GREEN}🌟 Tu as surmonté ta dépendance au {data['emoji']} {data['nom']} !")
+
+    if not AUTOPILOT and addict_msgs:
+        for msg in addict_msgs:
+            slow_print(f"\n{msg}", 0.02)
 
 
 def _trigger_market_event(sim):
@@ -1856,6 +1974,10 @@ def get_available_actions(sim):
             if stage[1] in ("Enfant", "Adolescent"):
                 continue
             if sim.days_burned_out > 0:
+                continue
+        # Substances : adultes uniquement
+        if key in ("boire_cafe", "boire_alcool", "fumer"):
+            if stage[1] in ("Enfant", "Adolescent"):
                 continue
         # Label dynamique pour devoirs : "Faire ses devoirs" quand on est jeune
         if key == "devoirs" and stage[1] in ("Enfant", "Adolescent"):
@@ -2150,6 +2272,9 @@ def action_dormir(sim):
     _mkt_event = _trigger_market_event(sim)
     if _mkt_event:
         sim.last_market_event = _mkt_event
+
+    # ── Addictions : traitement quotidien ────────────────────────
+    _process_addictions(sim)
 
     # Plancher post-sommeil : même très malade on récupère un minimum
     # (évite le blocage perpétuel énergie=0 quand le decay maladie > +60)
@@ -2687,6 +2812,8 @@ def action_sauvegarder(sim):
         "portfolio_cost": sim.portfolio_cost,
         "portfolio_peak": sim.portfolio_peak,
         "freelance_earned": getattr(sim, 'freelance_earned', 0),
+        "addictions": {sub: dict(st) for sub, st in sim.addictions.items()},
+        "recovered_addictions": list(getattr(sim, 'recovered_addictions', set())),
         "goals": {"keys": sim.goals.keys, "universal": sim.goals.universal},
         "traits": list(sim.traits.active),
         "relationship": {
@@ -3368,6 +3495,54 @@ def action_freelance(sim):
         _cont()
 
 
+def _use_substance(sim, sub):
+    """Applique les effets d'une substance et marque l'usage du jour."""
+    data = ADDICTIONS[sub]
+    sim.money -= data["cout"]
+    sim.addictions[sub]["days_since_used"] = 0
+    sim.modify(**data["effets"])
+    sim.stress = max(0, sim.stress + data.get("stress_delta", 0))
+    sim.tick(data["duree"])
+
+
+def action_boire_cafe(sim):
+    data = ADDICTIONS["cafe"]
+    if sim.money < data["cout"]:
+        slow_print(f"\n {C.RED}Tu n'as pas assez d'argent pour un café.{C.RESET}", 0.02)
+        if not AUTOPILOT: _cont()
+        return
+    streak = sim.addictions["cafe"]["streak"]
+    slow_print(f"\n {C.YELLOW}☕ Tu te prépares un café...{C.RESET}", 0.02)
+    _use_substance(sim, "cafe")
+    if streak >= data["seuil"] - 1 and not sim.addictions["cafe"]["addicted"]:
+        slow_print(f" {C.YELLOW}(Jour {streak+1} de suite — tu y tiens de plus en plus...){C.RESET}", 0.02)
+    if not AUTOPILOT: _cont()
+
+
+def action_boire_alcool(sim):
+    data = ADDICTIONS["alcool"]
+    if sim.money < data["cout"]:
+        slow_print(f"\n {C.RED}Tu n'as pas assez d'argent pour un verre.{C.RESET}", 0.02)
+        if not AUTOPILOT: _cont()
+        return
+    slow_print(f"\n {C.BLUE}🍺 Tu t'accordes un verre pour décompresser...{C.RESET}", 0.02)
+    _use_substance(sim, "alcool")
+    if sim.addictions["alcool"]["addicted"] and data["hp_par_jour"] < 0:
+        slow_print(f" {C.RED}(Ta santé se dégrade : {data['hp_par_jour']} HP/jour){C.RESET}", 0.02)
+    if not AUTOPILOT: _cont()
+
+
+def action_fumer(sim):
+    data = ADDICTIONS["tabac"]
+    if sim.money < data["cout"]:
+        slow_print(f"\n {C.RED}Tu n'as plus de cigarettes.{C.RESET}", 0.02)
+        if not AUTOPILOT: _cont()
+        return
+    slow_print(f"\n {C.GRAY}🚬 Tu sors fumer une cigarette...{C.RESET}", 0.02)
+    _use_substance(sim, "tabac")
+    if not AUTOPILOT: _cont()
+
+
 ACTION_FNS = {
     "manger": action_manger,
     "snack": action_snack,
@@ -3414,6 +3589,9 @@ ACTION_FNS = {
     "investir": action_investir,
     "retirer_invest": action_retirer_invest,
     "freelance": action_freelance,
+    "boire_cafe":   action_boire_cafe,
+    "boire_alcool": action_boire_alcool,
+    "fumer":        action_fumer,
 }
 
 # --- IA Autopilote ---
@@ -3700,6 +3878,35 @@ def ai_choose_action(sim):
     # ═══════════════════════════════════════════════════════════════
     if h.hp < 85 and sim.money >= 80:                                     return "medecin"
     if h.mental < 45 and sim.money >= 60:                                 return "psy"
+
+    # ═══════════════════════════════════════════════════════════════
+    # PRIORITÉ 4d : substances — compulsion si addict, usage rare si conditions OK
+    # ═══════════════════════════════════════════════════════════════
+    _adst = getattr(sim, 'addictions', {})
+
+    # Café : compulsion matinale si addict, sinon coup de boost rare
+    _cafe_st = _adst.get("cafe", {})
+    if "boire_cafe" not in blocked and sim.money >= 3:
+        if _cafe_st.get("addicted") and _cafe_st.get("days_since_used", 999) > 0:
+            return "boire_cafe"
+        if not _cafe_st.get("addicted") and n["energie"] < 30 and sim.hour < 14 and random.random() < 0.12:
+            return "boire_cafe"
+
+    # Alcool : compulsion si addict + hp OK, usage rare le soir si stress élevé
+    _alc_st = _adst.get("alcool", {})
+    if "boire_alcool" not in blocked and sim.money >= 15:
+        if _alc_st.get("addicted") and _alc_st.get("days_since_used", 999) > 0 and sim.health.hp > 50:
+            return "boire_alcool"
+        if not _alc_st.get("addicted") and sim.stress > 65 and sim.hour >= 18 and random.random() < 0.08:
+            return "boire_alcool"
+
+    # Tabac : compulsion si addict + hp OK, usage rare si stress élevé
+    _tab_st = _adst.get("tabac", {})
+    if "fumer" not in blocked and sim.money >= 8:
+        if _tab_st.get("addicted") and _tab_st.get("days_since_used", 999) > 0 and sim.health.hp > 40:
+            return "fumer"
+        if not _tab_st.get("addicted") and sim.stress > 55 and random.random() < 0.10:
+            return "fumer"
 
     # ═══════════════════════════════════════════════════════════════
     # PRIORITÉ 4c : freelance — le week-end si compétence utile + besoin d'argent
@@ -4100,7 +4307,9 @@ def _apply_legacy(heir, parent, chosen_child):
     heir.portfolio      = {k: v for k, v in parent.portfolio.items()}
     heir.portfolio_cost = {k: v for k, v in parent.portfolio_cost.items()}
     heir.portfolio_peak = parent.portfolio_peak
-    heir.freelance_earned = 0  # repart à zéro pour l'héritier
+    heir.freelance_earned     = 0
+    heir.addictions           = {sub: _default_addiction_state() for sub in ADDICTIONS}
+    heir.recovered_addictions = set()
 
     # — Transmettre le pic de relation et nouveaux objectifs de vie —
     heir.rel_peak_life = parent.rel_peak_life
@@ -4945,6 +5154,11 @@ def load_game():
     sim.portfolio_cost  = d.get("portfolio_cost", {})
     sim.portfolio_peak  = d.get("portfolio_peak", 0.0)
     sim.freelance_earned = d.get("freelance_earned", 0)
+    _addict_saved = d.get("addictions", {})
+    for sub in ADDICTIONS:
+        if sub in _addict_saved:
+            sim.addictions[sub].update(_addict_saved[sub])
+    sim.recovered_addictions = set(d.get("recovered_addictions", []))
     if "goals" in d:
         sim.goals = LifeGoals(d["goals"]["keys"], d["goals"]["universal"])
     trait_ids = d.get("traits")
