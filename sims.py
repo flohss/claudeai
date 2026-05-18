@@ -159,10 +159,11 @@ class Sim:
         self.friends       = FriendNetwork(self.name)
         self.goals         = LifeGoals.from_sim(self)
         self.rel_peak_life = 0     # pic de niveau de relation atteint (survit à l'héritage)
-        self.portfolio      = {}   # asset_id → valeur actuelle (float)
-        self.portfolio_cost = {}   # asset_id → coût d'acquisition total
-        self.portfolio_peak = 0.0  # valeur max atteinte (objectif investisseur)
-        self.freelance_earned = 0  # cumul des revenus freelance sur toute la vie
+        self.portfolio        = {}    # asset_id → valeur actuelle (float)
+        self.portfolio_cost   = {}    # asset_id → coût d'acquisition total
+        self.portfolio_peak   = 0.0   # valeur max atteinte (objectif investisseur)
+        self.freelance_earned = 0     # cumul des revenus freelance sur toute la vie
+        self.last_market_event = None # dernière actualité de marché (affichage)
 
     @property
     def mood(self):
@@ -1454,6 +1455,12 @@ def show_status(sim):
         _total = sum(_active.values())
         print(f" {C.BOLD}Investis :{C.RESET} " + "  ".join(_parts)
               + f"  {C.GRAY}Total ${_total:.0f}{C.RESET}")
+    _last_mkt = getattr(sim, 'last_market_event', None)
+    if _last_mkt:
+        # Extraire juste la ligne headline (2e ligne du message multi-lignes)
+        _mkt_lines = _last_mkt.strip().splitlines()
+        if len(_mkt_lines) >= 2:
+            print(f" {C.GRAY}📰{C.RESET} {_mkt_lines[1].strip()}")
 
     w = sim.weather
     print(f" {C.BOLD}Météo :{C.RESET} {w.emoji} {w.name}", end="")
@@ -1652,6 +1659,95 @@ MARKET_ASSETS = {
     "actions":  ("Bourse",    "📈", 0.00055, 0.035, 500, "moyen"),
     "crypto":   ("Crypto",    "₿",  0.00100, 0.120, 200, "élevé"),
 }
+
+# --- Événements de marché ---
+# (poids, emoji, headline, {asset_id: choc_fraction}, positif?)
+# Le choc s'applique en multiplicateur sur la valeur : +0.10 = +10%
+MARKET_EVENTS = [
+    # ── Positifs ────────────────────────────────────────────────────
+    (4, "🚀", "Euphorie boursière : les marchés s'emballent !",
+     {"actions": +0.10, "crypto": +0.05}, True),
+    (5, "🏦", "Revalorisation du Livret A : l'épargne récompensée.",
+     {"livret_a": +0.008}, True),
+    (3, "₿", "Adoption institutionnelle : les cryptos s'envolent !",
+     {"crypto": +0.22}, True),
+    (4, "📊", "Résultats d'entreprises excellents : la bourse monte.",
+     {"actions": +0.07}, True),
+    (3, "🌍", "Accord commercial mondial : boom des marchés.",
+     {"actions": +0.08, "crypto": +0.04}, True),
+    (3, "💡", "Percée technologique : le secteur tech en hausse.",
+     {"actions": +0.06}, True),
+    # ── Négatifs ────────────────────────────────────────────────────
+    (4, "📉", "Récession imminente : les marchés plongent.",
+     {"actions": -0.12, "crypto": -0.14}, False),
+    (2, "💥", "Krach boursier : chute brutale des indices !",
+     {"actions": -0.20, "crypto": -0.10}, False),
+    (4, "🌊", "Vague de ventes sur le marché crypto.",
+     {"crypto": -0.25}, False),
+    (4, "⚠️", "Inflation persistante : les bourses reculent.",
+     {"actions": -0.07}, False),
+    (2, "🏚", "Crise bancaire : la confiance s'effrite.",
+     {"actions": -0.09, "livret_a": -0.004}, False),
+    (3, "⛔", "Régulation stricte des cryptos : panique sur le marché.",
+     {"crypto": -0.22}, False),
+    (3, "🌐", "Tensions géopolitiques : fuite vers la sécurité.",
+     {"actions": -0.08, "crypto": -0.12}, False),
+    # ── Mitigés ─────────────────────────────────────────────────────
+    (4, "📐", "Hausse des taux directeurs : obligations vs actions.",
+     {"livret_a": +0.005, "actions": -0.05}, True),
+    (3, "🔀", "Rotation sectorielle : consolidation des marchés.",
+     {"actions": -0.03, "crypto": +0.08}, True),
+    (3, "🏷", "Soldes de fin de trimestre : volatilité accrue.",
+     {"actions": -0.04, "crypto": -0.06}, False),
+]
+# Probabilité globale de tirage d'un événement marché par nuit
+_MARKET_EVENT_CHANCE = 20  # 20% par nuit → ~1 événement tous les 5 jours
+
+
+def _trigger_market_event(sim):
+    """Tire éventuellement un événement de marché, applique le choc, retourne le texte ou None."""
+    if random.randint(1, 100) > _MARKET_EVENT_CHANCE:
+        return None
+    # Choisir un événement pondéré par poids
+    total_w = sum(e[0] for e in MARKET_EVENTS)
+    r = random.randint(1, total_w)
+    cumul = 0
+    event = MARKET_EVENTS[-1]
+    for e in MARKET_EVENTS:
+        cumul += e[0]
+        if r <= cumul:
+            event = e
+            break
+    _, emoji, headline, impacts, positive = event
+
+    # Appliquer les chocs aux actifs détenus
+    gains = {}
+    for aid, shock in impacts.items():
+        val = sim.portfolio.get(aid, 0.0)
+        if val > 0.5:
+            delta = round(val * shock, 2)
+            sim.portfolio[aid] = round(max(0.0, val + delta), 2)
+            gains[aid] = delta
+
+    _ptotal = sum(sim.portfolio.values())
+    if _ptotal > sim.portfolio_peak:
+        sim.portfolio_peak = _ptotal
+
+    # Formatage du message
+    hcol = C.GREEN if positive else C.RED
+    lines = [f"\n {C.BOLD}━━ 📰 ACTUALITÉ MARCHÉ ━━{C.RESET}",
+             f" {emoji} {hcol}{headline}{C.RESET}"]
+    if gains:
+        parts = []
+        for aid, delta in gains.items():
+            nom, aemoji = MARKET_ASSETS[aid][:2]
+            sign = "+" if delta >= 0 else ""
+            dcol = C.GREEN if delta >= 0 else C.RED
+            parts.append(f"{aemoji} {nom} {dcol}{sign}${delta:.0f}{C.RESET}")
+        lines.append(f" Impact portefeuille : {' · '.join(parts)}")
+    else:
+        lines.append(f" {C.GRAY}(aucun actif concerné dans ton portefeuille){C.RESET}")
+    return "\n".join(lines)
 
 # --- Immobilier ---
 # Format : (id, nom, emoji, prix, acompte_pct, standing, effets_quotidiens)
@@ -1954,6 +2050,12 @@ def action_dormir(sim):
                 sim.last_event = trigger_random_event(sim)
             else:
                 sim.last_event = None
+    # Événement marché indépendant : s'affiche en plus si actif, sinon alimente last_event
+    if _mkt_event:
+        if sim.last_event:
+            sim.last_event = sim.last_event + "\n" + _mkt_event
+        else:
+            sim.last_event = _mkt_event
 
     # ── Récupération du stress au repos ────────────────────────────
     stress_rec = 15
@@ -2043,6 +2145,11 @@ def action_dormir(sim):
     _ptotal = sum(sim.portfolio.values())
     if _ptotal > sim.portfolio_peak:
         sim.portfolio_peak = _ptotal
+
+    # ── Événement de marché (choc ponctuel ~20% de chance/nuit) ──
+    _mkt_event = _trigger_market_event(sim)
+    if _mkt_event:
+        sim.last_market_event = _mkt_event
 
     # Plancher post-sommeil : même très malade on récupère un minimum
     # (évite le blocage perpétuel énergie=0 quand le decay maladie > +60)
