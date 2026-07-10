@@ -36,7 +36,7 @@ PREDATOR_SPEED = 1.3
 PREDATOR_HUNT_RADIUS = 70.0
 PREDATOR_KILL_RADIUS = 3.0
 DANGER_RADIUS = 22.0  # how far a creature can spot a predator directly
-PREDATOR_PATCH_SIZE = (1, 2)  # predators per wave, like a food patch
+PREDATOR_PATCH_SIZE = (1, 3)  # predators per wave, like a food patch (rng.integers excludes the high bound)
 PREDATOR_SPAWN_INTERVAL = 600
 MAX_PREDATORS = 6
 
