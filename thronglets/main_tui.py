@@ -88,7 +88,7 @@ def draw(stdscr, world, paused, speed):
 
     for p in world.predators:
         y, x = HUD_H + int(p.pos[1] * sy), int(p.pos[0] * sx)
-        _safe_addstr(stdscr, y, x, "X", curses.color_pair(1) | curses.A_BOLD | curses.A_REVERSE)
+        _safe_addstr(stdscr, y, x, "X", curses.color_pair(1) | curses.A_BOLD)
 
     if pop == 0:
         _safe_addstr(stdscr, HUD_H + field_h // 2, max(0, cols // 2 - 12),
