@@ -20,17 +20,18 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from simulation import DANGER, FOOD, HEIGHT, IDLE, MATE, World, WIDTH
+from simulation import DANGER, FOOD, HEIGHT, IDLE, MATE, MAX_POPULATION, World, WIDTH
 
 DEFAULT_PORT = 8765
 STEP_INTERVAL = 0.05
+DEFAULT_INIT_POP = 70
 STATE_NAMES = {IDLE: "idle", FOOD: "food-call", MATE: "mate-call", DANGER: "alarm-call"}
 
 
-def _new_world(mode, predator_count):
+def _new_world(mode, predator_count, init_pop=DEFAULT_INIT_POP):
     if mode == "manual":
-        return World(init_pop=70, manual_food=True, manual_predators=True)
-    return World(init_pop=70, predator_count=predator_count)
+        return World(init_pop=init_pop, manual_food=True, manual_predators=True)
+    return World(init_pop=init_pop, predator_count=predator_count)
 
 
 class SimState:
@@ -38,6 +39,7 @@ class SimState:
         self.started = False
         self.mode = None
         self.placing = "food"
+        self.init_pop = DEFAULT_INIT_POP
         self.world = None
         self.paused = False
         self.speed = 1
@@ -117,7 +119,12 @@ class Handler(BaseHTTPRequestHandler):
         with state.lock:
             if action == "start" and not state.started:
                 state.mode = "manual" if body.get("mode") == "manual" else "auto"
-                state.world = _new_world(state.mode, 6)
+                try:
+                    init_pop = int(body.get("init_pop", DEFAULT_INIT_POP))
+                except (TypeError, ValueError):
+                    init_pop = DEFAULT_INIT_POP
+                state.init_pop = max(1, min(MAX_POPULATION, init_pop))
+                state.world = _new_world(state.mode, 6, state.init_pop)
                 state.started = True
             elif not state.started:
                 pass  # ignore every other action until a mode has been chosen
@@ -126,7 +133,7 @@ class Handler(BaseHTTPRequestHandler):
             elif action == "resume":
                 state.paused = False
             elif action == "reset":
-                state.world = _new_world(state.mode, len(state.world.predators))
+                state.world = _new_world(state.mode, len(state.world.predators), state.init_pop)
                 state.paused = False
             elif action == "speed":
                 state.speed = max(1, min(200, int(body.get("value", state.speed))))
@@ -190,6 +197,8 @@ INDEX_HTML = """<!doctype html>
   #start-overlay h1 { font-size: 18px; margin: 0; }
   #start-overlay p { font-size: 13px; opacity: 0.8; margin: 0; }
   #start-overlay button { padding: 14px; font-size: 15px; }
+  #start-overlay label { font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  #initPop { width: 70px; font-family: inherit; font-size: 14px; padding: 4px 6px; }
   #app { display: none; flex-direction: column; align-items: center; gap: 10px; width: 100%; }
 </style>
 </head>
@@ -197,6 +206,9 @@ INDEX_HTML = """<!doctype html>
   <div id="start-overlay">
     <h1>Thronglets</h1>
     <p>Choisis le mode de depart - ce choix ne se change pas en cours de partie.</p>
+    <label>Nombre de creatures au depart :
+      <input type="number" id="initPop" value="70" min="1" max="220">
+    </label>
     <button id="startAuto">Automatique — nourriture et predateurs apparaissent seuls</button>
     <button id="startManual">Manuel — je place tout moi-meme</button>
   </div>
@@ -333,8 +345,12 @@ function stepSpeed(speed, dir) {
   return Math.max(1, speed - (speed <= 10 ? 1 : 10));
 }
 
-document.getElementById('startAuto').onclick = () => post('start', {mode: 'auto'});
-document.getElementById('startManual').onclick = () => post('start', {mode: 'manual'});
+function startingInitPop() {
+  const raw = parseInt(document.getElementById('initPop').value, 10);
+  return Number.isFinite(raw) ? raw : 70;
+}
+document.getElementById('startAuto').onclick = () => post('start', {mode: 'auto', init_pop: startingInitPop()});
+document.getElementById('startManual').onclick = () => post('start', {mode: 'manual', init_pop: startingInitPop()});
 document.getElementById('pause').onclick = () => post(paused ? 'resume' : 'pause');
 document.getElementById('reset').onclick = () => post('reset');
 document.getElementById('faster').onclick = () => post('speed', {value: stepSpeed(currentSpeed, 1)});

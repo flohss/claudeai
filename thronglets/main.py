@@ -17,7 +17,9 @@ import sys
 
 import pygame
 
-from simulation import DANGER, FOOD, HEIGHT, IDLE, MATE, World, WIDTH
+from simulation import DANGER, FOOD, HEIGHT, IDLE, MATE, MAX_POPULATION, World, WIDTH
+
+DEFAULT_INIT_POP = 70
 
 SCALE = 5
 HUD_H = 200
@@ -123,10 +125,10 @@ def draw_hud(screen, font, world, paused, speed, mode, placing):
         screen.blit(msg, (10, legend_y + 22))
 
 
-def _new_world(mode, predator_count):
+def _new_world(mode, predator_count, init_pop=DEFAULT_INIT_POP):
     if mode == "manual":
-        return World(init_pop=70, manual_food=True, manual_predators=True)
-    return World(init_pop=70, predator_count=predator_count)
+        return World(init_pop=init_pop, manual_food=True, manual_predators=True)
+    return World(init_pop=init_pop, predator_count=predator_count)
 
 
 def choose_mode(screen, font):
@@ -155,6 +157,37 @@ def choose_mode(screen, font):
                     return "manual"
 
 
+def choose_population(screen, font):
+    text = ""
+    while True:
+        screen.fill(BG)
+        lines = [
+            "Thronglets",
+            "",
+            f"How many creatures to start with? (1-{MAX_POPULATION}, default {DEFAULT_INIT_POP})",
+            "",
+            f"> {text}",
+            "",
+            "Press ENTER to confirm.",
+        ]
+        for i, line in enumerate(lines):
+            screen.blit(font.render(line, True, TEXT_COLOR), (20, 20 + i * 26))
+        pygame.display.flip()
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_RETURN:
+                    if not text:
+                        return DEFAULT_INIT_POP
+                    return max(1, min(MAX_POPULATION, int(text)))
+                elif event.key == pygame.K_BACKSPACE:
+                    text = text[:-1]
+                elif event.unicode.isdigit() and len(text) < 3:
+                    text += event.unicode
+
+
 def main():
     pygame.init()
     pygame.display.set_caption("Thronglets - a tiny language is being born")
@@ -163,9 +196,10 @@ def main():
     font = pygame.font.SysFont("consolas", 16)
 
     mode = choose_mode(screen, font)
+    init_pop = choose_population(screen, font)
     placing = "food"
 
-    world = _new_world(mode, 6)
+    world = _new_world(mode, 6, init_pop)
     paused = False
     speed = 1
     running = True
@@ -180,7 +214,7 @@ def main():
                 elif event.key == pygame.K_SPACE:
                     paused = not paused
                 elif event.key == pygame.K_r:
-                    world = _new_world(mode, len(world.predators))
+                    world = _new_world(mode, len(world.predators), init_pop)
                 elif event.key == pygame.K_UP:
                     speed = min(200, speed + (1 if speed < 10 else 10))
                 elif event.key == pygame.K_DOWN:

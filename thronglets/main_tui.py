@@ -15,7 +15,9 @@ Controls: space=pause  f=drop food (auto mode only)  r=reset  +/-=speed  q=quit
 import curses
 import time
 
-from simulation import DANGER, FOOD, HEIGHT, IDLE, MATE, World, WIDTH
+from simulation import DANGER, FOOD, HEIGHT, IDLE, MATE, MAX_POPULATION, World, WIDTH
+
+DEFAULT_INIT_POP = 70
 
 TOKEN_COLOR_PAIR = {1: 1, 2: 2, 3: 3, 4: 4, 5: 5}
 STATE_LABELS = {IDLE: "idle", FOOD: "food-call", MATE: "mate-call", DANGER: "alarm-call"}
@@ -86,6 +88,33 @@ def choose_mode(stdscr):
     return mode
 
 
+def choose_population(stdscr):
+    stdscr.nodelay(False)
+    stdscr.erase()
+    lines = [
+        ("Thronglets", curses.A_BOLD),
+        ("", 0),
+        (f"Combien de creatures au depart ? (1-{MAX_POPULATION}, entree = {DEFAULT_INIT_POP})", curses.A_BOLD),
+    ]
+    for i, (line, attr) in enumerate(lines):
+        _safe_addstr(stdscr, i, 0, line, curses.color_pair(7) | attr)
+    _safe_addstr(stdscr, 4, 0, "> ", curses.color_pair(7))
+    stdscr.refresh()
+
+    curses.echo()
+    curses.curs_set(1)
+    text = stdscr.getstr(4, 2, 4).decode(errors="ignore").strip()
+    curses.noecho()
+    curses.curs_set(0)
+    stdscr.nodelay(True)
+
+    try:
+        n = int(text)
+    except ValueError:
+        return DEFAULT_INIT_POP
+    return max(1, min(MAX_POPULATION, n))
+
+
 def draw(stdscr, world, paused, speed, mode, placing, cursor):
     stdscr.erase()
     rows, cols = stdscr.getmaxyx()
@@ -143,10 +172,10 @@ def draw(stdscr, world, paused, speed, mode, placing, cursor):
     stdscr.refresh()
 
 
-def _new_world(mode, predator_count):
+def _new_world(mode, predator_count, init_pop=DEFAULT_INIT_POP):
     if mode == "manual":
-        return World(init_pop=70, manual_food=True, manual_predators=True)
-    return World(init_pop=70, predator_count=predator_count)
+        return World(init_pop=init_pop, manual_food=True, manual_predators=True)
+    return World(init_pop=init_pop, predator_count=predator_count)
 
 
 def run(stdscr):
@@ -154,10 +183,11 @@ def run(stdscr):
     setup_colors()
 
     mode = choose_mode(stdscr)
+    init_pop = choose_population(stdscr)
     placing = "food"
     cursor = [WIDTH / 2, HEIGHT / 2]
 
-    world = _new_world(mode, 6)
+    world = _new_world(mode, 6, init_pop)
     paused = False
     speed = 1
     frame_time = 1 / 20
@@ -169,7 +199,7 @@ def run(stdscr):
         elif key == ord(" "):
             paused = not paused
         elif key == ord("r"):
-            world = _new_world(mode, len(world.predators))
+            world = _new_world(mode, len(world.predators), init_pop)
         elif key in (ord("+"), ord("=")):
             speed = min(200, speed + (1 if speed < 10 else 10))
         elif key in (ord("-"), ord("_")):

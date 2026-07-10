@@ -49,9 +49,11 @@ pip install -r requirements.txt
 python main.py
 ```
 
-On launch you're asked to press `A` (automatic) or `M` (manual) before the
-world is created — that choice sticks for the whole run (`R` resets using
-it again, it doesn't ask a second time).
+On launch you're asked to press `A` (automatic) or `M` (manual), then how
+many creatures to start with (type a number, 1-220, `ENTER` to confirm or
+skip for the default of 70) — the world isn't created until both are
+answered, and both stick for the whole run (`R` resets using them again,
+it doesn't ask a second time).
 
 | Key           | Effect                                                       |
 |---------------|----------------------------------------------------------------|
@@ -80,8 +82,9 @@ cd claudeai/thronglets
 python main_tui.py
 ```
 
-On launch you're asked to press `A` (automatic) or `M` (manual) before
-anything else happens — that choice sticks for the whole run.
+On launch you're asked to press `A` (automatic) or `M` (manual), then type
+how many creatures to start with (1-220, `enter` to confirm or skip for the
+default of 70) — both choices stick for the whole run.
 
 Creatures show up as a colored `o` (colored by whatever token they're
 currently signaling, white if silent), food as green `.`, predators as a red
@@ -107,9 +110,10 @@ python main_web.py 9000       # or pick your own port
 
 Then open `http://localhost:8765` (swap in your port) in any browser on the
 same device. The world doesn't exist yet — a start screen asks you to pick
-automatic or manual mode first, and that choice sticks for the whole run
-(Reset doesn't ask again). Once started, the page polls the server a few
-times a second for a fresh snapshot and draws it to a `<canvas>`; buttons
+automatic or manual mode and how many creatures to start with (defaults to
+70), and both stick for the whole run (Reset doesn't ask again). Once
+started, the page polls the server a few times a second for a fresh
+snapshot and draws it to a `<canvas>`; buttons
 handle pause/reset/speed and what a manual placement adds. `+`/`- predateurs`
 remove or add a predator immediately (also setting how many a reset will
 use), and tapping/clicking the world places food (auto mode) or whatever's
