@@ -31,12 +31,14 @@ real, if deliberately small, model of how a shared vocabulary can emerge from
 
 ## Run it
 
-There are two renderers, sharing the same simulation core:
+There are three renderers, all sharing the same simulation core:
 
 - `main.py` — a pygame window (nicer, needs a display + pygame installed).
 - `main_tui.py` — a plain terminal renderer using only the standard library's
-  `curses` module + numpy. No GUI, no pygame, no X server. This is the one
-  to use on **Termux**.
+  `curses` module + numpy. No GUI, no pygame, no X server.
+- `main_web.py` — a local web server (standard library only, no new
+  dependency) with an HTML/canvas page you open in any browser. Works
+  anywhere, including Termux.
 
 ### Desktop (pygame)
 
@@ -78,7 +80,23 @@ Works best in a wide/tall terminal — Termux's default font is fairly large,
 so consider shrinking it (pinch to zoom, or Termux's font settings) to see
 more of the world at once.
 
-Both renderers show a HUD with, for each internal state (danger / food-call /
+### Web (any device with a browser)
+
+No new dependency at all beyond numpy — the server is built on Python's
+standard `http.server`, and the page is a single self-contained HTML file
+served from memory.
+
+```bash
+python main_web.py            # defaults to port 8765
+python main_web.py 9000       # or pick your own port
+```
+
+Then open `http://localhost:8765` (swap in your port) in any browser on the
+same device. The page polls the server a few times a second for a fresh
+snapshot and draws it to a `<canvas>`; buttons handle pause/reset/speed, and
+tapping/clicking the world drops a food patch there.
+
+All three renderers show a HUD with, for each internal state (danger / food-call /
 mate-call / idle), every token currently in use and what share of the living
 population uses it — the numbers to watch are how fast a single token pulls
 ahead of the pack (starting near chance, ~17%, since there are 6 tokens) and
@@ -102,8 +120,8 @@ not just that the window doesn't crash.
 The simulation core (`simulation.py`) and renderer (`main.py`) are split on
 purpose so this is easy to extend:
 
-- A cost to signaling (so "idle chatter" stops crowding out other meanings —
-  see the homonymy problem below)
+- A fifth state (e.g. "distress" - critically low energy with no food in
+  sight, distinct from an ordinary food-call)
 - Evolvable traits beyond signaling (speed, senses, metabolism)
 - A "translator" panel logging the emerging token → meaning dictionary over time
 - Swapping the fixed 2D field for a proper toroidal world, or a richer
@@ -117,17 +135,24 @@ Each state's dominant token is decided independently, so nothing stops two
 different states from converging on the *same* color by chance — a listener
 who hears that color can't tell which meaning was intended. Since `idle` is
 by far the most common state, this is usually what "wins" any collision,
-drowning out the rarer, more useful signal in noise. It sometimes resolves
-itself over further generations (a population can drift away from the
-collision on its own), but nothing guarantees it will, or that it'll stay
-resolved. A per-signal energy cost (see "where to take it next" above) would
-make this self-correcting instead of a matter of luck.
+drowning out the rarer, more useful signal in noise.
+
+There's a per-signal energy cost (`SIGNAL_COST` in `simulation.py`) that
+makes needless "idle chatter" costly, which helps but doesn't guarantee a
+clean vocabulary — across seeds it still sometimes lets two states share a
+token. A stronger, more targeted fix (explicitly penalizing a genome when
+two of its states share a dominant token) was considered and deliberately
+left out, to keep the outcome driven by selection rather than a rule
+designed to force a specific result. In practice the collision does
+sometimes resolve itself over further generations - and sometimes doesn't.
 
 ## Honest caveat
 
 This was built in a container without a display. The mechanics are verified
 via `test_smoke.py` (population survives, vocabulary converges across
-multiple random seeds), and `main_tui.py` was smoke-tested inside a real
-pseudo-terminal (colors, HUD and moving creatures all render correctly).
+multiple random seeds); `main_tui.py` was smoke-tested inside a real
+pseudo-terminal, and `main_web.py` inside a real headless browser (page
+loads, canvas draws, pause/reset/speed/food-click all confirmed working end
+to end) — colors, HUD and moving creatures all render correctly in both.
 `main.py`'s pygame window has *not* been eyeballed live — worth a quick
 visual check the first time you run it locally.
