@@ -3,7 +3,7 @@
 No GUI/X11/SDL needed - handy on Termux or over plain SSH, where pygame is
 painful to install. Only the Python standard library plus numpy are needed.
 
-Controls: space=pause  f=drop food  r=reset  +/-=speed  q=quit
+Controls: space=pause  f=drop food (auto mode only)  r=reset  +/-=speed  q=quit
   m=toggle auto/manual  p=toggle food/predator (manual placement)
   [ / ]=remove/add a predator right now (also sets the count used on reset)
   arrow keys=move cursor, enter=place (manual mode)
@@ -80,7 +80,8 @@ def draw(stdscr, world, paused, speed, mode, placing, cursor):
 
     _safe_addstr(stdscr, HUD_H - 3, 0, "o colore = signale   o blanc = silencieuse   . = nourriture   X = predateur",
                  curses.color_pair(7) | curses.A_DIM)
-    _safe_addstr(stdscr, HUD_H - 2, 0, "space=pause  f=food  r=reset  +/-=speed  q=quit",
+    food_hint = "f=food" if mode == "auto" else "f=food (auto mode only)"
+    _safe_addstr(stdscr, HUD_H - 2, 0, f"space=pause  {food_hint}  r=reset  +/-=speed  q=quit",
                  curses.color_pair(7) | curses.A_DIM)
     _safe_addstr(stdscr, HUD_H - 1, 0, "m=mode  p=placer  [ ]=nb predateurs  fleches/entree=placer",
                  curses.color_pair(7) | curses.A_DIM)
@@ -144,7 +145,7 @@ def run(stdscr):
             speed = min(200, speed + (1 if speed < 10 else 10))
         elif key in (ord("-"), ord("_")):
             speed = max(1, speed - (1 if speed <= 10 else 10))
-        elif key == ord("f"):
+        elif key == ord("f") and mode == "auto":
             world.add_food(*world.rng.uniform([10, 10], [WIDTH - 10, HEIGHT - 10]))
         elif key == ord("m"):
             mode = "manual" if mode == "auto" else "auto"
