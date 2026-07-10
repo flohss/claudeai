@@ -39,6 +39,7 @@ PREDATOR_KILL_RADIUS = 3.0
 DANGER_RADIUS = 22.0  # how far a creature can spot a predator directly
 
 METABOLISM = 0.06
+SIGNAL_COST = 0.025  # extra energy drain for emitting any non-silent token
 INIT_ENERGY = 60.0
 MAX_ENERGY = 120.0
 EAT_RADIUS = 4.0
@@ -281,6 +282,8 @@ class World:
                 move = move / speed * SPEED
             c.pos = np.clip(c.pos + move, [0, 0], [WIDTH, HEIGHT])
             c.energy -= METABOLISM
+            if c.token != 0:
+                c.energy -= SIGNAL_COST
 
     def _move_predators(self):
         if not self.predators:
