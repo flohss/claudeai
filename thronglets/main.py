@@ -13,10 +13,10 @@ import sys
 import numpy as np
 import pygame
 
-from simulation import FOOD, HEIGHT, IDLE, MATE, World, WIDTH
+from simulation import DANGER, FOOD, HEIGHT, IDLE, MATE, World, WIDTH
 
 SCALE = 5
-HUD_H = 150
+HUD_H = 175
 SCREEN_W, SCREEN_H = int(WIDTH * SCALE), int(HEIGHT * SCALE) + HUD_H
 
 BG = (18, 22, 16)
@@ -25,6 +25,7 @@ HUD_BG = (10, 12, 9)
 TEXT_COLOR = (220, 220, 210)
 FOOD_COLOR = (110, 220, 90)
 BODY_COLOR = (222, 208, 150)
+PREDATOR_COLOR = (220, 30, 30)
 TOKEN_COLORS = [
     (120, 120, 120),  # 0: silence, not drawn as a ring
     (235, 70, 70),
@@ -33,7 +34,7 @@ TOKEN_COLORS = [
     (200, 90, 230),
     (70, 225, 210),
 ]
-STATE_LABELS = {IDLE: "idle-chatter", FOOD: "food-call", MATE: "mate-call"}
+STATE_LABELS = {IDLE: "idle-chatter", FOOD: "food-call", MATE: "mate-call", DANGER: "alarm-call"}
 
 
 def draw(screen, font, world, paused, speed):
@@ -50,6 +51,10 @@ def draw(screen, font, world, paused, speed):
         pygame.draw.circle(screen, BODY_COLOR, (x, y), 4)
         if c.token != 0:
             pygame.draw.circle(screen, TOKEN_COLORS[c.token], (x, y), 7, width=2)
+
+    for p in world.predators:
+        x, y = int(p.pos[0] * SCALE), int(p.pos[1] * SCALE) + HUD_H
+        pygame.draw.circle(screen, PREDATOR_COLOR, (x, y), 6)
 
     draw_hud(screen, font, world, paused, speed)
 
@@ -81,7 +86,7 @@ def draw_hud(screen, font, world, paused, speed):
 
     y = 50
     breakdown = world.vocabulary_breakdown()
-    for state in (FOOD, MATE, IDLE):
+    for state in (DANGER, FOOD, MATE, IDLE):
         draw_vocab_row(screen, font, y, STATE_LABELS[state], breakdown[state])
         y += 22
 
@@ -95,6 +100,11 @@ def draw_hud(screen, font, world, paused, speed):
 
     pygame.draw.circle(screen, FOOD_COLOR, (lx + 6, legend_y + 8), 3)
     txt = font.render("food", True, TEXT_COLOR)
+    screen.blit(txt, (lx + 18, legend_y))
+    lx += 18 + txt.get_width() + 20
+
+    pygame.draw.circle(screen, PREDATOR_COLOR, (lx + 6, legend_y + 8), 6)
+    txt = font.render("predator", True, TEXT_COLOR)
     screen.blit(txt, (lx + 18, legend_y))
 
     if pop == 0:

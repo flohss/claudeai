@@ -11,11 +11,11 @@ import time
 
 import numpy as np
 
-from simulation import FOOD, HEIGHT, IDLE, MATE, World, WIDTH
+from simulation import DANGER, FOOD, HEIGHT, IDLE, MATE, World, WIDTH
 
 TOKEN_COLOR_PAIR = {1: 1, 2: 2, 3: 3, 4: 4, 5: 5}
-STATE_LABELS = {IDLE: "idle", FOOD: "food-call", MATE: "mate-call"}
-HUD_H = 6
+STATE_LABELS = {IDLE: "idle", FOOD: "food-call", MATE: "mate-call", DANGER: "alarm-call"}
+HUD_H = 7
 
 
 def setup_colors():
@@ -66,10 +66,10 @@ def draw(stdscr, world, paused, speed):
     _safe_addstr(stdscr, 0, 0, header, curses.color_pair(7) | curses.A_BOLD)
 
     breakdown = world.vocabulary_breakdown()
-    for row, state in enumerate((FOOD, MATE, IDLE), start=1):
+    for row, state in enumerate((DANGER, FOOD, MATE, IDLE), start=1):
         _draw_vocab_row(stdscr, row, STATE_LABELS[state], breakdown[state])
 
-    _safe_addstr(stdscr, HUD_H - 2, 0, "@ = signale   o = silencieuse   . = nourriture",
+    _safe_addstr(stdscr, HUD_H - 2, 0, "@ = signale   o = silencieuse   . = nourriture   X = predateur",
                  curses.color_pair(7) | curses.A_DIM)
     _safe_addstr(stdscr, HUD_H - 1, 0, "space=pause  f=food  r=reset  +/-=speed  q=quit",
                  curses.color_pair(7) | curses.A_DIM)
@@ -85,6 +85,10 @@ def draw(stdscr, world, paused, speed):
         pair = TOKEN_COLOR_PAIR.get(c.token, 7)
         ch = "@" if c.token else "o"
         _safe_addstr(stdscr, y, x, ch, curses.color_pair(pair) | curses.A_BOLD)
+
+    for p in world.predators:
+        y, x = HUD_H + int(p.pos[1] * sy), int(p.pos[0] * sx)
+        _safe_addstr(stdscr, y, x, "X", curses.color_pair(1) | curses.A_BOLD | curses.A_REVERSE)
 
     if pop == 0:
         _safe_addstr(stdscr, HUD_H + field_h // 2, max(0, cols // 2 - 12),

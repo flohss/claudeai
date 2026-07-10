@@ -1,13 +1,14 @@
 """Thronglets: a tiny artificial-life sandbox.
 
-Simple creatures forage, mate and die on a 2D world. Each one is born with a
-genome that decides which "token" it emits when it is hungry, has spotted
-food, or wants to mate, and how it reacts to tokens it hears from others.
-There is no training loop and nobody is told what the tokens should mean:
-genomes that happen to signal and interpret usefully help their owners
-survive and reproduce more, so a shared vocabulary can emerge purely from
-selection over generations - the same basic idea (rules + evolution, not
-gradient descent) behind classic artificial-life language experiments.
+Simple creatures forage, mate, flee predators, and die on a 2D world. Each
+one is born with a genome that decides which "token" it emits when it is
+hungry, has spotted food, wants to mate, or senses a predator nearby, and how
+it reacts to tokens it hears from others. There is no training loop and
+nobody is told what the tokens should mean: genomes that happen to signal
+and interpret usefully help their owners survive and reproduce more, so a
+shared vocabulary - including alarm calls - can emerge purely from selection
+over generations, the same basic idea (rules + evolution, not gradient
+descent) behind classic artificial-life language experiments.
 
 No pygame import here on purpose: this module is the simulation core and can
 be driven headlessly (see test_smoke.py); main.py is the renderer.
@@ -17,8 +18,8 @@ import numpy as np
 
 WIDTH, HEIGHT = 200.0, 140.0
 
-IDLE, FOOD, MATE = 0, 1, 2
-N_STATES = 3
+IDLE, FOOD, MATE, DANGER = 0, 1, 2, 3
+N_STATES = 4
 N_TOKENS = 6  # token 0 means "silent"
 
 SEE_RADIUS = 18.0    # a creature can directly spot food/mates within this range
@@ -26,9 +27,16 @@ HEAR_RADIUS = 34.0   # but it can *hear* a signal from further away than it can 
 SPEED = 1.6
 WANDER_STRENGTH = 0.5
 DRIVE_STRENGTH = 1.2
+FLEE_STRENGTH = 1.8
 SIGNAL_STRENGTH = 0.9
 EDGE_MARGIN = 12.0
 EDGE_PUSH = 1.0
+
+PREDATOR_COUNT = 3
+PREDATOR_SPEED = 1.3
+PREDATOR_HUNT_RADIUS = 70.0
+PREDATOR_KILL_RADIUS = 3.0
+DANGER_RADIUS = 22.0  # how far a creature can spot a predator directly
 
 METABOLISM = 0.06
 INIT_ENERGY = 60.0
@@ -106,6 +114,13 @@ class Creature:
         self.alive = True
 
 
+class Predator:
+    __slots__ = ("pos",)
+
+    def __init__(self, pos):
+        self.pos = pos
+
+
 def _toward(a, b):
     d = b - a
     n = np.linalg.norm(d)
@@ -133,6 +148,9 @@ class World:
             for _ in range(init_pop)
         ]
         self.food = []
+        self.predators = [
+            Predator(self.rng.uniform([0, 0], [WIDTH, HEIGHT])) for _ in range(PREDATOR_COUNT)
+        ]
         self.tick = 0
         self.births = 0
         self.deaths = 0
@@ -144,6 +162,8 @@ class World:
         self.tick += 1
         self._sense_and_signal()
         self._move()
+        self._move_predators()
+        self._predator_kills()
         self._eat()
         self._reproduce()
         self._age_and_cull()
@@ -159,7 +179,7 @@ class World:
         """Per-state list of (token, fraction) for every token in use, most common first."""
         result = {}
         alive = self._alive()
-        for state in (IDLE, FOOD, MATE):
+        for state in (IDLE, FOOD, MATE, DANGER):
             tokens = [c.genome.token_for(state) for c in alive]
             if not tokens:
                 result[state] = []
@@ -203,8 +223,19 @@ class World:
         nearest_mate_d = mate_d.min(axis=1)
         nearest_mate_i = mate_d.argmin(axis=1)
 
+        predator_pos = np.array([p.pos for p in self.predators]) if self.predators else np.empty((0, 2))
+        if len(predator_pos):
+            pred_d = np.linalg.norm(positions[:, None, :] - predator_pos[None, :, :], axis=2)
+            nearest_pred_d = pred_d.min(axis=1)
+            nearest_pred_i = pred_d.argmin(axis=1)
+        else:
+            nearest_pred_d = np.full(len(alive), np.inf)
+            nearest_pred_i = np.zeros(len(alive), dtype=int)
+
         for idx, c in enumerate(alive):
-            if nearest_food_d[idx] < SEE_RADIUS:
+            if nearest_pred_d[idx] < DANGER_RADIUS:
+                c.state = DANGER
+            elif nearest_food_d[idx] < SEE_RADIUS:
                 c.state = FOOD
             elif mate_ready[idx] and nearest_mate_d[idx] < SEE_RADIUS:
                 c.state = MATE
@@ -216,6 +247,7 @@ class World:
             alive=alive, positions=positions, food_pos=food_pos,
             nearest_food_d=nearest_food_d, nearest_food_i=nearest_food_i,
             pair_d=pair_d, nearest_mate_d=nearest_mate_d, nearest_mate_i=nearest_mate_i,
+            predator_pos=predator_pos, nearest_pred_d=nearest_pred_d, nearest_pred_i=nearest_pred_i,
         )
 
     def _move(self):
@@ -230,7 +262,10 @@ class World:
         for i, c in enumerate(alive):
             move = self.rng.normal(0, 1, 2) * WANDER_STRENGTH
 
-            if c.state == FOOD:
+            if c.state == DANGER:
+                predator = c_["predator_pos"][c_["nearest_pred_i"][i]]
+                move += -_toward(c.pos, predator) * FLEE_STRENGTH
+            elif c.state == FOOD:
                 move += _toward(c.pos, c_["food_pos"][c_["nearest_food_i"][i]]) * DRIVE_STRENGTH
             elif c.state == MATE:
                 move += _toward(c.pos, positions[c_["nearest_mate_i"][i]]) * DRIVE_STRENGTH
@@ -246,6 +281,41 @@ class World:
                 move = move / speed * SPEED
             c.pos = np.clip(c.pos + move, [0, 0], [WIDTH, HEIGHT])
             c.energy -= METABOLISM
+
+    def _move_predators(self):
+        if not self.predators:
+            return
+        alive = self._alive()
+        positions = np.array([c.pos for c in alive]) if alive else np.empty((0, 2))
+        for p in self.predators:
+            if len(positions):
+                d = np.linalg.norm(positions - p.pos, axis=1)
+                i = int(np.argmin(d))
+                if d[i] < PREDATOR_HUNT_RADIUS:
+                    move = _toward(p.pos, positions[i]) * PREDATOR_SPEED
+                else:
+                    move = self.rng.normal(0, 1, 2) * PREDATOR_SPEED * 0.5
+            else:
+                move = self.rng.normal(0, 1, 2) * PREDATOR_SPEED * 0.5
+            move += _edge_push(p.pos) * 1.5
+            speed = np.linalg.norm(move)
+            if speed > PREDATOR_SPEED:
+                move = move / speed * PREDATOR_SPEED
+            p.pos = np.clip(p.pos + move, [0, 0], [WIDTH, HEIGHT])
+
+    def _predator_kills(self):
+        alive = self._alive()
+        if not alive:
+            return
+        positions = np.array([c.pos for c in alive])
+        killed = set()
+        for p in self.predators:
+            d = np.linalg.norm(positions - p.pos, axis=1)
+            i = int(np.argmin(d))
+            if i not in killed and d[i] < PREDATOR_KILL_RADIUS:
+                alive[i].alive = False
+                killed.add(i)
+        self.deaths += len(killed)
 
     def _eat(self):
         if not self.food:

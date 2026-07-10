@@ -9,9 +9,14 @@ real, if deliberately small, model of how a shared vocabulary can emerge from
 **natural selection**, not machine learning:
 
 - Each creature is born with a genome deciding which of 6 "tokens" (colors)
-  it emits when it's **idle**, has **spotted food**, or wants to **mate** —
-  and separately, how it reacts on hearing each token from a neighbor
-  (move toward it, away from it, or ignore it).
+  it emits when it's **idle**, has **spotted food**, wants to **mate**, or
+  senses a nearby **predator** — and separately, how it reacts on hearing
+  each token from a neighbor (move toward it, away from it, or ignore it).
+- A handful of predators roam the world and kill any creature they catch.
+  Spotting one puts a creature in a "danger" state, using the exact same
+  signal/response machinery as food and mate calls — so an alarm call is
+  just another word that can (or might not) emerge, not a special-cased
+  mechanic.
 - Nobody is told what a token should mean. Creatures whose signaling and
   listening genes happen to help them (and their offspring) find food or
   mates survive and reproduce more; genomes mutate a little at each birth.
@@ -64,15 +69,17 @@ python main_tui.py
 ```
 
 Creatures show up as `@` (currently signaling, colored by token) or `o`
-(silent), food as green `.`. Controls: `space`=pause, `f`=drop a food patch,
-`r`=reset, `+`/`-`=speed, `q`=quit. Works best in a wide/tall terminal —
-Termux's default font is fairly large, so consider shrinking it (pinch to
-zoom, or Termux's font settings) to see more of the world at once.
+(silent), food as green `.`, predators as a bold red `X`. Controls:
+`space`=pause, `f`=drop a food patch, `r`=reset, `+`/`-`=speed, `q`=quit.
+Works best in a wide/tall terminal — Termux's default font is fairly large,
+so consider shrinking it (pinch to zoom, or Termux's font settings) to see
+more of the world at once.
 
-Both renderers show a HUD with, for each internal state (idle / food-call /
-mate-call), the token most of the living population uses for it and what
-fraction agree — that percentage is the thing to watch: it starts near
-chance (~17%, since there are 6 tokens) and climbs as a convention emerges.
+Both renderers show a HUD with, for each internal state (danger / food-call /
+mate-call / idle), every token currently in use and what share of the living
+population uses it — the numbers to watch are how fast a single token pulls
+ahead of the pack (starting near chance, ~17%, since there are 6 tokens) and
+whether it stays there.
 
 ## Headless check
 
@@ -92,13 +99,26 @@ not just that the window doesn't crash.
 The simulation core (`simulation.py`) and renderer (`main.py`) are split on
 purpose so this is easy to extend:
 
-- Predators / a danger state and alarm calls
+- A cost to signaling (so "idle chatter" stops crowding out other meanings —
+  see the homonymy problem below)
 - Evolvable traits beyond signaling (speed, senses, metabolism)
 - A "translator" panel logging the emerging token → meaning dictionary over time
 - Swapping the fixed 2D field for a proper toroidal world, or a richer
   pixel-art renderer for the creatures themselves
 - Replacing rule-based genomes with small neural nets trained via multi-agent
   RL, closer to real emergent-communication research
+
+## A known quirk: homonyms
+
+Each state's dominant token is decided independently, so nothing stops two
+different states from converging on the *same* color by chance — a listener
+who hears that color can't tell which meaning was intended. Since `idle` is
+by far the most common state, this is usually what "wins" any collision,
+drowning out the rarer, more useful signal in noise. It sometimes resolves
+itself over further generations (a population can drift away from the
+collision on its own), but nothing guarantees it will, or that it'll stay
+resolved. A per-signal energy cost (see "where to take it next" above) would
+make this self-correcting instead of a matter of luck.
 
 ## Honest caveat
 
