@@ -3,8 +3,11 @@
 Runs the simulation in a background thread and exposes it over plain HTTP:
   GET  /        the page (canvas + controls)
   GET  /state   a JSON snapshot of the world, polled by the page a few times a second
-  POST /control pause/resume/reset/speed/mode/placing/predator_count/click,
+  POST /control start/pause/resume/reset/speed/placing/predator_count/click,
                 driven by the page's buttons and clicks
+
+The world doesn't exist until the page's start screen picks automatic or
+manual mode - that choice is made once, up front, not toggled mid-run.
 
 No third-party dependencies beyond numpy (for simulation.py) - the server
 itself is only the standard library's http.server, so this needs nothing
@@ -32,18 +35,23 @@ def _new_world(mode, predator_count):
 
 class SimState:
     def __init__(self):
-        self.mode = "auto"
+        self.started = False
+        self.mode = None
         self.placing = "food"
-        self.world = _new_world(self.mode, 6)
+        self.world = None
         self.paused = False
         self.speed = 1
         self.lock = threading.Lock()
 
 
 def snapshot(state):
+    if not state.started:
+        return {"started": False}
+
     w = state.world
     breakdown = w.vocabulary_breakdown()
     return {
+        "started": True,
         "tick": w.tick,
         "pop": w.population(),
         "births": w.births,
@@ -71,7 +79,7 @@ def snapshot(state):
 def simulation_loop(state):
     while True:
         with state.lock:
-            if not state.paused:
+            if state.started and not state.paused:
                 for _ in range(state.speed):
                     state.world.step()
         time.sleep(STEP_INTERVAL)
@@ -107,7 +115,13 @@ class Handler(BaseHTTPRequestHandler):
         state = self.server.state
         action = body.get("action")
         with state.lock:
-            if action == "pause":
+            if action == "start" and not state.started:
+                state.mode = "manual" if body.get("mode") == "manual" else "auto"
+                state.world = _new_world(state.mode, 6)
+                state.started = True
+            elif not state.started:
+                pass  # ignore every other action until a mode has been chosen
+            elif action == "pause":
                 state.paused = True
             elif action == "resume":
                 state.paused = False
@@ -116,8 +130,6 @@ class Handler(BaseHTTPRequestHandler):
                 state.paused = False
             elif action == "speed":
                 state.speed = max(1, min(200, int(body.get("value", state.speed))))
-            elif action == "mode":
-                state.mode = "manual" if body.get("value") == "manual" else "auto"
             elif action == "placing":
                 state.placing = "predator" if body.get("value") == "predator" else "food"
             elif action == "predator_count":
@@ -174,31 +186,44 @@ INDEX_HTML = """<!doctype html>
     border-radius: 6px; touch-action: manipulation;
   }
   #hint { font-size: 12px; opacity: 0.6; }
+  #start-overlay { display: flex; flex-direction: column; gap: 14px; max-width: 480px; text-align: center; }
+  #start-overlay h1 { font-size: 18px; margin: 0; }
+  #start-overlay p { font-size: 13px; opacity: 0.8; margin: 0; }
+  #start-overlay button { padding: 14px; font-size: 15px; }
+  #app { display: none; flex-direction: column; align-items: center; gap: 10px; width: 100%; }
 </style>
 </head>
 <body>
-  <div id="hud">
-    <div class="row" id="header"></div>
-    <div class="row" id="settings"></div>
-    <div class="row" id="vocab-danger"></div>
-    <div class="row" id="vocab-food"></div>
-    <div class="row" id="vocab-mate"></div>
-    <div class="row" id="vocab-idle"></div>
+  <div id="start-overlay">
+    <h1>Thronglets</h1>
+    <p>Choisis le mode de depart - ce choix ne se change pas en cours de partie.</p>
+    <button id="startAuto">Automatique — nourriture et predateurs apparaissent seuls</button>
+    <button id="startManual">Manuel — je place tout moi-meme</button>
   </div>
-  <div id="controls">
-    <button id="pause">Pause</button>
-    <button id="reset">Reset</button>
-    <button id="slower">- vitesse</button>
-    <button id="faster">+ vitesse</button>
+
+  <div id="app">
+    <div id="hud">
+      <div class="row" id="header"></div>
+      <div class="row" id="settings"></div>
+      <div class="row" id="vocab-danger"></div>
+      <div class="row" id="vocab-food"></div>
+      <div class="row" id="vocab-mate"></div>
+      <div class="row" id="vocab-idle"></div>
+    </div>
+    <div id="controls">
+      <button id="pause">Pause</button>
+      <button id="reset">Reset</button>
+      <button id="slower">- vitesse</button>
+      <button id="faster">+ vitesse</button>
+    </div>
+    <div id="controls2">
+      <button id="placing">Pose: nourriture</button>
+      <button id="predLess">- predateurs</button>
+      <button id="predMore">+ predateurs</button>
+    </div>
+    <canvas id="world" width="900" height="630"></canvas>
+    <div id="hint">Clique/touche le monde pour placer de la nourriture (ou un predateur en mode manuel)</div>
   </div>
-  <div id="controls2">
-    <button id="mode">Mode: auto</button>
-    <button id="placing">Pose: nourriture</button>
-    <button id="predLess">- predateurs</button>
-    <button id="predMore">+ predateurs</button>
-  </div>
-  <canvas id="world" width="900" height="630"></canvas>
-  <div id="hint">Clique/touche le monde pour placer de la nourriture (ou un predateur en mode manuel)</div>
 
 <script>
 const TOKEN_COLORS = ["#a0a0a0", "#eb4646", "#4682eb", "#f5c83c", "#c85ae6", "#46e1d2"];
@@ -213,6 +238,14 @@ let worldW = 200, worldH = 140, paused = false, currentSpeed = 1;
 let mode = 'auto', placing = 'food', predatorCount = 6;
 
 function render(state) {
+  if (!state.started) {
+    document.getElementById('start-overlay').style.display = 'flex';
+    document.getElementById('app').style.display = 'none';
+    return;
+  }
+  document.getElementById('start-overlay').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+
   worldW = state.width; worldH = state.height;
   paused = state.paused; currentSpeed = state.speed;
   mode = state.mode; placing = state.placing; predatorCount = state.predator_count;
@@ -257,8 +290,8 @@ function render(state) {
   document.getElementById('settings').textContent = mode === 'manual'
     ? `mode: manuel   pose: ${placing === 'food' ? 'nourriture' : 'predateur'}`
     : `mode: auto   predateurs: ${predatorCount} (+/- agit tout de suite)`;
-  document.getElementById('mode').textContent = mode === 'manual' ? 'Mode: manuel' : 'Mode: auto';
   document.getElementById('placing').textContent = placing === 'food' ? 'Pose: nourriture' : 'Pose: predateur';
+  document.getElementById('placing').style.display = mode === 'manual' ? 'inline-block' : 'none';
 }
 
 function renderVocabRow(elId, label, pairs) {
@@ -300,11 +333,12 @@ function stepSpeed(speed, dir) {
   return Math.max(1, speed - (speed <= 10 ? 1 : 10));
 }
 
+document.getElementById('startAuto').onclick = () => post('start', {mode: 'auto'});
+document.getElementById('startManual').onclick = () => post('start', {mode: 'manual'});
 document.getElementById('pause').onclick = () => post(paused ? 'resume' : 'pause');
 document.getElementById('reset').onclick = () => post('reset');
 document.getElementById('faster').onclick = () => post('speed', {value: stepSpeed(currentSpeed, 1)});
 document.getElementById('slower').onclick = () => post('speed', {value: stepSpeed(currentSpeed, -1)});
-document.getElementById('mode').onclick = () => post('mode', {value: mode === 'auto' ? 'manual' : 'auto'});
 document.getElementById('placing').onclick = () => post('placing', {value: placing === 'food' ? 'predator' : 'food'});
 document.getElementById('predLess').onclick = () => post('predator_count', {delta: -1});
 document.getElementById('predMore').onclick = () => post('predator_count', {delta: 1});

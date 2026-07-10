@@ -1,13 +1,15 @@
 """Watch a Thronglets world live in a window.
 
+You pick automatic or manual mode once, at startup - not something you
+toggle mid-run.
+
 Controls:
   SPACE        pause / resume
   UP / DOWN    simulation speed (ticks per rendered frame)
   R            reset to a fresh world
   LEFT CLICK   place food (auto mode) or whatever's selected (manual mode)
-  M            toggle automatic / manual mode
   P            toggle what manual clicks place (food / predator)
-  [ / ]        adjust the automatic predator count
+  [ / ]        remove/add a predator right now
   ESC          quit
 """
 
@@ -85,9 +87,9 @@ def draw_hud(screen, font, world, paused, speed, mode, placing):
     screen.blit(font.render(header, True, TEXT_COLOR), (10, 8))
 
     if mode == "manual":
-        settings = f"mode: manual (M)   click places: {placing} (P)"
+        settings = f"mode: manual   click places: {placing} (P)"
     else:
-        settings = f"mode: automatic (M)   predators: {len(world.predators)} ([ / ] act immediately)"
+        settings = f"mode: automatic   predators: {len(world.predators)} ([ / ] act immediately)"
     screen.blit(font.render(settings, True, TEXT_COLOR), (10, 28))
 
     screen.blit(font.render("vocabulary — every color in use per state, population share:",
@@ -127,6 +129,32 @@ def _new_world(mode, predator_count):
     return World(init_pop=70, predator_count=predator_count)
 
 
+def choose_mode(screen, font):
+    lines = [
+        "Thronglets",
+        "",
+        "Choose the starting mode:",
+        "  A = automatic - food and predators spawn on their own",
+        "  M = manual - you place everything yourself, nothing spawns alone",
+        "",
+        "Press A or M to start.",
+    ]
+    while True:
+        screen.fill(BG)
+        for i, line in enumerate(lines):
+            screen.blit(font.render(line, True, TEXT_COLOR), (20, 20 + i * 26))
+        pygame.display.flip()
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_a:
+                    return "auto"
+                if event.key == pygame.K_m:
+                    return "manual"
+
+
 def main():
     pygame.init()
     pygame.display.set_caption("Thronglets - a tiny language is being born")
@@ -134,7 +162,7 @@ def main():
     clock = pygame.time.Clock()
     font = pygame.font.SysFont("consolas", 16)
 
-    mode = "auto"
+    mode = choose_mode(screen, font)
     placing = "food"
 
     world = _new_world(mode, 6)
@@ -157,8 +185,6 @@ def main():
                     speed = min(200, speed + (1 if speed < 10 else 10))
                 elif event.key == pygame.K_DOWN:
                     speed = max(1, speed - (1 if speed <= 10 else 10))
-                elif event.key == pygame.K_m:
-                    mode = "manual" if mode == "auto" else "auto"
                 elif event.key == pygame.K_p:
                     placing = "predator" if placing == "food" else "food"
                 elif event.key == pygame.K_LEFTBRACKET:

@@ -17,9 +17,10 @@ real, if deliberately small, model of how a shared vocabulary can emerge from
   machinery as food and mate calls — so an alarm call is just another word
   that can (or might not) emerge, not a special-cased mechanic.
 - Food and predators can each be **automatic** (food spawns in periodic
-  patches; predators all appear at once, in a count you choose) or
-  **manual** (nothing spawns on its own — you place every food patch and
-  every predator yourself). All three renderers support both modes.
+  patches; predators all appear at once) or **manual** (nothing spawns on
+  its own — you place every food patch and every predator yourself). You
+  pick which, once, at startup in all three renderers — it's not something
+  you toggle mid-run.
 - Nobody is told what a token should mean. Creatures whose signaling and
   listening genes happen to help them (and their offspring) find food or
   mates survive and reproduce more; genomes mutate a little at each birth.
@@ -48,12 +49,15 @@ pip install -r requirements.txt
 python main.py
 ```
 
+On launch you're asked to press `A` (automatic) or `M` (manual) before the
+world is created — that choice sticks for the whole run (`R` resets using
+it again, it doesn't ask a second time).
+
 | Key           | Effect                                                       |
 |---------------|----------------------------------------------------------------|
 | `SPACE`       | pause / resume                                              |
 | `UP` / `DOWN` | speed up / slow down the simulation                         |
-| `R`           | reset to a fresh world (using the current mode/count below)  |
-| `M`           | toggle automatic / manual mode                               |
+| `R`           | reset to a fresh world (same mode, same predator count)      |
 | `P`           | toggle what manual clicks place (food / predator)             |
 | `[` / `]`     | remove / add a predator right now (also sets the reset count) |
 | left click    | place food (auto mode) or whatever's selected (manual mode)  |
@@ -76,10 +80,13 @@ cd claudeai/thronglets
 python main_tui.py
 ```
 
+On launch you're asked to press `A` (automatic) or `M` (manual) before
+anything else happens — that choice sticks for the whole run.
+
 Creatures show up as a colored `o` (colored by whatever token they're
 currently signaling, white if silent), food as green `.`, predators as a red
-`X`. Controls: `space`=pause, `f`=drop a food patch, `r`=reset, `+`/`-`=speed,
-`q`=quit, `m`=toggle auto/manual, `p`=toggle food/predator placement,
+`X`. Controls: `space`=pause, `f`=drop a food patch (auto mode only),
+`r`=reset, `+`/`-`=speed, `q`=quit, `p`=toggle food/predator placement,
 `[`/`]`=remove/add a predator right now. There's no reliable mouse support
 in a terminal, so manual mode uses a keyboard cursor instead: the arrow
 keys move it, `enter` places whatever's currently selected.
@@ -99,9 +106,11 @@ python main_web.py 9000       # or pick your own port
 ```
 
 Then open `http://localhost:8765` (swap in your port) in any browser on the
-same device. The page polls the server a few times a second for a fresh
-snapshot and draws it to a `<canvas>`; buttons handle pause/reset/speed, the
-automatic/manual mode, and what a manual placement adds. `+`/`- predateurs`
+same device. The world doesn't exist yet — a start screen asks you to pick
+automatic or manual mode first, and that choice sticks for the whole run
+(Reset doesn't ask again). Once started, the page polls the server a few
+times a second for a fresh snapshot and draws it to a `<canvas>`; buttons
+handle pause/reset/speed and what a manual placement adds. `+`/`- predateurs`
 remove or add a predator immediately (also setting how many a reset will
 use), and tapping/clicking the world places food (auto mode) or whatever's
 selected (manual mode).
@@ -160,12 +169,13 @@ sometimes resolve itself over further generations - and sometimes doesn't.
 
 This was built in a container without a display. The mechanics are verified
 via `test_smoke.py` (population survives, vocabulary converges across
-multiple random seeds); `main_tui.py` was driven end to end inside a real
-pseudo-terminal (mode/placing toggles, cursor movement, and manual
-placement all confirmed working via a VT100 emulator reading the actual
-screen buffer), and `main_web.py` inside a real headless browser (mode,
-placing, predator count, and click-to-place all confirmed working end to
-end via both direct HTTP calls and real browser clicks). `main.py`'s pygame
-window was exercised headlessly (SDL's dummy driver) to confirm the new
-mode/predator-count logic doesn't crash, but hasn't been eyeballed live —
-worth a quick visual check the first time you run it locally.
+multiple random seeds); `main_tui.py`'s startup prompt, placing toggle,
+cursor movement, and manual placement were all driven end to end inside a
+real pseudo-terminal (read back through a VT100 emulator), and
+`main_web.py`'s start screen, placing, predator count, and click-to-place
+were all confirmed working end to end in a real headless browser (the
+overlay hides and the world appears only after picking a mode, exactly as
+intended). `main.py`'s pygame window was exercised headlessly (SDL's dummy
+driver) to confirm the new start-screen/predator-count logic doesn't crash,
+but hasn't been eyeballed live — worth a quick visual check the first time
+you run it locally.
