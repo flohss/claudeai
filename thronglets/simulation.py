@@ -35,6 +35,8 @@ EDGE_PUSH = 1.0
 PREDATOR_SPEED = 1.3
 PREDATOR_HUNT_RADIUS = 70.0
 PREDATOR_KILL_RADIUS = 3.0
+PREDATOR_SEPARATION_RADIUS = 20.0  # predators this close to each other push apart
+PREDATOR_SEPARATION_STRENGTH = 2.0
 DANGER_RADIUS = 22.0  # how far a creature can spot a predator directly
 DEFAULT_PREDATOR_COUNT = 6  # used in automatic mode unless the caller picks another number
 MAX_PREDATORS = 30  # safety cap, for both the automatic count and manual placement
@@ -318,7 +320,13 @@ class World:
             return
         alive = self._alive()
         positions = np.array([c.pos for c in alive]) if alive else np.empty((0, 2))
-        for p in self.predators:
+        predator_positions = np.array([p.pos for p in self.predators])
+        predator_d = np.linalg.norm(
+            predator_positions[:, None, :] - predator_positions[None, :, :], axis=2
+        )
+        np.fill_diagonal(predator_d, np.inf)
+
+        for idx, p in enumerate(self.predators):
             if len(positions):
                 d = np.linalg.norm(positions - p.pos, axis=1)
                 i = int(np.argmin(d))
@@ -328,6 +336,11 @@ class World:
                     move = self.rng.normal(0, 1, 2) * PREDATOR_SPEED * 0.5
             else:
                 move = self.rng.normal(0, 1, 2) * PREDATOR_SPEED * 0.5
+
+            for j in np.where(predator_d[idx] < PREDATOR_SEPARATION_RADIUS)[0]:
+                dist = max(predator_d[idx, j], 1e-6)
+                move += -_toward(p.pos, predator_positions[j]) * (PREDATOR_SEPARATION_STRENGTH / dist)
+
             move += _edge_push(p.pos) * 1.5
             speed = np.linalg.norm(move)
             if speed > PREDATOR_SPEED:

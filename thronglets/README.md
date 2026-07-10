@@ -15,7 +15,10 @@ real, if deliberately small, model of how a shared vocabulary can emerge from
 - Predators roam the world and kill any creature they catch. Spotting one
   puts a creature in a "danger" state, using the exact same signal/response
   machinery as food and mate calls — so an alarm call is just another word
-  that can (or might not) emerge, not a special-cased mechanic.
+  that can (or might not) emerge, not a special-cased mechanic. Each
+  predator independently hunts whichever creature is nearest to it, and
+  gently pushes away from other predators that get too close, so a pack
+  doesn't collapse onto a single point when creatures cluster together.
 - Food and predators can each be **automatic** (food spawns in periodic
   patches; predators all appear at once) or **manual** (nothing spawns on
   its own — you place every food patch and every predator yourself). You
