@@ -158,8 +158,50 @@ purpose so this is easy to extend:
 - A "translator" panel logging the emerging token → meaning dictionary over time
 - Swapping the fixed 2D field for a proper toroidal world, or a richer
   pixel-art renderer for the creatures themselves
-- Replacing rule-based genomes with small neural nets trained via multi-agent
-  RL, closer to real emergent-communication research
+- Feeding `train_language.py`'s per-agent diversity back in - it currently
+  trains one shared Speaker/Listener pair (a "population" that's forced to
+  agree with itself by construction); training several pairs with random
+  pairing per episode would be a fairer comparison to the evolved version's
+  actual population diversity
+
+## The gradient-trained version: `train_language.py`
+
+`simulation.py`'s colors emerge from blind evolutionary drift - nothing in
+that model is actually optimizing for successful communication, only
+surviving long enough to reproduce. `train_language.py` is a separate,
+optional experiment that trains a real Speaker and Listener network with
+backpropagation (Gumbel-Softmax for a differentiable discrete channel) to
+directly minimize communication error, using the same 4-state/6-token
+vocabulary for a fair comparison. It needs PyTorch:
+
+```bash
+pip install -r requirements-rl.txt
+python train_language.py            # one run, with training progress printed
+python train_language.py --sweep 10 # 10 independent seeds, collision-rate summary
+```
+
+This needs a genuinely heavy dependency not expected to work on Termux -
+unlike the three renderers, it's a standalone script, and doesn't touch
+`simulation.py` or the real-time game.
+
+**What actually happened when we ran it**, sampling states with the same
+idle-heavy skew the real simulation has: 8 out of 10 seeds converged to a
+perfect, collision-free code (100% listener accuracy) - a real difference
+from the evolved version, where two states landing on the same color is
+common and can persist indefinitely. But it wasn't 10/10: the 2 seeds that
+still collided always merged the two *rarest* states (`mate-call` and
+`alarm-call`, each well under 15% of samples) into one token, capping
+accuracy at ~75%. With `--uniform` (equal frequency for all 4 states)
+instead, it's 100% clean and near-instant every time.
+
+So gradient descent doesn't magically solve the underlying issue, it just
+attacks it far more directly and far more often: with a skewed class
+distribution, the loss saved by correctly separating a rare class from
+another rare class is tiny next to the loss from the frequent classes, so
+occasionally the network settles for merging them anyway - a cleaner,
+quantifiable version of the exact same "the frequent state drowns out the
+rare one" dynamic behind the evolved version's homonymy, not an escape
+from it.
 
 ## A known quirk: homonyms
 
