@@ -24,12 +24,19 @@ real, if deliberately small, model of how a shared vocabulary can emerge from
 
 ## Run it
 
+There are two renderers, sharing the same simulation core:
+
+- `main.py` — a pygame window (nicer, needs a display + pygame installed).
+- `main_tui.py` — a plain terminal renderer using only the standard library's
+  `curses` module + numpy. No GUI, no pygame, no X server. This is the one
+  to use on **Termux**.
+
+### Desktop (pygame)
+
 ```bash
 pip install -r requirements.txt
 python main.py
 ```
-
-Controls:
 
 | Key         | Effect                                  |
 |-------------|------------------------------------------|
@@ -39,7 +46,30 @@ Controls:
 | left click  | drop a food patch where you click       |
 | `ESC`       | quit                                    |
 
-The HUD at the top shows, for each internal state (idle / food-call /
+### Termux (Android)
+
+Getting pygame's SDL2 dependencies to compile on Termux is a known pain
+(needs the X11 repo, clang, `sdl2-dev`, and a running Termux:X11 session —
+see [this issue](https://github.com/termux/termux-packages/issues/6233) if
+you want to fight that battle). It's not needed here: `main_tui.py` draws
+the whole simulation with colored characters directly in your terminal.
+
+```bash
+pkg update
+pkg install python
+pip install numpy
+git clone <this repo's URL>   # or copy the thronglets/ folder over
+cd claudeai/thronglets
+python main_tui.py
+```
+
+Creatures show up as `@` (currently signaling, colored by token) or `o`
+(silent), food as green `.`. Controls: `space`=pause, `f`=drop a food patch,
+`r`=reset, `+`/`-`=speed, `q`=quit. Works best in a wide/tall terminal —
+Termux's default font is fairly large, so consider shrinking it (pinch to
+zoom, or Termux's font settings) to see more of the world at once.
+
+Both renderers show a HUD with, for each internal state (idle / food-call /
 mate-call), the token most of the living population uses for it and what
 fraction agree — that percentage is the thing to watch: it starts near
 chance (~17%, since there are 6 tokens) and climbs as a convention emerges.
@@ -72,8 +102,9 @@ purpose so this is easy to extend:
 
 ## Honest caveat
 
-This was built and tuned headlessly in a container without a display — the
-mechanics are verified via `test_smoke.py` (population survives, vocabulary
-converges across multiple random seeds), but the actual on-screen rendering
-hasn't been eyeballed in a live window. Worth a quick visual check the first
-time you run `main.py` locally.
+This was built in a container without a display. The mechanics are verified
+via `test_smoke.py` (population survives, vocabulary converges across
+multiple random seeds), and `main_tui.py` was smoke-tested inside a real
+pseudo-terminal (colors, HUD and moving creatures all render correctly).
+`main.py`'s pygame window has *not* been eyeballed live — worth a quick
+visual check the first time you run it locally.
