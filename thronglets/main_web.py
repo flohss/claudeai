@@ -16,8 +16,6 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-import numpy as np
-
 from simulation import DANGER, FOOD, HEIGHT, IDLE, MATE, World, WIDTH
 
 DEFAULT_PORT = 8765
@@ -25,9 +23,18 @@ STEP_INTERVAL = 0.05
 STATE_NAMES = {IDLE: "idle", FOOD: "food-call", MATE: "mate-call", DANGER: "alarm-call"}
 
 
+def _new_world(mode, predator_count):
+    if mode == "manual":
+        return World(init_pop=70, manual_food=True, manual_predators=True)
+    return World(init_pop=70, predator_count=predator_count)
+
+
 class SimState:
     def __init__(self):
-        self.world = World(init_pop=70)
+        self.mode = "auto"
+        self.placing = "food"
+        self.predator_count = 6
+        self.world = _new_world(self.mode, self.predator_count)
         self.paused = False
         self.speed = 1
         self.lock = threading.Lock()
@@ -43,6 +50,9 @@ def snapshot(state):
         "deaths": w.deaths,
         "paused": state.paused,
         "speed": state.speed,
+        "mode": state.mode,
+        "placing": state.placing,
+        "predator_count": state.predator_count,
         "width": WIDTH,
         "height": HEIGHT,
         "food": [[float(x), float(y)] for x, y in w.food],
@@ -102,15 +112,22 @@ class Handler(BaseHTTPRequestHandler):
             elif action == "resume":
                 state.paused = False
             elif action == "reset":
-                state.world = World(init_pop=70)
+                state.world = _new_world(state.mode, state.predator_count)
                 state.paused = False
             elif action == "speed":
                 state.speed = max(1, min(200, int(body.get("value", state.speed))))
-            elif action == "food":
-                center = np.array([float(body.get("x", 0)), float(body.get("y", 0))])
-                for _ in range(5):
-                    jitter = state.world.rng.normal(0, 4, 2)
-                    state.world.food.append(np.clip(center + jitter, [0, 0], [WIDTH, HEIGHT]))
+            elif action == "mode":
+                state.mode = "manual" if body.get("value") == "manual" else "auto"
+            elif action == "placing":
+                state.placing = "predator" if body.get("value") == "predator" else "food"
+            elif action == "predator_count":
+                state.predator_count = max(0, min(30, int(body.get("value", state.predator_count))))
+            elif action == "click":
+                x, y = float(body.get("x", 0)), float(body.get("y", 0))
+                if state.mode == "manual" and state.placing == "predator":
+                    state.world.add_predator(x, y)
+                else:
+                    state.world.add_food(x, y)
         self._send(200, "application/json", b'{"ok":true}')
 
     def _send(self, code, content_type, body, no_store=False):
@@ -159,6 +176,7 @@ INDEX_HTML = """<!doctype html>
 <body>
   <div id="hud">
     <div class="row" id="header"></div>
+    <div class="row" id="settings"></div>
     <div class="row" id="vocab-danger"></div>
     <div class="row" id="vocab-food"></div>
     <div class="row" id="vocab-mate"></div>
@@ -170,8 +188,14 @@ INDEX_HTML = """<!doctype html>
     <button id="slower">- vitesse</button>
     <button id="faster">+ vitesse</button>
   </div>
+  <div id="controls2">
+    <button id="mode">Mode: auto</button>
+    <button id="placing">Pose: nourriture</button>
+    <button id="predLess">- predateurs</button>
+    <button id="predMore">+ predateurs</button>
+  </div>
   <canvas id="world" width="900" height="630"></canvas>
-  <div id="hint">Clique/touche le monde pour faire apparaitre de la nourriture</div>
+  <div id="hint">Clique/touche le monde pour placer de la nourriture (ou un predateur en mode manuel)</div>
 
 <script>
 const TOKEN_COLORS = ["#a0a0a0", "#eb4646", "#4682eb", "#f5c83c", "#c85ae6", "#46e1d2"];
@@ -183,9 +207,12 @@ const canvas = document.getElementById('world');
 const ctx = canvas.getContext('2d');
 let worldW = 200, worldH = 140, paused = false, currentSpeed = 1;
 
+let mode = 'auto', placing = 'food', predatorCount = 6;
+
 function render(state) {
   worldW = state.width; worldH = state.height;
   paused = state.paused; currentSpeed = state.speed;
+  mode = state.mode; placing = state.placing; predatorCount = state.predator_count;
   const scale = canvas.width / worldW;
   canvas.height = worldH * scale;
 
@@ -223,6 +250,12 @@ function render(state) {
   renderVocabRow('vocab-idle', 'idle', state.vocabulary['idle']);
 
   document.getElementById('pause').textContent = state.paused ? 'Reprendre' : 'Pause';
+
+  document.getElementById('settings').textContent = mode === 'manual'
+    ? `mode: manuel   pose: ${placing === 'food' ? 'nourriture' : 'predateur'}`
+    : `mode: auto   predateurs au depart: ${predatorCount}`;
+  document.getElementById('mode').textContent = mode === 'manual' ? 'Mode: manuel' : 'Mode: auto';
+  document.getElementById('placing').textContent = placing === 'food' ? 'Pose: nourriture' : 'Pose: predateur';
 }
 
 function renderVocabRow(elId, label, pairs) {
@@ -268,13 +301,17 @@ document.getElementById('pause').onclick = () => post(paused ? 'resume' : 'pause
 document.getElementById('reset').onclick = () => post('reset');
 document.getElementById('faster').onclick = () => post('speed', {value: stepSpeed(currentSpeed, 1)});
 document.getElementById('slower').onclick = () => post('speed', {value: stepSpeed(currentSpeed, -1)});
+document.getElementById('mode').onclick = () => post('mode', {value: mode === 'auto' ? 'manual' : 'auto'});
+document.getElementById('placing').onclick = () => post('placing', {value: placing === 'food' ? 'predator' : 'food'});
+document.getElementById('predLess').onclick = () => post('predator_count', {value: predatorCount - 1});
+document.getElementById('predMore').onclick = () => post('predator_count', {value: predatorCount + 1});
 
 canvas.addEventListener('click', (ev) => {
   const rect = canvas.getBoundingClientRect();
   const px = (ev.clientX - rect.left) * (canvas.width / rect.width);
   const py = (ev.clientY - rect.top) * (canvas.height / rect.height);
   const scale = canvas.width / worldW;
-  post('food', {x: px / scale, y: py / scale});
+  post('click', {x: px / scale, y: py / scale});
 });
 
 setInterval(poll, 100);

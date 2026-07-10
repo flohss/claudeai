@@ -4,18 +4,21 @@ No GUI/X11/SDL needed - handy on Termux or over plain SSH, where pygame is
 painful to install. Only the Python standard library plus numpy are needed.
 
 Controls: space=pause  f=drop food  r=reset  +/-=speed  q=quit
+  m=toggle auto/manual  p=toggle food/predator (manual placement)
+  [ / ]=predator count (automatic mode)
+  arrow keys=move cursor, enter=place (manual mode)
 """
 
 import curses
 import time
 
-import numpy as np
-
 from simulation import DANGER, FOOD, HEIGHT, IDLE, MATE, World, WIDTH
 
 TOKEN_COLOR_PAIR = {1: 1, 2: 2, 3: 3, 4: 4, 5: 5}
 STATE_LABELS = {IDLE: "idle", FOOD: "food-call", MATE: "mate-call", DANGER: "alarm-call"}
-HUD_H = 7
+HUD_H = 9
+CURSOR_STEP = 4.0
+ENTER_KEYS = (10, 13, curses.KEY_ENTER)
 
 
 def setup_colors():
@@ -53,7 +56,7 @@ def _draw_vocab_row(stdscr, y, label, pairs):
         x += 2 + len(seg)
 
 
-def draw(stdscr, world, paused, speed):
+def draw(stdscr, world, paused, speed, mode, placing, predator_count, cursor):
     stdscr.erase()
     rows, cols = stdscr.getmaxyx()
     field_h = max(1, rows - HUD_H)
@@ -65,13 +68,21 @@ def draw(stdscr, world, paused, speed):
     header = f"tick {world.tick}  pop {pop}  births {world.births}  deaths {world.deaths}  {status}"
     _safe_addstr(stdscr, 0, 0, header, curses.color_pair(7) | curses.A_BOLD)
 
+    if mode == "manual":
+        settings = f"mode: manuel (m)   pose: {placing} (p)   fleches+entree pour placer"
+    else:
+        settings = f"mode: auto (m)   predateurs auto: {predator_count} ([ ])"
+    _safe_addstr(stdscr, 1, 0, settings, curses.color_pair(7) | curses.A_DIM)
+
     breakdown = world.vocabulary_breakdown()
-    for row, state in enumerate((DANGER, FOOD, MATE, IDLE), start=1):
+    for row, state in enumerate((DANGER, FOOD, MATE, IDLE), start=2):
         _draw_vocab_row(stdscr, row, STATE_LABELS[state], breakdown[state])
 
-    _safe_addstr(stdscr, HUD_H - 2, 0, "o colore = signale   o blanc = silencieuse   . = nourriture   X = predateur",
+    _safe_addstr(stdscr, HUD_H - 3, 0, "o colore = signale   o blanc = silencieuse   . = nourriture   X = predateur",
                  curses.color_pair(7) | curses.A_DIM)
-    _safe_addstr(stdscr, HUD_H - 1, 0, "space=pause  f=food  r=reset  +/-=speed  q=quit",
+    _safe_addstr(stdscr, HUD_H - 2, 0, "space=pause  f=food  r=reset  +/-=speed  q=quit",
+                 curses.color_pair(7) | curses.A_DIM)
+    _safe_addstr(stdscr, HUD_H - 1, 0, "m=mode  p=placer  [ ]=nb predateurs  fleches/entree=placer",
                  curses.color_pair(7) | curses.A_DIM)
 
     for fx, fy in world.food:
@@ -89,6 +100,11 @@ def draw(stdscr, world, paused, speed):
         y, x = HUD_H + int(p.pos[1] * sy), int(p.pos[0] * sx)
         _safe_addstr(stdscr, y, x, "X", curses.color_pair(1) | curses.A_BOLD)
 
+    if mode == "manual":
+        cy, cx = HUD_H + int(cursor[1] * sy), int(cursor[0] * sx)
+        pair = 6 if placing == "food" else 1
+        _safe_addstr(stdscr, cy, cx, "+", curses.color_pair(pair) | curses.A_BOLD | curses.A_REVERSE)
+
     if pop == 0:
         _safe_addstr(stdscr, HUD_H + field_h // 2, max(0, cols // 2 - 12),
                      "Extinct. Press r to reset.", curses.color_pair(1) | curses.A_BOLD)
@@ -96,12 +112,23 @@ def draw(stdscr, world, paused, speed):
     stdscr.refresh()
 
 
+def _new_world(mode, predator_count):
+    if mode == "manual":
+        return World(init_pop=70, manual_food=True, manual_predators=True)
+    return World(init_pop=70, predator_count=predator_count)
+
+
 def run(stdscr):
     curses.curs_set(0)
     stdscr.nodelay(True)
     setup_colors()
 
-    world = World(init_pop=70)
+    mode = "auto"
+    placing = "food"
+    predator_count = 6
+    cursor = [WIDTH / 2, HEIGHT / 2]
+
+    world = _new_world(mode, predator_count)
     paused = False
     speed = 1
     frame_time = 1 / 20
@@ -113,21 +140,40 @@ def run(stdscr):
         elif key == ord(" "):
             paused = not paused
         elif key == ord("r"):
-            world = World(init_pop=70)
+            world = _new_world(mode, predator_count)
         elif key in (ord("+"), ord("=")):
             speed = min(200, speed + (1 if speed < 10 else 10))
         elif key in (ord("-"), ord("_")):
             speed = max(1, speed - (1 if speed <= 10 else 10))
         elif key == ord("f"):
-            center = world.rng.uniform([10, 10], [WIDTH - 10, HEIGHT - 10])
-            for _ in range(6):
-                world.food.append(np.clip(center + world.rng.normal(0, 5, 2), [0, 0], [WIDTH, HEIGHT]))
+            world.add_food(*world.rng.uniform([10, 10], [WIDTH - 10, HEIGHT - 10]))
+        elif key == ord("m"):
+            mode = "manual" if mode == "auto" else "auto"
+        elif key == ord("p"):
+            placing = "predator" if placing == "food" else "food"
+        elif key == ord("[") and mode == "auto":
+            predator_count = max(0, predator_count - 1)
+        elif key == ord("]") and mode == "auto":
+            predator_count = min(30, predator_count + 1)
+        elif key == curses.KEY_UP:
+            cursor[1] = max(0.0, cursor[1] - CURSOR_STEP)
+        elif key == curses.KEY_DOWN:
+            cursor[1] = min(HEIGHT, cursor[1] + CURSOR_STEP)
+        elif key == curses.KEY_LEFT:
+            cursor[0] = max(0.0, cursor[0] - CURSOR_STEP)
+        elif key == curses.KEY_RIGHT:
+            cursor[0] = min(WIDTH, cursor[0] + CURSOR_STEP)
+        elif key in ENTER_KEYS and mode == "manual":
+            if placing == "food":
+                world.add_food(cursor[0], cursor[1])
+            else:
+                world.add_predator(cursor[0], cursor[1])
 
         if not paused:
             for _ in range(speed):
                 world.step()
 
-        draw(stdscr, world, paused, speed)
+        draw(stdscr, world, paused, speed, mode, placing, predator_count, cursor)
         time.sleep(frame_time)
 
 

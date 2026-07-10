@@ -12,13 +12,14 @@ real, if deliberately small, model of how a shared vocabulary can emerge from
   it emits when it's **idle**, has **spotted food**, wants to **mate**, or
   senses a nearby **predator** — and separately, how it reacts on hearing
   each token from a neighbor (move toward it, away from it, or ignore it).
-- Predators roam the world and kill any creature they catch. They spawn in
-  small waves over time (like food patches do), up to a cap, rather than all
-  existing from tick 0 — so the world gets more dangerous the longer it runs.
-  Spotting one puts a creature in a "danger" state, using the exact same
-  signal/response machinery as food and mate calls — so an alarm call is
-  just another word that can (or might not) emerge, not a special-cased
-  mechanic.
+- Predators roam the world and kill any creature they catch. Spotting one
+  puts a creature in a "danger" state, using the exact same signal/response
+  machinery as food and mate calls — so an alarm call is just another word
+  that can (or might not) emerge, not a special-cased mechanic.
+- Food and predators can each be **automatic** (food spawns in periodic
+  patches; predators all appear at once, in a count you choose) or
+  **manual** (nothing spawns on its own — you place every food patch and
+  every predator yourself). All three renderers support both modes.
 - Nobody is told what a token should mean. Creatures whose signaling and
   listening genes happen to help them (and their offspring) find food or
   mates survive and reproduce more; genomes mutate a little at each birth.
@@ -47,13 +48,16 @@ pip install -r requirements.txt
 python main.py
 ```
 
-| Key         | Effect                                  |
-|-------------|------------------------------------------|
-| `SPACE`     | pause / resume                          |
-| `UP` / `DOWN` | speed up / slow down the simulation   |
-| `R`         | reset to a fresh world                  |
-| left click  | drop a food patch where you click       |
-| `ESC`       | quit                                    |
+| Key           | Effect                                                       |
+|---------------|----------------------------------------------------------------|
+| `SPACE`       | pause / resume                                              |
+| `UP` / `DOWN` | speed up / slow down the simulation                         |
+| `R`           | reset to a fresh world (using the current mode/count below)  |
+| `M`           | toggle automatic / manual mode                               |
+| `P`           | toggle what manual clicks place (food / predator)             |
+| `[` / `]`     | adjust the automatic predator count                          |
+| left click    | place food (auto mode) or whatever's selected (manual mode)  |
+| `ESC`         | quit                                                         |
 
 ### Termux (Android)
 
@@ -75,7 +79,10 @@ python main_tui.py
 Creatures show up as a colored `o` (colored by whatever token they're
 currently signaling, white if silent), food as green `.`, predators as a red
 `X`. Controls: `space`=pause, `f`=drop a food patch, `r`=reset, `+`/`-`=speed,
-`q`=quit.
+`q`=quit, `m`=toggle auto/manual, `p`=toggle food/predator placement,
+`[`/`]`=adjust the automatic predator count. There's no reliable mouse
+support in a terminal, so manual mode uses a keyboard cursor instead: the
+arrow keys move it, `enter` places whatever's currently selected.
 Works best in a wide/tall terminal — Termux's default font is fairly large,
 so consider shrinking it (pinch to zoom, or Termux's font settings) to see
 more of the world at once.
@@ -93,8 +100,9 @@ python main_web.py 9000       # or pick your own port
 
 Then open `http://localhost:8765` (swap in your port) in any browser on the
 same device. The page polls the server a few times a second for a fresh
-snapshot and draws it to a `<canvas>`; buttons handle pause/reset/speed, and
-tapping/clicking the world drops a food patch there.
+snapshot and draws it to a `<canvas>`; buttons handle pause/reset/speed and
+the automatic/manual mode and predator count, and tapping/clicking the
+world places food (auto mode) or whatever's selected (manual mode).
 
 All three renderers show a HUD with, for each internal state (danger / food-call /
 mate-call / idle), every token currently in use and what share of the living
@@ -150,9 +158,12 @@ sometimes resolve itself over further generations - and sometimes doesn't.
 
 This was built in a container without a display. The mechanics are verified
 via `test_smoke.py` (population survives, vocabulary converges across
-multiple random seeds); `main_tui.py` was smoke-tested inside a real
-pseudo-terminal, and `main_web.py` inside a real headless browser (page
-loads, canvas draws, pause/reset/speed/food-click all confirmed working end
-to end) — colors, HUD and moving creatures all render correctly in both.
-`main.py`'s pygame window has *not* been eyeballed live — worth a quick
-visual check the first time you run it locally.
+multiple random seeds); `main_tui.py` was driven end to end inside a real
+pseudo-terminal (mode/placing toggles, cursor movement, and manual
+placement all confirmed working via a VT100 emulator reading the actual
+screen buffer), and `main_web.py` inside a real headless browser (mode,
+placing, predator count, and click-to-place all confirmed working end to
+end via both direct HTTP calls and real browser clicks). `main.py`'s pygame
+window was exercised headlessly (SDL's dummy driver) to confirm the new
+mode/predator-count logic doesn't crash, but hasn't been eyeballed live —
+worth a quick visual check the first time you run it locally.
