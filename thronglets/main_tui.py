@@ -5,7 +5,7 @@ painful to install. Only the Python standard library plus numpy are needed.
 
 Controls: space=pause  f=drop food  r=reset  +/-=speed  q=quit
   m=toggle auto/manual  p=toggle food/predator (manual placement)
-  [ / ]=predator count (automatic mode)
+  [ / ]=remove/add a predator right now (also sets the count used on reset)
   arrow keys=move cursor, enter=place (manual mode)
 """
 
@@ -56,7 +56,7 @@ def _draw_vocab_row(stdscr, y, label, pairs):
         x += 2 + len(seg)
 
 
-def draw(stdscr, world, paused, speed, mode, placing, predator_count, cursor):
+def draw(stdscr, world, paused, speed, mode, placing, cursor):
     stdscr.erase()
     rows, cols = stdscr.getmaxyx()
     field_h = max(1, rows - HUD_H)
@@ -71,7 +71,7 @@ def draw(stdscr, world, paused, speed, mode, placing, predator_count, cursor):
     if mode == "manual":
         settings = f"mode: manuel (m)   pose: {placing} (p)   fleches+entree pour placer"
     else:
-        settings = f"mode: auto (m)   predateurs auto: {predator_count} ([ ])"
+        settings = f"mode: auto (m)   predateurs: {len(world.predators)} ([ ] agit tout de suite)"
     _safe_addstr(stdscr, 1, 0, settings, curses.color_pair(7) | curses.A_DIM)
 
     breakdown = world.vocabulary_breakdown()
@@ -125,10 +125,9 @@ def run(stdscr):
 
     mode = "auto"
     placing = "food"
-    predator_count = 6
     cursor = [WIDTH / 2, HEIGHT / 2]
 
-    world = _new_world(mode, predator_count)
+    world = _new_world(mode, 6)
     paused = False
     speed = 1
     frame_time = 1 / 20
@@ -140,7 +139,7 @@ def run(stdscr):
         elif key == ord(" "):
             paused = not paused
         elif key == ord("r"):
-            world = _new_world(mode, predator_count)
+            world = _new_world(mode, len(world.predators))
         elif key in (ord("+"), ord("=")):
             speed = min(200, speed + (1 if speed < 10 else 10))
         elif key in (ord("-"), ord("_")):
@@ -151,10 +150,10 @@ def run(stdscr):
             mode = "manual" if mode == "auto" else "auto"
         elif key == ord("p"):
             placing = "predator" if placing == "food" else "food"
-        elif key == ord("[") and mode == "auto":
-            predator_count = max(0, predator_count - 1)
-        elif key == ord("]") and mode == "auto":
-            predator_count = min(30, predator_count + 1)
+        elif key == ord("["):
+            world.remove_predator()
+        elif key == ord("]"):
+            world.add_random_predator()
         elif key == curses.KEY_UP:
             cursor[1] = max(0.0, cursor[1] - CURSOR_STEP)
         elif key == curses.KEY_DOWN:
@@ -173,7 +172,7 @@ def run(stdscr):
             for _ in range(speed):
                 world.step()
 
-        draw(stdscr, world, paused, speed, mode, placing, predator_count, cursor)
+        draw(stdscr, world, paused, speed, mode, placing, cursor)
         time.sleep(frame_time)
 
 

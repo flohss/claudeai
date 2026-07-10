@@ -39,7 +39,7 @@ TOKEN_COLORS = [
 STATE_LABELS = {IDLE: "idle-chatter", FOOD: "food-call", MATE: "mate-call", DANGER: "alarm-call"}
 
 
-def draw(screen, font, world, paused, speed, mode, placing, predator_count):
+def draw(screen, font, world, paused, speed, mode, placing):
     screen.fill(BG)
     pygame.draw.rect(screen, GROUND, (0, HUD_H, SCREEN_W, SCREEN_H - HUD_H))
 
@@ -58,7 +58,7 @@ def draw(screen, font, world, paused, speed, mode, placing, predator_count):
         x, y = int(p.pos[0] * SCALE), int(p.pos[1] * SCALE) + HUD_H
         pygame.draw.circle(screen, PREDATOR_COLOR, (x, y), 6)
 
-    draw_hud(screen, font, world, paused, speed, mode, placing, predator_count)
+    draw_hud(screen, font, world, paused, speed, mode, placing)
 
 
 def draw_vocab_row(screen, font, y, label, pairs):
@@ -76,7 +76,7 @@ def draw_vocab_row(screen, font, y, label, pairs):
         x += 16 + txt.get_width() + 14
 
 
-def draw_hud(screen, font, world, paused, speed, mode, placing, predator_count):
+def draw_hud(screen, font, world, paused, speed, mode, placing):
     pygame.draw.rect(screen, HUD_BG, (0, 0, SCREEN_W, HUD_H))
     pop = world.population()
     status = "PAUSED" if paused else f"x{speed}"
@@ -87,7 +87,7 @@ def draw_hud(screen, font, world, paused, speed, mode, placing, predator_count):
     if mode == "manual":
         settings = f"mode: manual (M)   click places: {placing} (P)"
     else:
-        settings = f"mode: automatic (M)   predators at start: {predator_count} ([ / ])"
+        settings = f"mode: automatic (M)   predators: {len(world.predators)} ([ / ] act immediately)"
     screen.blit(font.render(settings, True, TEXT_COLOR), (10, 28))
 
     screen.blit(font.render("vocabulary — every color in use per state, population share:",
@@ -136,9 +136,8 @@ def main():
 
     mode = "auto"
     placing = "food"
-    predator_count = 6
 
-    world = _new_world(mode, predator_count)
+    world = _new_world(mode, 6)
     paused = False
     speed = 1
     running = True
@@ -153,7 +152,7 @@ def main():
                 elif event.key == pygame.K_SPACE:
                     paused = not paused
                 elif event.key == pygame.K_r:
-                    world = _new_world(mode, predator_count)
+                    world = _new_world(mode, len(world.predators))
                 elif event.key == pygame.K_UP:
                     speed = min(200, speed + (1 if speed < 10 else 10))
                 elif event.key == pygame.K_DOWN:
@@ -162,10 +161,10 @@ def main():
                     mode = "manual" if mode == "auto" else "auto"
                 elif event.key == pygame.K_p:
                     placing = "predator" if placing == "food" else "food"
-                elif event.key == pygame.K_LEFTBRACKET and mode == "auto":
-                    predator_count = max(0, predator_count - 1)
-                elif event.key == pygame.K_RIGHTBRACKET and mode == "auto":
-                    predator_count = min(30, predator_count + 1)
+                elif event.key == pygame.K_LEFTBRACKET:
+                    world.remove_predator()
+                elif event.key == pygame.K_RIGHTBRACKET:
+                    world.add_random_predator()
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 mx, my = event.pos
                 if my > HUD_H:
@@ -179,7 +178,7 @@ def main():
             for _ in range(speed):
                 world.step()
 
-        draw(screen, font, world, paused, speed, mode, placing, predator_count)
+        draw(screen, font, world, paused, speed, mode, placing)
         pygame.display.flip()
         clock.tick(60)
 

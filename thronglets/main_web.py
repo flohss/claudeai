@@ -3,7 +3,8 @@
 Runs the simulation in a background thread and exposes it over plain HTTP:
   GET  /        the page (canvas + controls)
   GET  /state   a JSON snapshot of the world, polled by the page a few times a second
-  POST /control pause/resume/reset/speed/food, driven by the page's buttons and clicks
+  POST /control pause/resume/reset/speed/mode/placing/predator_count/click,
+                driven by the page's buttons and clicks
 
 No third-party dependencies beyond numpy (for simulation.py) - the server
 itself is only the standard library's http.server, so this needs nothing
@@ -33,8 +34,7 @@ class SimState:
     def __init__(self):
         self.mode = "auto"
         self.placing = "food"
-        self.predator_count = 6
-        self.world = _new_world(self.mode, self.predator_count)
+        self.world = _new_world(self.mode, 6)
         self.paused = False
         self.speed = 1
         self.lock = threading.Lock()
@@ -52,7 +52,7 @@ def snapshot(state):
         "speed": state.speed,
         "mode": state.mode,
         "placing": state.placing,
-        "predator_count": state.predator_count,
+        "predator_count": len(w.predators),
         "width": WIDTH,
         "height": HEIGHT,
         "food": [[float(x), float(y)] for x, y in w.food],
@@ -112,7 +112,7 @@ class Handler(BaseHTTPRequestHandler):
             elif action == "resume":
                 state.paused = False
             elif action == "reset":
-                state.world = _new_world(state.mode, state.predator_count)
+                state.world = _new_world(state.mode, len(state.world.predators))
                 state.paused = False
             elif action == "speed":
                 state.speed = max(1, min(200, int(body.get("value", state.speed))))
@@ -121,7 +121,10 @@ class Handler(BaseHTTPRequestHandler):
             elif action == "placing":
                 state.placing = "predator" if body.get("value") == "predator" else "food"
             elif action == "predator_count":
-                state.predator_count = max(0, min(30, int(body.get("value", state.predator_count))))
+                if int(body.get("delta", 0)) > 0:
+                    state.world.add_random_predator()
+                else:
+                    state.world.remove_predator()
             elif action == "click":
                 x, y = float(body.get("x", 0)), float(body.get("y", 0))
                 if state.mode == "manual" and state.placing == "predator":
@@ -253,7 +256,7 @@ function render(state) {
 
   document.getElementById('settings').textContent = mode === 'manual'
     ? `mode: manuel   pose: ${placing === 'food' ? 'nourriture' : 'predateur'}`
-    : `mode: auto   predateurs au depart: ${predatorCount}`;
+    : `mode: auto   predateurs: ${predatorCount} (+/- agit tout de suite)`;
   document.getElementById('mode').textContent = mode === 'manual' ? 'Mode: manuel' : 'Mode: auto';
   document.getElementById('placing').textContent = placing === 'food' ? 'Pose: nourriture' : 'Pose: predateur';
 }
@@ -303,8 +306,8 @@ document.getElementById('faster').onclick = () => post('speed', {value: stepSpee
 document.getElementById('slower').onclick = () => post('speed', {value: stepSpeed(currentSpeed, -1)});
 document.getElementById('mode').onclick = () => post('mode', {value: mode === 'auto' ? 'manual' : 'auto'});
 document.getElementById('placing').onclick = () => post('placing', {value: placing === 'food' ? 'predator' : 'food'});
-document.getElementById('predLess').onclick = () => post('predator_count', {value: predatorCount - 1});
-document.getElementById('predMore').onclick = () => post('predator_count', {value: predatorCount + 1});
+document.getElementById('predLess').onclick = () => post('predator_count', {delta: -1});
+document.getElementById('predMore').onclick = () => post('predator_count', {delta: 1});
 
 canvas.addEventListener('click', (ev) => {
   const rect = canvas.getBoundingClientRect();

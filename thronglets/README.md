@@ -55,7 +55,7 @@ python main.py
 | `R`           | reset to a fresh world (using the current mode/count below)  |
 | `M`           | toggle automatic / manual mode                               |
 | `P`           | toggle what manual clicks place (food / predator)             |
-| `[` / `]`     | adjust the automatic predator count                          |
+| `[` / `]`     | remove / add a predator right now (also sets the reset count) |
 | left click    | place food (auto mode) or whatever's selected (manual mode)  |
 | `ESC`         | quit                                                         |
 
@@ -80,9 +80,9 @@ Creatures show up as a colored `o` (colored by whatever token they're
 currently signaling, white if silent), food as green `.`, predators as a red
 `X`. Controls: `space`=pause, `f`=drop a food patch, `r`=reset, `+`/`-`=speed,
 `q`=quit, `m`=toggle auto/manual, `p`=toggle food/predator placement,
-`[`/`]`=adjust the automatic predator count. There's no reliable mouse
-support in a terminal, so manual mode uses a keyboard cursor instead: the
-arrow keys move it, `enter` places whatever's currently selected.
+`[`/`]`=remove/add a predator right now. There's no reliable mouse support
+in a terminal, so manual mode uses a keyboard cursor instead: the arrow
+keys move it, `enter` places whatever's currently selected.
 Works best in a wide/tall terminal — Termux's default font is fairly large,
 so consider shrinking it (pinch to zoom, or Termux's font settings) to see
 more of the world at once.
@@ -100,9 +100,11 @@ python main_web.py 9000       # or pick your own port
 
 Then open `http://localhost:8765` (swap in your port) in any browser on the
 same device. The page polls the server a few times a second for a fresh
-snapshot and draws it to a `<canvas>`; buttons handle pause/reset/speed and
-the automatic/manual mode and predator count, and tapping/clicking the
-world places food (auto mode) or whatever's selected (manual mode).
+snapshot and draws it to a `<canvas>`; buttons handle pause/reset/speed, the
+automatic/manual mode, and what a manual placement adds. `+`/`- predateurs`
+remove or add a predator immediately (also setting how many a reset will
+use), and tapping/clicking the world places food (auto mode) or whatever's
+selected (manual mode).
 
 All three renderers show a HUD with, for each internal state (danger / food-call /
 mate-call / idle), every token currently in use and what share of the living

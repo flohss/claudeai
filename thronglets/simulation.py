@@ -192,6 +192,13 @@ class World:
             return
         self.predators.append(Predator(np.clip(np.array([x, y]), [0, 0], [WIDTH, HEIGHT])))
 
+    def add_random_predator(self):
+        self.add_predator(*self.rng.uniform([0, 0], [WIDTH, HEIGHT]))
+
+    def remove_predator(self):
+        if self.predators:
+            self.predators.pop()
+
     def vocabulary(self):
         """Per-state (dominant token, agreement fraction) across the living population."""
         return {state: (pairs[0] if pairs else (0, 0.0))
