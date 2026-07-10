@@ -136,9 +136,9 @@ def main():
                 elif event.key == pygame.K_r:
                     world = World(init_pop=70)
                 elif event.key == pygame.K_UP:
-                    speed = min(10, speed + 1)
+                    speed = min(200, speed + (1 if speed < 10 else 10))
                 elif event.key == pygame.K_DOWN:
-                    speed = max(1, speed - 1)
+                    speed = max(1, speed - (1 if speed <= 10 else 10))
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 mx, my = event.pos
                 if my > HUD_H:

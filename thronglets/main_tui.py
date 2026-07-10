@@ -116,9 +116,9 @@ def run(stdscr):
         elif key == ord("r"):
             world = World(init_pop=70)
         elif key in (ord("+"), ord("=")):
-            speed = min(10, speed + 1)
+            speed = min(200, speed + (1 if speed < 10 else 10))
         elif key in (ord("-"), ord("_")):
-            speed = max(1, speed - 1)
+            speed = max(1, speed - (1 if speed <= 10 else 10))
         elif key == ord("f"):
             center = world.rng.uniform([10, 10], [WIDTH - 10, HEIGHT - 10])
             for _ in range(6):
