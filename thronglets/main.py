@@ -16,7 +16,7 @@ import pygame
 from simulation import FOOD, HEIGHT, IDLE, MATE, World, WIDTH
 
 SCALE = 5
-HUD_H = 110
+HUD_H = 150
 SCREEN_W, SCREEN_H = int(WIDTH * SCALE), int(HEIGHT * SCALE) + HUD_H
 
 BG = (18, 22, 16)
@@ -54,6 +54,21 @@ def draw(screen, font, world, paused, speed):
     draw_hud(screen, font, world, paused, speed)
 
 
+def draw_vocab_row(screen, font, y, label, pairs):
+    x = 10
+    lbl = font.render(f"{label}:", True, TEXT_COLOR)
+    screen.blit(lbl, (x, y))
+    x += lbl.get_width() + 10
+    for token, frac in pairs:
+        if token == 0:
+            pygame.draw.circle(screen, (110, 110, 110), (x + 6, y + 8), 6, width=1)
+        else:
+            pygame.draw.circle(screen, TOKEN_COLORS[token], (x + 6, y + 8), 6)
+        txt = font.render(f"{frac * 100:3.0f}%", True, TEXT_COLOR)
+        screen.blit(txt, (x + 16, y))
+        x += 16 + txt.get_width() + 14
+
+
 def draw_hud(screen, font, world, paused, speed):
     pygame.draw.rect(screen, HUD_BG, (0, 0, SCREEN_W, HUD_H))
     pop = world.population()
@@ -61,20 +76,16 @@ def draw_hud(screen, font, world, paused, speed):
     header = (f"tick {world.tick:>6}   pop {pop:>4}   births {world.births:>5}   "
               f"deaths {world.deaths:>5}   {status}   (space=pause  up/down=speed  r=reset  click=food)")
     screen.blit(font.render(header, True, TEXT_COLOR), (10, 8))
-    screen.blit(font.render("vocabulary — state to dominant token, population agreement:",
+    screen.blit(font.render("vocabulary — every color in use per state, population share:",
                              True, TEXT_COLOR), (10, 28))
 
-    x, y = 10, 50
-    vocab = world.vocabulary()
-    for state, label in STATE_LABELS.items():
-        token, agreement = vocab[state]
-        color = TOKEN_COLORS[token]
-        pygame.draw.circle(screen, color, (x + 6, y + 8), 6)
-        txt = font.render(f"{label}: {agreement * 100:4.0f}% agree", True, TEXT_COLOR)
-        screen.blit(txt, (x + 18, y))
-        x += 220
+    y = 50
+    breakdown = world.vocabulary_breakdown()
+    for state in (FOOD, MATE, IDLE):
+        draw_vocab_row(screen, font, y, STATE_LABELS[state], breakdown[state])
+        y += 22
 
-    legend_y = y + 22
+    legend_y = y
     lx = 10
     pygame.draw.circle(screen, BODY_COLOR, (lx + 6, legend_y + 8), 4)
     pygame.draw.circle(screen, (150, 150, 150), (lx + 6, legend_y + 8), 7, width=2)

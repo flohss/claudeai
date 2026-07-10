@@ -152,16 +152,25 @@ class World:
 
     def vocabulary(self):
         """Per-state (dominant token, agreement fraction) across the living population."""
+        return {state: (pairs[0] if pairs else (0, 0.0))
+                for state, pairs in self.vocabulary_breakdown().items()}
+
+    def vocabulary_breakdown(self):
+        """Per-state list of (token, fraction) for every token in use, most common first."""
         result = {}
         alive = self._alive()
         for state in (IDLE, FOOD, MATE):
             tokens = [c.genome.token_for(state) for c in alive]
             if not tokens:
-                result[state] = (0, 0.0)
+                result[state] = []
                 continue
             counts = np.bincount(tokens, minlength=N_TOKENS)
-            dominant = int(np.argmax(counts))
-            result[state] = (dominant, counts[dominant] / len(tokens))
+            total = len(tokens)
+            pairs = sorted(
+                ((int(t), counts[t] / total) for t in range(N_TOKENS) if counts[t] > 0),
+                key=lambda p: -p[1],
+            )
+            result[state] = pairs
         return result
 
     def population(self):

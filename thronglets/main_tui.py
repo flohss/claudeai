@@ -15,7 +15,7 @@ from simulation import FOOD, HEIGHT, IDLE, MATE, World, WIDTH
 
 TOKEN_COLOR_PAIR = {1: 1, 2: 2, 3: 3, 4: 4, 5: 5}
 STATE_LABELS = {IDLE: "idle", FOOD: "food-call", MATE: "mate-call"}
-HUD_H = 4
+HUD_H = 6
 
 
 def setup_colors():
@@ -39,6 +39,20 @@ def _safe_addstr(stdscr, y, x, text, attr):
             pass
 
 
+def _draw_vocab_row(stdscr, y, label, pairs):
+    x = 0
+    _safe_addstr(stdscr, y, x, f"{label}:", curses.color_pair(7) | curses.A_BOLD)
+    x += len(label) + 2
+    for token, frac in pairs:
+        if token == 0:
+            _safe_addstr(stdscr, y, x, "..", curses.color_pair(7) | curses.A_DIM)
+        else:
+            _safe_addstr(stdscr, y, x, "##", curses.color_pair(TOKEN_COLOR_PAIR[token]) | curses.A_BOLD)
+        seg = f"{frac * 100:3.0f}% "
+        _safe_addstr(stdscr, y, x + 2, seg, curses.color_pair(7))
+        x += 2 + len(seg)
+
+
 def draw(stdscr, world, paused, speed):
     stdscr.erase()
     rows, cols = stdscr.getmaxyx()
@@ -51,19 +65,13 @@ def draw(stdscr, world, paused, speed):
     header = f"tick {world.tick}  pop {pop}  births {world.births}  deaths {world.deaths}  {status}"
     _safe_addstr(stdscr, 0, 0, header, curses.color_pair(7) | curses.A_BOLD)
 
-    x = 0
-    vocab = world.vocabulary()
-    for state in (FOOD, MATE, IDLE):
-        token, agreement = vocab[state]
-        pair = TOKEN_COLOR_PAIR.get(token, 7)
-        _safe_addstr(stdscr, 1, x, "##", curses.color_pair(pair) | curses.A_BOLD)
-        label = f" {STATE_LABELS[state]} {agreement * 100:.0f}%   "
-        _safe_addstr(stdscr, 1, x + 2, label, curses.color_pair(7))
-        x += 2 + len(label)
+    breakdown = world.vocabulary_breakdown()
+    for row, state in enumerate((FOOD, MATE, IDLE), start=1):
+        _draw_vocab_row(stdscr, row, STATE_LABELS[state], breakdown[state])
 
-    _safe_addstr(stdscr, 2, 0, "@ = signale   o = silencieuse   . = nourriture",
+    _safe_addstr(stdscr, HUD_H - 2, 0, "@ = signale   o = silencieuse   . = nourriture",
                  curses.color_pair(7) | curses.A_DIM)
-    _safe_addstr(stdscr, 3, 0, "space=pause  f=food  r=reset  +/-=speed  q=quit",
+    _safe_addstr(stdscr, HUD_H - 1, 0, "space=pause  f=food  r=reset  +/-=speed  q=quit",
                  curses.color_pair(7) | curses.A_DIM)
 
     for fx, fy in world.food:
