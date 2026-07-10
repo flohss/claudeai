@@ -30,6 +30,9 @@ real, if deliberately small, model of how a shared vocabulary can emerge from
 - Signals also carry real information: a creature can *hear* a call from
   farther away than it can *see* food itself, so listening to others is
   genuinely useful, not just decorative.
+- All three renderers have an in-game notice (`h`/`H` in pygame and the
+  terminal, a "Notice" button on the web page) explaining the mechanics
+  above without leaving the running simulation.
 
 ## Run it
 
@@ -62,6 +65,7 @@ it doesn't ask a second time).
 | `R`           | reset to a fresh world (same mode, same predator count)      |
 | `P`           | toggle what manual clicks place (food / predator)             |
 | `[` / `]`     | remove / add a predator right now (also sets the reset count) |
+| `H`           | in-game notice explaining the mechanics                      |
 | left click    | place food (auto mode) or whatever's selected (manual mode)  |
 | `ESC`         | quit                                                         |
 
@@ -90,9 +94,10 @@ Creatures show up as a colored `o` (colored by whatever token they're
 currently signaling, white if silent), food as green `.`, predators as a red
 `X`. Controls: `space`=pause, `f`=drop a food patch (auto mode only),
 `r`=reset, `+`/`-`=speed, `q`=quit, `p`=toggle food/predator placement,
-`[`/`]`=remove/add a predator right now. There's no reliable mouse support
-in a terminal, so manual mode uses a keyboard cursor instead: the arrow
-keys move it, `enter` places whatever's currently selected.
+`[`/`]`=remove/add a predator right now, `h`=in-game notice (paginated so it
+fits any terminal height). There's no reliable mouse support in a terminal,
+so manual mode uses a keyboard cursor instead: the arrow keys move it,
+`enter` places whatever's currently selected.
 Works best in a wide/tall terminal — Termux's default font is fairly large,
 so consider shrinking it (pinch to zoom, or Termux's font settings) to see
 more of the world at once.
@@ -116,8 +121,9 @@ started, the page polls the server a few times a second for a fresh
 snapshot and draws it to a `<canvas>`; buttons
 handle pause/reset/speed and what a manual placement adds. `+`/`- predateurs`
 remove or add a predator immediately (also setting how many a reset will
-use), and tapping/clicking the world places food (auto mode) or whatever's
-selected (manual mode).
+use), tapping/clicking the world places food (auto mode) or whatever's
+selected (manual mode), and a **Notice** button opens an explainer of the
+mechanics without pausing the simulation underneath.
 
 All three renderers show a HUD with, for each internal state (danger / food-call /
 mate-call / idle), every token currently in use and what share of the living
@@ -174,12 +180,13 @@ sometimes resolve itself over further generations - and sometimes doesn't.
 This was built in a container without a display. The mechanics are verified
 via `test_smoke.py` (population survives, vocabulary converges across
 multiple random seeds); `main_tui.py`'s startup prompt, placing toggle,
-cursor movement, and manual placement were all driven end to end inside a
-real pseudo-terminal (read back through a VT100 emulator), and
-`main_web.py`'s start screen, placing, predator count, and click-to-place
-were all confirmed working end to end in a real headless browser (the
-overlay hides and the world appears only after picking a mode, exactly as
-intended). `main.py`'s pygame window was exercised headlessly (SDL's dummy
-driver) to confirm the new start-screen/predator-count logic doesn't crash,
-but hasn't been eyeballed live — worth a quick visual check the first time
-you run it locally.
+cursor movement, manual placement, and the paginated in-game notice were
+all driven end to end inside a real pseudo-terminal (read back through a
+VT100 emulator) — including on a genuinely small 24-row terminal, which is
+what caught the notice screen needing pagination in the first place (it
+silently ran off the bottom of a normal-sized terminal otherwise), and
+`main_web.py`'s start screen, placing, predator count, click-to-place, and
+notice modal were all confirmed working end to end in a real headless
+browser. `main.py`'s pygame window was exercised headlessly (SDL's dummy
+driver) to confirm the new logic doesn't crash, but hasn't been eyeballed
+live — worth a quick visual check the first time you run it locally.

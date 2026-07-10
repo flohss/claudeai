@@ -10,6 +10,7 @@ Controls:
   LEFT CLICK   place food (auto mode) or whatever's selected (manual mode)
   P            toggle what manual clicks place (food / predator)
   [ / ]        remove/add a predator right now
+  H            in-game notice/help screen
   ESC          quit
 """
 
@@ -41,6 +42,62 @@ TOKEN_COLORS = [
     (70, 225, 210),
 ]
 STATE_LABELS = {IDLE: "idle-chatter", FOOD: "food-call", MATE: "mate-call", DANGER: "alarm-call"}
+
+HELP_LINES = [
+    ("Thronglets - notice", True),
+    ("", False),
+    ("Each creature is born with a genome deciding which color it shows for", False),
+    ("its current state, and how it reacts to colors it hears from others.", False),
+    ("Nobody programs what a color means - a shared language can emerge", False),
+    ("through natural selection, or it might not.", False),
+    ("", False),
+    ("The 4 states, in priority order:", True),
+    ("  1. danger     a predator was spotted -> flee immediately", False),
+    ("  2. food-call  food is visible nearby", False),
+    ("  3. mate-call  ready to mate, and a ready partner is nearby", False),
+    ("  4. idle       nothing special (by far the most common state)", False),
+    ("", False),
+    ("Living, mating, dying:", True),
+    ("  Energy drains constantly; eating restores it. Emitting a color", False),
+    ("  (other than silence) costs a bit of extra energy. Enough energy", False),
+    ("  and age, plus a matching partner nearby: a child is born. A", False),
+    ("  predator that catches a creature kills it outright.", False),
+    ("", False),
+    ("Reading the vocabulary rows at the top:", True),
+    ("  For each state, the share of the population using each color.", False),
+    ("  It starts near chance (~17%) and climbs if a token wins out.", False),
+    ("  A '..' swatch means silence, not a missing color.", False),
+    ("", False),
+    ("Worth knowing:", True),
+    ("  Two states can end up sharing the same color purely by chance", False),
+    ("  (e.g. idle and alarm-call) - nothing prevents it or guarantees", False),
+    ("  it resolves. Signaling costs energy, so silence is a real", False),
+    ("  strategy, not a default.", False),
+]
+
+
+def show_help(screen, font):
+    line_h = 24
+    top = 20
+    page_size = max(1, (SCREEN_H - top - 50) // line_h)
+    for start in range(0, len(HELP_LINES), page_size):
+        page = HELP_LINES[start:start + page_size]
+        more = start + page_size < len(HELP_LINES)
+        footer = "-- space for more --" if more else "-- press any key to resume --"
+        waiting = True
+        while waiting:
+            screen.fill(BG)
+            for i, (line, bold) in enumerate(page):
+                color = TEXT_COLOR if not bold else (255, 255, 255)
+                screen.blit(font.render(line, True, color), (20, top + i * line_h))
+            screen.blit(font.render(footer, True, (150, 155, 145)), (20, top + len(page) * line_h + 14))
+            pygame.display.flip()
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+                elif event.type == pygame.KEYDOWN:
+                    waiting = False
 
 
 def draw(screen, font, world, paused, speed, mode, placing):
@@ -85,7 +142,7 @@ def draw_hud(screen, font, world, paused, speed, mode, placing):
     pop = world.population()
     status = "PAUSED" if paused else f"x{speed}"
     header = (f"tick {world.tick:>6}   pop {pop:>4}   births {world.births:>5}   "
-              f"deaths {world.deaths:>5}   {status}   (space=pause  up/down=speed  r=reset)")
+              f"deaths {world.deaths:>5}   {status}   (space=pause  up/down=speed  r=reset  h=help)")
     screen.blit(font.render(header, True, TEXT_COLOR), (10, 8))
 
     if mode == "manual":
@@ -225,6 +282,8 @@ def main():
                     world.remove_predator()
                 elif event.key == pygame.K_RIGHTBRACKET:
                     world.add_random_predator()
+                elif event.key == pygame.K_h:
+                    show_help(screen, font)
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 mx, my = event.pos
                 if my > HUD_H:

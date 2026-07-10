@@ -10,6 +10,7 @@ Controls: space=pause  f=drop food (auto mode only)  r=reset  +/-=speed  q=quit
   p=toggle food/predator (manual placement)
   [ / ]=remove/add a predator right now (also sets the count used on reset)
   arrow keys=move cursor, enter=place (manual mode)
+  h=in-game notice/help screen
 """
 
 import curses
@@ -24,6 +25,56 @@ STATE_LABELS = {IDLE: "idle", FOOD: "food-call", MATE: "mate-call", DANGER: "ala
 HUD_H = 9
 CURSOR_STEP = 4.0
 ENTER_KEYS = (10, 13, curses.KEY_ENTER)
+
+HELP_LINES = [
+    ("Thronglets — notice", curses.A_BOLD),
+    ("", 0),
+    ("Chaque creature nait avec un genome qui decide quelle couleur", 0),
+    ("elle affiche selon son etat, et comment elle reagit aux couleurs", 0),
+    ("des autres. Personne ne programme le sens des couleurs : un", 0),
+    ("langage commun peut emerger par selection naturelle, ou pas.", 0),
+    ("", 0),
+    ("Les 4 etats, par ordre de priorite :", curses.A_BOLD),
+    ("  1. danger     un predateur repere -> fuite immediate", 0),
+    ("  2. food-call  de la nourriture est visible tout pres", 0),
+    ("  3. mate-call  prete a se reproduire + partenaire prete proche", 0),
+    ("  4. idle       rien de special (etat le plus frequent, de loin)", 0),
+    ("", 0),
+    ("Vivre, se reproduire, mourir :", curses.A_BOLD),
+    ("  L'energie baisse en permanence, manger la restaure. Emettre", 0),
+    ("  une couleur (hors silence) coute un peu d'energie en plus.", 0),
+    ("  Assez d'energie et d'age, un partenaire pareil a proximite :", 0),
+    ("  un enfant nait. Un predateur qui attrape une creature la tue.", 0),
+    ("", 0),
+    ("Lire le vocabulaire affiche en haut :", curses.A_BOLD),
+    ("  Pour chaque etat, la part de la population qui utilise chaque", 0),
+    ("  couleur. Ca part du hasard (~17%) et grimpe si un mot fait", 0),
+    ("  consensus. '..' = silence, pas une couleur en moins.", 0),
+    ("", 0),
+    ("A savoir :", curses.A_BOLD),
+    ("  Deux etats peuvent finir sur la meme couleur par hasard (ex:", 0),
+    ("  idle et alarm-call) - rien ne l'empeche ni ne garantit que ca", 0),
+    ("  se resolve. Parler coute de l'energie : le silence est une", 0),
+    ("  vraie strategie, pas un defaut.", 0),
+]
+
+
+def show_help(stdscr):
+    """Paginate so this fits any terminal height, not just tall ones."""
+    stdscr.nodelay(False)
+    rows, _ = stdscr.getmaxyx()
+    page_size = max(1, rows - 2)
+    for start in range(0, len(HELP_LINES), page_size):
+        page = HELP_LINES[start:start + page_size]
+        stdscr.erase()
+        for i, (line, attr) in enumerate(page):
+            _safe_addstr(stdscr, i, 0, line, curses.color_pair(7) | attr)
+        more = start + page_size < len(HELP_LINES)
+        footer = "-- espace pour la suite --" if more else "-- une touche pour reprendre --"
+        _safe_addstr(stdscr, min(rows - 1, len(page) + 1), 0, footer, curses.color_pair(7) | curses.A_DIM)
+        stdscr.refresh()
+        stdscr.getch()
+    stdscr.nodelay(True)
 
 
 def setup_colors():
@@ -142,7 +193,7 @@ def draw(stdscr, world, paused, speed, mode, placing, cursor):
     food_hint = "f=food" if mode == "auto" else "f=food (auto mode only)"
     _safe_addstr(stdscr, HUD_H - 2, 0, f"space=pause  {food_hint}  r=reset  +/-=speed  q=quit",
                  curses.color_pair(7) | curses.A_DIM)
-    _safe_addstr(stdscr, HUD_H - 1, 0, "p=placer  [ ]=nb predateurs  fleches/entree=placer",
+    _safe_addstr(stdscr, HUD_H - 1, 0, "p=placer  [ ]=nb predateurs  fleches/entree=placer  h=aide",
                  curses.color_pair(7) | curses.A_DIM)
 
     for fx, fy in world.food:
@@ -212,6 +263,8 @@ def run(stdscr):
             world.remove_predator()
         elif key == ord("]"):
             world.add_random_predator()
+        elif key == ord("h"):
+            show_help(stdscr)
         elif key == curses.KEY_UP:
             cursor[1] = max(0.0, cursor[1] - CURSOR_STEP)
         elif key == curses.KEY_DOWN:

@@ -7,7 +7,8 @@ Runs the simulation in a background thread and exposes it over plain HTTP:
                 driven by the page's buttons and clicks
 
 The world doesn't exist until the page's start screen picks automatic or
-manual mode - that choice is made once, up front, not toggled mid-run.
+manual mode - that choice is made once, up front, not toggled mid-run. A
+"Notice" button opens an in-page explainer of the mechanics at any time.
 
 No third-party dependencies beyond numpy (for simulation.py) - the server
 itself is only the standard library's http.server, so this needs nothing
@@ -200,6 +201,21 @@ INDEX_HTML = """<!doctype html>
   #start-overlay label { font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 8px; }
   #initPop { width: 70px; font-family: inherit; font-size: 14px; padding: 4px 6px; }
   #app { display: none; flex-direction: column; align-items: center; gap: 10px; width: 100%; }
+
+  #help-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+    align-items: center; justify-content: center; padding: 16px; z-index: 10;
+  }
+  #help-panel {
+    background: #171d13; border: 1px solid #3a4530; border-radius: 10px;
+    max-width: 640px; width: 100%; max-height: 85vh; overflow-y: auto;
+    padding: 22px 24px; line-height: 1.6; font-size: 13.5px;
+  }
+  #help-panel h2 { font-size: 17px; margin: 18px 0 6px; }
+  #help-panel h2:first-child { margin-top: 0; }
+  #help-panel p, #help-panel li { color: #c3c8b6; margin: 4px 0; }
+  #help-panel ul { margin: 4px 0; padding-left: 1.3em; }
+  #help-panel .close-row { text-align: right; margin-top: 16px; }
 </style>
 </head>
 <body>
@@ -227,6 +243,7 @@ INDEX_HTML = """<!doctype html>
       <button id="reset">Reset</button>
       <button id="slower">- vitesse</button>
       <button id="faster">+ vitesse</button>
+      <button id="openHelp">Notice</button>
     </div>
     <div id="controls2">
       <button id="placing">Pose: nourriture</button>
@@ -235,6 +252,32 @@ INDEX_HTML = """<!doctype html>
     </div>
     <canvas id="world" width="900" height="630"></canvas>
     <div id="hint">Clique/touche le monde pour placer de la nourriture (ou un predateur en mode manuel)</div>
+  </div>
+
+  <div id="help-overlay">
+    <div id="help-panel">
+      <h2>Le principe</h2>
+      <p>Chaque creature nait avec un genome qui decide quelle couleur elle affiche selon son etat, et comment elle reagit aux couleurs des autres. Personne ne programme le sens des couleurs : un langage commun peut emerger par selection naturelle, ou pas.</p>
+
+      <h2>Les 4 etats, par ordre de priorite</h2>
+      <ul>
+        <li><strong>danger</strong> — un predateur est repere, fuite immediate</li>
+        <li><strong>food-call</strong> — de la nourriture est visible tout pres</li>
+        <li><strong>mate-call</strong> — prete a se reproduire, partenaire prete proche</li>
+        <li><strong>idle</strong> — rien de special (l'etat le plus frequent, de loin)</li>
+      </ul>
+
+      <h2>Vivre, se reproduire, mourir</h2>
+      <p>L'energie baisse en permanence, manger la restaure. Emettre une couleur (hors silence) coute un peu d'energie en plus. Assez d'energie et d'age, un partenaire pareil a proximite : un enfant nait. Un predateur qui attrape une creature la tue net.</p>
+
+      <h2>Lire le vocabulaire affiche en haut</h2>
+      <p>Pour chaque etat, la part de la population qui utilise chaque couleur. Ca part du hasard (~17%, il y a 6 mots possibles) et grimpe si un mot fait consensus. Les deux points <code>..</code> representent le silence — pas une couleur en moins.</p>
+
+      <h2>A savoir</h2>
+      <p>Deux etats peuvent finir sur la meme couleur par hasard (par exemple idle et alarm-call) — rien ne l'empeche ni ne garantit que ca se resolve. Parler coute de l'energie : le silence est une vraie strategie, pas un defaut.</p>
+
+      <div class="close-row"><button id="closeHelp">Fermer</button></div>
+    </div>
   </div>
 
 <script>
@@ -358,6 +401,13 @@ document.getElementById('slower').onclick = () => post('speed', {value: stepSpee
 document.getElementById('placing').onclick = () => post('placing', {value: placing === 'food' ? 'predator' : 'food'});
 document.getElementById('predLess').onclick = () => post('predator_count', {delta: -1});
 document.getElementById('predMore').onclick = () => post('predator_count', {delta: 1});
+
+const helpOverlay = document.getElementById('help-overlay');
+document.getElementById('openHelp').onclick = () => { helpOverlay.style.display = 'flex'; };
+document.getElementById('closeHelp').onclick = () => { helpOverlay.style.display = 'none'; };
+helpOverlay.addEventListener('click', (ev) => {
+  if (ev.target === helpOverlay) helpOverlay.style.display = 'none';
+});
 
 canvas.addEventListener('click', (ev) => {
   const rect = canvas.getBoundingClientRect();
