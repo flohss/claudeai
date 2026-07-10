@@ -32,11 +32,13 @@ SIGNAL_STRENGTH = 0.9
 EDGE_MARGIN = 12.0
 EDGE_PUSH = 1.0
 
-PREDATOR_COUNT = 3
 PREDATOR_SPEED = 1.3
 PREDATOR_HUNT_RADIUS = 70.0
 PREDATOR_KILL_RADIUS = 3.0
 DANGER_RADIUS = 22.0  # how far a creature can spot a predator directly
+PREDATOR_PATCH_SIZE = (1, 2)  # predators per wave, like a food patch
+PREDATOR_SPAWN_INTERVAL = 600
+MAX_PREDATORS = 6
 
 METABOLISM = 0.06
 SIGNAL_COST = 0.025  # extra energy drain for emitting any non-silent token
@@ -149,15 +151,14 @@ class World:
             for _ in range(init_pop)
         ]
         self.food = []
-        self.predators = [
-            Predator(self.rng.uniform([0, 0], [WIDTH, HEIGHT])) for _ in range(PREDATOR_COUNT)
-        ]
+        self.predators = []
         self.tick = 0
         self.births = 0
         self.deaths = 0
         self._cache = {"alive": []}
         for _ in range(4):
             self._spawn_food_patch()
+        self._spawn_predator_wave()
 
     def step(self):
         self.tick += 1
@@ -170,6 +171,8 @@ class World:
         self._age_and_cull()
         if self.tick % FOOD_SPAWN_INTERVAL == 0 and len(self.food) < MAX_FOOD:
             self._spawn_food_patch()
+        if self.tick % PREDATOR_SPAWN_INTERVAL == 0 and len(self.predators) < MAX_PREDATORS:
+            self._spawn_predator_wave()
 
     def vocabulary(self):
         """Per-state (dominant token, agreement fraction) across the living population."""
@@ -396,3 +399,9 @@ class World:
             if len(self.food) >= MAX_FOOD:
                 break
             self.food.append(np.clip(center + self.rng.normal(0, 5, 2), [0, 0], [WIDTH, HEIGHT]))
+
+    def _spawn_predator_wave(self):
+        for _ in range(int(self.rng.integers(*PREDATOR_PATCH_SIZE))):
+            if len(self.predators) >= MAX_PREDATORS:
+                break
+            self.predators.append(Predator(self.rng.uniform([0, 0], [WIDTH, HEIGHT])))

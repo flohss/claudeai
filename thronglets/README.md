@@ -12,7 +12,9 @@ real, if deliberately small, model of how a shared vocabulary can emerge from
   it emits when it's **idle**, has **spotted food**, wants to **mate**, or
   senses a nearby **predator** — and separately, how it reacts on hearing
   each token from a neighbor (move toward it, away from it, or ignore it).
-- A handful of predators roam the world and kill any creature they catch.
+- Predators roam the world and kill any creature they catch. They spawn in
+  small waves over time (like food patches do), up to a cap, rather than all
+  existing from tick 0 — so the world gets more dangerous the longer it runs.
   Spotting one puts a creature in a "danger" state, using the exact same
   signal/response machinery as food and mate calls — so an alarm call is
   just another word that can (or might not) emerge, not a special-cased
