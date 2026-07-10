@@ -70,9 +70,10 @@ cd claudeai/thronglets
 python main_tui.py
 ```
 
-Creatures show up as `@` (currently signaling, colored by token) or `o`
-(silent), food as green `.`, predators as a bold red `X`. Controls:
-`space`=pause, `f`=drop a food patch, `r`=reset, `+`/`-`=speed, `q`=quit.
+Creatures show up as a colored `o` (colored by whatever token they're
+currently signaling, white if silent), food as green `.`, predators as a red
+`X`. Controls: `space`=pause, `f`=drop a food patch, `r`=reset, `+`/`-`=speed,
+`q`=quit.
 Works best in a wide/tall terminal — Termux's default font is fairly large,
 so consider shrinking it (pinch to zoom, or Termux's font settings) to see
 more of the world at once.

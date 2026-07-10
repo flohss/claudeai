@@ -69,7 +69,7 @@ def draw(stdscr, world, paused, speed):
     for row, state in enumerate((DANGER, FOOD, MATE, IDLE), start=1):
         _draw_vocab_row(stdscr, row, STATE_LABELS[state], breakdown[state])
 
-    _safe_addstr(stdscr, HUD_H - 2, 0, "@ = signale   o = silencieuse   . = nourriture   X = predateur",
+    _safe_addstr(stdscr, HUD_H - 2, 0, "o colore = signale   o blanc = silencieuse   . = nourriture   X = predateur",
                  curses.color_pair(7) | curses.A_DIM)
     _safe_addstr(stdscr, HUD_H - 1, 0, "space=pause  f=food  r=reset  +/-=speed  q=quit",
                  curses.color_pair(7) | curses.A_DIM)
@@ -83,8 +83,7 @@ def draw(stdscr, world, paused, speed):
             continue
         y, x = HUD_H + int(c.pos[1] * sy), int(c.pos[0] * sx)
         pair = TOKEN_COLOR_PAIR.get(c.token, 7)
-        ch = "@" if c.token else "o"
-        _safe_addstr(stdscr, y, x, ch, curses.color_pair(pair) | curses.A_BOLD)
+        _safe_addstr(stdscr, y, x, "o", curses.color_pair(pair) | curses.A_BOLD)
 
     for p in world.predators:
         y, x = HUD_H + int(p.pos[1] * sy), int(p.pos[0] * sx)
