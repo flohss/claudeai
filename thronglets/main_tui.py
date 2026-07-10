@@ -15,7 +15,7 @@ from simulation import FOOD, HEIGHT, IDLE, MATE, World, WIDTH
 
 TOKEN_COLOR_PAIR = {1: 1, 2: 2, 3: 3, 4: 4, 5: 5}
 STATE_LABELS = {IDLE: "idle", FOOD: "food-call", MATE: "mate-call"}
-HUD_H = 3
+HUD_H = 4
 
 
 def setup_colors():
@@ -49,13 +49,21 @@ def draw(stdscr, world, paused, speed):
     pop = world.population()
     status = "PAUSED" if paused else f"x{speed}"
     header = f"tick {world.tick}  pop {pop}  births {world.births}  deaths {world.deaths}  {status}"
-    vocab = world.vocabulary()
-    vocab_line = "  ".join(
-        f"{STATE_LABELS[s]}={vocab[s][1] * 100:.0f}%" for s in (IDLE, FOOD, MATE)
-    )
     _safe_addstr(stdscr, 0, 0, header, curses.color_pair(7) | curses.A_BOLD)
-    _safe_addstr(stdscr, 1, 0, vocab_line, curses.color_pair(7))
-    _safe_addstr(stdscr, 2, 0, "space=pause  f=food  r=reset  +/-=speed  q=quit",
+
+    x = 0
+    vocab = world.vocabulary()
+    for state in (FOOD, MATE, IDLE):
+        token, agreement = vocab[state]
+        pair = TOKEN_COLOR_PAIR.get(token, 7)
+        _safe_addstr(stdscr, 1, x, "##", curses.color_pair(pair) | curses.A_BOLD)
+        label = f" {STATE_LABELS[state]} {agreement * 100:.0f}%   "
+        _safe_addstr(stdscr, 1, x + 2, label, curses.color_pair(7))
+        x += 2 + len(label)
+
+    _safe_addstr(stdscr, 2, 0, "@ = signale   o = silencieuse   . = nourriture",
+                 curses.color_pair(7) | curses.A_DIM)
+    _safe_addstr(stdscr, 3, 0, "space=pause  f=food  r=reset  +/-=speed  q=quit",
                  curses.color_pair(7) | curses.A_DIM)
 
     for fx, fy in world.food:

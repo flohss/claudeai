@@ -16,7 +16,7 @@ import pygame
 from simulation import FOOD, HEIGHT, IDLE, MATE, World, WIDTH
 
 SCALE = 5
-HUD_H = 90
+HUD_H = 110
 SCREEN_W, SCREEN_H = int(WIDTH * SCALE), int(HEIGHT * SCALE) + HUD_H
 
 BG = (18, 22, 16)
@@ -74,9 +74,21 @@ def draw_hud(screen, font, world, paused, speed):
         screen.blit(txt, (x + 18, y))
         x += 220
 
+    legend_y = y + 22
+    lx = 10
+    pygame.draw.circle(screen, BODY_COLOR, (lx + 6, legend_y + 8), 4)
+    pygame.draw.circle(screen, (150, 150, 150), (lx + 6, legend_y + 8), 7, width=2)
+    txt = font.render("creature (ring = its current signal)", True, TEXT_COLOR)
+    screen.blit(txt, (lx + 18, legend_y))
+    lx += 18 + txt.get_width() + 20
+
+    pygame.draw.circle(screen, FOOD_COLOR, (lx + 6, legend_y + 8), 3)
+    txt = font.render("food", True, TEXT_COLOR)
+    screen.blit(txt, (lx + 18, legend_y))
+
     if pop == 0:
         msg = font.render("Extinct. Press R to start a new world.", True, (235, 90, 90))
-        screen.blit(msg, (10, y + 22))
+        screen.blit(msg, (10, legend_y + 22))
 
 
 def main():
