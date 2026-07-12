@@ -21,16 +21,19 @@ extra to install anywhere main_tui.py already runs.
 
 import argparse
 import json
+import os
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from simulation import DANGER, FOOD, HEIGHT, IDLE, MATE, MAX_POPULATION, World, WIDTH, load_seed_genome
+from simulation import (DANGER, FOOD, HEIGHT, IDLE, MATE, MAX_POPULATION, World, WIDTH,
+                         load_seed_genome, load_world, save_world)
 
 DEFAULT_PORT = 8765
 STEP_INTERVAL = 0.05
 DEFAULT_INIT_POP = 70
 DEFAULT_LANGUAGE_FILE = "language_model.json"
+DEFAULT_SAVE_FILE = "thronglets_save.json"
 STATE_IDS = {IDLE: "idle", FOOD: "food", MATE: "mate", DANGER: "danger"}
 
 
@@ -56,7 +59,7 @@ class SimState:
 
 def snapshot(state):
     if not state.started:
-        return {"started": False}
+        return {"started": False, "save_exists": os.path.exists(DEFAULT_SAVE_FILE)}
 
     w = state.world
     breakdown = w.vocabulary_breakdown()
@@ -125,9 +128,18 @@ class Handler(BaseHTTPRequestHandler):
 
         state = self.server.state
         action = body.get("action")
-        ai_error = None
+        error_code = None
         with state.lock:
-            if action == "start" and not state.started:
+            if action == "start" and not state.started and body.get("resume_save"):
+                try:
+                    state.world = load_world(DEFAULT_SAVE_FILE)
+                    state.mode = "manual" if (state.world.manual_food or state.world.manual_predators) else "auto"
+                    state.init_pop = state.world.population()
+                    state.active_seed_genome = None
+                    state.started = True
+                except (OSError, ValueError, KeyError):
+                    error_code = "resume_failed"
+            elif action == "start" and not state.started:
                 state.mode = "manual" if body.get("mode") == "manual" else "auto"
                 try:
                     init_pop = int(body.get("init_pop", DEFAULT_INIT_POP))
@@ -142,7 +154,7 @@ class Handler(BaseHTTPRequestHandler):
                         state.active_seed_genome = load_seed_genome(DEFAULT_LANGUAGE_FILE)
                     except OSError:
                         state.active_seed_genome = None
-                        ai_error = "ai_missing"
+                        error_code = "ai_missing"
                 else:
                     state.active_seed_genome = None
 
@@ -154,6 +166,8 @@ class Handler(BaseHTTPRequestHandler):
                 state.paused = True
             elif action == "resume":
                 state.paused = False
+            elif action == "save":
+                save_world(state.world, DEFAULT_SAVE_FILE)
             elif action == "reset":
                 state.world = _new_world(state.mode, len(state.world.predators), state.init_pop,
                                           state.active_seed_genome)
@@ -173,8 +187,9 @@ class Handler(BaseHTTPRequestHandler):
                     state.world.add_predator(x, y)
                 else:
                     state.world.add_food(x, y)
+        error_file = DEFAULT_SAVE_FILE if error_code == "resume_failed" else DEFAULT_LANGUAGE_FILE
         self._send(200, "application/json",
-                   json.dumps({"ok": True, "error": ai_error, "file": DEFAULT_LANGUAGE_FILE}).encode())
+                   json.dumps({"ok": True, "error": error_code, "file": error_file}).encode())
 
     def _send(self, code, content_type, body, no_store=False):
         self.send_response(code)
@@ -260,6 +275,7 @@ INDEX_HTML = """<!doctype html>
     <label><input type="checkbox" id="useAi"> <span data-i18n="useAiLabel"></span></label>
     <button id="startAuto" data-i18n="startAuto"></button>
     <button id="startManual" data-i18n="startManual"></button>
+    <button id="startResume" data-i18n="resumeSaveText" style="display:none"></button>
   </div>
 
   <div id="app">
@@ -276,6 +292,7 @@ INDEX_HTML = """<!doctype html>
       <button id="reset" data-i18n="resetText"></button>
       <button id="slower" data-i18n="slowerText"></button>
       <button id="faster" data-i18n="fasterText"></button>
+      <button id="save" data-i18n="saveText"></button>
       <button id="openHelp" data-i18n="noticeText"></button>
     </div>
     <div id="controls2">
@@ -326,14 +343,17 @@ const STRINGS = {
     useAiLabel: "Activate the pre-trained AI language (language_model.json)",
     startAuto: "Automatic — food and predators spawn on their own",
     startManual: "Manual — I place everything myself",
+    resumeSaveText: "Resume saved game",
     pauseText: "Pause", resumeText: "Resume",
     resetText: "Reset",
     slowerText: "- speed", fasterText: "+ speed",
+    saveText: "Save", savedText: "Saved!",
     noticeText: "Notice",
     placingFoodBtn: "Placing: food", placingPredatorBtn: "Placing: predator",
     predLessText: "- predators", predMoreText: "+ predators",
     hint: "Click/tap the world to place food (or a predator in manual mode)",
     closeText: "Close",
+    errorResumeFailed: (file) => `'${file}' could not be read - start a fresh game instead.`,
 
     labelIdle: "idle", labelFood: "food-call", labelMate: "mate-call", labelDanger: "alarm-call",
     wordBirths: "births", wordDeaths: "deaths", wordPaused: "PAUSE",
@@ -360,14 +380,17 @@ const STRINGS = {
     useAiLabel: "Activer le langage pre-entraine par IA (language_model.json)",
     startAuto: "Automatique — nourriture et predateurs apparaissent seuls",
     startManual: "Manuel — je place tout moi-meme",
+    resumeSaveText: "Reprendre la partie sauvegardee",
     pauseText: "Pause", resumeText: "Reprendre",
     resetText: "Reset",
     slowerText: "- vitesse", fasterText: "+ vitesse",
+    saveText: "Sauvegarder", savedText: "Sauvegarde !",
     noticeText: "Notice",
     placingFoodBtn: "Pose: nourriture", placingPredatorBtn: "Pose: predateur",
     predLessText: "- predateurs", predMoreText: "+ predateurs",
     hint: "Clique/touche le monde pour placer de la nourriture (ou un predateur en mode manuel)",
     closeText: "Fermer",
+    errorResumeFailed: (file) => `'${file}' illisible - nouvelle partie a la place.`,
 
     labelIdle: "inactif", labelFood: "nourriture", labelMate: "partenaire", labelDanger: "alerte",
     wordBirths: "naissances", wordDeaths: "morts", wordPaused: "PAUSE",
@@ -414,6 +437,7 @@ function render(state) {
   if (!state.started) {
     document.getElementById('start-overlay').style.display = 'flex';
     document.getElementById('app').style.display = 'none';
+    document.getElementById('startResume').style.display = state.save_exists ? 'block' : 'none';
     return;
   }
   document.getElementById('start-overlay').style.display = 'none';
@@ -518,12 +542,25 @@ async function startGame(mode) {
   const res = await post('start', {mode, init_pop: startingInitPop(), use_ai: useAi});
   if (res.error === 'ai_missing') alert(STRINGS[uiLang].errorAiMissing(res.file));
 }
+async function resumeGame() {
+  const res = await post('start', {resume_save: true});
+  if (res.error === 'resume_failed') alert(STRINGS[uiLang].errorResumeFailed(res.file));
+}
+async function saveGame() {
+  await post('save');
+  const btn = document.getElementById('save');
+  const original = STRINGS[uiLang].saveText;
+  btn.textContent = STRINGS[uiLang].savedText;
+  setTimeout(() => { btn.textContent = STRINGS[uiLang].saveText; }, 1500);
+}
 document.getElementById('langEn').onclick = () => applyLanguage('en');
 document.getElementById('langFr').onclick = () => applyLanguage('fr');
 document.getElementById('startAuto').onclick = () => startGame('auto');
 document.getElementById('startManual').onclick = () => startGame('manual');
+document.getElementById('startResume').onclick = () => resumeGame();
 document.getElementById('pause').onclick = () => post(paused ? 'resume' : 'pause');
 document.getElementById('reset').onclick = () => post('reset');
+document.getElementById('save').onclick = () => saveGame();
 document.getElementById('faster').onclick = () => post('speed', {value: stepSpeed(currentSpeed, 1)});
 document.getElementById('slower').onclick = () => post('speed', {value: stepSpeed(currentSpeed, -1)});
 document.getElementById('placing').onclick = () => post('placing', {value: placing === 'food' ? 'predator' : 'food'});

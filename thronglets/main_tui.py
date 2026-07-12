@@ -15,13 +15,16 @@ Controls: space=pause  f=drop food (auto mode only)  r=reset  +/-=speed  q=quit
 
 import argparse
 import curses
+import os
 import time
 
 from i18n import STATE_LABELS
-from simulation import DANGER, FOOD, HEIGHT, IDLE, MATE, MAX_POPULATION, World, WIDTH, load_seed_genome
+from simulation import (DANGER, FOOD, HEIGHT, IDLE, MATE, MAX_POPULATION, World, WIDTH,
+                         load_seed_genome, load_world, save_world)
 
 DEFAULT_INIT_POP = 70
 DEFAULT_LANGUAGE_FILE = "language_model.json"
+DEFAULT_SAVE_FILE = "thronglets_save.json"
 
 TOKEN_COLOR_PAIR = {1: 1, 2: 2, 3: 3, 4: 4, 5: 5}
 HUD_H = 9
@@ -45,6 +48,14 @@ TEXT = {
         "ai_missing_file": "'{file}' not found - starting without AI.",
         "flash_hint": "-- press any key to continue --",
 
+        "choose_resume_prompt": "A saved game was found. Resume it?",
+        "choose_resume_subtitle": "  (reads '{file}' - the population, food, and predators as you left them)",
+        "choose_resume_yes": "  Y = yes - pick up exactly where you left off",
+        "choose_resume_no": "  N = no - start a fresh game instead",
+        "choose_resume_hint": "Press Y or N to continue.",
+        "resume_load_failed": "'{file}' could not be read - starting a fresh game instead.",
+        "save_confirmed": "Game saved to '{file}'.",
+
         "hud_paused": "PAUSED",
         "hud_trained_tag": "  [trained vocabulary]",
         "hud_header": "tick {tick}  pop {pop}  births {births}  deaths {deaths}  {status}{tag}",
@@ -56,7 +67,7 @@ TEXT = {
         "hud_controls1": "space=pause  {food_hint}  r=reset  +/-=speed  q=quit",
         "food_hint_auto": "f=food",
         "food_hint_manual": "f=food (auto mode only)",
-        "hud_controls2": "p=place  [ ]=predator count  arrows/enter=place  h=help",
+        "hud_controls2": "p=place  [ ]=predator count  s=save  arrows/enter=place  h=help",
         "extinct": "Extinct. Press r to reset.",
 
         "help_more": "-- space for more --",
@@ -78,6 +89,14 @@ TEXT = {
         "ai_missing_file": "'{file}' introuvable - lancement sans IA.",
         "flash_hint": "-- une touche pour continuer --",
 
+        "choose_resume_prompt": "Une partie sauvegardee existe. La reprendre ?",
+        "choose_resume_subtitle": "  (relit '{file}' - la population, la nourriture et les predateurs tels que laisses)",
+        "choose_resume_yes": "  O = oui - reprendre exactement ou tu t'es arrete",
+        "choose_resume_no": "  N = non - commencer une nouvelle partie",
+        "choose_resume_hint": "Appuie sur O ou N pour continuer.",
+        "resume_load_failed": "'{file}' illisible - nouvelle partie a la place.",
+        "save_confirmed": "Partie sauvegardee dans '{file}'.",
+
         "hud_paused": "PAUSE",
         "hud_trained_tag": "  [vocabulaire entraine]",
         "hud_header": "tick {tick}  pop {pop}  naissances {births}  morts {deaths}  {status}{tag}",
@@ -89,7 +108,7 @@ TEXT = {
         "hud_controls1": "space=pause  {food_hint}  r=reset  +/-=speed  q=quit",
         "food_hint_auto": "f=food",
         "food_hint_manual": "f=food (auto uniquement)",
-        "hud_controls2": "p=placer  [ ]=nb predateurs  fleches/entree=placer  h=aide",
+        "hud_controls2": "p=placer  [ ]=nb predateurs  s=sauver  fleches/entree=placer  h=aide",
         "extinct": "Extinction. Appuie sur r pour recommencer.",
 
         "help_more": "-- espace pour la suite --",
@@ -331,6 +350,37 @@ def choose_ai(stdscr, lang):
     return choice
 
 
+def choose_resume(stdscr, lang):
+    t = TEXT[lang]
+    stdscr.nodelay(False)
+    stdscr.erase()
+    lines = [
+        ("Thronglets", curses.A_BOLD),
+        ("", 0),
+        (t["choose_resume_prompt"], curses.A_BOLD),
+        (t["choose_resume_subtitle"].format(file=DEFAULT_SAVE_FILE), 0),
+        ("", 0),
+        (t["choose_resume_yes"], 0),
+        (t["choose_resume_no"], 0),
+        ("", 0),
+        (t["choose_resume_hint"], curses.A_DIM),
+    ]
+    for i, (line, attr) in enumerate(lines):
+        _safe_addstr(stdscr, i, 0, line, curses.color_pair(7) | attr)
+    stdscr.refresh()
+
+    yes_keys = (ord("o"), ord("O")) if lang == "fr" else (ord("y"), ord("Y"))
+    choice = None
+    while choice is None:
+        key = stdscr.getch()
+        if key in yes_keys:
+            choice = True
+        elif key in (ord("n"), ord("N")):
+            choice = False
+    stdscr.nodelay(True)
+    return choice
+
+
 def _flash_message(stdscr, lang, text):
     stdscr.nodelay(False)
     stdscr.erase()
@@ -412,24 +462,35 @@ def run(stdscr, language_path=None):
     setup_colors()
 
     lang = choose_language(stdscr)
-    mode = choose_mode(stdscr, lang)
-    init_pop = choose_population(stdscr, lang)
 
-    if language_path:
-        seed_genome = load_seed_genome(language_path)
-    elif choose_ai(stdscr, lang):
+    world = None
+    if os.path.exists(DEFAULT_SAVE_FILE) and choose_resume(stdscr, lang):
         try:
-            seed_genome = load_seed_genome(DEFAULT_LANGUAGE_FILE)
-        except OSError:
-            seed_genome = None
-            _flash_message(stdscr, lang, TEXT[lang]["ai_missing_file"].format(file=DEFAULT_LANGUAGE_FILE))
-    else:
-        seed_genome = None
+            world = load_world(DEFAULT_SAVE_FILE)
+            mode = "manual" if (world.manual_food or world.manual_predators) else "auto"
+            init_pop = world.population()
+        except (OSError, ValueError, KeyError):
+            world = None
+            _flash_message(stdscr, lang, TEXT[lang]["resume_load_failed"].format(file=DEFAULT_SAVE_FILE))
+
+    seed_genome = None
+    if world is None:
+        mode = choose_mode(stdscr, lang)
+        init_pop = choose_population(stdscr, lang)
+
+        if language_path:
+            seed_genome = load_seed_genome(language_path)
+        elif choose_ai(stdscr, lang):
+            try:
+                seed_genome = load_seed_genome(DEFAULT_LANGUAGE_FILE)
+            except OSError:
+                seed_genome = None
+                _flash_message(stdscr, lang, TEXT[lang]["ai_missing_file"].format(file=DEFAULT_LANGUAGE_FILE))
+        world = _new_world(mode, 6, init_pop, seed_genome)
 
     placing = "food"
     cursor = [WIDTH / 2, HEIGHT / 2]
 
-    world = _new_world(mode, 6, init_pop, seed_genome)
     paused = False
     speed = 1
     frame_time = 1 / 20
@@ -454,6 +515,9 @@ def run(stdscr, language_path=None):
             world.remove_predator()
         elif key == ord("]"):
             world.add_random_predator()
+        elif key == ord("s"):
+            save_world(world, DEFAULT_SAVE_FILE)
+            _flash_message(stdscr, lang, TEXT[lang]["save_confirmed"].format(file=DEFAULT_SAVE_FILE))
         elif key == ord("h"):
             show_help(stdscr, lang)
         elif key == curses.KEY_UP:

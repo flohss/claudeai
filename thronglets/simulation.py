@@ -479,3 +479,56 @@ class World:
             if len(self.food) >= MAX_FOOD:
                 break
             self.food.append(np.clip(center + self.rng.normal(0, 5, 2), [0, 0], [WIDTH, HEIGHT]))
+
+
+def save_world(world, path):
+    """Serialize the live population (full genomes included), food, predators,
+    and tick counters to JSON - a complete snapshot, so a language that took
+    hours to evolve survives closing the game, not just the trained-AI case
+    load_seed_genome() covers."""
+    data = {
+        "tick": world.tick,
+        "births": world.births,
+        "deaths": world.deaths,
+        "manual_food": world.manual_food,
+        "manual_predators": world.manual_predators,
+        "food": [[float(x), float(y)] for x, y in world.food],
+        "predators": [[float(p.pos[0]), float(p.pos[1])] for p in world.predators],
+        "creatures": [
+            {
+                "pos": [float(c.pos[0]), float(c.pos[1])],
+                "energy": float(c.energy),
+                "age": c.age,
+                "emission_logits": c.genome.emission_logits.tolist(),
+                "response_weights": c.genome.response_weights.tolist(),
+            }
+            for c in world.creatures if c.alive
+        ],
+    }
+    with open(path, "w") as f:
+        json.dump(data, f)
+
+
+def load_world(path, seed=None):
+    """The inverse of save_world() - rebuilds a World exactly as it was left,
+    bypassing World.__init__'s from-scratch population/food/predator setup."""
+    with open(path) as f:
+        data = json.load(f)
+
+    world = World.__new__(World)
+    world.rng = np.random.default_rng(seed)
+    world.manual_food = data["manual_food"]
+    world.manual_predators = data["manual_predators"]
+    world.tick = data["tick"]
+    world.births = data["births"]
+    world.deaths = data["deaths"]
+    world._cache = {"alive": []}
+    world.food = [np.array(f, dtype=float) for f in data["food"]]
+    world.predators = [Predator(np.array(p, dtype=float)) for p in data["predators"]]
+    world.creatures = []
+    for cd in data["creatures"]:
+        genome = Genome(np.array(cd["emission_logits"]), np.array(cd["response_weights"]))
+        creature = Creature(np.array(cd["pos"], dtype=float), cd["energy"], genome)
+        creature.age = cd["age"]
+        world.creatures.append(creature)
+    return world

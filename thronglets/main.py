@@ -19,15 +19,18 @@ Controls:
 """
 
 import argparse
+import os
 import sys
 
 import pygame
 
 from i18n import STATE_LABELS
-from simulation import DANGER, FOOD, HEIGHT, IDLE, MATE, MAX_POPULATION, World, WIDTH, load_seed_genome
+from simulation import (DANGER, FOOD, HEIGHT, IDLE, MATE, MAX_POPULATION, World, WIDTH,
+                         load_seed_genome, load_world, save_world)
 
 DEFAULT_INIT_POP = 70
 DEFAULT_LANGUAGE_FILE = "language_model.json"
+DEFAULT_SAVE_FILE = "thronglets_save.json"
 
 HUD_H = 200
 # Placeholder sizes - main() overwrites these with the real screen resolution
@@ -69,10 +72,18 @@ TEXT = {
         "ai_missing_file": "'{file}' not found - starting without AI.",
         "flash_hint": "-- press any key to continue --",
 
+        "choose_resume_prompt": "A saved game was found. Resume it?",
+        "choose_resume_subtitle": "  (reads '{file}' - the population, food, and predators as you left them)",
+        "choose_resume_yes": "  Y = yes - pick up exactly where you left off",
+        "choose_resume_no": "  N = no - start a fresh game instead",
+        "choose_resume_hint": "Press Y or N to continue.",
+        "resume_load_failed": "'{file}' could not be read - starting a fresh game instead.",
+        "save_confirmed": "Game saved to '{file}'.",
+
         "hud_paused": "PAUSED",
         "hud_trained_tag": "   [trained vocabulary]",
         "hud_header": ("tick {tick:>6}   pop {pop:>4}   births {births:>5}   deaths {deaths:>5}   "
-                        "{status}   (space=pause  up/down=speed  r=reset  h=help){tag}"),
+                        "{status}   (space=pause  up/down=speed  r=reset  s=save  h=help){tag}"),
         "hud_manual": "mode: manual   click places: {placing} (P)",
         "hud_auto": "mode: automatic   predators: {count} ([ / ] act immediately)",
         "placing_food": "food",
@@ -134,10 +145,18 @@ TEXT = {
         "ai_missing_file": "'{file}' introuvable - lancement sans IA.",
         "flash_hint": "-- une touche pour continuer --",
 
+        "choose_resume_prompt": "Une partie sauvegardee existe. La reprendre ?",
+        "choose_resume_subtitle": "  (relit '{file}' - la population, la nourriture et les predateurs tels que laisses)",
+        "choose_resume_yes": "  O = oui - reprendre exactement ou tu t'es arrete",
+        "choose_resume_no": "  N = non - commencer une nouvelle partie",
+        "choose_resume_hint": "Appuie sur O ou N pour continuer.",
+        "resume_load_failed": "'{file}' illisible - nouvelle partie a la place.",
+        "save_confirmed": "Partie sauvegardee dans '{file}'.",
+
         "hud_paused": "PAUSE",
         "hud_trained_tag": "   [vocabulaire entraine]",
         "hud_header": ("tick {tick:>6}   pop {pop:>4}   naissances {births:>5}   morts {deaths:>5}   "
-                        "{status}   (espace=pause  haut/bas=vitesse  r=reset  h=aide){tag}"),
+                        "{status}   (espace=pause  haut/bas=vitesse  r=reset  s=sauver  h=aide){tag}"),
         "hud_manual": "mode: manuel   clic pose : {placing} (P)",
         "hud_auto": "mode: auto   predateurs : {count} ([ / ] agit tout de suite)",
         "placing_food": "nourriture",
@@ -417,6 +436,36 @@ def choose_ai(screen, font, lang):
                     return False
 
 
+def choose_resume(screen, font, lang):
+    t = TEXT[lang]
+    lines = [
+        "Thronglets",
+        "",
+        t["choose_resume_prompt"],
+        t["choose_resume_subtitle"].format(file=DEFAULT_SAVE_FILE),
+        "",
+        t["choose_resume_yes"],
+        t["choose_resume_no"],
+        "",
+        t["choose_resume_hint"],
+    ]
+    yes_key = pygame.K_o if lang == "fr" else pygame.K_y
+    while True:
+        screen.fill(BG)
+        for i, line in enumerate(lines):
+            screen.blit(font.render(line, True, TEXT_COLOR), (20, 20 + i * 26))
+        pygame.display.flip()
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.KEYDOWN:
+                if event.key == yes_key:
+                    return True
+                if event.key == pygame.K_n:
+                    return False
+
+
 def flash_message(screen, font, lang, text):
     waiting = True
     while waiting:
@@ -453,23 +502,33 @@ def main():
     font = pygame.font.SysFont("consolas", 16)
 
     lang = choose_language(screen, font)
-    mode = choose_mode(screen, font, lang)
-    init_pop = choose_population(screen, font, lang)
 
-    if args.language:
-        seed_genome = load_seed_genome(args.language)
-    elif choose_ai(screen, font, lang):
+    world = None
+    if os.path.exists(DEFAULT_SAVE_FILE) and choose_resume(screen, font, lang):
         try:
-            seed_genome = load_seed_genome(DEFAULT_LANGUAGE_FILE)
-        except OSError:
-            seed_genome = None
-            flash_message(screen, font, lang, TEXT[lang]["ai_missing_file"].format(file=DEFAULT_LANGUAGE_FILE))
-    else:
-        seed_genome = None
+            world = load_world(DEFAULT_SAVE_FILE)
+            mode = "manual" if (world.manual_food or world.manual_predators) else "auto"
+            init_pop = world.population()
+        except (OSError, ValueError, KeyError):
+            world = None
+            flash_message(screen, font, lang, TEXT[lang]["resume_load_failed"].format(file=DEFAULT_SAVE_FILE))
+
+    seed_genome = None
+    if world is None:
+        mode = choose_mode(screen, font, lang)
+        init_pop = choose_population(screen, font, lang)
+
+        if args.language:
+            seed_genome = load_seed_genome(args.language)
+        elif choose_ai(screen, font, lang):
+            try:
+                seed_genome = load_seed_genome(DEFAULT_LANGUAGE_FILE)
+            except OSError:
+                seed_genome = None
+                flash_message(screen, font, lang, TEXT[lang]["ai_missing_file"].format(file=DEFAULT_LANGUAGE_FILE))
+        world = _new_world(mode, 6, init_pop, seed_genome)
 
     placing = "food"
-
-    world = _new_world(mode, 6, init_pop, seed_genome)
     paused = False
     speed = 1
     running = True
@@ -495,6 +554,9 @@ def main():
                     world.remove_predator()
                 elif event.key == pygame.K_RIGHTBRACKET:
                     world.add_random_predator()
+                elif event.key == pygame.K_s:
+                    save_world(world, DEFAULT_SAVE_FILE)
+                    flash_message(screen, font, lang, TEXT[lang]["save_confirmed"].format(file=DEFAULT_SAVE_FILE))
                 elif event.key == pygame.K_h:
                     show_help(screen, font, lang)
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
