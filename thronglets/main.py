@@ -1,8 +1,8 @@
 """Watch a Thronglets world live in a window.
 
-Runs fullscreen, scaled to fit whatever resolution the screen actually is
-(pygame's SCALED flag letterboxes rather than stretching), so it never
-shows up bigger than the display. ESC quits back to the desktop.
+Runs fullscreen at the desktop's own resolution, stretching the world to
+fill the screen exactly (each axis scaled independently, so no letterbox
+bars regardless of aspect ratio). ESC quits back to the desktop.
 
 You pick a language, automatic or manual mode, and whether to seed the AI
 language once, at startup - not something you toggle mid-run.
@@ -29,9 +29,11 @@ from simulation import DANGER, FOOD, HEIGHT, IDLE, MATE, MAX_POPULATION, World, 
 DEFAULT_INIT_POP = 70
 DEFAULT_LANGUAGE_FILE = "language_model.json"
 
-SCALE = 5
 HUD_H = 200
-SCREEN_W, SCREEN_H = int(WIDTH * SCALE), int(HEIGHT * SCALE) + HUD_H
+# Placeholder sizes - main() overwrites these with the real screen resolution
+# so the world fills the whole display with no letterboxing on either axis.
+SCREEN_W, SCREEN_H = int(WIDTH * 5), int(HEIGHT * 5) + HUD_H
+SCALE_X, SCALE_Y = 5.0, 5.0
 
 BG = (18, 22, 16)
 GROUND = (30, 38, 24)
@@ -214,18 +216,18 @@ def draw(screen, font, world, paused, speed, mode, placing, lang, trained=False)
     pygame.draw.rect(screen, GROUND, (0, HUD_H, SCREEN_W, SCREEN_H - HUD_H))
 
     for fx, fy in world.food:
-        pygame.draw.circle(screen, FOOD_COLOR, (int(fx * SCALE), int(fy * SCALE) + HUD_H), 3)
+        pygame.draw.circle(screen, FOOD_COLOR, (int(fx * SCALE_X), int(fy * SCALE_Y) + HUD_H), 3)
 
     for c in world.creatures:
         if not c.alive:
             continue
-        x, y = int(c.pos[0] * SCALE), int(c.pos[1] * SCALE) + HUD_H
+        x, y = int(c.pos[0] * SCALE_X), int(c.pos[1] * SCALE_Y) + HUD_H
         pygame.draw.circle(screen, BODY_COLOR, (x, y), 4)
         if c.token != 0:
             pygame.draw.circle(screen, TOKEN_COLORS[c.token], (x, y), 7, width=2)
 
     for p in world.predators:
-        x, y = int(p.pos[0] * SCALE), int(p.pos[1] * SCALE) + HUD_H
+        x, y = int(p.pos[0] * SCALE_X), int(p.pos[1] * SCALE_Y) + HUD_H
         pygame.draw.circle(screen, PREDATOR_COLOR, (x, y), 6)
 
     draw_hud(screen, font, world, paused, speed, mode, placing, lang, trained)
@@ -439,7 +441,14 @@ def main():
 
     pygame.init()
     pygame.display.set_caption("Thronglets - a tiny language is being born")
-    screen = pygame.display.set_mode((SCREEN_W, SCREEN_H), pygame.FULLSCREEN | pygame.SCALED)
+    # (0, 0) + FULLSCREEN asks SDL for the desktop's own resolution, then the
+    # world is stretched per-axis to exactly fill it - no fixed aspect ratio,
+    # so no letterboxing bars on wide/narrow screens.
+    screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+    global SCREEN_W, SCREEN_H, SCALE_X, SCALE_Y
+    SCREEN_W, SCREEN_H = screen.get_size()
+    SCALE_X = SCREEN_W / WIDTH
+    SCALE_Y = (SCREEN_H - HUD_H) / HEIGHT
     clock = pygame.time.Clock()
     font = pygame.font.SysFont("consolas", 16)
 
@@ -491,7 +500,7 @@ def main():
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 mx, my = event.pos
                 if my > HUD_H:
-                    wx, wy = mx / SCALE, (my - HUD_H) / SCALE
+                    wx, wy = mx / SCALE_X, (my - HUD_H) / SCALE_Y
                     if mode == "manual" and placing == "predator":
                         world.add_predator(wx, wy)
                     else:
