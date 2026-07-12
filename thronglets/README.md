@@ -81,11 +81,12 @@ defaulting to French. If a save from a previous run exists
 and everything else is skipped, you're straight back where you left off.
 Otherwise you pick `A` (automatic) or `M` (manual), how many creatures to
 start with (type a number, 1-220, `ENTER` to confirm or skip for the
-default of 100), then `Y`/`N` (`O`/`N` in French) for whether to start
-already speaking a pre-trained language (see below) — every screen defaults
-to French/automatic/100/yes if you just hit `ENTER` through all of them,
-and they stick for the whole run (`R` resets using them again, it doesn't
-ask a second time).
+default of 100), then `Y`/`N`/`T` (`O`/`N`/`T` in French) for whether to
+start already speaking a pre-trained language, train a fresh one live right
+there, or skip it (see below for both) — every screen defaults to
+French/automatic/100/yes if you just hit `ENTER` through all of them, and
+they stick for the whole run (`R` resets using them again, it doesn't ask
+a second time).
 
 | Key           | Effect                                                       |
 |---------------|----------------------------------------------------------------|
@@ -294,6 +295,34 @@ shows a `[trained vocabulary]` tag so it's obvious the population didn't
 start from scratch. Ordinary mutation and reproduction still apply from
 tick 1 onward, so this seeds the starting point, it doesn't freeze the
 language in place.
+
+### Training live, from inside `main.py`
+
+You don't have to leave the game or touch a terminal to train one: on the
+AI-language screen, press `T` instead of `Y`/`N` to train a fresh seed
+right there. This is the same `train()` used by `train_language.py --sweep`,
+just called directly - `main.py` imports `train_language` lazily, only when
+you press `T`, so nothing else in the game needs PyTorch installed. This
+still needs `pip install -r requirements-rl.txt` to work; if it isn't
+installed, pressing `T` gives a clear message and the game starts without
+AI instead of crashing, same as a missing `language_model.json`.
+
+Training one seed shows live progress (step, loss, listener accuracy)
+right in the window - it takes a little while (the same few thousand
+training steps `--sweep` runs per seed), `ESC` cancels it early. Once a
+seed finishes, its result is shown - clean or collision, overall accuracy,
+and the color each state landed on - and you choose:
+
+| Key   | Effect                                                          |
+|-------|------------------------------------------------------------------|
+| `V`   | use this seed - exports it to `language_model.json` and starts the game with it |
+| `N`   | keep this one's result, try the next seed instead                |
+| `ESC` | give up - start the game without AI                              |
+
+This is the interactive version of watching `--sweep`'s collision-rate
+table scroll by and then re-running with `--seed` on whichever one looked
+good, except you never leave the game window and don't need to remember a
+seed number - you just watch each one train and decide as you go.
 
 **Does the clean vocabulary survive being handed to blind evolution?**
 Running seeded worlds for 20,000 ticks shows agreement on all five states

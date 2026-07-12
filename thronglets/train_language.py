@@ -22,9 +22,14 @@ The game, each step:
      ambiguity is penalized directly, every step, rather than hoped for.
 
 This needs PyTorch (`pip install torch`), a genuinely heavy dependency that
-is not expected to work on Termux - unlike main.py/main_tui.py/main_web.py,
-this script is a separate, optional experiment and does not touch the real-
-time simulation or its renderers.
+is not expected to work on Termux. `main_tui.py` and `main_web.py` never
+import this module. `main.py` can, but only lazily: choosing "train a new
+one now" on its AI-language screen imports this module and calls train()
+live, with a progress callback and a cancel event so the pygame window can
+show live progress and let you stop early - if PyTorch isn't installed,
+main.py catches the ImportError and falls back cleanly, same as a missing
+language_model.json. Run directly from the command line, this script never
+needs any of that.
 """
 
 import argparse
@@ -91,7 +96,12 @@ def load_checkpoint(path):
     return speaker, listener
 
 
-def train(episodes, batch_size, skewed, lr, seed, verbose=True):
+def train(episodes, batch_size, skewed, lr, seed, verbose=True, progress_callback=None, cancel_event=None):
+    """progress_callback(step, episodes, loss, acc, temperature) is called at the
+    same cadence as the printed progress (about 20 times per run) - main.py's
+    in-app training screen uses this instead of parsing stdout. cancel_event,
+    if given, is checked every step so a live "stop training" request (e.g. the
+    user pressing ESC) can break out promptly instead of finishing all episodes."""
     torch.manual_seed(seed)
     speaker = Speaker()
     listener = Listener()
@@ -99,6 +109,9 @@ def train(episodes, batch_size, skewed, lr, seed, verbose=True):
     weights = REALISTIC_WEIGHTS if skewed else torch.ones(N_STATES) / N_STATES
 
     for step in range(episodes):
+        if cancel_event is not None and cancel_event.is_set():
+            break
+
         temperature = max(0.5, 2.0 - step / episodes * 1.5)  # anneal: exploratory -> near-discrete
 
         states = sample_states(batch_size, weights)
@@ -114,27 +127,38 @@ def train(episodes, batch_size, skewed, lr, seed, verbose=True):
         loss.backward()
         optimizer.step()
 
-        if verbose and (step % max(1, episodes // 20) == 0 or step == episodes - 1):
+        if step % max(1, episodes // 20) == 0 or step == episodes - 1:
             with torch.no_grad():
                 acc = (state_logits.argmax(dim=1) == states).float().mean().item()
-            print(f"step {step:6d}/{episodes}   loss {loss.item():.3f}   listener accuracy {acc:.0%}   temp {temperature:.2f}")
+            if verbose:
+                print(f"step {step:6d}/{episodes}   loss {loss.item():.3f}   listener accuracy {acc:.0%}   temp {temperature:.2f}")
+            if progress_callback is not None:
+                progress_callback(step, episodes, loss.item(), acc, temperature)
 
     return speaker, listener
 
 
-def export_vocabulary(speaker, listener, path):
-    """Bake the trained networks down to two small lookup tables (state->token,
-    token->state) and write them as plain JSON - no PyTorch needed to read this
-    back, so simulation.py and the renderers can seed a game with it without
-    ever importing torch. This is the bridge between the experiment and the
-    actual (Termux-friendly) game."""
+def compute_lookup(speaker, listener):
+    """The two small lookup tables (state->token, token->state) a trained
+    Speaker/Listener pair boils down to - the actual bridge to the game.
+    Shared by export_vocabulary() (writes them to disk) and main.py's live
+    training screen (builds a Genome from them directly, in memory)."""
     with torch.no_grad():
         state_onehot = F.one_hot(torch.arange(N_STATES), N_STATES).float()
         state_to_token = speaker(state_onehot).argmax(dim=1).tolist()
 
         token_onehot = F.one_hot(torch.arange(N_TOKENS), N_TOKENS).float()
         token_to_state = listener(token_onehot).argmax(dim=1).tolist()
+    return state_to_token, token_to_state
 
+
+def export_vocabulary(speaker, listener, path):
+    """Bake the trained networks down to state_to_token/token_to_state and
+    write them as plain JSON - no PyTorch needed to read this back, so
+    simulation.py and the renderers can seed a game with it without ever
+    importing torch. This is the bridge between the experiment and the
+    actual (Termux-friendly) game."""
+    state_to_token, token_to_state = compute_lookup(speaker, listener)
     with open(path, "w") as f:
         json.dump({"state_to_token": state_to_token, "token_to_state": token_to_state}, f, indent=2)
     print(f"Exported a game-ready vocabulary to '{path}' (no PyTorch needed to use it).")
