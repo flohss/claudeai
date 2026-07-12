@@ -25,14 +25,14 @@ import sys
 import pygame
 
 from i18n import STATE_LABELS
-from simulation import (DANGER, FOOD, HEIGHT, IDLE, MATE, MAX_POPULATION, World, WIDTH,
+from simulation import (DANGER, DISTRESS, FOOD, HEIGHT, IDLE, MATE, MAX_POPULATION, World, WIDTH,
                          load_seed_genome, load_world, save_world)
 
 DEFAULT_INIT_POP = 70
 DEFAULT_LANGUAGE_FILE = "language_model.json"
 DEFAULT_SAVE_FILE = "thronglets_save.json"
 
-HUD_H = 200
+HUD_H = 224
 # Placeholder sizes - main() overwrites these with the real screen resolution
 # so the world fills the whole display with no letterboxing on either axis.
 SCREEN_W, SCREEN_H = int(WIDTH * 5), int(HEIGHT * 5) + HUD_H
@@ -104,11 +104,12 @@ TEXT = {
             ("Nobody programs what a color means - a shared language can emerge", False),
             ("through natural selection, or it might not.", False),
             ("", False),
-            ("The 4 states, in priority order:", True),
-            ("  1. alarm-call  a predator was spotted -> flee immediately", False),
-            ("  2. food-call   food is visible nearby", False),
-            ("  3. mate-call   ready to mate, and a ready partner is nearby", False),
-            ("  4. idle        nothing special (by far the most common state)", False),
+            ("The 5 states, in priority order:", True),
+            ("  1. alarm-call    a predator was spotted -> flee immediately", False),
+            ("  2. food-call     food is visible nearby", False),
+            ("  3. distress-call energy critically low, no food in sight", False),
+            ("  4. mate-call     ready to mate, and a ready partner is nearby", False),
+            ("  5. idle          nothing special (by far the most common state)", False),
             ("", False),
             ("Living, mating, dying:", True),
             ("  Energy drains constantly; eating restores it. Emitting a color", False),
@@ -177,11 +178,12 @@ TEXT = {
             ("des autres. Personne ne programme le sens des couleurs : un", False),
             ("langage commun peut emerger par selection naturelle, ou pas.", False),
             ("", False),
-            ("Les 4 etats, par ordre de priorite :", True),
-            ("  1. alerte      un predateur repere -> fuite immediate", False),
-            ("  2. nourriture  de la nourriture est visible tout pres", False),
-            ("  3. partenaire  prete a se reproduire + partenaire prete proche", False),
-            ("  4. inactif     rien de special (etat le plus frequent, de loin)", False),
+            ("Les 5 etats, par ordre de priorite :", True),
+            ("  1. alerte     un predateur repere -> fuite immediate", False),
+            ("  2. nourriture de la nourriture est visible tout pres", False),
+            ("  3. detresse   energie tres basse, aucune nourriture en vue", False),
+            ("  4. partenaire prete a se reproduire + partenaire prete proche", False),
+            ("  5. inactif    rien de special (etat le plus frequent, de loin)", False),
             ("", False),
             ("Vivre, se reproduire, mourir :", True),
             ("  L'energie baisse en permanence, manger la restaure. Emettre", False),
@@ -289,7 +291,7 @@ def draw_hud(screen, font, world, paused, speed, mode, placing, lang, trained=Fa
 
     y = 70
     breakdown = world.vocabulary_breakdown()
-    for state in (DANGER, FOOD, MATE, IDLE):
+    for state in (DANGER, FOOD, DISTRESS, MATE, IDLE):
         draw_vocab_row(screen, font, y, labels[state], breakdown[state])
         y += 22
 

@@ -9,9 +9,10 @@ real, if deliberately small, model of how a shared vocabulary can emerge from
 **natural selection**, not machine learning:
 
 - Each creature is born with a genome deciding which of 6 "tokens" (colors)
-  it emits when it's **idle**, has **spotted food**, wants to **mate**, or
-  senses a nearby **predator** — and separately, how it reacts on hearing
-  each token from a neighbor (move toward it, away from it, or ignore it).
+  it emits when it's **idle**, has **spotted food**, wants to **mate**,
+  senses a nearby **predator**, or is **critically low on energy with no
+  food in sight** — and separately, how it reacts on hearing each token
+  from a neighbor (move toward it, away from it, or ignore it).
 - Predators roam the world and kill any creature they catch. Spotting one
   puts a creature in a "danger" state, using the exact same signal/response
   machinery as food and mate calls — so an alarm call is just another word
@@ -19,6 +20,11 @@ real, if deliberately small, model of how a shared vocabulary can emerge from
   predator independently hunts whichever creature is nearest to it, and
   gently pushes away from other predators that get too close, so a pack
   doesn't collapse onto a single point when creatures cluster together.
+- A creature whose energy drops critically low with no food visible enters
+  **distress** - a fifth state, ranked below food (spotting actual food
+  always wins) but above mating (survival first). It's not a special case
+  either: same signal/response machinery, a color that may or may not come
+  to mean anything to a creature's neighbors.
 - Food and predators can each be **automatic** (food spawns in periodic
   patches; predators all appear at once) or **manual** (nothing spawns on
   its own — you place every food patch and every predator yourself). You
@@ -161,10 +167,10 @@ selected (manual mode), a **Save** button writes the running game to
 mechanics without pausing the simulation underneath.
 
 All three renderers show a HUD with, for each internal state (danger / food-call /
-mate-call / idle), every token currently in use and what share of the living
-population uses it — the numbers to watch are how fast a single token pulls
-ahead of the pack (starting near chance, ~17%, since there are 6 tokens) and
-whether it stays there.
+distress-call / mate-call / idle), every token currently in use and what share
+of the living population uses it — the numbers to watch are how fast a single
+token pulls ahead of the pack (starting near chance, ~17%, since there are 6
+tokens) and whether it stays there.
 
 ## Headless check
 
@@ -184,8 +190,6 @@ not just that the window doesn't crash.
 The simulation core (`simulation.py`) and renderer (`main.py`) are split on
 purpose so this is easy to extend:
 
-- A fifth state (e.g. "distress" - critically low energy with no food in
-  sight, distinct from an ordinary food-call)
 - Evolvable traits beyond signaling (speed, senses, metabolism)
 - A "translator" panel logging the emerging token → meaning dictionary over time
 - Swapping the fixed 2D field for a proper toroidal world, or a richer
@@ -203,7 +207,7 @@ that model is actually optimizing for successful communication, only
 surviving long enough to reproduce. `train_language.py` is a separate,
 optional experiment that trains a real Speaker and Listener network with
 backpropagation (Gumbel-Softmax for a differentiable discrete channel) to
-directly minimize communication error, using the same 4-state/6-token
+directly minimize communication error, using the same 5-state/6-token
 vocabulary for a fair comparison. It needs PyTorch:
 
 ```bash
@@ -226,14 +230,20 @@ python train_language.py --load
 ```
 
 **What actually happened when we ran it**, sampling states with the same
-idle-heavy skew the real simulation has: 8 out of 10 seeds converged to a
+idle-heavy skew the real simulation has: 4 out of 10 seeds converged to a
 perfect, collision-free code (100% listener accuracy) - a real difference
 from the evolved version, where two states landing on the same color is
-common and can persist indefinitely. But it wasn't 10/10: the 2 seeds that
-still collided always merged the two *rarest* states (`mate-call` and
-`alarm-call`, each well under 15% of samples) into one token, capping
-accuracy at ~75%. With `--uniform` (equal frequency for all 4 states)
-instead, it's 100% clean and near-instant every time.
+common and can persist indefinitely. But it's a tighter squeeze than it
+looks: 5 states now have to fit into 6 tokens (only one spare, instead of
+two), so it's less forgiving than the original 4-state setup. The 6 seeds
+that still collided always merged two of the three *rarest* states
+(`distress-call`, `alarm-call`, `mate-call`, each well under 15% of
+samples) into one token, never touching `food-call` or `idle`, and capped
+accuracy around 80%. With `--uniform` (equal frequency for all 5 states)
+instead, it's clean almost every time (9/10 in our sweep) - much better
+than the skewed case, but no longer the literal 100% guarantee it was with
+4 states: fitting 5 states into 6 tokens leaves only one token of slack
+even without a frequency skew working against it.
 
 So gradient descent doesn't magically solve the underlying issue, it just
 attacks it far more directly and far more often: with a skewed class
@@ -276,15 +286,17 @@ tick 1 onward, so this seeds the starting point, it doesn't freeze the
 language in place.
 
 **Does the clean vocabulary survive being handed to blind evolution?**
-Running seeded worlds for 50,000 ticks (multiple seeds, well past several
-hundred generations) shows agreement on all four states staying at or
-extremely close to 100% the entire way - occasionally a single mutant
-copy of a token shows up (99% instead of 100%) before being outcompeted
-again, but no state ever drifts back into a real collision. Once
-selection has nothing left to gain from reshuffling an already-optimal,
-collision-free code, there's essentially no pressure pushing it away from
-that optimum - mutation keeps proposing alternatives, they just keep
-losing to the token that already works.
+Running seeded worlds for 20,000 ticks shows agreement on all five states
+staying at or extremely close to 100% the entire way, for as long as the
+population survives - once selection has nothing left to gain from
+reshuffling an already-optimal, collision-free code, there's essentially
+no pressure pushing it away from that optimum. Population itself can still
+boom and crash from ordinary resource pressure (the food supply is fixed
+regardless of headcount) independently of how clean the vocabulary is -
+the same extinction risk that was always possible in this simulation, not
+something the trained vocabulary introduces: in a 5-seed spot-check, 1 run
+died out this way around tick 2700 after a population boom outran the food
+supply, the other 4 held a clean vocabulary the whole time they were alive.
 
 ## A known quirk: homonyms
 
@@ -292,7 +304,9 @@ Each state's dominant token is decided independently, so nothing stops two
 different states from converging on the *same* color by chance — a listener
 who hears that color can't tell which meaning was intended. Since `idle` is
 by far the most common state, this is usually what "wins" any collision,
-drowning out the rarer, more useful signal in noise.
+drowning out the rarer, more useful signal in noise. With 5 states sharing
+6 tokens (only one spare instead of two), there's less room to avoid
+collisions than before `distress-call` existed.
 
 There's a per-signal energy cost (`SIGNAL_COST` in `simulation.py`) that
 makes needless "idle chatter" costly, which helps but doesn't guarantee a

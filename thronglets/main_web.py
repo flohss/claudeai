@@ -26,7 +26,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from simulation import (DANGER, FOOD, HEIGHT, IDLE, MATE, MAX_POPULATION, World, WIDTH,
+from simulation import (DANGER, DISTRESS, FOOD, HEIGHT, IDLE, MATE, MAX_POPULATION, World, WIDTH,
                          load_seed_genome, load_world, save_world)
 
 DEFAULT_PORT = 8765
@@ -34,7 +34,7 @@ STEP_INTERVAL = 0.05
 DEFAULT_INIT_POP = 70
 DEFAULT_LANGUAGE_FILE = "language_model.json"
 DEFAULT_SAVE_FILE = "thronglets_save.json"
-STATE_IDS = {IDLE: "idle", FOOD: "food", MATE: "mate", DANGER: "danger"}
+STATE_IDS = {IDLE: "idle", FOOD: "food", MATE: "mate", DANGER: "danger", DISTRESS: "distress"}
 
 
 def _new_world(mode, predator_count, init_pop=DEFAULT_INIT_POP, seed_genome=None):
@@ -85,7 +85,7 @@ def snapshot(state):
         ],
         "vocabulary": {
             STATE_IDS[s]: [[int(t), float(f)] for t, f in breakdown[s]]
-            for s in (DANGER, FOOD, MATE, IDLE)
+            for s in (DANGER, FOOD, DISTRESS, MATE, IDLE)
         },
     }
 
@@ -284,6 +284,7 @@ INDEX_HTML = """<!doctype html>
       <div class="row" id="settings"></div>
       <div class="row" id="vocab-danger"></div>
       <div class="row" id="vocab-food"></div>
+      <div class="row" id="vocab-distress"></div>
       <div class="row" id="vocab-mate"></div>
       <div class="row" id="vocab-idle"></div>
     </div>
@@ -313,6 +314,7 @@ INDEX_HTML = """<!doctype html>
       <ul>
         <li><strong data-i18n="stateDanger"></strong> — <span data-i18n="stateDangerDesc"></span></li>
         <li><strong data-i18n="stateFood"></strong> — <span data-i18n="stateFoodDesc"></span></li>
+        <li><strong data-i18n="stateDistress"></strong> — <span data-i18n="stateDistressDesc"></span></li>
         <li><strong data-i18n="stateMate"></strong> — <span data-i18n="stateMateDesc"></span></li>
         <li><strong data-i18n="stateIdle"></strong> — <span data-i18n="stateIdleDesc"></span></li>
       </ul>
@@ -356,6 +358,7 @@ const STRINGS = {
     errorResumeFailed: (file) => `'${file}' could not be read - start a fresh game instead.`,
 
     labelIdle: "idle", labelFood: "food-call", labelMate: "mate-call", labelDanger: "alarm-call",
+    labelDistress: "distress-call",
     wordBirths: "births", wordDeaths: "deaths", wordPaused: "PAUSE",
     trainedTag: "   [trained vocabulary]",
     placingWordFood: "food", placingWordPredator: "predator",
@@ -364,9 +367,10 @@ const STRINGS = {
     errorAiMissing: (file) => `'${file}' not found - starting without AI.`,
 
     helpH1: "The idea", helpP1: "Each creature is born with a genome deciding which color it shows for its current state, and how it reacts to colors it hears from others. Nobody programs what a color means - a shared language can emerge through natural selection, or it might not.",
-    helpH2: "The 4 states, in priority order",
+    helpH2: "The 5 states, in priority order",
     stateDanger: "alarm-call", stateDangerDesc: "a predator was spotted, flee immediately",
     stateFood: "food-call", stateFoodDesc: "food is visible nearby",
+    stateDistress: "distress-call", stateDistressDesc: "energy critically low, no food in sight",
     stateMate: "mate-call", stateMateDesc: "ready to mate, a ready partner is nearby",
     stateIdle: "idle", stateIdleDesc: "nothing special (by far the most common state)",
     helpH3: "Living, mating, dying", helpP3: "Energy drains constantly; eating restores it. Emitting a color (other than silence) costs a bit of extra energy. Enough energy and age, a matching partner nearby: a child is born. A predator that catches a creature kills it outright.",
@@ -393,6 +397,7 @@ const STRINGS = {
     errorResumeFailed: (file) => `'${file}' illisible - nouvelle partie a la place.`,
 
     labelIdle: "inactif", labelFood: "nourriture", labelMate: "partenaire", labelDanger: "alerte",
+    labelDistress: "detresse",
     wordBirths: "naissances", wordDeaths: "morts", wordPaused: "PAUSE",
     trainedTag: "   [vocabulaire entraine]",
     placingWordFood: "nourriture", placingWordPredator: "predateur",
@@ -401,9 +406,10 @@ const STRINGS = {
     errorAiMissing: (file) => `'${file}' introuvable - lancement sans IA.`,
 
     helpH1: "Le principe", helpP1: "Chaque creature nait avec un genome qui decide quelle couleur elle affiche selon son etat, et comment elle reagit aux couleurs des autres. Personne ne programme le sens des couleurs : un langage commun peut emerger par selection naturelle, ou pas.",
-    helpH2: "Les 4 etats, par ordre de priorite",
+    helpH2: "Les 5 etats, par ordre de priorite",
     stateDanger: "alerte", stateDangerDesc: "un predateur est repere, fuite immediate",
     stateFood: "nourriture", stateFoodDesc: "de la nourriture est visible tout pres",
+    stateDistress: "detresse", stateDistressDesc: "energie tres basse, aucune nourriture en vue",
     stateMate: "partenaire", stateMateDesc: "prete a se reproduire, partenaire prete proche",
     stateIdle: "inactif", stateIdleDesc: "rien de special (l'etat le plus frequent, de loin)",
     helpH3: "Vivre, se reproduire, mourir", helpP3: "L'energie baisse en permanence, manger la restaure. Emettre une couleur (hors silence) coute un peu d'energie en plus. Assez d'energie et d'age, un partenaire pareil a proximite : un enfant nait. Un predateur qui attrape une creature la tue net.",
@@ -481,6 +487,7 @@ function render(state) {
 
   renderVocabRow('vocab-danger', t.labelDanger, state.vocabulary['danger']);
   renderVocabRow('vocab-food', t.labelFood, state.vocabulary['food']);
+  renderVocabRow('vocab-distress', t.labelDistress, state.vocabulary['distress']);
   renderVocabRow('vocab-mate', t.labelMate, state.vocabulary['mate']);
   renderVocabRow('vocab-idle', t.labelIdle, state.vocabulary['idle']);
 

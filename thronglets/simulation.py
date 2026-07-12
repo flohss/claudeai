@@ -2,7 +2,8 @@
 
 Simple creatures forage, mate, flee predators, and die on a 2D world. Each
 one is born with a genome that decides which "token" it emits when it is
-hungry, has spotted food, wants to mate, or senses a predator nearby, and how
+hungry, has spotted food, wants to mate, senses a predator nearby, or is
+running critically low on energy with nothing in sight to fix that - and how
 it reacts to tokens it hears from others. There is no training loop and
 nobody is told what the tokens should mean: genomes that happen to signal
 and interpret usefully help their owners survive and reproduce more, so a
@@ -20,8 +21,8 @@ import numpy as np
 
 WIDTH, HEIGHT = 200.0, 140.0
 
-IDLE, FOOD, MATE, DANGER = 0, 1, 2, 3
-N_STATES = 4
+IDLE, FOOD, MATE, DANGER, DISTRESS = 0, 1, 2, 3, 4
+N_STATES = 5
 N_TOKENS = 6  # token 0 means "silent"
 
 SEE_RADIUS = 18.0    # a creature can directly spot food/mates within this range
@@ -49,6 +50,8 @@ INIT_ENERGY = 60.0
 MAX_ENERGY = 120.0
 EAT_RADIUS = 4.0
 FOOD_VALUE = 30.0
+DISTRESS_ENERGY = 20.0        # below this, with no food in sight, a creature is in distress
+DISTRESS_SEARCH_STRENGTH = 1.0  # a wider, more urgent search than plain idle wandering
 
 MATE_ENERGY = 75.0
 MIN_MATE_AGE = 60
@@ -252,7 +255,7 @@ class World:
         """Per-state list of (token, fraction) for every token in use, most common first."""
         result = {}
         alive = self._alive()
-        for state in (IDLE, FOOD, MATE, DANGER):
+        for state in (IDLE, FOOD, MATE, DANGER, DISTRESS):
             tokens = [c.genome.token_for(state) for c in alive]
             if not tokens:
                 result[state] = []
@@ -310,6 +313,8 @@ class World:
                 c.state = DANGER
             elif nearest_food_d[idx] < SEE_RADIUS:
                 c.state = FOOD
+            elif c.energy < DISTRESS_ENERGY:
+                c.state = DISTRESS
             elif mate_ready[idx] and nearest_mate_d[idx] < SEE_RADIUS:
                 c.state = MATE
             else:
@@ -340,6 +345,8 @@ class World:
                 move += -_toward(c.pos, predator) * FLEE_STRENGTH
             elif c.state == FOOD:
                 move += _toward(c.pos, c_["food_pos"][c_["nearest_food_i"][i]]) * DRIVE_STRENGTH
+            elif c.state == DISTRESS:
+                move += self.rng.normal(0, 1, 2) * DISTRESS_SEARCH_STRENGTH
             elif c.state == MATE:
                 move += _toward(c.pos, positions[c_["nearest_mate_i"][i]]) * DRIVE_STRENGTH
 

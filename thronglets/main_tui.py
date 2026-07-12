@@ -19,7 +19,7 @@ import os
 import time
 
 from i18n import STATE_LABELS
-from simulation import (DANGER, FOOD, HEIGHT, IDLE, MATE, MAX_POPULATION, World, WIDTH,
+from simulation import (DANGER, DISTRESS, FOOD, HEIGHT, IDLE, MATE, MAX_POPULATION, World, WIDTH,
                          load_seed_genome, load_world, save_world)
 
 DEFAULT_INIT_POP = 70
@@ -27,7 +27,7 @@ DEFAULT_LANGUAGE_FILE = "language_model.json"
 DEFAULT_SAVE_FILE = "thronglets_save.json"
 
 TOKEN_COLOR_PAIR = {1: 1, 2: 2, 3: 3, 4: 4, 5: 5}
-HUD_H = 9
+HUD_H = 10
 CURSOR_STEP = 4.0
 ENTER_KEYS = (10, 13, curses.KEY_ENTER)
 
@@ -125,11 +125,12 @@ HELP_LINES = {
         ("others. Nobody programs what a color means - a shared language can", 0),
         ("emerge through natural selection, or it might not.", 0),
         ("", 0),
-        ("The 4 states, in priority order:", curses.A_BOLD),
-        ("  1. alarm-call  a predator was spotted -> flee immediately", 0),
-        ("  2. food-call   food is visible nearby", 0),
-        ("  3. mate-call   ready to mate, and a ready partner is nearby", 0),
-        ("  4. idle        nothing special (by far the most common state)", 0),
+        ("The 5 states, in priority order:", curses.A_BOLD),
+        ("  1. alarm-call    a predator was spotted -> flee immediately", 0),
+        ("  2. food-call     food is visible nearby", 0),
+        ("  3. distress-call energy critically low, no food in sight", 0),
+        ("  4. mate-call     ready to mate, and a ready partner is nearby", 0),
+        ("  5. idle          nothing special (by far the most common state)", 0),
         ("", 0),
         ("Living, mating, dying:", curses.A_BOLD),
         ("  Energy drains constantly; eating restores it. Emitting a color", 0),
@@ -156,11 +157,12 @@ HELP_LINES = {
         ("des autres. Personne ne programme le sens des couleurs : un", 0),
         ("langage commun peut emerger par selection naturelle, ou pas.", 0),
         ("", 0),
-        ("Les 4 etats, par ordre de priorite :", curses.A_BOLD),
-        ("  1. alerte      un predateur repere -> fuite immediate", 0),
-        ("  2. nourriture  de la nourriture est visible tout pres", 0),
-        ("  3. partenaire  prete a se reproduire + partenaire prete proche", 0),
-        ("  4. inactif     rien de special (etat le plus frequent, de loin)", 0),
+        ("Les 5 etats, par ordre de priorite :", curses.A_BOLD),
+        ("  1. alerte     un predateur repere -> fuite immediate", 0),
+        ("  2. nourriture de la nourriture est visible tout pres", 0),
+        ("  3. detresse   energie tres basse, aucune nourriture en vue", 0),
+        ("  4. partenaire prete a se reproduire + partenaire prete proche", 0),
+        ("  5. inactif    rien de special (etat le plus frequent, de loin)", 0),
         ("", 0),
         ("Vivre, se reproduire, mourir :", curses.A_BOLD),
         ("  L'energie baisse en permanence, manger la restaure. Emettre", 0),
@@ -415,7 +417,7 @@ def draw(stdscr, world, paused, speed, mode, placing, cursor, lang, trained=Fals
     _safe_addstr(stdscr, 1, 0, settings, curses.color_pair(7) | curses.A_DIM)
 
     breakdown = world.vocabulary_breakdown()
-    for row, state in enumerate((DANGER, FOOD, MATE, IDLE), start=2):
+    for row, state in enumerate((DANGER, FOOD, DISTRESS, MATE, IDLE), start=2):
         _draw_vocab_row(stdscr, row, labels[state], breakdown[state])
 
     _safe_addstr(stdscr, HUD_H - 3, 0, t["hud_legend"], curses.color_pair(7) | curses.A_DIM)

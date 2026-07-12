@@ -5,13 +5,14 @@ end up sharing a color purely by chance, because nothing in that model is
 actually optimizing for successful communication, only surviving long enough
 to reproduce. This script instead trains a Speaker and a Listener network
 with backpropagation to directly minimize communication error, using the
-same state/token vocabulary (4 states, 6 tokens including silence) so the
+same state/token vocabulary (5 states, 6 tokens including silence) so the
 outcome is a fair, apples-to-apples comparison.
 
 The game, each step:
-  1. A state (idle / food / mate / danger) is sampled - by default with the
-     same skewed frequency idle dominates with in the real simulation, since
-     that skew is exactly what causes idle to "win" collisions there.
+  1. A state (idle / food / mate / danger / distress) is sampled - by
+     default with the same skewed frequency idle dominates with in the real
+     simulation, since that skew is exactly what causes idle to "win"
+     collisions there.
   2. The Speaker sees the state and emits a token (Gumbel-Softmax, so the
      discrete choice stays differentiable during training).
   3. The Listener sees only the token (never the true state) and predicts
@@ -33,15 +34,16 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from simulation import DANGER, FOOD, IDLE, MATE, N_STATES, N_TOKENS
+from simulation import DANGER, DISTRESS, FOOD, IDLE, MATE, N_STATES, N_TOKENS
 
-STATE_NAMES = {IDLE: "idle", FOOD: "food-call", MATE: "mate-call", DANGER: "alarm-call"}
+STATE_NAMES = {IDLE: "idle", FOOD: "food-call", MATE: "mate-call", DANGER: "alarm-call",
+               DISTRESS: "distress-call"}
 DEFAULT_CHECKPOINT = "language_model.pt"
 DEFAULT_VOCAB_EXPORT = "language_model.json"
 
 # Roughly the state frequencies actually observed in simulation.py's runs:
 # idle dominates because it's the default when nothing else applies.
-REALISTIC_WEIGHTS = torch.tensor([0.75, 0.13, 0.08, 0.04])  # idle, food, mate, danger
+REALISTIC_WEIGHTS = torch.tensor([0.72, 0.13, 0.08, 0.04, 0.03])  # idle, food, mate, danger, distress
 
 
 class Speaker(nn.Module):
@@ -146,7 +148,7 @@ def evaluate(speaker, listener):
 
     seen = set()
     collisions = False
-    for state in (DANGER, FOOD, MATE, IDLE):
+    for state in (DANGER, FOOD, DISTRESS, MATE, IDLE):
         token = tokens[state].item()
         if token in seen:
             collisions = True
@@ -167,7 +169,7 @@ def report_vocabulary(speaker, listener):
     tokens, collisions, acc = evaluate(speaker, listener)
 
     seen = {}
-    for state in (DANGER, FOOD, MATE, IDLE):
+    for state in (DANGER, FOOD, DISTRESS, MATE, IDLE):
         token = tokens[state].item()
         label = STATE_NAMES[state]
         marker = f"  <-- same token as '{seen[token]}' !" if token in seen else ""
