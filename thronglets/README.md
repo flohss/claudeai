@@ -75,16 +75,17 @@ The window opens fullscreen at the desktop's own resolution, stretching
 the world to fill the screen exactly (no letterbox bars, whatever the
 screen's aspect ratio) — `ESC` quits back to the desktop.
 
-On launch you're asked to press `E`/`F` for English or French. If a save
-from a previous run exists (`thronglets_save.json`), you're then asked
-whether to resume it — say yes and everything else is skipped, you're
-straight back where you left off. Otherwise you pick `A` (automatic) or
-`M` (manual), how many creatures to start with (type a number, 1-220,
-`ENTER` to confirm or skip for the default of 70), then `Y`/`N` (`O`/`N`
-in French) for whether to start already speaking a pre-trained language
-(see below) — the world isn't created until all are answered, and they
-stick for the whole run (`R` resets using them again, it doesn't ask a
-second time).
+On launch you're asked to press `E`/`F` for English or French, `ENTER`
+defaulting to French. If a save from a previous run exists
+(`thronglets_save.json`), you're then asked whether to resume it — say yes
+and everything else is skipped, you're straight back where you left off.
+Otherwise you pick `A` (automatic) or `M` (manual), how many creatures to
+start with (type a number, 1-220, `ENTER` to confirm or skip for the
+default of 100), then `Y`/`N` (`O`/`N` in French) for whether to start
+already speaking a pre-trained language (see below) — every screen defaults
+to French/automatic/100/yes if you just hit `ENTER` through all of them,
+and they stick for the whole run (`R` resets using them again, it doesn't
+ask a second time).
 
 | Key           | Effect                                                       |
 |---------------|----------------------------------------------------------------|
@@ -115,14 +116,16 @@ cd claudeai/thronglets
 python main_tui.py
 ```
 
-On launch you're asked to press `E`/`F` for English or French. If a save
-from a previous run exists, you're then asked whether to resume it — say
-yes and the population, food, and predators come back exactly as you left
-them, skipping every other question. Otherwise: `A` (automatic) or `M`
-(manual), how many creatures to start with (1-220, `enter` to confirm or
-skip for the default of 70), then a yes/no for whether to start already
-speaking a pre-trained language (see below, `y`/`n` in English, `o`/`n` in
-French) — all choices stick for the whole run.
+On launch you're asked to press `E`/`F` for English or French, `enter`
+defaulting to French. If a save from a previous run exists, you're then
+asked whether to resume it — say yes and the population, food, and
+predators come back exactly as you left them, skipping every other
+question. Otherwise: `A` (automatic) or `M` (manual), how many creatures to
+start with (1-220, `enter` to confirm or skip for the default of 100), then
+a yes/no for whether to start already speaking a pre-trained language (see
+below, `y`/`n` in English, `o`/`n` in French) — every screen defaults to
+French/automatic/100/yes if you just hit `enter` through all of them, and
+all choices stick for the whole run.
 
 Creatures show up as a colored `o` (colored by whatever token they're
 currently signaling, white if silent), food as green `.`, predators as a red
@@ -150,13 +153,14 @@ python main_web.py --port 9000      # or pick your own port
 
 Then open `http://localhost:8765` (swap in your port) in any browser on the
 same device. Two small buttons at the top switch the whole page between
-English and French at any time, including mid-run — this one isn't a
-one-time choice like the others. The world doesn't exist yet — if a save
-from a previous run exists, a **Resume saved game** button appears on the
-start screen and skips every other question. Otherwise, pick automatic or
-manual mode, how many creatures to start with (defaults to 70), and
-whether to activate a pre-trained language (see below), and those three
-stick for the whole run (Reset doesn't ask again). Once
+English and French at any time, including mid-run (French by default) —
+this one isn't a one-time choice like the others. The world doesn't exist
+yet — if a save from a previous run exists, a **Resume saved game** button
+appears on the start screen and skips every other question. Otherwise,
+pick automatic or manual mode, how many creatures to start with (pre-filled
+with 100), and whether to activate a pre-trained language (checked by
+default), and those three stick for the whole run (Reset doesn't ask
+again). Once
 started, the page polls the server a few times a second for a fresh
 snapshot and draws it to a `<canvas>`; buttons
 handle pause/reset/speed and what a manual placement adds. `+`/`- predateurs`

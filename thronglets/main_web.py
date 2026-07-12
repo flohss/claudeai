@@ -31,7 +31,7 @@ from simulation import (DANGER, DISTRESS, FOOD, HEIGHT, IDLE, MATE, MAX_POPULATI
 
 DEFAULT_PORT = 8765
 STEP_INTERVAL = 0.05
-DEFAULT_INIT_POP = 70
+DEFAULT_INIT_POP = 100
 DEFAULT_LANGUAGE_FILE = "language_model.json"
 DEFAULT_SAVE_FILE = "thronglets_save.json"
 STATE_IDS = {IDLE: "idle", FOOD: "food", MATE: "mate", DANGER: "danger", DISTRESS: "distress"}
@@ -280,9 +280,9 @@ INDEX_HTML = """<!doctype html>
     <p data-i18n="startPrompt"></p>
     <label>
       <span data-i18n="initPopLabel"></span>
-      <input type="number" id="initPop" value="70" min="1" max="220">
+      <input type="number" id="initPop" value="100" min="1" max="220">
     </label>
-    <label><input type="checkbox" id="useAi"> <span data-i18n="useAiLabel"></span></label>
+    <label><input type="checkbox" id="useAi" checked> <span data-i18n="useAiLabel"></span></label>
     <button id="startAuto" data-i18n="startAuto"></button>
     <button id="startManual" data-i18n="startManual"></button>
     <button id="startResume" data-i18n="resumeSaveText" style="display:none"></button>
@@ -552,7 +552,7 @@ function stepSpeed(speed, dir) {
 
 function startingInitPop() {
   const raw = parseInt(document.getElementById('initPop').value, 10);
-  return Number.isFinite(raw) ? raw : 70;
+  return Number.isFinite(raw) ? raw : 100;
 }
 async function startGame(mode) {
   const useAi = document.getElementById('useAi').checked;
