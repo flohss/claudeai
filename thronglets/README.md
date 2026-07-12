@@ -172,6 +172,12 @@ of the living population uses it — the numbers to watch are how fast a single
 token pulls ahead of the pack (starting near chance, ~17%, since there are 6
 tokens) and whether it stays there.
 
+Speed is measured in real time, not rendered frames: the default `x1` is a
+genuine one tick per second, slow enough to actually watch a single decision
+happen, and `x10`/`x50`/etc. scale from that same one-second baseline
+(capped at `x200`) rather than from whatever frame rate the renderer happens
+to draw at.
+
 ## Headless check
 
 `simulation.py` has no pygame dependency, so the core can be run and tested

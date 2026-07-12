@@ -9,7 +9,7 @@ language once, at startup - not something you toggle mid-run.
 
 Controls:
   SPACE        pause / resume
-  UP / DOWN    simulation speed (ticks per rendered frame)
+  UP / DOWN    simulation speed (ticks per real second - x1 is a genuine 1 tick/s)
   R            reset to a fresh world
   LEFT CLICK   place food (auto mode) or whatever's selected (manual mode)
   P            toggle what manual clicks place (food / predator)
@@ -532,10 +532,14 @@ def main():
 
     placing = "food"
     paused = False
-    speed = 1
+    speed = 1  # ticks per real second
+    tick_accumulator = 0.0
     running = True
 
     while running:
+        # Capped so returning from a blocking screen (help, save confirmation)
+        # resumes at normal pace instead of fast-forwarding through a huge backlog.
+        dt = min(clock.tick(60) / 1000.0, 0.25)
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
@@ -571,12 +575,16 @@ def main():
                         world.add_food(wx, wy)
 
         if not paused:
-            for _ in range(speed):
+            tick_accumulator += dt
+            tick_interval = 1.0 / speed
+            while tick_accumulator >= tick_interval:
                 world.step()
+                tick_accumulator -= tick_interval
+        else:
+            tick_accumulator = 0.0
 
         draw(screen, font, world, paused, speed, mode, placing, lang, trained=seed_genome is not None)
         pygame.display.flip()
-        clock.tick(60)
 
     pygame.quit()
     sys.exit()

@@ -91,12 +91,22 @@ def snapshot(state):
 
 
 def simulation_loop(state):
+    tick_accumulator = 0.0
+    last = time.monotonic()
     while True:
+        time.sleep(STEP_INTERVAL)
+        now = time.monotonic()
+        dt = min(now - last, 0.25)  # capped so a delayed loop iteration doesn't fast-forward
+        last = now
         with state.lock:
             if state.started and not state.paused:
-                for _ in range(state.speed):
+                tick_accumulator += dt
+                tick_interval = 1.0 / state.speed
+                while tick_accumulator >= tick_interval:
                     state.world.step()
-        time.sleep(STEP_INTERVAL)
+                    tick_accumulator -= tick_interval
+            else:
+                tick_accumulator = 0.0
 
 
 class Handler(BaseHTTPRequestHandler):

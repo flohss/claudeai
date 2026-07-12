@@ -494,8 +494,9 @@ def run(stdscr, language_path=None):
     cursor = [WIDTH / 2, HEIGHT / 2]
 
     paused = False
-    speed = 1
+    speed = 1  # ticks per real second
     frame_time = 1 / 20
+    tick_accumulator = 0.0
 
     while True:
         key = stdscr.getch()
@@ -537,8 +538,13 @@ def run(stdscr, language_path=None):
                 world.add_predator(cursor[0], cursor[1])
 
         if not paused:
-            for _ in range(speed):
+            tick_accumulator += frame_time
+            tick_interval = 1.0 / speed
+            while tick_accumulator >= tick_interval:
                 world.step()
+                tick_accumulator -= tick_interval
+        else:
+            tick_accumulator = 0.0
 
         draw(stdscr, world, paused, speed, mode, placing, cursor, lang, trained=seed_genome is not None)
         time.sleep(frame_time)
