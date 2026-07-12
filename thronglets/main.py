@@ -1,5 +1,9 @@
 """Watch a Thronglets world live in a window.
 
+Runs fullscreen, scaled to fit whatever resolution the screen actually is
+(pygame's SCALED flag letterboxes rather than stretching), so it never
+shows up bigger than the display. ESC quits back to the desktop.
+
 You pick a language, automatic or manual mode, and whether to seed the AI
 language once, at startup - not something you toggle mid-run.
 
@@ -435,7 +439,7 @@ def main():
 
     pygame.init()
     pygame.display.set_caption("Thronglets - a tiny language is being born")
-    screen = pygame.display.set_mode((SCREEN_W, SCREEN_H))
+    screen = pygame.display.set_mode((SCREEN_W, SCREEN_H), pygame.FULLSCREEN | pygame.SCALED)
     clock = pygame.time.Clock()
     font = pygame.font.SysFont("consolas", 16)
 

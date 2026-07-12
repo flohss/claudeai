@@ -60,6 +60,10 @@ pip install -r requirements.txt
 python main.py
 ```
 
+The window opens fullscreen, scaled (with letterboxing, not stretched) to
+fit whatever resolution the screen actually is — `ESC` quits back to the
+desktop.
+
 On launch you're asked to press `E`/`F` for English or French, then `A`
 (automatic) or `M` (manual), then how many creatures to start with (type a
 number, 1-220, `ENTER` to confirm or skip for the default of 70), then
