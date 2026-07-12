@@ -57,9 +57,10 @@ python main.py
 
 On launch you're asked to press `A` (automatic) or `M` (manual), then how
 many creatures to start with (type a number, 1-220, `ENTER` to confirm or
-skip for the default of 70) — the world isn't created until both are
-answered, and both stick for the whole run (`R` resets using them again,
-it doesn't ask a second time).
+skip for the default of 70), then `O`/`N` for whether to start already
+speaking a pre-trained language (see below) — the world isn't created
+until all three are answered, and they stick for the whole run (`R` resets
+using them again, it doesn't ask a second time).
 
 | Key           | Effect                                                       |
 |---------------|----------------------------------------------------------------|
@@ -91,7 +92,8 @@ python main_tui.py
 
 On launch you're asked to press `A` (automatic) or `M` (manual), then type
 how many creatures to start with (1-220, `enter` to confirm or skip for the
-default of 70) — both choices stick for the whole run.
+default of 70), then `o`/`n` for whether to start already speaking a
+pre-trained language (see below) — all three choices stick for the whole run.
 
 Creatures show up as a colored `o` (colored by whatever token they're
 currently signaling, white if silent), food as green `.`, predators as a red
@@ -118,8 +120,9 @@ python main_web.py --port 9000      # or pick your own port
 
 Then open `http://localhost:8765` (swap in your port) in any browser on the
 same device. The world doesn't exist yet — a start screen asks you to pick
-automatic or manual mode and how many creatures to start with (defaults to
-70), and both stick for the whole run (Reset doesn't ask again). Once
+automatic or manual mode, how many creatures to start with (defaults to
+70), and whether to activate a pre-trained language (see below), and all
+three stick for the whole run (Reset doesn't ask again). Once
 started, the page polls the server a few times a second for a fresh
 snapshot and draws it to a `<canvas>`; buttons
 handle pause/reset/speed and what a manual placement adds. `+`/`- predateurs`
@@ -225,6 +228,14 @@ python main.py            --language language_model.json
 python main_tui.py        --language language_model.json
 python main_web.py        --language language_model.json
 ```
+
+You don't have to remember that flag, though: if you launch any renderer
+without `--language`, right after picking the mode and the starting
+population you're asked "Activer le langage pre-entraine par IA ?" (`O`/`N`
+in pygame and the terminal, a checkbox on the web start screen) - answering
+yes loads `language_model.json` from the current folder automatically. If
+that file doesn't exist yet (you haven't run `train_language.py` there),
+you get a clear message and the game starts normally instead of crashing.
 
 Every creature in generation 0 gets an exact copy of the trained genome
 (a spiked emission for its trained token per state, and response weights

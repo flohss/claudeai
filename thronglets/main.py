@@ -22,6 +22,7 @@ import pygame
 from simulation import DANGER, FOOD, HEIGHT, IDLE, MATE, MAX_POPULATION, World, WIDTH, load_seed_genome
 
 DEFAULT_INIT_POP = 70
+DEFAULT_LANGUAGE_FILE = "language_model.json"
 
 SCALE = 5
 HUD_H = 200
@@ -247,14 +248,55 @@ def choose_population(screen, font):
                     text += event.unicode
 
 
+def choose_ai(screen, font):
+    lines = [
+        "Thronglets",
+        "",
+        "Activer le langage pre-entraine par IA ?",
+        f"  (relit '{DEFAULT_LANGUAGE_FILE}', genere par train_language.py)",
+        "",
+        "  O = oui - les creatures parlent deja un langage sans confusion",
+        "  N = non - le langage doit emerger tout seul en jouant (defaut)",
+        "",
+        "Press O or N to start.",
+    ]
+    while True:
+        screen.fill(BG)
+        for i, line in enumerate(lines):
+            screen.blit(font.render(line, True, TEXT_COLOR), (20, 20 + i * 26))
+        pygame.display.flip()
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_o:
+                    return True
+                if event.key == pygame.K_n:
+                    return False
+
+
+def flash_message(screen, font, text):
+    waiting = True
+    while waiting:
+        screen.fill(BG)
+        screen.blit(font.render(text, True, (235, 90, 90)), (20, 20))
+        screen.blit(font.render("-- press any key to continue --", True, TEXT_COLOR), (20, 60))
+        pygame.display.flip()
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.KEYDOWN:
+                waiting = False
+
+
 def main():
     parser = argparse.ArgumentParser(description="Thronglets - pygame renderer")
     parser.add_argument("--language", type=str, default=None,
                          help="seed the population with a train_language.py --export vocabulary "
                               "instead of starting from scratch")
     args = parser.parse_args()
-
-    seed_genome = load_seed_genome(args.language) if args.language else None
 
     pygame.init()
     pygame.display.set_caption("Thronglets - a tiny language is being born")
@@ -264,6 +306,18 @@ def main():
 
     mode = choose_mode(screen, font)
     init_pop = choose_population(screen, font)
+
+    if args.language:
+        seed_genome = load_seed_genome(args.language)
+    elif choose_ai(screen, font):
+        try:
+            seed_genome = load_seed_genome(DEFAULT_LANGUAGE_FILE)
+        except OSError:
+            seed_genome = None
+            flash_message(screen, font, f"'{DEFAULT_LANGUAGE_FILE}' introuvable - lancement sans IA.")
+    else:
+        seed_genome = None
+
     placing = "food"
 
     world = _new_world(mode, 6, init_pop, seed_genome)

@@ -20,6 +20,7 @@ import time
 from simulation import DANGER, FOOD, HEIGHT, IDLE, MATE, MAX_POPULATION, World, WIDTH, load_seed_genome
 
 DEFAULT_INIT_POP = 70
+DEFAULT_LANGUAGE_FILE = "language_model.json"
 
 TOKEN_COLOR_PAIR = {1: 1, 2: 2, 3: 3, 4: 4, 5: 5}
 STATE_LABELS = {IDLE: "idle", FOOD: "food-call", MATE: "mate-call", DANGER: "alarm-call"}
@@ -167,6 +168,45 @@ def choose_population(stdscr):
     return max(1, min(MAX_POPULATION, n))
 
 
+def choose_ai(stdscr):
+    stdscr.nodelay(False)
+    stdscr.erase()
+    lines = [
+        ("Thronglets", curses.A_BOLD),
+        ("", 0),
+        ("Activer le langage pre-entraine par IA ?", curses.A_BOLD),
+        (f"  (relit '{DEFAULT_LANGUAGE_FILE}', genere par train_language.py)", 0),
+        ("", 0),
+        ("  O = oui - les creatures parlent deja un langage sans confusion", 0),
+        ("  N = non - le langage doit emerger tout seul en jouant (defaut)", 0),
+        ("", 0),
+        ("Appuie sur O ou N pour commencer.", curses.A_DIM),
+    ]
+    for i, (line, attr) in enumerate(lines):
+        _safe_addstr(stdscr, i, 0, line, curses.color_pair(7) | attr)
+    stdscr.refresh()
+
+    choice = None
+    while choice is None:
+        key = stdscr.getch()
+        if key in (ord("o"), ord("O")):
+            choice = True
+        elif key in (ord("n"), ord("N")):
+            choice = False
+    stdscr.nodelay(True)
+    return choice
+
+
+def _flash_message(stdscr, text):
+    stdscr.nodelay(False)
+    stdscr.erase()
+    _safe_addstr(stdscr, 0, 0, text, curses.color_pair(1) | curses.A_BOLD)
+    _safe_addstr(stdscr, 2, 0, "-- une touche pour continuer --", curses.color_pair(7) | curses.A_DIM)
+    stdscr.refresh()
+    stdscr.getch()
+    stdscr.nodelay(True)
+
+
 def draw(stdscr, world, paused, speed, mode, placing, cursor, trained=False):
     stdscr.erase()
     rows, cols = stdscr.getmaxyx()
@@ -231,12 +271,24 @@ def _new_world(mode, predator_count, init_pop=DEFAULT_INIT_POP, seed_genome=None
     return World(init_pop=init_pop, predator_count=predator_count, seed_genome=seed_genome)
 
 
-def run(stdscr, seed_genome=None):
+def run(stdscr, language_path=None):
     curses.curs_set(0)
     setup_colors()
 
     mode = choose_mode(stdscr)
     init_pop = choose_population(stdscr)
+
+    if language_path:
+        seed_genome = load_seed_genome(language_path)
+    elif choose_ai(stdscr):
+        try:
+            seed_genome = load_seed_genome(DEFAULT_LANGUAGE_FILE)
+        except OSError:
+            seed_genome = None
+            _flash_message(stdscr, f"'{DEFAULT_LANGUAGE_FILE}' introuvable - lancement sans IA.")
+    else:
+        seed_genome = None
+
     placing = "food"
     cursor = [WIDTH / 2, HEIGHT / 2]
 
@@ -296,8 +348,7 @@ def main():
                               "instead of starting from scratch")
     args = parser.parse_args()
 
-    seed_genome = load_seed_genome(args.language) if args.language else None
-    curses.wrapper(run, seed_genome)
+    curses.wrapper(run, args.language)
 
 
 if __name__ == "__main__":

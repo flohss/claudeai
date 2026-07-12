@@ -26,6 +26,7 @@ from simulation import DANGER, FOOD, HEIGHT, IDLE, MATE, MAX_POPULATION, World, 
 DEFAULT_PORT = 8765
 STEP_INTERVAL = 0.05
 DEFAULT_INIT_POP = 70
+DEFAULT_LANGUAGE_FILE = "language_model.json"
 STATE_NAMES = {IDLE: "idle", FOOD: "food-call", MATE: "mate-call", DANGER: "alarm-call"}
 
 
@@ -44,7 +45,8 @@ class SimState:
         self.world = None
         self.paused = False
         self.speed = 1
-        self.seed_genome = seed_genome
+        self.cli_seed_genome = seed_genome
+        self.active_seed_genome = None
         self.lock = threading.Lock()
 
 
@@ -62,7 +64,7 @@ def snapshot(state):
         "deaths": w.deaths,
         "paused": state.paused,
         "speed": state.speed,
-        "trained": state.seed_genome is not None,
+        "trained": state.active_seed_genome is not None,
         "mode": state.mode,
         "placing": state.placing,
         "predator_count": len(w.predators),
@@ -119,6 +121,7 @@ class Handler(BaseHTTPRequestHandler):
 
         state = self.server.state
         action = body.get("action")
+        ai_error = None
         with state.lock:
             if action == "start" and not state.started:
                 state.mode = "manual" if body.get("mode") == "manual" else "auto"
@@ -127,7 +130,19 @@ class Handler(BaseHTTPRequestHandler):
                 except (TypeError, ValueError):
                     init_pop = DEFAULT_INIT_POP
                 state.init_pop = max(1, min(MAX_POPULATION, init_pop))
-                state.world = _new_world(state.mode, 6, state.init_pop, state.seed_genome)
+
+                if state.cli_seed_genome is not None:
+                    state.active_seed_genome = state.cli_seed_genome
+                elif body.get("use_ai"):
+                    try:
+                        state.active_seed_genome = load_seed_genome(DEFAULT_LANGUAGE_FILE)
+                    except OSError:
+                        state.active_seed_genome = None
+                        ai_error = f"'{DEFAULT_LANGUAGE_FILE}' introuvable - lancement sans IA."
+                else:
+                    state.active_seed_genome = None
+
+                state.world = _new_world(state.mode, 6, state.init_pop, state.active_seed_genome)
                 state.started = True
             elif not state.started:
                 pass  # ignore every other action until a mode has been chosen
@@ -136,7 +151,8 @@ class Handler(BaseHTTPRequestHandler):
             elif action == "resume":
                 state.paused = False
             elif action == "reset":
-                state.world = _new_world(state.mode, len(state.world.predators), state.init_pop, state.seed_genome)
+                state.world = _new_world(state.mode, len(state.world.predators), state.init_pop,
+                                          state.active_seed_genome)
                 state.paused = False
             elif action == "speed":
                 state.speed = max(1, min(200, int(body.get("value", state.speed))))
@@ -153,7 +169,7 @@ class Handler(BaseHTTPRequestHandler):
                     state.world.add_predator(x, y)
                 else:
                     state.world.add_food(x, y)
-        self._send(200, "application/json", b'{"ok":true}')
+        self._send(200, "application/json", json.dumps({"ok": True, "error": ai_error}).encode())
 
     def _send(self, code, content_type, body, no_store=False):
         self.send_response(code)
@@ -227,6 +243,7 @@ INDEX_HTML = """<!doctype html>
     <label>Nombre de creatures au depart :
       <input type="number" id="initPop" value="70" min="1" max="220">
     </label>
+    <label><input type="checkbox" id="useAi"> Activer le langage pre-entraine par IA (language_model.json)</label>
     <button id="startAuto">Automatique — nourriture et predateurs apparaissent seuls</button>
     <button id="startManual">Manuel — je place tout moi-meme</button>
   </div>
@@ -379,11 +396,12 @@ async function poll() {
 }
 
 async function post(action, extra) {
-  await fetch('/control', {
+  const r = await fetch('/control', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify(Object.assign({action}, extra || {})),
   });
+  return r.json();
 }
 
 function stepSpeed(speed, dir) {
@@ -395,8 +413,13 @@ function startingInitPop() {
   const raw = parseInt(document.getElementById('initPop').value, 10);
   return Number.isFinite(raw) ? raw : 70;
 }
-document.getElementById('startAuto').onclick = () => post('start', {mode: 'auto', init_pop: startingInitPop()});
-document.getElementById('startManual').onclick = () => post('start', {mode: 'manual', init_pop: startingInitPop()});
+async function startGame(mode) {
+  const useAi = document.getElementById('useAi').checked;
+  const res = await post('start', {mode, init_pop: startingInitPop(), use_ai: useAi});
+  if (res.error) alert(res.error);
+}
+document.getElementById('startAuto').onclick = () => startGame('auto');
+document.getElementById('startManual').onclick = () => startGame('manual');
 document.getElementById('pause').onclick = () => post(paused ? 'resume' : 'pause');
 document.getElementById('reset').onclick = () => post('reset');
 document.getElementById('faster').onclick = () => post('speed', {value: stepSpeed(currentSpeed, 1)});
