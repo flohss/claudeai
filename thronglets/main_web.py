@@ -6,9 +6,13 @@ Runs the simulation in a background thread and exposes it over plain HTTP:
   POST /control start/pause/resume/reset/speed/placing/predator_count/click,
                 driven by the page's buttons and clicks
 
-The world doesn't exist until the page's start screen picks automatic or
-manual mode - that choice is made once, up front, not toggled mid-run. A
-"Notice" button opens an in-page explainer of the mechanics at any time.
+The world doesn't exist until the page's start screen picks a language,
+automatic or manual mode, and whether to seed the AI language - those
+choices are made once, up front, not toggled mid-run. A "Notice"/"Help"
+button opens an in-page explainer of the mechanics at any time. All UI
+text (including the state names like food-call/mate-call) is translated
+client-side between English and French; the server only ever deals in
+fixed internal ids (idle/food/mate/danger).
 
 No third-party dependencies beyond numpy (for simulation.py) - the server
 itself is only the standard library's http.server, so this needs nothing
@@ -27,7 +31,7 @@ DEFAULT_PORT = 8765
 STEP_INTERVAL = 0.05
 DEFAULT_INIT_POP = 70
 DEFAULT_LANGUAGE_FILE = "language_model.json"
-STATE_NAMES = {IDLE: "idle", FOOD: "food-call", MATE: "mate-call", DANGER: "alarm-call"}
+STATE_IDS = {IDLE: "idle", FOOD: "food", MATE: "mate", DANGER: "danger"}
 
 
 def _new_world(mode, predator_count, init_pop=DEFAULT_INIT_POP, seed_genome=None):
@@ -77,7 +81,7 @@ def snapshot(state):
             for c in w.creatures if c.alive
         ],
         "vocabulary": {
-            STATE_NAMES[s]: [[int(t), float(f)] for t, f in breakdown[s]]
+            STATE_IDS[s]: [[int(t), float(f)] for t, f in breakdown[s]]
             for s in (DANGER, FOOD, MATE, IDLE)
         },
     }
@@ -138,7 +142,7 @@ class Handler(BaseHTTPRequestHandler):
                         state.active_seed_genome = load_seed_genome(DEFAULT_LANGUAGE_FILE)
                     except OSError:
                         state.active_seed_genome = None
-                        ai_error = f"'{DEFAULT_LANGUAGE_FILE}' introuvable - lancement sans IA."
+                        ai_error = "ai_missing"
                 else:
                     state.active_seed_genome = None
 
@@ -169,7 +173,8 @@ class Handler(BaseHTTPRequestHandler):
                     state.world.add_predator(x, y)
                 else:
                     state.world.add_food(x, y)
-        self._send(200, "application/json", json.dumps({"ok": True, "error": ai_error}).encode())
+        self._send(200, "application/json",
+                   json.dumps({"ok": True, "error": ai_error, "file": DEFAULT_LANGUAGE_FILE}).encode())
 
     def _send(self, code, content_type, body, no_store=False):
         self.send_response(code)
@@ -220,6 +225,10 @@ INDEX_HTML = """<!doctype html>
   #initPop { width: 70px; font-family: inherit; font-size: 14px; padding: 4px 6px; }
   #app { display: none; flex-direction: column; align-items: center; gap: 10px; width: 100%; }
 
+  #langToggle { display: flex; gap: 8px; justify-content: center; }
+  .lang-btn { padding: 6px 14px; font-size: 13px; opacity: 0.6; }
+  .lang-btn.active { opacity: 1; border-color: #6edc5a; }
+
   #help-overlay {
     display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6);
     align-items: center; justify-content: center; padding: 16px; z-index: 10;
@@ -237,15 +246,20 @@ INDEX_HTML = """<!doctype html>
 </style>
 </head>
 <body>
+  <div id="langToggle">
+    <button id="langEn" class="lang-btn">English</button>
+    <button id="langFr" class="lang-btn">Francais</button>
+  </div>
   <div id="start-overlay">
-    <h1>Thronglets</h1>
-    <p>Choisis le mode de depart - ce choix ne se change pas en cours de partie.</p>
-    <label>Nombre de creatures au depart :
+    <h1 data-i18n="title"></h1>
+    <p data-i18n="startPrompt"></p>
+    <label>
+      <span data-i18n="initPopLabel"></span>
       <input type="number" id="initPop" value="70" min="1" max="220">
     </label>
-    <label><input type="checkbox" id="useAi"> Activer le langage pre-entraine par IA (language_model.json)</label>
-    <button id="startAuto">Automatique — nourriture et predateurs apparaissent seuls</button>
-    <button id="startManual">Manuel — je place tout moi-meme</button>
+    <label><input type="checkbox" id="useAi"> <span data-i18n="useAiLabel"></span></label>
+    <button id="startAuto" data-i18n="startAuto"></button>
+    <button id="startManual" data-i18n="startManual"></button>
   </div>
 
   <div id="app">
@@ -258,44 +272,44 @@ INDEX_HTML = """<!doctype html>
       <div class="row" id="vocab-idle"></div>
     </div>
     <div id="controls">
-      <button id="pause">Pause</button>
-      <button id="reset">Reset</button>
-      <button id="slower">- vitesse</button>
-      <button id="faster">+ vitesse</button>
-      <button id="openHelp">Notice</button>
+      <button id="pause"></button>
+      <button id="reset" data-i18n="resetText"></button>
+      <button id="slower" data-i18n="slowerText"></button>
+      <button id="faster" data-i18n="fasterText"></button>
+      <button id="openHelp" data-i18n="noticeText"></button>
     </div>
     <div id="controls2">
-      <button id="placing">Pose: nourriture</button>
-      <button id="predLess">- predateurs</button>
-      <button id="predMore">+ predateurs</button>
+      <button id="placing"></button>
+      <button id="predLess" data-i18n="predLessText"></button>
+      <button id="predMore" data-i18n="predMoreText"></button>
     </div>
     <canvas id="world" width="900" height="630"></canvas>
-    <div id="hint">Clique/touche le monde pour placer de la nourriture (ou un predateur en mode manuel)</div>
+    <div id="hint" data-i18n="hint"></div>
   </div>
 
   <div id="help-overlay">
     <div id="help-panel">
-      <h2>Le principe</h2>
-      <p>Chaque creature nait avec un genome qui decide quelle couleur elle affiche selon son etat, et comment elle reagit aux couleurs des autres. Personne ne programme le sens des couleurs : un langage commun peut emerger par selection naturelle, ou pas.</p>
+      <h2 data-i18n="helpH1"></h2>
+      <p data-i18n="helpP1"></p>
 
-      <h2>Les 4 etats, par ordre de priorite</h2>
+      <h2 data-i18n="helpH2"></h2>
       <ul>
-        <li><strong>danger</strong> — un predateur est repere, fuite immediate</li>
-        <li><strong>food-call</strong> — de la nourriture est visible tout pres</li>
-        <li><strong>mate-call</strong> — prete a se reproduire, partenaire prete proche</li>
-        <li><strong>idle</strong> — rien de special (l'etat le plus frequent, de loin)</li>
+        <li><strong data-i18n="stateDanger"></strong> — <span data-i18n="stateDangerDesc"></span></li>
+        <li><strong data-i18n="stateFood"></strong> — <span data-i18n="stateFoodDesc"></span></li>
+        <li><strong data-i18n="stateMate"></strong> — <span data-i18n="stateMateDesc"></span></li>
+        <li><strong data-i18n="stateIdle"></strong> — <span data-i18n="stateIdleDesc"></span></li>
       </ul>
 
-      <h2>Vivre, se reproduire, mourir</h2>
-      <p>L'energie baisse en permanence, manger la restaure. Emettre une couleur (hors silence) coute un peu d'energie en plus. Assez d'energie et d'age, un partenaire pareil a proximite : un enfant nait. Un predateur qui attrape une creature la tue net.</p>
+      <h2 data-i18n="helpH3"></h2>
+      <p data-i18n="helpP3"></p>
 
-      <h2>Lire le vocabulaire affiche en haut</h2>
-      <p>Pour chaque etat, la part de la population qui utilise chaque couleur. Ca part du hasard (~17%, il y a 6 mots possibles) et grimpe si un mot fait consensus. Les deux points <code>..</code> representent le silence — pas une couleur en moins.</p>
+      <h2 data-i18n="helpH4"></h2>
+      <p data-i18n="helpP4"></p>
 
-      <h2>A savoir</h2>
-      <p>Deux etats peuvent finir sur la meme couleur par hasard (par exemple idle et alarm-call) — rien ne l'empeche ni ne garantit que ca se resolve. Parler coute de l'energie : le silence est une vraie strategie, pas un defaut.</p>
+      <h2 data-i18n="helpH5"></h2>
+      <p data-i18n="helpP5"></p>
 
-      <div class="close-row"><button id="closeHelp">Fermer</button></div>
+      <div class="close-row"><button id="closeHelp" data-i18n="closeText"></button></div>
     </div>
   </div>
 
@@ -303,7 +317,92 @@ INDEX_HTML = """<!doctype html>
 const TOKEN_COLORS = ["#a0a0a0", "#eb4646", "#4682eb", "#f5c83c", "#c85ae6", "#46e1d2"];
 const FOOD_COLOR = "#6edc5a";
 const PREDATOR_COLOR = "#dc1e1e";
-const STATE_LABELS = {"alarm-call": "alarm-call", "food-call": "food-call", "mate-call": "mate-call", "idle": "idle"};
+
+const STRINGS = {
+  en: {
+    title: "Thronglets",
+    startPrompt: "Choose the starting mode - this choice does not change during the game.",
+    initPopLabel: "Number of creatures to start with:",
+    useAiLabel: "Activate the pre-trained AI language (language_model.json)",
+    startAuto: "Automatic — food and predators spawn on their own",
+    startManual: "Manual — I place everything myself",
+    pauseText: "Pause", resumeText: "Resume",
+    resetText: "Reset",
+    slowerText: "- speed", fasterText: "+ speed",
+    noticeText: "Notice",
+    placingFoodBtn: "Placing: food", placingPredatorBtn: "Placing: predator",
+    predLessText: "- predators", predMoreText: "+ predators",
+    hint: "Click/tap the world to place food (or a predator in manual mode)",
+    closeText: "Close",
+
+    labelIdle: "idle", labelFood: "food-call", labelMate: "mate-call", labelDanger: "alarm-call",
+    wordBirths: "births", wordDeaths: "deaths", wordPaused: "PAUSE",
+    trainedTag: "   [trained vocabulary]",
+    placingWordFood: "food", placingWordPredator: "predator",
+    settingsManual: (placing) => `mode: manual   placing: ${placing}`,
+    settingsAuto: (count) => `mode: automatic   predators: ${count} (+/- act immediately)`,
+    errorAiMissing: (file) => `'${file}' not found - starting without AI.`,
+
+    helpH1: "The idea", helpP1: "Each creature is born with a genome deciding which color it shows for its current state, and how it reacts to colors it hears from others. Nobody programs what a color means - a shared language can emerge through natural selection, or it might not.",
+    helpH2: "The 4 states, in priority order",
+    stateDanger: "alarm-call", stateDangerDesc: "a predator was spotted, flee immediately",
+    stateFood: "food-call", stateFoodDesc: "food is visible nearby",
+    stateMate: "mate-call", stateMateDesc: "ready to mate, a ready partner is nearby",
+    stateIdle: "idle", stateIdleDesc: "nothing special (by far the most common state)",
+    helpH3: "Living, mating, dying", helpP3: "Energy drains constantly; eating restores it. Emitting a color (other than silence) costs a bit of extra energy. Enough energy and age, a matching partner nearby: a child is born. A predator that catches a creature kills it outright.",
+    helpH4: "Reading the vocabulary rows at the top", helpP4: "For each state, the share of the population using each color. It starts near chance (~17%, there are 6 possible tokens) and climbs if a token wins out. The two dots '..' represent silence, not a missing color.",
+    helpH5: "Worth knowing", helpP5: "Two states can end up sharing the same color purely by chance (e.g. idle and alarm-call) - nothing prevents it or guarantees it resolves. Signaling costs energy: silence is a real strategy, not a default.",
+  },
+  fr: {
+    title: "Thronglets",
+    startPrompt: "Choisis le mode de depart - ce choix ne se change pas en cours de partie.",
+    initPopLabel: "Nombre de creatures au depart :",
+    useAiLabel: "Activer le langage pre-entraine par IA (language_model.json)",
+    startAuto: "Automatique — nourriture et predateurs apparaissent seuls",
+    startManual: "Manuel — je place tout moi-meme",
+    pauseText: "Pause", resumeText: "Reprendre",
+    resetText: "Reset",
+    slowerText: "- vitesse", fasterText: "+ vitesse",
+    noticeText: "Notice",
+    placingFoodBtn: "Pose: nourriture", placingPredatorBtn: "Pose: predateur",
+    predLessText: "- predateurs", predMoreText: "+ predateurs",
+    hint: "Clique/touche le monde pour placer de la nourriture (ou un predateur en mode manuel)",
+    closeText: "Fermer",
+
+    labelIdle: "inactif", labelFood: "nourriture", labelMate: "partenaire", labelDanger: "alerte",
+    wordBirths: "naissances", wordDeaths: "morts", wordPaused: "PAUSE",
+    trainedTag: "   [vocabulaire entraine]",
+    placingWordFood: "nourriture", placingWordPredator: "predateur",
+    settingsManual: (placing) => `mode: manuel   pose: ${placing}`,
+    settingsAuto: (count) => `mode: auto   predateurs: ${count} (+/- agit tout de suite)`,
+    errorAiMissing: (file) => `'${file}' introuvable - lancement sans IA.`,
+
+    helpH1: "Le principe", helpP1: "Chaque creature nait avec un genome qui decide quelle couleur elle affiche selon son etat, et comment elle reagit aux couleurs des autres. Personne ne programme le sens des couleurs : un langage commun peut emerger par selection naturelle, ou pas.",
+    helpH2: "Les 4 etats, par ordre de priorite",
+    stateDanger: "alerte", stateDangerDesc: "un predateur est repere, fuite immediate",
+    stateFood: "nourriture", stateFoodDesc: "de la nourriture est visible tout pres",
+    stateMate: "partenaire", stateMateDesc: "prete a se reproduire, partenaire prete proche",
+    stateIdle: "inactif", stateIdleDesc: "rien de special (l'etat le plus frequent, de loin)",
+    helpH3: "Vivre, se reproduire, mourir", helpP3: "L'energie baisse en permanence, manger la restaure. Emettre une couleur (hors silence) coute un peu d'energie en plus. Assez d'energie et d'age, un partenaire pareil a proximite : un enfant nait. Un predateur qui attrape une creature la tue net.",
+    helpH4: "Lire le vocabulaire affiche en haut", helpP4: "Pour chaque etat, la part de la population qui utilise chaque couleur. Ca part du hasard (~17%, il y a 6 mots possibles) et grimpe si un mot fait consensus. Les deux points '..' representent le silence, pas une couleur en moins.",
+    helpH5: "A savoir", helpP5: "Deux etats peuvent finir sur la meme couleur par hasard (par exemple idle et alarm-call) — rien ne l'empeche ni ne garantit que ca se resolve. Parler coute de l'energie : le silence est une vraie strategie, pas un defaut.",
+  },
+};
+
+let uiLang = 'fr';
+
+function applyLanguage(lang) {
+  uiLang = lang;
+  const t = STRINGS[lang];
+  document.querySelectorAll('[data-i18n]').forEach((el) => {
+    const key = el.dataset.i18n;
+    if (t[key] !== undefined) el.textContent = t[key];
+  });
+  document.getElementById('langEn').classList.toggle('active', lang === 'en');
+  document.getElementById('langFr').classList.toggle('active', lang === 'fr');
+  document.getElementById('pause').textContent = paused ? t.resumeText : t.pauseText;
+  document.getElementById('placing').textContent = placing === 'food' ? t.placingFoodBtn : t.placingPredatorBtn;
+}
 
 const canvas = document.getElementById('world');
 const ctx = canvas.getContext('2d');
@@ -320,6 +419,7 @@ function render(state) {
   document.getElementById('start-overlay').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
 
+  const t = STRINGS[uiLang];
   worldW = state.width; worldH = state.height;
   paused = state.paused; currentSpeed = state.speed;
   mode = state.mode; placing = state.placing; predatorCount = state.predator_count;
@@ -351,21 +451,21 @@ function render(state) {
   }
 
   document.getElementById('header').textContent =
-    `tick ${state.tick}   pop ${state.pop}   births ${state.births}   deaths ${state.deaths}   ` +
-    (state.paused ? "PAUSE" : "x" + state.speed) +
-    (state.trained ? "   [vocabulaire entraine]" : "");
+    `tick ${state.tick}   pop ${state.pop}   ${t.wordBirths} ${state.births}   ${t.wordDeaths} ${state.deaths}   ` +
+    (state.paused ? t.wordPaused : "x" + state.speed) +
+    (state.trained ? t.trainedTag : "");
 
-  renderVocabRow('vocab-danger', 'alarm-call', state.vocabulary['alarm-call']);
-  renderVocabRow('vocab-food', 'food-call', state.vocabulary['food-call']);
-  renderVocabRow('vocab-mate', 'mate-call', state.vocabulary['mate-call']);
-  renderVocabRow('vocab-idle', 'idle', state.vocabulary['idle']);
+  renderVocabRow('vocab-danger', t.labelDanger, state.vocabulary['danger']);
+  renderVocabRow('vocab-food', t.labelFood, state.vocabulary['food']);
+  renderVocabRow('vocab-mate', t.labelMate, state.vocabulary['mate']);
+  renderVocabRow('vocab-idle', t.labelIdle, state.vocabulary['idle']);
 
-  document.getElementById('pause').textContent = state.paused ? 'Reprendre' : 'Pause';
+  document.getElementById('pause').textContent = state.paused ? t.resumeText : t.pauseText;
 
   document.getElementById('settings').textContent = mode === 'manual'
-    ? `mode: manuel   pose: ${placing === 'food' ? 'nourriture' : 'predateur'}`
-    : `mode: auto   predateurs: ${predatorCount} (+/- agit tout de suite)`;
-  document.getElementById('placing').textContent = placing === 'food' ? 'Pose: nourriture' : 'Pose: predateur';
+    ? t.settingsManual(placing === 'food' ? t.placingWordFood : t.placingWordPredator)
+    : t.settingsAuto(predatorCount);
+  document.getElementById('placing').textContent = placing === 'food' ? t.placingFoodBtn : t.placingPredatorBtn;
   document.getElementById('placing').style.display = mode === 'manual' ? 'inline-block' : 'none';
 }
 
@@ -416,8 +516,10 @@ function startingInitPop() {
 async function startGame(mode) {
   const useAi = document.getElementById('useAi').checked;
   const res = await post('start', {mode, init_pop: startingInitPop(), use_ai: useAi});
-  if (res.error) alert(res.error);
+  if (res.error === 'ai_missing') alert(STRINGS[uiLang].errorAiMissing(res.file));
 }
+document.getElementById('langEn').onclick = () => applyLanguage('en');
+document.getElementById('langFr').onclick = () => applyLanguage('fr');
 document.getElementById('startAuto').onclick = () => startGame('auto');
 document.getElementById('startManual').onclick = () => startGame('manual');
 document.getElementById('pause').onclick = () => post(paused ? 'resume' : 'pause');
@@ -443,6 +545,7 @@ canvas.addEventListener('click', (ev) => {
   post('click', {x: px / scale, y: py / scale});
 });
 
+applyLanguage(uiLang);
 setInterval(poll, 100);
 poll();
 </script>

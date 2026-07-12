@@ -36,6 +36,11 @@ real, if deliberately small, model of how a shared vocabulary can emerge from
 - All three renderers have an in-game notice (`h`/`H` in pygame and the
   terminal, a "Notice" button on the web page) explaining the mechanics
   above without leaving the running simulation.
+- The whole interface is available in English or French, chosen once at
+  startup in pygame/terminal, or toggled anytime (even mid-run) with the
+  buttons at the top of the web page — including the state names
+  themselves (`food-call`/`nourriture`, `mate-call`/`partenaire`,
+  `alarm-call`/`alerte`, `idle`/`inactif`).
 
 ## Run it
 
@@ -55,12 +60,13 @@ pip install -r requirements.txt
 python main.py
 ```
 
-On launch you're asked to press `A` (automatic) or `M` (manual), then how
-many creatures to start with (type a number, 1-220, `ENTER` to confirm or
-skip for the default of 70), then `O`/`N` for whether to start already
-speaking a pre-trained language (see below) — the world isn't created
-until all three are answered, and they stick for the whole run (`R` resets
-using them again, it doesn't ask a second time).
+On launch you're asked to press `E`/`F` for English or French, then `A`
+(automatic) or `M` (manual), then how many creatures to start with (type a
+number, 1-220, `ENTER` to confirm or skip for the default of 70), then
+`Y`/`N` (`O`/`N` in French) for whether to start already speaking a
+pre-trained language (see below) — the world isn't created until all four
+are answered, and they stick for the whole run (`R` resets using them
+again, it doesn't ask a second time).
 
 | Key           | Effect                                                       |
 |---------------|----------------------------------------------------------------|
@@ -90,10 +96,12 @@ cd claudeai/thronglets
 python main_tui.py
 ```
 
-On launch you're asked to press `A` (automatic) or `M` (manual), then type
-how many creatures to start with (1-220, `enter` to confirm or skip for the
-default of 70), then `o`/`n` for whether to start already speaking a
-pre-trained language (see below) — all three choices stick for the whole run.
+On launch you're asked to press `E`/`F` for English or French, `A`
+(automatic) or `M` (manual), then type how many creatures to start with
+(1-220, `enter` to confirm or skip for the default of 70), then a yes/no
+for whether to start already speaking a pre-trained language (see below,
+`y`/`n` in English, `o`/`n` in French) — all four choices stick for the
+whole run.
 
 Creatures show up as a colored `o` (colored by whatever token they're
 currently signaling, white if silent), food as green `.`, predators as a red
@@ -119,10 +127,13 @@ python main_web.py --port 9000      # or pick your own port
 ```
 
 Then open `http://localhost:8765` (swap in your port) in any browser on the
-same device. The world doesn't exist yet — a start screen asks you to pick
-automatic or manual mode, how many creatures to start with (defaults to
-70), and whether to activate a pre-trained language (see below), and all
-three stick for the whole run (Reset doesn't ask again). Once
+same device. Two small buttons at the top switch the whole page between
+English and French at any time, including mid-run — this one isn't a
+one-time choice like the others. The world doesn't exist yet — a start
+screen asks you to pick automatic or manual mode, how many creatures to
+start with (defaults to 70), and whether to activate a pre-trained
+language (see below), and those three stick for the whole run (Reset
+doesn't ask again). Once
 started, the page polls the server a few times a second for a fresh
 snapshot and draws it to a `<canvas>`; buttons
 handle pause/reset/speed and what a manual placement adds. `+`/`- predateurs`
