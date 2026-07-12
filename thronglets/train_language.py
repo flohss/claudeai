@@ -35,6 +35,7 @@ import torch.nn.functional as F
 from simulation import DANGER, FOOD, IDLE, MATE, N_STATES, N_TOKENS
 
 STATE_NAMES = {IDLE: "idle", FOOD: "food-call", MATE: "mate-call", DANGER: "alarm-call"}
+DEFAULT_CHECKPOINT = "language_model.pt"
 
 # Roughly the state frequencies actually observed in simulation.py's runs:
 # idle dominates because it's the default when nothing else applies.
@@ -67,6 +68,23 @@ class Listener(nn.Module):
 
 def sample_states(batch_size, weights):
     return torch.multinomial(weights, batch_size, replacement=True)
+
+
+def save_checkpoint(path, speaker, listener):
+    torch.save({"speaker": speaker.state_dict(), "listener": listener.state_dict()}, path)
+    print(f"\nSaved what it learned to '{path}' - reload it later with --load {path}")
+
+
+def load_checkpoint(path):
+    checkpoint = torch.load(path, weights_only=True)
+    speaker = Speaker()
+    listener = Listener()
+    speaker.load_state_dict(checkpoint["speaker"])
+    listener.load_state_dict(checkpoint["listener"])
+    speaker.eval()
+    listener.eval()
+    print(f"Loaded a previously trained brain from '{path}' (no training this run).")
+    return speaker, listener
 
 
 def train(episodes, batch_size, skewed, lr, seed, verbose=True):
@@ -172,13 +190,22 @@ def main():
                          help="sample states uniformly instead of matching the real sim's idle-heavy skew")
     parser.add_argument("--sweep", type=int, default=0,
                          help="train this many seeds and report the collision rate, instead of a single run")
+    parser.add_argument("--checkpoint", type=str, default=DEFAULT_CHECKPOINT,
+                         help=f"file to save to / load from (default: {DEFAULT_CHECKPOINT})")
+    parser.add_argument("--load", action="store_true",
+                         help="skip training - load a previously saved brain instead")
     args = parser.parse_args()
 
     if args.sweep:
         sweep(args.sweep, args.episodes, args.batch_size, not args.uniform, args.lr)
         return
 
-    speaker, listener = train(args.episodes, args.batch_size, not args.uniform, args.lr, args.seed)
+    if args.load:
+        speaker, listener = load_checkpoint(args.checkpoint)
+    else:
+        speaker, listener = train(args.episodes, args.batch_size, not args.uniform, args.lr, args.seed)
+        save_checkpoint(args.checkpoint, speaker, listener)
+
     report_vocabulary(speaker, listener)
 
 

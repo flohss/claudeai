@@ -184,6 +184,15 @@ This needs a genuinely heavy dependency not expected to work on Termux -
 unlike the three renderers, it's a standalone script, and doesn't touch
 `simulation.py` or the real-time game.
 
+Training starts from scratch and forgets everything the moment the process
+ends, unless you save it: a normal run automatically writes the trained
+Speaker/Listener to `language_model.pt` (customize with `--checkpoint`).
+To look at what a past run learned without retraining:
+
+```bash
+python train_language.py --load
+```
+
 **What actually happened when we ran it**, sampling states with the same
 idle-heavy skew the real simulation has: 8 out of 10 seeds converged to a
 perfect, collision-free code (100% listener accuracy) - a real difference
