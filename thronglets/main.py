@@ -14,11 +14,12 @@ Controls:
   ESC          quit
 """
 
+import argparse
 import sys
 
 import pygame
 
-from simulation import DANGER, FOOD, HEIGHT, IDLE, MATE, MAX_POPULATION, World, WIDTH
+from simulation import DANGER, FOOD, HEIGHT, IDLE, MATE, MAX_POPULATION, World, WIDTH, load_seed_genome
 
 DEFAULT_INIT_POP = 70
 
@@ -100,7 +101,7 @@ def show_help(screen, font):
                     waiting = False
 
 
-def draw(screen, font, world, paused, speed, mode, placing):
+def draw(screen, font, world, paused, speed, mode, placing, trained=False):
     screen.fill(BG)
     pygame.draw.rect(screen, GROUND, (0, HUD_H, SCREEN_W, SCREEN_H - HUD_H))
 
@@ -119,7 +120,7 @@ def draw(screen, font, world, paused, speed, mode, placing):
         x, y = int(p.pos[0] * SCALE), int(p.pos[1] * SCALE) + HUD_H
         pygame.draw.circle(screen, PREDATOR_COLOR, (x, y), 6)
 
-    draw_hud(screen, font, world, paused, speed, mode, placing)
+    draw_hud(screen, font, world, paused, speed, mode, placing, trained)
 
 
 def draw_vocab_row(screen, font, y, label, pairs):
@@ -137,12 +138,13 @@ def draw_vocab_row(screen, font, y, label, pairs):
         x += 16 + txt.get_width() + 14
 
 
-def draw_hud(screen, font, world, paused, speed, mode, placing):
+def draw_hud(screen, font, world, paused, speed, mode, placing, trained=False):
     pygame.draw.rect(screen, HUD_BG, (0, 0, SCREEN_W, HUD_H))
     pop = world.population()
     status = "PAUSED" if paused else f"x{speed}"
+    tag = "   [trained vocabulary]" if trained else ""
     header = (f"tick {world.tick:>6}   pop {pop:>4}   births {world.births:>5}   "
-              f"deaths {world.deaths:>5}   {status}   (space=pause  up/down=speed  r=reset  h=help)")
+              f"deaths {world.deaths:>5}   {status}   (space=pause  up/down=speed  r=reset  h=help){tag}")
     screen.blit(font.render(header, True, TEXT_COLOR), (10, 8))
 
     if mode == "manual":
@@ -182,10 +184,10 @@ def draw_hud(screen, font, world, paused, speed, mode, placing):
         screen.blit(msg, (10, legend_y + 22))
 
 
-def _new_world(mode, predator_count, init_pop=DEFAULT_INIT_POP):
+def _new_world(mode, predator_count, init_pop=DEFAULT_INIT_POP, seed_genome=None):
     if mode == "manual":
-        return World(init_pop=init_pop, manual_food=True, manual_predators=True)
-    return World(init_pop=init_pop, predator_count=predator_count)
+        return World(init_pop=init_pop, manual_food=True, manual_predators=True, seed_genome=seed_genome)
+    return World(init_pop=init_pop, predator_count=predator_count, seed_genome=seed_genome)
 
 
 def choose_mode(screen, font):
@@ -246,6 +248,14 @@ def choose_population(screen, font):
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Thronglets - pygame renderer")
+    parser.add_argument("--language", type=str, default=None,
+                         help="seed the population with a train_language.py --export vocabulary "
+                              "instead of starting from scratch")
+    args = parser.parse_args()
+
+    seed_genome = load_seed_genome(args.language) if args.language else None
+
     pygame.init()
     pygame.display.set_caption("Thronglets - a tiny language is being born")
     screen = pygame.display.set_mode((SCREEN_W, SCREEN_H))
@@ -256,7 +266,7 @@ def main():
     init_pop = choose_population(screen, font)
     placing = "food"
 
-    world = _new_world(mode, 6, init_pop)
+    world = _new_world(mode, 6, init_pop, seed_genome)
     paused = False
     speed = 1
     running = True
@@ -271,7 +281,7 @@ def main():
                 elif event.key == pygame.K_SPACE:
                     paused = not paused
                 elif event.key == pygame.K_r:
-                    world = _new_world(mode, len(world.predators), init_pop)
+                    world = _new_world(mode, len(world.predators), init_pop, seed_genome)
                 elif event.key == pygame.K_UP:
                     speed = min(200, speed + (1 if speed < 10 else 10))
                 elif event.key == pygame.K_DOWN:
@@ -297,7 +307,7 @@ def main():
             for _ in range(speed):
                 world.step()
 
-        draw(screen, font, world, paused, speed, mode, placing)
+        draw(screen, font, world, paused, speed, mode, placing, trained=seed_genome is not None)
         pygame.display.flip()
         clock.tick(60)
 

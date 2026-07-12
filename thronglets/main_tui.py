@@ -13,10 +13,11 @@ Controls: space=pause  f=drop food (auto mode only)  r=reset  +/-=speed  q=quit
   h=in-game notice/help screen
 """
 
+import argparse
 import curses
 import time
 
-from simulation import DANGER, FOOD, HEIGHT, IDLE, MATE, MAX_POPULATION, World, WIDTH
+from simulation import DANGER, FOOD, HEIGHT, IDLE, MATE, MAX_POPULATION, World, WIDTH, load_seed_genome
 
 DEFAULT_INIT_POP = 70
 
@@ -166,7 +167,7 @@ def choose_population(stdscr):
     return max(1, min(MAX_POPULATION, n))
 
 
-def draw(stdscr, world, paused, speed, mode, placing, cursor):
+def draw(stdscr, world, paused, speed, mode, placing, cursor, trained=False):
     stdscr.erase()
     rows, cols = stdscr.getmaxyx()
     field_h = max(1, rows - HUD_H)
@@ -175,7 +176,8 @@ def draw(stdscr, world, paused, speed, mode, placing, cursor):
 
     pop = world.population()
     status = "PAUSED" if paused else f"x{speed}"
-    header = f"tick {world.tick}  pop {pop}  births {world.births}  deaths {world.deaths}  {status}"
+    tag = "  [trained vocabulary]" if trained else ""
+    header = f"tick {world.tick}  pop {pop}  births {world.births}  deaths {world.deaths}  {status}{tag}"
     _safe_addstr(stdscr, 0, 0, header, curses.color_pair(7) | curses.A_BOLD)
 
     if mode == "manual":
@@ -223,13 +225,13 @@ def draw(stdscr, world, paused, speed, mode, placing, cursor):
     stdscr.refresh()
 
 
-def _new_world(mode, predator_count, init_pop=DEFAULT_INIT_POP):
+def _new_world(mode, predator_count, init_pop=DEFAULT_INIT_POP, seed_genome=None):
     if mode == "manual":
-        return World(init_pop=init_pop, manual_food=True, manual_predators=True)
-    return World(init_pop=init_pop, predator_count=predator_count)
+        return World(init_pop=init_pop, manual_food=True, manual_predators=True, seed_genome=seed_genome)
+    return World(init_pop=init_pop, predator_count=predator_count, seed_genome=seed_genome)
 
 
-def run(stdscr):
+def run(stdscr, seed_genome=None):
     curses.curs_set(0)
     setup_colors()
 
@@ -238,7 +240,7 @@ def run(stdscr):
     placing = "food"
     cursor = [WIDTH / 2, HEIGHT / 2]
 
-    world = _new_world(mode, 6, init_pop)
+    world = _new_world(mode, 6, init_pop, seed_genome)
     paused = False
     speed = 1
     frame_time = 1 / 20
@@ -250,7 +252,7 @@ def run(stdscr):
         elif key == ord(" "):
             paused = not paused
         elif key == ord("r"):
-            world = _new_world(mode, len(world.predators), init_pop)
+            world = _new_world(mode, len(world.predators), init_pop, seed_genome)
         elif key in (ord("+"), ord("=")):
             speed = min(200, speed + (1 if speed < 10 else 10))
         elif key in (ord("-"), ord("_")):
@@ -283,12 +285,19 @@ def run(stdscr):
             for _ in range(speed):
                 world.step()
 
-        draw(stdscr, world, paused, speed, mode, placing, cursor)
+        draw(stdscr, world, paused, speed, mode, placing, cursor, trained=seed_genome is not None)
         time.sleep(frame_time)
 
 
 def main():
-    curses.wrapper(run)
+    parser = argparse.ArgumentParser(description="Thronglets - terminal renderer")
+    parser.add_argument("--language", type=str, default=None,
+                         help="seed the population with a train_language.py --export vocabulary "
+                              "instead of starting from scratch")
+    args = parser.parse_args()
+
+    seed_genome = load_seed_genome(args.language) if args.language else None
+    curses.wrapper(run, seed_genome)
 
 
 if __name__ == "__main__":

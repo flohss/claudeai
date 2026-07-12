@@ -112,8 +112,8 @@ standard `http.server`, and the page is a single self-contained HTML file
 served from memory.
 
 ```bash
-python main_web.py            # defaults to port 8765
-python main_web.py 9000       # or pick your own port
+python main_web.py                  # defaults to port 8765
+python main_web.py --port 9000      # or pick your own port
 ```
 
 Then open `http://localhost:8765` (swap in your port) in any browser on the
@@ -211,6 +211,40 @@ occasionally the network settles for merging them anyway - a cleaner,
 quantifiable version of the exact same "the frequent state drowns out the
 rare one" dynamic behind the evolved version's homonymy, not an escape
 from it.
+
+## Feeding the trained language into the real game
+
+`train_language.py` always finishes by writing `language_model.json` (see
+`--export`) - a tiny, PyTorch-free lookup table (which token each state
+maps to, and vice versa) baked out of the trained networks. All three
+renderers can start a population already speaking that clean vocabulary,
+with `--language`:
+
+```bash
+python main.py            --language language_model.json
+python main_tui.py        --language language_model.json
+python main_web.py        --language language_model.json
+```
+
+Every creature in generation 0 gets an exact copy of the trained genome
+(a spiked emission for its trained token per state, and response weights
+that approach food/mate tokens and flee the danger token) - no PyTorch is
+imported by the game itself, only the small JSON file is read. The header
+shows a `[trained vocabulary]` tag so it's obvious the population didn't
+start from scratch. Ordinary mutation and reproduction still apply from
+tick 1 onward, so this seeds the starting point, it doesn't freeze the
+language in place.
+
+**Does the clean vocabulary survive being handed to blind evolution?**
+Running seeded worlds for 50,000 ticks (multiple seeds, well past several
+hundred generations) shows agreement on all four states staying at or
+extremely close to 100% the entire way - occasionally a single mutant
+copy of a token shows up (99% instead of 100%) before being outcompeted
+again, but no state ever drifts back into a real collision. Once
+selection has nothing left to gain from reshuffling an already-optimal,
+collision-free code, there's essentially no pressure pushing it away from
+that optimum - mutation keeps proposing alternatives, they just keep
+losing to the token that already works.
 
 ## A known quirk: homonyms
 

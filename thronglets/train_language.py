@@ -27,6 +27,7 @@ time simulation or its renderers.
 """
 
 import argparse
+import json
 
 import torch
 import torch.nn as nn
@@ -36,6 +37,7 @@ from simulation import DANGER, FOOD, IDLE, MATE, N_STATES, N_TOKENS
 
 STATE_NAMES = {IDLE: "idle", FOOD: "food-call", MATE: "mate-call", DANGER: "alarm-call"}
 DEFAULT_CHECKPOINT = "language_model.pt"
+DEFAULT_VOCAB_EXPORT = "language_model.json"
 
 # Roughly the state frequencies actually observed in simulation.py's runs:
 # idle dominates because it's the default when nothing else applies.
@@ -118,6 +120,24 @@ def train(episodes, batch_size, skewed, lr, seed, verbose=True):
     return speaker, listener
 
 
+def export_vocabulary(speaker, listener, path):
+    """Bake the trained networks down to two small lookup tables (state->token,
+    token->state) and write them as plain JSON - no PyTorch needed to read this
+    back, so simulation.py and the renderers can seed a game with it without
+    ever importing torch. This is the bridge between the experiment and the
+    actual (Termux-friendly) game."""
+    with torch.no_grad():
+        state_onehot = F.one_hot(torch.arange(N_STATES), N_STATES).float()
+        state_to_token = speaker(state_onehot).argmax(dim=1).tolist()
+
+        token_onehot = F.one_hot(torch.arange(N_TOKENS), N_TOKENS).float()
+        token_to_state = listener(token_onehot).argmax(dim=1).tolist()
+
+    with open(path, "w") as f:
+        json.dump({"state_to_token": state_to_token, "token_to_state": token_to_state}, f, indent=2)
+    print(f"Exported a game-ready vocabulary to '{path}' (no PyTorch needed to use it).")
+
+
 def evaluate(speaker, listener):
     """Returns (token per state, whether any two states collide, held-out accuracy)."""
     all_onehot = F.one_hot(torch.arange(N_STATES), N_STATES).float()
@@ -194,6 +214,8 @@ def main():
                          help=f"file to save to / load from (default: {DEFAULT_CHECKPOINT})")
     parser.add_argument("--load", action="store_true",
                          help="skip training - load a previously saved brain instead")
+    parser.add_argument("--export", type=str, default=DEFAULT_VOCAB_EXPORT,
+                         help=f"where to write the game-ready vocabulary (default: {DEFAULT_VOCAB_EXPORT})")
     args = parser.parse_args()
 
     if args.sweep:
@@ -207,6 +229,7 @@ def main():
         save_checkpoint(args.checkpoint, speaker, listener)
 
     report_vocabulary(speaker, listener)
+    export_vocabulary(speaker, listener, args.export)
 
 
 if __name__ == "__main__":

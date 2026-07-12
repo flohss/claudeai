@@ -14,6 +14,8 @@ No pygame import here on purpose: this module is the simulation core and can
 be driven headlessly (see test_smoke.py); main.py is the renderer.
 """
 
+import json
+
 import numpy as np
 
 WIDTH, HEIGHT = 200.0, 140.0
@@ -104,6 +106,33 @@ class Genome:
         mask_r = rng.random(self.response_weights.shape) < MUTATION_RATE
         self.response_weights += mask_r * rng.normal(0, MUTATION_SCALE, self.response_weights.shape)
 
+    @staticmethod
+    def from_lookup(state_to_token, token_to_state):
+        """Build a fixed genome from train_language.py's exported vocabulary - a
+        population can start already "fluent" instead of evolving from scratch.
+        No PyTorch involved here, just the two small lookup tables it exported."""
+        emission_logits = np.zeros((N_STATES, N_TOKENS))
+        for state, token in enumerate(state_to_token):
+            emission_logits[state, token] = 5.0
+
+        # A token whose trained meaning is food/mate is worth approaching; one
+        # that means danger is worth avoiding; idle carries nothing worth acting on.
+        response_weights = np.zeros(N_TOKENS)
+        for token, meaning in enumerate(token_to_state):
+            if meaning in (FOOD, MATE):
+                response_weights[token] = 1.5
+            elif meaning == DANGER:
+                response_weights[token] = -1.5
+
+        return Genome(emission_logits, response_weights)
+
+
+def load_seed_genome(path):
+    """Read a train_language.py --export JSON file into a ready-to-use Genome."""
+    with open(path) as f:
+        data = json.load(f)
+    return Genome.from_lookup(data["state_to_token"], data["token_to_state"])
+
 
 class Creature:
     __slots__ = ("pos", "energy", "age", "genome", "state", "token", "alive")
@@ -145,12 +174,25 @@ def _edge_push(pos):
 
 
 class World:
-    def __init__(self, init_pop=70, seed=None, manual_food=False, manual_predators=False, predator_count=None):
+    def __init__(self, init_pop=70, seed=None, manual_food=False, manual_predators=False,
+                 predator_count=None, seed_genome=None):
         self.rng = np.random.default_rng(seed)
-        self.creatures = [
-            Creature(self.rng.uniform([0, 0], [WIDTH, HEIGHT]), INIT_ENERGY, Genome.random(self.rng))
-            for _ in range(init_pop)
-        ]
+        if seed_genome is None:
+            self.creatures = [
+                Creature(self.rng.uniform([0, 0], [WIDTH, HEIGHT]), INIT_ENERGY, Genome.random(self.rng))
+                for _ in range(init_pop)
+            ]
+        else:
+            # Every creature starts as an exact copy of the trained vocabulary -
+            # no mutation yet, so generation 0 is genuinely, fully "fluent".
+            # Ordinary reproduction (and its mutation) still applies from then on.
+            self.creatures = [
+                Creature(
+                    self.rng.uniform([0, 0], [WIDTH, HEIGHT]), INIT_ENERGY,
+                    Genome(seed_genome.emission_logits.copy(), seed_genome.response_weights.copy()),
+                )
+                for _ in range(init_pop)
+            ]
         self.food = []
         self.predators = []
         self.manual_food = manual_food

@@ -15,13 +15,13 @@ itself is only the standard library's http.server, so this needs nothing
 extra to install anywhere main_tui.py already runs.
 """
 
+import argparse
 import json
-import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from simulation import DANGER, FOOD, HEIGHT, IDLE, MATE, MAX_POPULATION, World, WIDTH
+from simulation import DANGER, FOOD, HEIGHT, IDLE, MATE, MAX_POPULATION, World, WIDTH, load_seed_genome
 
 DEFAULT_PORT = 8765
 STEP_INTERVAL = 0.05
@@ -29,14 +29,14 @@ DEFAULT_INIT_POP = 70
 STATE_NAMES = {IDLE: "idle", FOOD: "food-call", MATE: "mate-call", DANGER: "alarm-call"}
 
 
-def _new_world(mode, predator_count, init_pop=DEFAULT_INIT_POP):
+def _new_world(mode, predator_count, init_pop=DEFAULT_INIT_POP, seed_genome=None):
     if mode == "manual":
-        return World(init_pop=init_pop, manual_food=True, manual_predators=True)
-    return World(init_pop=init_pop, predator_count=predator_count)
+        return World(init_pop=init_pop, manual_food=True, manual_predators=True, seed_genome=seed_genome)
+    return World(init_pop=init_pop, predator_count=predator_count, seed_genome=seed_genome)
 
 
 class SimState:
-    def __init__(self):
+    def __init__(self, seed_genome=None):
         self.started = False
         self.mode = None
         self.placing = "food"
@@ -44,6 +44,7 @@ class SimState:
         self.world = None
         self.paused = False
         self.speed = 1
+        self.seed_genome = seed_genome
         self.lock = threading.Lock()
 
 
@@ -61,6 +62,7 @@ def snapshot(state):
         "deaths": w.deaths,
         "paused": state.paused,
         "speed": state.speed,
+        "trained": state.seed_genome is not None,
         "mode": state.mode,
         "placing": state.placing,
         "predator_count": len(w.predators),
@@ -125,7 +127,7 @@ class Handler(BaseHTTPRequestHandler):
                 except (TypeError, ValueError):
                     init_pop = DEFAULT_INIT_POP
                 state.init_pop = max(1, min(MAX_POPULATION, init_pop))
-                state.world = _new_world(state.mode, 6, state.init_pop)
+                state.world = _new_world(state.mode, 6, state.init_pop, state.seed_genome)
                 state.started = True
             elif not state.started:
                 pass  # ignore every other action until a mode has been chosen
@@ -134,7 +136,7 @@ class Handler(BaseHTTPRequestHandler):
             elif action == "resume":
                 state.paused = False
             elif action == "reset":
-                state.world = _new_world(state.mode, len(state.world.predators), state.init_pop)
+                state.world = _new_world(state.mode, len(state.world.predators), state.init_pop, state.seed_genome)
                 state.paused = False
             elif action == "speed":
                 state.speed = max(1, min(200, int(body.get("value", state.speed))))
@@ -333,7 +335,8 @@ function render(state) {
 
   document.getElementById('header').textContent =
     `tick ${state.tick}   pop ${state.pop}   births ${state.births}   deaths ${state.deaths}   ` +
-    (state.paused ? "PAUSE" : "x" + state.speed);
+    (state.paused ? "PAUSE" : "x" + state.speed) +
+    (state.trained ? "   [vocabulaire entraine]" : "");
 
   renderVocabRow('vocab-danger', 'alarm-call', state.vocabulary['alarm-call']);
   renderVocabRow('vocab-food', 'food-call', state.vocabulary['food-call']);
@@ -426,13 +429,20 @@ poll();
 
 
 def main():
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_PORT
-    state = SimState()
+    parser = argparse.ArgumentParser(description="Thronglets - web renderer")
+    parser.add_argument("--port", type=int, default=DEFAULT_PORT)
+    parser.add_argument("--language", type=str, default=None,
+                         help="seed the population with a train_language.py --export vocabulary "
+                              "instead of starting from scratch")
+    args = parser.parse_args()
+
+    seed_genome = load_seed_genome(args.language) if args.language else None
+    state = SimState(seed_genome)
     threading.Thread(target=simulation_loop, args=(state,), daemon=True).start()
 
-    server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
+    server = ThreadingHTTPServer(("0.0.0.0", args.port), Handler)
     server.state = state
-    print(f"Thronglets running at http://localhost:{port}  (Ctrl+C to stop)")
+    print(f"Thronglets running at http://localhost:{args.port}  (Ctrl+C to stop)")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
