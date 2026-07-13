@@ -102,8 +102,8 @@ TEXT = {
         "save_confirmed": "Game saved to '{file}'.",
 
         "hud_paused": "PAUSED",
-        "hud_trained_tag": "   [trained vocabulary]",
-        "hud_traits_tag": "   [adaptive traits]",
+        "hud_trained_tag": "[trained vocabulary]",
+        "hud_traits_tag": "[adaptive traits]",
         "hud_header": ("tick {tick:>6}   pop {pop:>4}   births {births:>5}   deaths {deaths:>5}   "
                         "{status}   (space=pause  up/down=speed  r=reset  s=save  g=graph  t=family  h=help)"),
         "hud_manual": "mode: manual   click places: {placing} (P)",
@@ -208,8 +208,8 @@ TEXT = {
         "save_confirmed": "Partie sauvegardee dans '{file}'.",
 
         "hud_paused": "PAUSE",
-        "hud_trained_tag": "   [vocabulaire entraine]",
-        "hud_traits_tag": "   [traits evolutifs]",
+        "hud_trained_tag": "[vocabulaire entraine]",
+        "hud_traits_tag": "[traits evolutifs]",
         "hud_header": ("tick {tick:>6}   pop {pop:>4}   naissances {births:>5}   morts {deaths:>5}   "
                         "{status}   (espace=pause  haut/bas=vitesse  r=reset  s=sauver  g=graphique  t=famille  h=aide)"),
         "hud_manual": "mode: manuel   clic pose : {placing} (P)",
@@ -501,7 +501,10 @@ def draw_hud(screen, font, world, paused, speed, mode, placing, lang, trained=Fa
     pygame.draw.rect(screen, HUD_BG, (0, 0, SCREEN_W, HUD_H))
     pop = world.population()
     status = t["hud_paused"] if paused else f"x{speed}"
-    tag = (t["hud_trained_tag"] if trained else "") + (t["hud_traits_tag"] if world.adaptive_traits else "")
+    tag_parts = [t["hud_trained_tag"]] if trained else []
+    if world.adaptive_traits:
+        tag_parts.append(t["hud_traits_tag"])
+    tag = "   ".join(tag_parts)
     header = t["hud_header"].format(tick=world.tick, pop=pop, births=world.births,
                                      deaths=world.deaths, status=status)
     screen.blit(font.render(header, True, TEXT_COLOR), (10, 8))
