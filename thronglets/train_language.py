@@ -97,11 +97,13 @@ def load_checkpoint(path):
 
 
 def train(episodes, batch_size, skewed, lr, seed, verbose=True, progress_callback=None, cancel_event=None):
-    """progress_callback(step, episodes, loss, acc, temperature) is called at the
-    same cadence as the printed progress (about 20 times per run) - main.py's
-    in-app training screen uses this instead of parsing stdout. cancel_event,
-    if given, is checked every step so a live "stop training" request (e.g. the
-    user pressing ESC) can break out promptly instead of finishing all episodes."""
+    """progress_callback(step, episodes, loss, acc, temperature, state_to_token) is
+    called at the same cadence as the printed progress (about 20 times per run) -
+    main.py's in-app training screen uses this instead of parsing stdout, and can
+    show state_to_token (the current, still-shifting state->color guess) live
+    instead of waiting for the final result. cancel_event, if given, is checked
+    every step so a live "stop training" request (e.g. the user pressing ESC) can
+    break out promptly instead of finishing all episodes."""
     torch.manual_seed(seed)
     speaker = Speaker()
     listener = Listener()
@@ -133,7 +135,8 @@ def train(episodes, batch_size, skewed, lr, seed, verbose=True, progress_callbac
             if verbose:
                 print(f"step {step:6d}/{episodes}   loss {loss.item():.3f}   listener accuracy {acc:.0%}   temp {temperature:.2f}")
             if progress_callback is not None:
-                progress_callback(step, episodes, loss.item(), acc, temperature)
+                state_to_token, _ = compute_lookup(speaker, listener)
+                progress_callback(step, episodes, loss.item(), acc, temperature, state_to_token)
 
     return speaker, listener
 

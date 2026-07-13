@@ -23,6 +23,7 @@ import os
 import random
 import sys
 import threading
+import time
 
 import pygame
 
@@ -89,6 +90,10 @@ TEXT = {
         "torch_missing": "PyTorch isn't installed - can't train here. Run 'pip install torch',\nor use a language_model.json trained elsewhere. Starting without AI.",
         "training_seed": "Training seed {seed} - this takes a little while, ESC cancels",
         "training_progress": "step {step}/{episodes}   loss {loss:.3f}   listener accuracy {acc:.0f}%",
+        "training_elapsed": "{elapsed:.0f}s elapsed   {rate:.0f} steps/s",
+        "training_explain": "Loss = how wrong the Listener's guesses still are (lower = better).",
+        "training_explain2": "Accuracy = % of guesses it currently gets right, on this batch.",
+        "training_live_title": "Current guess per state (still shifting - not final yet):",
         "training_result": "Seed {seed}: {outcome}   (overall accuracy {acc:.0f}%)",
         "training_clean": "no collisions - every state got its own color",
         "training_collision": "collision - two states share a color",
@@ -196,6 +201,10 @@ TEXT = {
         "torch_missing": "PyTorch n'est pas installe - entrainement impossible ici. Lance\n'pip install torch', ou utilise un language_model.json deja entraine ailleurs. Lancement sans IA.",
         "training_seed": "Entrainement de la seed {seed} - ca prend un moment, ESC annule",
         "training_progress": "etape {step}/{episodes}   perte {loss:.3f}   precision {acc:.0f}%",
+        "training_elapsed": "{elapsed:.0f}s ecoulees   {rate:.0f} etapes/s",
+        "training_explain": "Perte = a quel point le Listener se trompe encore (plus bas = mieux).",
+        "training_explain2": "Precision = % de bonnes reponses actuellement, sur ce lot d'essais.",
+        "training_live_title": "Devinette actuelle par etat (encore mouvante - pas definitive) :",
         "training_result": "Seed {seed} : {outcome}   (precision globale {acc:.0f}%)",
         "training_clean": "aucune collision - chaque etat a sa propre couleur",
         "training_collision": "collision - deux etats partagent une couleur",
@@ -793,13 +802,13 @@ def run_training_ui(screen, font, lang):
 
     while True:
         cancel_event = threading.Event()
-        progress = {"step": 0, "episodes": TRAIN_EPISODES, "loss": 0.0, "acc": 0.0}
+        progress = {"step": 0, "episodes": TRAIN_EPISODES, "loss": 0.0, "acc": 0.0, "state_to_token": None}
         progress_lock = threading.Lock()
         result = {}
 
-        def on_progress(step, episodes, loss, acc, temperature):
+        def on_progress(step, episodes, loss, acc, temperature, state_to_token):
             with progress_lock:
-                progress.update(step=step, episodes=episodes, loss=loss, acc=acc)
+                progress.update(step=step, episodes=episodes, loss=loss, acc=acc, state_to_token=state_to_token)
 
         def worker():
             speaker, listener = train_language.train(
@@ -809,6 +818,7 @@ def run_training_ui(screen, font, lang):
             result["speaker"] = speaker
             result["listener"] = listener
 
+        start_time = time.monotonic()
         thread = threading.Thread(target=worker, daemon=True)
         thread.start()
 
@@ -825,15 +835,47 @@ def run_training_ui(screen, font, lang):
             with progress_lock:
                 step, episodes = progress["step"], progress["episodes"]
                 loss, acc = progress["loss"], progress["acc"]
+                state_to_token = progress["state_to_token"]
+            elapsed = time.monotonic() - start_time
+            rate = step / elapsed if elapsed > 0 else 0.0
+
             screen.fill(BG)
             lines = [
                 "Thronglets",
                 "",
                 t["training_seed"].format(seed=seed),
                 t["training_progress"].format(step=step, episodes=episodes, loss=loss, acc=acc * 100),
+                t["training_elapsed"].format(elapsed=elapsed, rate=rate),
             ]
             for i, line in enumerate(lines):
                 screen.blit(font.render(line, True, TEXT_COLOR), (20, 20 + i * 26))
+            y = 20 + len(lines) * 26
+
+            bar_x, bar_w, bar_h = 20, 400, 14
+            frac = step / episodes if episodes else 0.0
+            pygame.draw.rect(screen, (60, 66, 54), (bar_x, y, bar_w, bar_h))
+            pygame.draw.rect(screen, (110, 220, 90), (bar_x, y, int(bar_w * frac), bar_h))
+            y += bar_h + 20
+
+            screen.blit(font.render(t["training_explain"], True, (150, 155, 145)), (20, y))
+            y += 22
+            screen.blit(font.render(t["training_explain2"], True, (150, 155, 145)), (20, y))
+            y += 34
+
+            screen.blit(font.render(t["training_live_title"], True, TEXT_COLOR), (20, y))
+            y += 26
+            if state_to_token is not None:
+                for state in (DANGER, FOOD, DISTRESS, MATE, IDLE):
+                    token = state_to_token[state]
+                    lbl = font.render(f"  {labels[state]:<14}", True, TEXT_COLOR)
+                    screen.blit(lbl, (20, y))
+                    cx = 20 + lbl.get_width() + 16
+                    if token == 0:
+                        pygame.draw.circle(screen, (110, 110, 110), (cx, y + 8), 6, width=1)
+                    else:
+                        pygame.draw.circle(screen, TOKEN_COLORS[token], (cx, y + 8), 6)
+                    y += 24
+
             pygame.display.flip()
             clock.tick(30)
 

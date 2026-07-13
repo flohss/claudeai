@@ -357,16 +357,22 @@ still needs `pip install -r requirements-rl.txt` to work; if it isn't
 installed, pressing `T` gives a clear message and the game starts without
 AI instead of crashing, same as a missing `language_model.json`.
 
-Training one seed shows live progress (step, loss, listener accuracy)
-right in the window - it takes a little while (the same few thousand
-training steps `--sweep` runs per seed), `ESC` cancels it early. Once a
-seed finishes, its result is shown - clean or collision, overall accuracy,
-and the color each state landed on - and you choose:
+Training one seed shows live progress right in the window - it takes a
+little while (the same few thousand training steps `--sweep` runs per
+seed), `ESC` cancels it early. Rather than just a step counter, you get a
+fill-up progress bar and elapsed-time/steps-per-second, a one-line
+explanation of what loss and accuracy actually mean, and - the most useful
+part - the current state->color guess for all five states, updating live as
+it trains, so you can watch the mapping actually settle instead of staring
+at an abstract loss number. Each attempt picks a fresh random seed (not
+0, 1, 2, 3... - there's no reason a seed's number would predict anything
+about its outcome). Once a seed finishes, its result is shown - clean or
+collision, overall accuracy - and you choose:
 
 | Key   | Effect                                                          |
 |-------|------------------------------------------------------------------|
-| `V`   | use this seed - exports it to `language_model.json` and starts the game with it |
-| `N`   | keep this one's result, try the next seed instead                |
+| `V`   | use this seed - exports it to `language_model.json` and starts the game with it (only offered if this seed came out clean) |
+| `N`   | keep this one's result, try another random seed instead          |
 | `ESC` | give up - start the game without AI                              |
 
 This is the interactive version of watching `--sweep`'s collision-rate
