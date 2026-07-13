@@ -96,6 +96,7 @@ a second time).
 | `P`           | toggle what manual clicks place (food / predator)             |
 | `[` / `]`     | remove / add a predator right now (also sets the reset count) |
 | `S`           | save the running game to `thronglets_save.json`               |
+| `G`           | vocabulary-over-time graph                                  |
 | `H`           | in-game notice explaining the mechanics                      |
 | left click    | place food (auto mode) or whatever's selected (manual mode)  |
 | `ESC`         | quit                                                         |
@@ -133,7 +134,8 @@ currently signaling, white if silent), food as green `.`, predators as a red
 `X`. Controls: `space`=pause, `f`=drop a food patch (auto mode only),
 `r`=reset, `+`/`-`=speed, `q`=quit, `p`=toggle food/predator placement,
 `[`/`]`=remove/add a predator right now, `s`=save to `thronglets_save.json`,
-`h`=in-game notice (paginated so it fits any terminal height). There's no
+`g`=vocabulary-over-time graph, `h`=in-game notice (paginated so it fits any
+terminal height). There's no
 reliable mouse support in a terminal, so manual mode uses a keyboard cursor
 instead: the arrow keys move it, `enter` places whatever's currently
 selected.
@@ -175,13 +177,16 @@ All three renderers show a HUD with, for each internal state (danger / food-call
 distress-call / mate-call / idle), every token currently in use and what share
 of the living population uses it — the numbers to watch are how fast a single
 token pulls ahead of the pack (starting near chance, ~17%, since there are 6
-tokens) and whether it stays there. Next to each row, a small sparkline plots
-the dominant token's share over time (a sample every 20 ticks, the last 200
-samples kept) — a rising line is a color pulling ahead, a falling one is a
-consensus breaking apart, and a flat line at the bottom is no agreement yet.
-This history rides along with `s`/save (so a resumed game keeps its curve,
-not just its population) but resets on `r`/reset, same as everything else
-about the world.
+tokens) and whether it stays there.
+
+A separate **Graph** screen (`g`/`G` in pygame and the terminal, a "Graph"
+button on the web page — the same pattern as the in-game notice) plots each
+state's dominant-token share over time as a proper curve: a sample every 20
+ticks, the last 200 kept. A rising line is a color pulling ahead, a falling
+one is a consensus breaking apart, a flat line at the bottom is no agreement
+yet. This history rides along with `s`/save (so a resumed game keeps its
+curve, not just its population) but resets on `r`/reset, same as everything
+else about the world.
 
 Speed is measured in real time, not rendered frames: the default `x1` is a
 genuine one tick per second, slow enough to actually watch a single decision

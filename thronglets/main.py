@@ -97,13 +97,14 @@ TEXT = {
         "hud_paused": "PAUSED",
         "hud_trained_tag": "   [trained vocabulary]",
         "hud_header": ("tick {tick:>6}   pop {pop:>4}   births {births:>5}   deaths {deaths:>5}   "
-                        "{status}   (space=pause  up/down=speed  r=reset  s=save  h=help){tag}"),
+                        "{status}   (space=pause  up/down=speed  r=reset  s=save  g=graph  h=help){tag}"),
         "hud_manual": "mode: manual   click places: {placing} (P)",
         "hud_auto": "mode: automatic   predators: {count} ([ / ] act immediately)",
         "placing_food": "food",
         "placing_predator": "predator",
         "hud_vocab_title": "vocabulary — every color in use per state, population share:",
-        "hud_history_title": "dominant share over time",
+        "graph_title": "Vocabulary over time - dominant share per state",
+        "graph_dismiss": "-- press any key to go back --",
         "legend_creature": "creature (ring = its current signal)",
         "legend_food": "food",
         "legend_predator": "predator",
@@ -181,13 +182,14 @@ TEXT = {
         "hud_paused": "PAUSE",
         "hud_trained_tag": "   [vocabulaire entraine]",
         "hud_header": ("tick {tick:>6}   pop {pop:>4}   naissances {births:>5}   morts {deaths:>5}   "
-                        "{status}   (espace=pause  haut/bas=vitesse  r=reset  s=sauver  h=aide){tag}"),
+                        "{status}   (espace=pause  haut/bas=vitesse  r=reset  s=sauver  g=graphique  h=aide){tag}"),
         "hud_manual": "mode: manuel   clic pose : {placing} (P)",
         "hud_auto": "mode: auto   predateurs : {count} ([ / ] agit tout de suite)",
         "placing_food": "nourriture",
         "placing_predator": "predateur",
         "hud_vocab_title": "vocabulaire — toutes les couleurs en usage par etat, part de la population :",
-        "hud_history_title": "part dominante dans le temps",
+        "graph_title": "Vocabulaire dans le temps - part dominante par etat",
+        "graph_dismiss": "-- une touche pour revenir --",
         "legend_creature": "creature (anneau = son signal actuel)",
         "legend_food": "nourriture",
         "legend_predator": "predateur",
@@ -257,6 +259,38 @@ def show_help(screen, font, lang):
                     waiting = False
 
 
+def show_graph(screen, font, world, lang):
+    """A dedicated full-screen view of vocab_history, opened like show_help()
+    - the HUD rows stay compact, this is where the curves get room to breathe."""
+    t = TEXT[lang]
+    labels = STATE_LABELS[lang]
+    row_h = (SCREEN_H - 80) // 5
+    graph_w = SCREEN_W - 260
+    graph_h = min(60, row_h - 30)
+
+    waiting = True
+    while waiting:
+        screen.fill(BG)
+        screen.blit(font.render(t["graph_title"], True, (255, 255, 255)), (20, 20))
+
+        y = 60
+        for state in (DANGER, FOOD, DISTRESS, MATE, IDLE):
+            history = world.vocab_history[state]
+            current = f"{history[-1] * 100:3.0f}%" if history else "  -%"
+            screen.blit(font.render(f"{labels[state]}: {current}", True, TEXT_COLOR), (20, y))
+            draw_sparkline(screen, 220, y - 6, graph_w, graph_h, history)
+            y += row_h
+
+        screen.blit(font.render(t["graph_dismiss"], True, (150, 155, 145)), (20, y))
+        pygame.display.flip()
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.KEYDOWN:
+                waiting = False
+
+
 def draw(screen, font, world, paused, speed, mode, placing, lang, trained=False):
     screen.fill(BG)
     pygame.draw.rect(screen, GROUND, (0, HUD_H, SCREEN_W, SCREEN_H - HUD_H))
@@ -279,28 +313,25 @@ def draw(screen, font, world, paused, speed, mode, placing, lang, trained=False)
     draw_hud(screen, font, world, paused, speed, mode, placing, lang, trained)
 
 
-SPARK_X = 640
-SPARK_W = 180
-SPARK_H = 16
 SPARK_COLOR = (150, 200, 130)
 SPARK_BG = (26, 32, 20)
 
 
-def draw_sparkline(screen, x, y, history):
-    rect = pygame.Rect(x, y, SPARK_W, SPARK_H)
+def draw_sparkline(screen, x, y, w, h, history):
+    rect = pygame.Rect(x, y, w, h)
     pygame.draw.rect(screen, SPARK_BG, rect)
     if len(history) < 2:
         return
     values = list(history)
-    step = SPARK_W / (len(values) - 1)
+    step = w / (len(values) - 1)
     points = [
-        (x + i * step, y + SPARK_H - 1 - v * (SPARK_H - 2))
+        (x + i * step, y + h - 1 - v * (h - 2))
         for i, v in enumerate(values)
     ]
     pygame.draw.lines(screen, SPARK_COLOR, False, points, width=2)
 
 
-def draw_vocab_row(screen, font, y, label, pairs, history):
+def draw_vocab_row(screen, font, y, label, pairs):
     x = 10
     lbl = font.render(f"{label}:", True, TEXT_COLOR)
     screen.blit(lbl, (x, y))
@@ -313,7 +344,6 @@ def draw_vocab_row(screen, font, y, label, pairs, history):
         txt = font.render(f"{frac * 100:3.0f}%", True, TEXT_COLOR)
         screen.blit(txt, (x + 16, y))
         x += 16 + txt.get_width() + 14
-    draw_sparkline(screen, SPARK_X, y, history)
 
 
 def draw_hud(screen, font, world, paused, speed, mode, placing, lang, trained=False):
@@ -335,12 +365,11 @@ def draw_hud(screen, font, world, paused, speed, mode, placing, lang, trained=Fa
     screen.blit(font.render(settings, True, TEXT_COLOR), (10, 28))
 
     screen.blit(font.render(t["hud_vocab_title"], True, TEXT_COLOR), (10, 48))
-    screen.blit(font.render(t["hud_history_title"], True, TEXT_COLOR), (SPARK_X, 48))
 
     y = 70
     breakdown = world.vocabulary_breakdown()
     for state in (DANGER, FOOD, DISTRESS, MATE, IDLE):
-        draw_vocab_row(screen, font, y, labels[state], breakdown[state], world.vocab_history[state])
+        draw_vocab_row(screen, font, y, labels[state], breakdown[state])
         y += 22
 
     legend_y = y
@@ -742,6 +771,8 @@ def main():
                 elif event.key == pygame.K_s:
                     save_world(world, DEFAULT_SAVE_FILE)
                     flash_message(screen, font, lang, TEXT[lang]["save_confirmed"].format(file=DEFAULT_SAVE_FILE))
+                elif event.key == pygame.K_g:
+                    show_graph(screen, font, world, lang)
                 elif event.key == pygame.K_h:
                     show_help(screen, font, lang)
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:

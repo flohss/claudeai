@@ -67,7 +67,9 @@ TEXT = {
         "hud_controls1": "space=pause  {food_hint}  r=reset  +/-=speed  q=quit",
         "food_hint_auto": "f=food",
         "food_hint_manual": "f=food (auto mode only)",
-        "hud_controls2": "p=place  [ ]=predator count  s=save  arrows/enter=place  h=help",
+        "hud_controls2": "p=place  [ ]=predator count  s=save  arrows/enter=place  g=graph  h=help",
+        "graph_title": "Vocabulary over time - dominant share per state",
+        "graph_dismiss": "-- press any key to go back --",
         "extinct": "Extinct. Press r to reset.",
 
         "help_more": "-- space for more --",
@@ -108,7 +110,9 @@ TEXT = {
         "hud_controls1": "space=pause  {food_hint}  r=reset  +/-=speed  q=quit",
         "food_hint_auto": "f=food",
         "food_hint_manual": "f=food (auto uniquement)",
-        "hud_controls2": "p=placer  [ ]=nb predateurs  s=sauver  fleches/entree=placer  h=aide",
+        "hud_controls2": "p=placer  [ ]=nb predateurs  s=sauver  fleches/entree=placer  g=graphique  h=aide",
+        "graph_title": "Vocabulaire dans le temps - part dominante par etat",
+        "graph_dismiss": "-- une touche pour revenir --",
         "extinct": "Extinction. Appuie sur r pour recommencer.",
 
         "help_more": "-- espace pour la suite --",
@@ -237,7 +241,7 @@ def _sparkline(history, width=24):
     return "".join(values)
 
 
-def _draw_vocab_row(stdscr, y, label, pairs, history=None):
+def _draw_vocab_row(stdscr, y, label, pairs):
     x = 0
     _safe_addstr(stdscr, y, x, f"{label}:", curses.color_pair(7) | curses.A_BOLD)
     x += len(label) + 2
@@ -249,8 +253,34 @@ def _draw_vocab_row(stdscr, y, label, pairs, history=None):
         seg = f"{frac * 100:3.0f}% "
         _safe_addstr(stdscr, y, x + 2, seg, curses.color_pair(7))
         x += 2 + len(seg)
-    if history is not None:
-        _safe_addstr(stdscr, y, x + 2, _sparkline(history), curses.color_pair(7) | curses.A_DIM)
+
+
+def show_graph(stdscr, world, lang):
+    """A dedicated full-screen view of vocab_history, opened like show_help()
+    - the HUD rows stay compact, this is where the curves get room to breathe."""
+    t = TEXT[lang]
+    labels = STATE_LABELS[lang]
+    stdscr.nodelay(False)
+    stdscr.erase()
+    rows, cols = stdscr.getmaxyx()
+    width = max(10, cols - 20)
+
+    _safe_addstr(stdscr, 0, 0, t["graph_title"], curses.color_pair(7) | curses.A_BOLD)
+
+    y = 2
+    for state in (DANGER, FOOD, DISTRESS, MATE, IDLE):
+        if y + 1 >= rows - 1:
+            break
+        history = world.vocab_history[state]
+        current = f"{history[-1] * 100:3.0f}%" if history else "  -%"
+        _safe_addstr(stdscr, y, 0, f"{labels[state]:<14} {current}", curses.color_pair(7) | curses.A_BOLD)
+        _safe_addstr(stdscr, y + 1, 0, _sparkline(history, width), curses.color_pair(6))
+        y += 3
+
+    _safe_addstr(stdscr, min(rows - 1, y), 0, t["graph_dismiss"], curses.color_pair(7) | curses.A_DIM)
+    stdscr.refresh()
+    stdscr.getch()
+    stdscr.nodelay(True)
 
 
 def choose_language(stdscr):
@@ -433,7 +463,7 @@ def draw(stdscr, world, paused, speed, mode, placing, cursor, lang, trained=Fals
 
     breakdown = world.vocabulary_breakdown()
     for row, state in enumerate((DANGER, FOOD, DISTRESS, MATE, IDLE), start=2):
-        _draw_vocab_row(stdscr, row, labels[state], breakdown[state], world.vocab_history[state])
+        _draw_vocab_row(stdscr, row, labels[state], breakdown[state])
 
     _safe_addstr(stdscr, HUD_H - 3, 0, t["hud_legend"], curses.color_pair(7) | curses.A_DIM)
     food_hint = t["food_hint_auto"] if mode == "auto" else t["food_hint_manual"]
@@ -536,6 +566,8 @@ def run(stdscr, language_path=None):
         elif key == ord("s"):
             save_world(world, DEFAULT_SAVE_FILE)
             _flash_message(stdscr, lang, TEXT[lang]["save_confirmed"].format(file=DEFAULT_SAVE_FILE))
+        elif key == ord("g"):
+            show_graph(stdscr, world, lang)
         elif key == ord("h"):
             show_help(stdscr, lang)
         elif key == curses.KEY_UP:

@@ -231,9 +231,6 @@ INDEX_HTML = """<!doctype html>
   }
   #hud { width: 100%; max-width: 900px; font-size: 13px; line-height: 1.6; }
   .row { white-space: nowrap; overflow-x: auto; }
-  .vocab-row { display: flex; align-items: center; gap: 10px; overflow: visible; }
-  .vocab-row .vocab-text { white-space: nowrap; overflow-x: auto; }
-  .vocab-row canvas.spark { flex: none; background: #1a2014; border-radius: 3px; }
   .swatch {
     display: inline-block; width: 10px; height: 10px; border-radius: 50%;
     margin-right: 4px; vertical-align: middle;
@@ -275,6 +272,21 @@ INDEX_HTML = """<!doctype html>
   #help-panel p, #help-panel li { color: #c3c8b6; margin: 4px 0; }
   #help-panel ul { margin: 4px 0; padding-left: 1.3em; }
   #help-panel .close-row { text-align: right; margin-top: 16px; }
+
+  #graph-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+    align-items: center; justify-content: center; padding: 16px; z-index: 10;
+  }
+  #graph-panel {
+    background: #171d13; border: 1px solid #3a4530; border-radius: 10px;
+    max-width: 640px; width: 100%; max-height: 85vh; overflow-y: auto;
+    padding: 22px 24px; line-height: 1.6; font-size: 13.5px;
+  }
+  #graph-panel h2 { font-size: 17px; margin: 0 0 14px; }
+  .graph-row { margin: 14px 0; }
+  .graph-row .graph-label { display: flex; justify-content: space-between; margin-bottom: 4px; color: #c3c8b6; }
+  .graph-row canvas { width: 100%; height: 44px; background: #1a2014; border-radius: 4px; display: block; }
+  #graph-panel .close-row { text-align: right; margin-top: 16px; }
 </style>
 </head>
 <body>
@@ -299,11 +311,11 @@ INDEX_HTML = """<!doctype html>
     <div id="hud">
       <div class="row" id="header"></div>
       <div class="row" id="settings"></div>
-      <div class="row vocab-row" id="vocab-danger"><span class="vocab-text"></span><canvas class="spark" width="140" height="16"></canvas></div>
-      <div class="row vocab-row" id="vocab-food"><span class="vocab-text"></span><canvas class="spark" width="140" height="16"></canvas></div>
-      <div class="row vocab-row" id="vocab-distress"><span class="vocab-text"></span><canvas class="spark" width="140" height="16"></canvas></div>
-      <div class="row vocab-row" id="vocab-mate"><span class="vocab-text"></span><canvas class="spark" width="140" height="16"></canvas></div>
-      <div class="row vocab-row" id="vocab-idle"><span class="vocab-text"></span><canvas class="spark" width="140" height="16"></canvas></div>
+      <div class="row" id="vocab-danger"></div>
+      <div class="row" id="vocab-food"></div>
+      <div class="row" id="vocab-distress"></div>
+      <div class="row" id="vocab-mate"></div>
+      <div class="row" id="vocab-idle"></div>
     </div>
     <div id="controls">
       <button id="pause"></button>
@@ -311,6 +323,7 @@ INDEX_HTML = """<!doctype html>
       <button id="slower" data-i18n="slowerText"></button>
       <button id="faster" data-i18n="fasterText"></button>
       <button id="save" data-i18n="saveText"></button>
+      <button id="openGraph" data-i18n="graphText"></button>
       <button id="openHelp" data-i18n="noticeText"></button>
     </div>
     <div id="controls2">
@@ -349,6 +362,33 @@ INDEX_HTML = """<!doctype html>
     </div>
   </div>
 
+  <div id="graph-overlay">
+    <div id="graph-panel">
+      <h2 data-i18n="graphTitle"></h2>
+      <div class="graph-row">
+        <div class="graph-label"><span data-i18n="stateDanger"></span><span id="graph-cur-danger"></span></div>
+        <canvas id="graph-danger" width="560" height="88"></canvas>
+      </div>
+      <div class="graph-row">
+        <div class="graph-label"><span data-i18n="stateFood"></span><span id="graph-cur-food"></span></div>
+        <canvas id="graph-food" width="560" height="88"></canvas>
+      </div>
+      <div class="graph-row">
+        <div class="graph-label"><span data-i18n="stateDistress"></span><span id="graph-cur-distress"></span></div>
+        <canvas id="graph-distress" width="560" height="88"></canvas>
+      </div>
+      <div class="graph-row">
+        <div class="graph-label"><span data-i18n="stateMate"></span><span id="graph-cur-mate"></span></div>
+        <canvas id="graph-mate" width="560" height="88"></canvas>
+      </div>
+      <div class="graph-row">
+        <div class="graph-label"><span data-i18n="stateIdle"></span><span id="graph-cur-idle"></span></div>
+        <canvas id="graph-idle" width="560" height="88"></canvas>
+      </div>
+      <div class="close-row"><button id="closeGraph" data-i18n="closeText"></button></div>
+    </div>
+  </div>
+
 <script>
 const TOKEN_COLORS = ["#a0a0a0", "#eb4646", "#4682eb", "#f5c83c", "#c85ae6", "#46e1d2"];
 const FOOD_COLOR = "#6edc5a";
@@ -368,6 +408,7 @@ const STRINGS = {
     slowerText: "- speed", fasterText: "+ speed",
     saveText: "Save", savedText: "Saved!",
     noticeText: "Notice",
+    graphText: "Graph", graphTitle: "Vocabulary over time - dominant share per state",
     placingFoodBtn: "Placing: food", placingPredatorBtn: "Placing: predator",
     predLessText: "- predators", predMoreText: "+ predators",
     hint: "Click/tap the world to place food (or a predator in manual mode)",
@@ -407,6 +448,7 @@ const STRINGS = {
     slowerText: "- vitesse", fasterText: "+ vitesse",
     saveText: "Sauvegarder", savedText: "Sauvegarde !",
     noticeText: "Notice",
+    graphText: "Graphique", graphTitle: "Vocabulaire dans le temps - part dominante par etat",
     placingFoodBtn: "Pose: nourriture", placingPredatorBtn: "Pose: predateur",
     predLessText: "- predateurs", predMoreText: "+ predateurs",
     hint: "Clique/touche le monde pour placer de la nourriture (ou un predateur en mode manuel)",
@@ -502,11 +544,11 @@ function render(state) {
     (state.paused ? t.wordPaused : "x" + state.speed) +
     (state.trained ? t.trainedTag : "");
 
-  renderVocabRow('vocab-danger', t.labelDanger, state.vocabulary['danger'], state.vocab_history['danger']);
-  renderVocabRow('vocab-food', t.labelFood, state.vocabulary['food'], state.vocab_history['food']);
-  renderVocabRow('vocab-distress', t.labelDistress, state.vocabulary['distress'], state.vocab_history['distress']);
-  renderVocabRow('vocab-mate', t.labelMate, state.vocabulary['mate'], state.vocab_history['mate']);
-  renderVocabRow('vocab-idle', t.labelIdle, state.vocabulary['idle'], state.vocab_history['idle']);
+  renderVocabRow('vocab-danger', t.labelDanger, state.vocabulary['danger']);
+  renderVocabRow('vocab-food', t.labelFood, state.vocabulary['food']);
+  renderVocabRow('vocab-distress', t.labelDistress, state.vocabulary['distress']);
+  renderVocabRow('vocab-mate', t.labelMate, state.vocabulary['mate']);
+  renderVocabRow('vocab-idle', t.labelIdle, state.vocabulary['idle']);
 
   document.getElementById('pause').textContent = state.paused ? t.resumeText : t.pauseText;
 
@@ -515,27 +557,27 @@ function render(state) {
     : t.settingsAuto(predatorCount);
   document.getElementById('placing').textContent = placing === 'food' ? t.placingFoodBtn : t.placingPredatorBtn;
   document.getElementById('placing').style.display = mode === 'manual' ? 'inline-block' : 'none';
+
+  if (graphOverlay.style.display === 'flex') renderGraphOverlay(state);
 }
 
-function renderVocabRow(elId, label, pairs, history) {
+function renderVocabRow(elId, label, pairs) {
   const el = document.getElementById(elId);
-  const textEl = el.querySelector('.vocab-text');
-  textEl.innerHTML = '';
+  el.innerHTML = '';
   const labelSpan = document.createElement('span');
   labelSpan.textContent = label + ': ';
   labelSpan.style.fontWeight = 'bold';
-  textEl.appendChild(labelSpan);
+  el.appendChild(labelSpan);
   for (const [token, frac] of pairs) {
     const sw = document.createElement('span');
     sw.className = 'swatch';
     sw.style.background = TOKEN_COLORS[token];
     if (token === 0) sw.style.border = '1px solid #666';
-    textEl.appendChild(sw);
+    el.appendChild(sw);
     const txt = document.createElement('span');
     txt.textContent = Math.round(frac * 100) + '%  ';
-    textEl.appendChild(txt);
+    el.appendChild(txt);
   }
-  renderSparkline(el.querySelector('canvas.spark'), history);
 }
 
 function renderSparkline(canvas, history) {
@@ -553,6 +595,15 @@ function renderSparkline(canvas, history) {
     if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
   });
   ctx.stroke();
+}
+
+function renderGraphOverlay(state) {
+  for (const key of ['danger', 'food', 'distress', 'mate', 'idle']) {
+    const history = state.vocab_history[key];
+    renderSparkline(document.getElementById('graph-' + key), history);
+    const cur = history && history.length ? Math.round(history[history.length - 1] * 100) + '%' : '-';
+    document.getElementById('graph-cur-' + key).textContent = cur;
+  }
 }
 
 async function poll() {
@@ -615,6 +666,13 @@ document.getElementById('openHelp').onclick = () => { helpOverlay.style.display 
 document.getElementById('closeHelp').onclick = () => { helpOverlay.style.display = 'none'; };
 helpOverlay.addEventListener('click', (ev) => {
   if (ev.target === helpOverlay) helpOverlay.style.display = 'none';
+});
+
+const graphOverlay = document.getElementById('graph-overlay');
+document.getElementById('openGraph').onclick = () => { graphOverlay.style.display = 'flex'; };
+document.getElementById('closeGraph').onclick = () => { graphOverlay.style.display = 'none'; };
+graphOverlay.addEventListener('click', (ev) => {
+  if (ev.target === graphOverlay) graphOverlay.style.display = 'none';
 });
 
 canvas.addEventListener('click', (ev) => {
