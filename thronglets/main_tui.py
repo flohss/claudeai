@@ -16,11 +16,12 @@ Controls: space=pause  f=drop food (auto mode only)  r=reset  +/-=speed  q=quit
 import argparse
 import curses
 import os
+import threading
 import time
 
 from i18n import STATE_LABELS, TRAIT_LABELS
 from simulation import (DANGER, DISTRESS, FOOD, HEIGHT, IDLE, MATE, MAX_POPULATION, N_TRAITS, World, WIDTH,
-                         load_seed_genome, load_world, save_world)
+                         compare_seeds, load_seed_genome, load_world, save_world)
 
 DEFAULT_INIT_POP = 100
 DEFAULT_LANGUAGE_FILE = "language_model.json"
@@ -75,7 +76,7 @@ TEXT = {
         "hud_controls1": "space=pause  {food_hint}  r=reset  +/-=speed  q=quit",
         "food_hint_auto": "f=food",
         "food_hint_manual": "f=food (auto mode only)",
-        "hud_controls2": "p=place  [ ]=predator count  s=save  arrows/enter=place  g=graph  t=family  h=help",
+        "hud_controls2": "p=place  [ ]=predator count  s=save  arrows/enter=place  g=graph  t=family  c=compare  h=help",
         "graph_title": "Vocabulary over time - dominant share per state",
         "graph_traits_title": "Physical traits over time - population average (share of range)",
         "graph_dismiss": "-- press any key to go back --",
@@ -94,6 +95,23 @@ TEXT = {
         "family_hint": "UP=parent  DOWN=child  LEFT/RIGHT=siblings  -- t or ESC to go back --",
         "family_none": "No creature to show yet.",
         "family_dismiss": "-- press any key to go back --",
+
+        "compare_mode_prompt": "Compare seeds: what should be reproducible?",
+        "compare_mode_language": "  L = language - does the same word win across independent runs?",
+        "compare_mode_traits": "  T = physical traits - do speed/vision/hearing/metabolism converge the same way?",
+        "compare_mode_traits_unavailable": "  (traits unavailable - adaptive evolution is off for this world)",
+        "compare_mode_hint": "Press L or T, or ESC to cancel.",
+        "compare_depth_prompt": "How thorough?",
+        "compare_depth_quick": "  R = quick - 4 seeds x 8,000 ticks (default)",
+        "compare_depth_thorough": "  A = thorough - 8 seeds x 40,000 ticks",
+        "compare_depth_hint": "Press R or A, or ENTER for the default (quick). ESC cancels.",
+        "compare_progress": "seed {seed}/{n_seeds}   tick {tick}/{ticks}   ESC cancels",
+        "compare_result_title": "Comparison done ({n_seeds} seeds x {ticks} ticks)",
+        "compare_traits_header": "trait          mean    std dev   min      max",
+        "compare_lang_header": "state          seeds' dominant color",
+        "compare_collision_summary": "Collisions: {clean}/{n_seeds} seeds had none",
+        "compare_dismiss": "-- press any key to go back --",
+        "compare_cancelled": "Cancelled - {n} seed(s) completed before stopping.",
 
         "help_more": "-- space for more --",
         "help_dismiss": "-- press any key to resume --",
@@ -141,7 +159,7 @@ TEXT = {
         "hud_controls1": "space=pause  {food_hint}  r=reset  +/-=speed  q=quit",
         "food_hint_auto": "f=food",
         "food_hint_manual": "f=food (auto uniquement)",
-        "hud_controls2": "p=placer  [ ]=nb predateurs  s=sauver  fleches/entree=placer  g=graphique  t=famille  h=aide",
+        "hud_controls2": "p=placer  [ ]=nb predateurs  s=sauver  fleches/entree=placer  g=graphique  t=famille  c=comparer  h=aide",
         "graph_title": "Vocabulaire dans le temps - part dominante par etat",
         "graph_traits_title": "Traits physiques dans le temps - moyenne population (part de la plage)",
         "graph_dismiss": "-- une touche pour revenir --",
@@ -160,6 +178,23 @@ TEXT = {
         "family_hint": "HAUT=parent  BAS=enfant  GAUCHE/DROITE=freres et soeurs  -- t ou ESC pour revenir --",
         "family_none": "Aucune creature a montrer pour le moment.",
         "family_dismiss": "-- une touche pour revenir --",
+
+        "compare_mode_prompt": "Comparer des seeds : qu'est-ce qui doit etre reproductible ?",
+        "compare_mode_language": "  L = langage - le meme mot gagne-t-il sur des parties independantes ?",
+        "compare_mode_traits": "  T = traits physiques - vitesse/vision/ouie/metabolisme convergent-ils pareil ?",
+        "compare_mode_traits_unavailable": "  (traits indisponibles - evolution adaptative desactivee pour ce monde)",
+        "compare_mode_hint": "Appuie sur L ou T, ou ESC pour annuler.",
+        "compare_depth_prompt": "Quelle profondeur ?",
+        "compare_depth_quick": "  R = rapide - 4 seeds x 8 000 ticks (defaut)",
+        "compare_depth_thorough": "  A = approfondi - 8 seeds x 40 000 ticks",
+        "compare_depth_hint": "Appuie sur R ou A, ou ENTREE pour le defaut (rapide). ESC annule.",
+        "compare_progress": "seed {seed}/{n_seeds}   tick {tick}/{ticks}   ESC annule",
+        "compare_result_title": "Comparaison terminee ({n_seeds} seeds x {ticks} ticks)",
+        "compare_traits_header": "trait          moyenne ecart-type  min      max",
+        "compare_lang_header": "etat           couleur dominante par seed",
+        "compare_collision_summary": "Collisions : {clean}/{n_seeds} seeds sans collision",
+        "compare_dismiss": "-- une touche pour revenir --",
+        "compare_cancelled": "Annule - {n} seed(s) terminee(s) avant l'arret.",
 
         "help_more": "-- espace pour la suite --",
         "help_dismiss": "-- une touche pour reprendre --",
@@ -444,6 +479,165 @@ def show_family(stdscr, world, lang):
                 i = (i + (1 if key == curses.KEY_RIGHT else -1)) % len(siblings)
                 focus = siblings[i]
 
+    stdscr.nodelay(True)
+
+
+COMPARE_QUICK = (4, 8000)
+COMPARE_THOROUGH = (8, 40000)
+
+
+def choose_compare_mode(stdscr, lang, traits_available):
+    t = TEXT[lang]
+    stdscr.nodelay(False)
+    stdscr.erase()
+    lines = [
+        ("Thronglets", curses.A_BOLD),
+        ("", 0),
+        (t["compare_mode_prompt"], curses.A_BOLD),
+        (t["compare_mode_language"], 0),
+        (t["compare_mode_traits"] if traits_available else t["compare_mode_traits_unavailable"], 0),
+        ("", 0),
+        (t["compare_mode_hint"], curses.A_DIM),
+    ]
+    for i, (line, attr) in enumerate(lines):
+        _safe_addstr(stdscr, i, 0, line, curses.color_pair(7) | attr)
+    stdscr.refresh()
+
+    mode = None
+    while mode is None:
+        key = stdscr.getch()
+        if key in (ord("l"), ord("L")):
+            mode = "language"
+        elif key in (ord("t"), ord("T")) and traits_available:
+            mode = "traits"
+        elif key == 27:
+            stdscr.nodelay(True)
+            return None
+    stdscr.nodelay(True)
+    return mode
+
+
+def choose_compare_depth(stdscr, lang):
+    t = TEXT[lang]
+    stdscr.nodelay(False)
+    stdscr.erase()
+    lines = [
+        ("Thronglets", curses.A_BOLD),
+        ("", 0),
+        (t["compare_depth_prompt"], curses.A_BOLD),
+        (t["compare_depth_quick"], 0),
+        (t["compare_depth_thorough"], 0),
+        ("", 0),
+        (t["compare_depth_hint"], curses.A_DIM),
+    ]
+    for i, (line, attr) in enumerate(lines):
+        _safe_addstr(stdscr, i, 0, line, curses.color_pair(7) | attr)
+    stdscr.refresh()
+
+    depth = None
+    while depth is None:
+        key = stdscr.getch()
+        if key in (ord("r"), ord("R")) or key in ENTER_KEYS:
+            depth = COMPARE_QUICK
+        elif key in (ord("a"), ord("A")):
+            depth = COMPARE_THOROUGH
+        elif key == 27:
+            stdscr.nodelay(True)
+            return None
+    stdscr.nodelay(True)
+    return depth
+
+
+def run_compare_ui(stdscr, world, lang, init_pop, seed_genome):
+    """Curses equivalent of main.py's Compare screen. No real threading
+    needed here - curses is already a blocking single loop, so the batch
+    just runs directly, with progress_callback redrawing the screen and
+    polling for ESC every 200 ticks (compare_seeds()'s own cadence)."""
+    t = TEXT[lang]
+    labels = STATE_LABELS[lang]
+    trait_labels = TRAIT_LABELS[lang]
+
+    mode = choose_compare_mode(stdscr, lang, world.adaptive_traits)
+    if mode is None:
+        return
+    depth = choose_compare_depth(stdscr, lang)
+    if depth is None:
+        return
+    n_seeds, ticks = depth
+
+    cancel_event = threading.Event()
+    stdscr.nodelay(True)
+
+    def on_progress(seed_i, n, tick, total_ticks):
+        key = stdscr.getch()
+        if key == 27:
+            cancel_event.set()
+        stdscr.erase()
+        _safe_addstr(stdscr, 0, 0,
+                     t["compare_progress"].format(seed=seed_i + 1, n_seeds=n_seeds, tick=tick, ticks=ticks),
+                     curses.color_pair(7) | curses.A_BOLD)
+        stdscr.refresh()
+
+    results = compare_seeds(n_seeds, ticks, init_pop, len(world.predators), mode == "traits",
+                             seed_genome=seed_genome, progress_callback=on_progress, cancel_event=cancel_event)
+
+    cancelled = cancel_event.is_set()
+    if cancelled and not results:
+        stdscr.nodelay(False)
+        stdscr.erase()
+        _safe_addstr(stdscr, 0, 0, t["compare_cancelled"].format(n=len(results)),
+                     curses.color_pair(1) | curses.A_BOLD)
+        stdscr.refresh()
+        stdscr.getch()
+        stdscr.nodelay(True)
+        return
+
+    stdscr.nodelay(False)
+    stdscr.erase()
+    y = 0
+    _safe_addstr(stdscr, y, 0, t["compare_result_title"].format(n_seeds=len(results), ticks=ticks),
+                 curses.color_pair(7) | curses.A_BOLD)
+    y += 2
+
+    if mode == "traits":
+        _safe_addstr(stdscr, y, 0, t["compare_traits_header"], curses.color_pair(7) | curses.A_BOLD)
+        y += 1
+        for trait in range(N_TRAITS):
+            vals = [r["traits"][trait] * 100 for r in results if r["traits"] is not None]
+            mean = sum(vals) / len(vals)
+            std = (sum((v - mean) ** 2 for v in vals) / len(vals)) ** 0.5
+            row = f"{trait_labels[trait]:<14} {mean:5.1f}%   {std:5.1f}%   {min(vals):5.1f}%  {max(vals):5.1f}%"
+            _safe_addstr(stdscr, y, 0, row, curses.color_pair(7))
+            y += 1
+    else:
+        _safe_addstr(stdscr, y, 0, t["compare_lang_header"], curses.color_pair(7) | curses.A_BOLD)
+        y += 1
+        for state in (DANGER, FOOD, DISTRESS, MATE, IDLE):
+            x = 0
+            _safe_addstr(stdscr, y, x, f"{labels[state]:<14}", curses.color_pair(7))
+            x += 15
+            for r in results:
+                token = r["vocab"][state][0]
+                if token == 0:
+                    _safe_addstr(stdscr, y, x, "..", curses.color_pair(7) | curses.A_DIM)
+                else:
+                    _safe_addstr(stdscr, y, x, "##", curses.color_pair(TOKEN_COLOR_PAIR[token]) | curses.A_BOLD)
+                x += 3
+            y += 1
+        y += 1
+        clean = sum(1 for r in results if not r["collision"])
+        _safe_addstr(stdscr, y, 0, t["compare_collision_summary"].format(clean=clean, n_seeds=len(results)),
+                     curses.color_pair(7))
+        y += 1
+
+    if cancelled:
+        y += 1
+        _safe_addstr(stdscr, y, 0, t["compare_cancelled"].format(n=len(results)), curses.color_pair(1) | curses.A_BOLD)
+        y += 1
+
+    _safe_addstr(stdscr, y + 1, 0, t["compare_dismiss"], curses.color_pair(7) | curses.A_DIM)
+    stdscr.refresh()
+    stdscr.getch()
     stdscr.nodelay(True)
 
 
@@ -771,6 +965,8 @@ def run(stdscr, language_path=None):
             show_graph(stdscr, world, lang)
         elif key == ord("t"):
             show_family(stdscr, world, lang)
+        elif key == ord("c"):
+            run_compare_ui(stdscr, world, lang, init_pop, seed_genome)
         elif key == ord("h"):
             show_help(stdscr, lang)
         elif key == curses.KEY_UP:
