@@ -26,7 +26,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from simulation import (DANGER, DISTRESS, FOOD, HEIGHT, IDLE, MATE, MAX_POPULATION, N_TRAITS, TRAIT_HEARING,
+from simulation import (DANGER, DISTRESS, FOOD, HEIGHT, IDLE, MATE, MAX_POPULATION, N_TOKENS, N_TRAITS, TRAIT_HEARING,
                          TRAIT_METABOLISM, TRAIT_SPEED, TRAIT_VISION, World, WIDTH,
                          compare_seeds, load_seed_genome, load_world, save_world)
 
@@ -135,6 +135,10 @@ def snapshot(state):
         "trait_history": {
             TRAIT_IDS[i]: [float(v) for v in w.trait_history[i]]
             for i in range(N_TRAITS)
+        },
+        "translator": {
+            str(token): [[STATE_IDS[s], float(frac)] for s, frac in claims]
+            for token, claims in w.translator().items()
         },
     }
 
@@ -462,6 +466,21 @@ INDEX_HTML = """<!doctype html>
     display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px;
   }
   #compare-panel .close-row { text-align: right; margin-top: 16px; }
+
+  #translator-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+    align-items: center; justify-content: center; padding: 16px; z-index: 10;
+  }
+  #translator-panel {
+    background: #171d13; border: 1px solid #3a4530; border-radius: 10px;
+    max-width: 480px; width: 100%; max-height: 85vh; overflow-y: auto;
+    padding: 22px 24px; line-height: 1.6; font-size: 13.5px;
+  }
+  #translator-panel h2 { font-size: 17px; margin: 0 0 10px; }
+  .translator-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; color: #c3c8b6; }
+  .translator-row .swatch { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+  .translator-homonym { color: #eb5a5a; font-size: 12px; margin: -2px 0 6px 20px; }
+  #translator-panel .close-row { text-align: right; margin-top: 16px; }
 </style>
 </head>
 <body>
@@ -503,6 +522,7 @@ INDEX_HTML = """<!doctype html>
       <button id="openGraph" data-i18n="graphText"></button>
       <button id="openFamily" data-i18n="familyText"></button>
       <button id="openCompare" data-i18n="compareText"></button>
+      <button id="openTranslator" data-i18n="translatorText"></button>
       <button id="openHelp" data-i18n="noticeText"></button>
     </div>
     <div id="controls2">
@@ -631,6 +651,14 @@ INDEX_HTML = """<!doctype html>
     </div>
   </div>
 
+  <div id="translator-overlay">
+    <div id="translator-panel">
+      <h2 data-i18n="translatorTitle"></h2>
+      <div id="translator-content"></div>
+      <div class="close-row"><button id="closeTranslator" data-i18n="closeText"></button></div>
+    </div>
+  </div>
+
 <script>
 const TOKEN_COLORS = ["#a0a0a0", "#eb4646", "#4682eb", "#f5c83c", "#c85ae6", "#46e1d2"];
 const FOOD_COLOR = "#6edc5a";
@@ -682,6 +710,9 @@ const STRINGS = {
     compareColState: "state", compareColSeed: (i) => `seed ${i}`,
     compareColTrait: "trait", compareColMean: "mean", compareColStd: "std dev",
     compareColMin: "min", compareColMax: "max",
+    translatorText: "Translator", translatorTitle: "Translator - what each color currently means",
+    translatorUnused: "unused / ambiguous",
+    translatorHomonym: "! homonym - shared with another state",
     placingFoodBtn: "Placing: food", placingPredatorBtn: "Placing: predator",
     predLessText: "- predators", predMoreText: "+ predators",
     hint: "Click/tap the world to place food (or a predator in manual mode)",
@@ -754,6 +785,9 @@ const STRINGS = {
     compareColState: "etat", compareColSeed: (i) => `seed ${i}`,
     compareColTrait: "trait", compareColMean: "moyenne", compareColStd: "ecart-type",
     compareColMin: "min", compareColMax: "max",
+    translatorText: "Traducteur", translatorTitle: "Traducteur - ce que signifie chaque couleur en ce moment",
+    translatorUnused: "inutilisee / ambigue",
+    translatorHomonym: "! homonymie - partagee avec un autre etat",
     placingFoodBtn: "Pose: nourriture", placingPredatorBtn: "Pose: predateur",
     predLessText: "- predateurs", predMoreText: "+ predateurs",
     hint: "Clique/touche le monde pour placer de la nourriture (ou un predateur en mode manuel)",
@@ -867,6 +901,7 @@ function render(state) {
 
   if (graphOverlay.style.display === 'flex') renderGraphOverlay(state);
   if (compareOverlay.style.display === 'flex') renderCompare(state);
+  if (translatorOverlay.style.display === 'flex') renderTranslator(state.translator);
 }
 
 function renderVocabRow(elId, label, pairs) {
@@ -1163,6 +1198,34 @@ document.getElementById('compareCancel').onclick = () => post('compare_cancel');
 document.getElementById('compareAgain').onclick = () => post('compare_dismiss');
 compareOverlay.addEventListener('click', (ev) => {
   if (ev.target === compareOverlay) compareOverlay.style.display = 'none';
+});
+
+const translatorOverlay = document.getElementById('translator-overlay');
+const translatorContent = document.getElementById('translator-content');
+
+function renderTranslator(translator) {
+  const t = STRINGS[uiLang];
+  const stateLabels = {danger: t.labelDanger, food: t.labelFood, distress: t.labelDistress,
+                        mate: t.labelMate, idle: t.labelIdle};
+  let html = '';
+  for (let token = 0; token < 6; token++) {
+    const claims = (translator && translator[String(token)]) || [];
+    const style = token === 0
+      ? 'border:1px solid #666; background:transparent'
+      : `background:${TOKEN_COLORS[token] || TOKEN_COLORS[0]}`;
+    const text = claims.length
+      ? claims.map(([s, frac]) => `${stateLabels[s]} (${Math.round(frac * 100)}%)`).join(' / ')
+      : t.translatorUnused;
+    html += `<div class="translator-row"><span class="swatch" style="${style}"></span><span>${text}</span></div>`;
+    if (claims.length > 1) html += `<div class="translator-homonym">${t.translatorHomonym}</div>`;
+  }
+  translatorContent.innerHTML = html;
+}
+
+document.getElementById('openTranslator').onclick = () => { translatorOverlay.style.display = 'flex'; };
+document.getElementById('closeTranslator').onclick = () => { translatorOverlay.style.display = 'none'; };
+translatorOverlay.addEventListener('click', (ev) => {
+  if (ev.target === translatorOverlay) translatorOverlay.style.display = 'none';
 });
 
 canvas.addEventListener('click', (ev) => {

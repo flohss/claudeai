@@ -101,6 +101,7 @@ if you just hit `ENTER` through all of them, and they stick for the whole run
 | `G`           | vocabulary-over-time graph                                  |
 | `T`           | family tree - browse ancestors/descendants                  |
 | `C`           | compare seeds - is a result reproducible?                   |
+| `D`           | translator - what each color currently means                |
 | `H`           | in-game notice explaining the mechanics                      |
 | left click    | place food (auto mode) or whatever's selected (manual mode)  |
 | `ESC`         | quit                                                         |
@@ -142,7 +143,8 @@ currently signaling, white if silent), food as green `.`, predators as a red
 `r`=reset, `+`/`-`=speed, `q`=quit, `p`=toggle food/predator placement,
 `[`/`]`=remove/add a predator right now, `s`=save to `thronglets_save.json`,
 `g`=vocabulary-over-time graph, `t`=family tree, `c`=compare seeds,
-`h`=in-game notice (paginated so it fits any terminal height). There's no
+`d`=translator, `h`=in-game notice (paginated so it fits any terminal
+height). There's no
 reliable mouse support in a terminal, so manual mode uses a keyboard cursor
 instead: the arrow keys move it, `enter` places whatever's currently
 selected.
@@ -180,8 +182,9 @@ use), tapping/clicking the world places food (auto mode) or whatever's
 selected (manual mode), a **Save** button writes the running game to
 `thronglets_save.json`, a **Family** button opens the genealogy browser
 (arrow keys or on-screen ▲▼◀▶ buttons to navigate), a **Compare** button
-opens the seed-comparison panel, and a **Notice** button opens an explainer
-of the mechanics without pausing the simulation
+opens the seed-comparison panel, a **Translator** button opens the
+color-to-meaning dictionary, and a **Notice** button opens an explainer of
+the mechanics without pausing the simulation
 underneath.
 
 All three renderers show a HUD with, for each internal state (danger / food-call /
@@ -277,6 +280,19 @@ showing live progress, and `ESC`/Cancel stops it early without losing
 whatever seeds already finished. It's a side experiment - it builds its own
 worlds from scratch and never touches the game you're actually playing.
 
+## Translator: what does each color mean right now?
+
+The HUD and Graph screens are organized by *state* - for "food-call," which
+color is winning? The **Translator** screen (`d`/`D` in pygame and the
+terminal, a "Translator" button on the web page) flips that around: for each
+of the six tokens (including silence), which state currently treats it as
+its dominant color, and with what confidence. A token nobody's settled on
+yet shows as unused/ambiguous; a token two states are both using is flagged
+as a homonym right there instead of you having to notice it by eye across
+five separate HUD rows. Unlike the Graph screen this is a frozen snapshot of
+right now, not a history - open it again later to see how the mapping has
+moved on.
+
 ## Headless check
 
 `simulation.py` has no pygame dependency, so the core can be run and tested
@@ -295,7 +311,6 @@ not just that the window doesn't crash.
 The simulation core (`simulation.py`) and renderer (`main.py`) are split on
 purpose so this is easy to extend:
 
-- A "translator" panel logging the emerging token → meaning dictionary over time
 - Swapping the fixed 2D field for a proper toroidal world, or a richer
   pixel-art renderer for the creatures themselves
 - Feeding `train_language.py`'s per-agent diversity back in - it currently
