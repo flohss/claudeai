@@ -18,8 +18,8 @@ import curses
 import os
 import time
 
-from i18n import STATE_LABELS
-from simulation import (DANGER, DISTRESS, FOOD, HEIGHT, IDLE, MATE, MAX_POPULATION, World, WIDTH,
+from i18n import STATE_LABELS, TRAIT_LABELS
+from simulation import (DANGER, DISTRESS, FOOD, HEIGHT, IDLE, MATE, MAX_POPULATION, N_TRAITS, World, WIDTH,
                          load_seed_genome, load_world, save_world)
 
 DEFAULT_INIT_POP = 100
@@ -77,6 +77,7 @@ TEXT = {
         "food_hint_manual": "f=food (auto mode only)",
         "hud_controls2": "p=place  [ ]=predator count  s=save  arrows/enter=place  g=graph  t=family  h=help",
         "graph_title": "Vocabulary over time - dominant share per state",
+        "graph_traits_title": "Physical traits over time - population average (share of range)",
         "graph_dismiss": "-- press any key to go back --",
         "extinct": "Extinct. Press r to reset.",
 
@@ -142,6 +143,7 @@ TEXT = {
         "food_hint_manual": "f=food (auto uniquement)",
         "hud_controls2": "p=placer  [ ]=nb predateurs  s=sauver  fleches/entree=placer  g=graphique  t=famille  h=aide",
         "graph_title": "Vocabulaire dans le temps - part dominante par etat",
+        "graph_traits_title": "Traits physiques dans le temps - moyenne population (part de la plage)",
         "graph_dismiss": "-- une touche pour revenir --",
         "extinct": "Extinction. Appuie sur r pour recommencer.",
 
@@ -320,6 +322,20 @@ def show_graph(stdscr, world, lang):
         _safe_addstr(stdscr, y, 0, f"{labels[state]:<14} {current}", curses.color_pair(7) | curses.A_BOLD)
         _safe_addstr(stdscr, y + 1, 0, _sparkline(history, width), curses.color_pair(6))
         y += 3
+
+    if world.adaptive_traits and y + 1 < rows - 1:
+        y += 1
+        trait_labels = TRAIT_LABELS[lang]
+        _safe_addstr(stdscr, y, 0, t["graph_traits_title"], curses.color_pair(7) | curses.A_BOLD)
+        y += 2
+        for trait in range(N_TRAITS):
+            if y + 1 >= rows - 1:
+                break
+            history = world.trait_history[trait]
+            current = f"{history[-1] * 100:3.0f}%" if history else "  -%"
+            _safe_addstr(stdscr, y, 0, f"{trait_labels[trait]:<14} {current}", curses.color_pair(7) | curses.A_BOLD)
+            _safe_addstr(stdscr, y + 1, 0, _sparkline(history, width), curses.color_pair(5))
+            y += 3
 
     _safe_addstr(stdscr, min(rows - 1, y), 0, t["graph_dismiss"], curses.color_pair(7) | curses.A_DIM)
     stdscr.refresh()

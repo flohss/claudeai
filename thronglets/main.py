@@ -27,8 +27,8 @@ import time
 
 import pygame
 
-from i18n import STATE_LABELS
-from simulation import (DANGER, DISTRESS, FOOD, Genome, HEIGHT, IDLE, MATE, MAX_POPULATION, World, WIDTH,
+from i18n import STATE_LABELS, TRAIT_LABELS
+from simulation import (DANGER, DISTRESS, FOOD, Genome, HEIGHT, IDLE, MATE, MAX_POPULATION, N_TRAITS, World, WIDTH,
                          load_seed_genome, load_world, save_world)
 
 TRAIN_EPISODES = 3000
@@ -119,6 +119,7 @@ TEXT = {
         "placing_predator": "predator",
         "hud_vocab_title": "vocabulary — every color in use per state, population share:",
         "graph_title": "Vocabulary over time - dominant share per state",
+        "graph_traits_title": "Physical traits over time - population average (share of range)",
         "graph_dismiss": "-- press any key to go back --",
         "legend_creature": "creature (ring = its current signal)",
         "legend_food": "food",
@@ -230,6 +231,7 @@ TEXT = {
         "placing_predator": "predateur",
         "hud_vocab_title": "vocabulaire — toutes les couleurs en usage par etat, part de la population :",
         "graph_title": "Vocabulaire dans le temps - part dominante par etat",
+        "graph_traits_title": "Traits physiques dans le temps - moyenne population (part de la plage)",
         "graph_dismiss": "-- une touche pour revenir --",
         "legend_creature": "creature (anneau = son signal actuel)",
         "legend_food": "nourriture",
@@ -314,11 +316,15 @@ def show_help(screen, font, lang):
 
 
 def show_graph(screen, font, world, lang):
-    """A dedicated full-screen view of vocab_history, opened like show_help()
-    - the HUD rows stay compact, this is where the curves get room to breathe."""
+    """A dedicated full-screen view of vocab_history (and trait_history, if
+    adaptive traits are on), opened like show_help() - the HUD rows stay
+    compact, this is where the curves get room to breathe."""
     t = TEXT[lang]
     labels = STATE_LABELS[lang]
-    row_h = (SCREEN_H - 80) // 5
+    trait_labels = TRAIT_LABELS[lang]
+    n_rows = 5 + (N_TRAITS if world.adaptive_traits else 0)
+    title_h = 40 if world.adaptive_traits else 0
+    row_h = (SCREEN_H - 80 - title_h) // n_rows
     graph_w = SCREEN_W - 260
     graph_h = min(60, row_h - 30)
 
@@ -334,6 +340,17 @@ def show_graph(screen, font, world, lang):
             screen.blit(font.render(f"{labels[state]}: {current}", True, TEXT_COLOR), (20, y))
             draw_sparkline(screen, 220, y - 6, graph_w, graph_h, history)
             y += row_h
+
+        if world.adaptive_traits:
+            y += 10
+            screen.blit(font.render(t["graph_traits_title"], True, (255, 255, 255)), (20, y))
+            y += 30
+            for trait in range(N_TRAITS):
+                history = world.trait_history[trait]
+                current = f"{history[-1] * 100:3.0f}%" if history else "  -%"
+                screen.blit(font.render(f"{trait_labels[trait]}: {current}", True, TEXT_COLOR), (20, y))
+                draw_sparkline(screen, 220, y - 6, graph_w, graph_h, history)
+                y += row_h
 
         screen.blit(font.render(t["graph_dismiss"], True, (150, 155, 145)), (20, y))
         pygame.display.flip()

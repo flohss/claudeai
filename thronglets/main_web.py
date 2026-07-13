@@ -26,7 +26,8 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from simulation import (DANGER, DISTRESS, FOOD, HEIGHT, IDLE, MATE, MAX_POPULATION, World, WIDTH,
+from simulation import (DANGER, DISTRESS, FOOD, HEIGHT, IDLE, MATE, MAX_POPULATION, N_TRAITS, TRAIT_HEARING,
+                         TRAIT_METABOLISM, TRAIT_SPEED, TRAIT_VISION, World, WIDTH,
                          load_seed_genome, load_world, save_world)
 
 DEFAULT_PORT = 8765
@@ -34,6 +35,8 @@ STEP_INTERVAL = 0.05
 DEFAULT_INIT_POP = 100
 DEFAULT_LANGUAGE_FILE = "language_model.json"
 DEFAULT_SAVE_FILE = "thronglets_save.json"
+TRAIT_IDS = {TRAIT_SPEED: "speed", TRAIT_VISION: "vision", TRAIT_HEARING: "hearing",
+             TRAIT_METABOLISM: "metabolism"}
 STATE_IDS = {IDLE: "idle", FOOD: "food", MATE: "mate", DANGER: "danger", DISTRESS: "distress"}
 
 
@@ -95,6 +98,10 @@ def snapshot(state):
         "vocab_history": {
             STATE_IDS[s]: [float(v) for v in w.vocab_history[s]]
             for s in (DANGER, FOOD, DISTRESS, MATE, IDLE)
+        },
+        "trait_history": {
+            TRAIT_IDS[i]: [float(v) for v in w.trait_history[i]]
+            for i in range(N_TRAITS)
         },
     }
 
@@ -447,6 +454,25 @@ INDEX_HTML = """<!doctype html>
         <div class="graph-label"><span data-i18n="stateIdle"></span><span id="graph-cur-idle"></span></div>
         <canvas id="graph-idle" width="560" height="88"></canvas>
       </div>
+      <div id="graph-traits-section" style="display:none">
+        <h2 data-i18n="graphTraitsTitle"></h2>
+        <div class="graph-row">
+          <div class="graph-label"><span data-i18n="traitSpeed"></span><span id="graph-cur-speed"></span></div>
+          <canvas id="graph-speed" width="560" height="88"></canvas>
+        </div>
+        <div class="graph-row">
+          <div class="graph-label"><span data-i18n="traitVision"></span><span id="graph-cur-vision"></span></div>
+          <canvas id="graph-vision" width="560" height="88"></canvas>
+        </div>
+        <div class="graph-row">
+          <div class="graph-label"><span data-i18n="traitHearing"></span><span id="graph-cur-hearing"></span></div>
+          <canvas id="graph-hearing" width="560" height="88"></canvas>
+        </div>
+        <div class="graph-row">
+          <div class="graph-label"><span data-i18n="traitMetabolism"></span><span id="graph-cur-metabolism"></span></div>
+          <canvas id="graph-metabolism" width="560" height="88"></canvas>
+        </div>
+      </div>
       <div class="close-row"><button id="closeGraph" data-i18n="closeText"></button></div>
     </div>
   </div>
@@ -487,6 +513,8 @@ const STRINGS = {
     saveText: "Save", savedText: "Saved!",
     noticeText: "Notice",
     graphText: "Graph", graphTitle: "Vocabulary over time - dominant share per state",
+    graphTraitsTitle: "Physical traits over time - population average (share of range)",
+    traitSpeed: "speed", traitVision: "vision", traitHearing: "hearing", traitMetabolism: "metabolism",
     familyText: "Family", familyTitle: "Family tree",
     familyGen: (gen) => `generation ${gen}`,
     familyAlive: (token, age) => `alive - token ${token}, age ${age}`,
@@ -539,6 +567,8 @@ const STRINGS = {
     saveText: "Sauvegarder", savedText: "Sauvegarde !",
     noticeText: "Notice",
     graphText: "Graphique", graphTitle: "Vocabulaire dans le temps - part dominante par etat",
+    graphTraitsTitle: "Traits physiques dans le temps - moyenne population (part de la plage)",
+    traitSpeed: "vitesse", traitVision: "vision", traitHearing: "ouie", traitMetabolism: "metabolisme",
     familyText: "Famille", familyTitle: "Arbre genealogique",
     familyGen: (gen) => `generation ${gen}`,
     familyAlive: (token, age) => `vivant - token ${token}, age ${age}`,
@@ -704,6 +734,15 @@ function renderGraphOverlay(state) {
     renderSparkline(document.getElementById('graph-' + key), history);
     const cur = history && history.length ? Math.round(history[history.length - 1] * 100) + '%' : '-';
     document.getElementById('graph-cur-' + key).textContent = cur;
+  }
+  document.getElementById('graph-traits-section').style.display = state.adaptive_traits ? 'block' : 'none';
+  if (state.adaptive_traits) {
+    for (const key of ['speed', 'vision', 'hearing', 'metabolism']) {
+      const history = state.trait_history[key];
+      renderSparkline(document.getElementById('graph-' + key), history);
+      const cur = history && history.length ? Math.round(history[history.length - 1] * 100) + '%' : '-';
+      document.getElementById('graph-cur-' + key).textContent = cur;
+    }
   }
 }
 

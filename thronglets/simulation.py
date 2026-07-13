@@ -247,6 +247,7 @@ class World:
         self._cache = {"alive": []}
         self.vocab_history = {state: deque(maxlen=VOCAB_HISTORY_LENGTH)
                                for state in (IDLE, FOOD, MATE, DANGER, DISTRESS)}
+        self.trait_history = {trait: deque(maxlen=VOCAB_HISTORY_LENGTH) for trait in range(N_TRAITS)}
         if not manual_food:
             for _ in range(4):
                 self._spawn_food_patch()
@@ -268,10 +269,25 @@ class World:
             self._spawn_food_patch()
         if self.tick % VOCAB_HISTORY_INTERVAL == 0:
             self._record_vocab_history()
+            if self.adaptive_traits:
+                self._record_trait_history()
 
     def _record_vocab_history(self):
         for state, (_token, share) in self.vocabulary().items():
             self.vocab_history[state].append(share)
+
+    def _record_trait_history(self):
+        """Population-average of each physical trait, normalized to its
+        [0, 1] bound range - same shape as vocab_history's shares, so it can
+        reuse the exact same sparkline rendering everywhere."""
+        alive = self._alive()
+        if not alive:
+            return
+        traits = np.array([c.genome.traits for c in alive])
+        avg = traits.mean(axis=0)
+        normalized = (avg - TRAIT_BOUNDS[:, 0]) / (TRAIT_BOUNDS[:, 1] - TRAIT_BOUNDS[:, 0])
+        for trait in range(N_TRAITS):
+            self.trait_history[trait].append(float(np.clip(normalized[trait], 0.0, 1.0)))
 
     def add_food(self, x, y):
         if len(self.food) >= MAX_FOOD:
@@ -636,6 +652,7 @@ def save_world(world, path):
         "manual_predators": world.manual_predators,
         "adaptive_traits": world.adaptive_traits,
         "vocab_history": {state: list(hist) for state, hist in world.vocab_history.items()},
+        "trait_history": {trait: list(hist) for trait, hist in world.trait_history.items()},
         "food": [[float(x), float(y)] for x, y in world.food],
         "predators": [[float(p.pos[0]), float(p.pos[1])] for p in world.predators],
         "next_id": world._next_id,
@@ -680,6 +697,11 @@ def load_world(path, seed=None):
     world.vocab_history = {
         state: deque(saved_history.get(str(state), []), maxlen=VOCAB_HISTORY_LENGTH)
         for state in (IDLE, FOOD, MATE, DANGER, DISTRESS)
+    }
+    saved_trait_history = data.get("trait_history", {})
+    world.trait_history = {
+        trait: deque(saved_trait_history.get(str(trait), []), maxlen=VOCAB_HISTORY_LENGTH)
+        for trait in range(N_TRAITS)
     }
     world.food = [np.array(f, dtype=float) for f in data["food"]]
     world.predators = [Predator(np.array(p, dtype=float)) for p in data["predators"]]

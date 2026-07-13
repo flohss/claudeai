@@ -234,6 +234,16 @@ has to actually weigh "can sense more of the world" against "burns energy
 faster doing it," the same kind of real trade-off that already exists
 between signaling and staying silent.
 
+When adaptive traits are on, the **Graph** screen gains a second section
+below the vocabulary curves: the population's average speed, vision,
+hearing, and metabolism over time, each as a share of that trait's allowed
+range (same sampling cadence and rolling window as the vocabulary curves).
+It's the same kind of evidence as watching a token's share climb - a rising
+or falling line means selection is actually pushing that trait somewhere,
+not just letting it drift. This section is hidden entirely when adaptive
+traits are off, since there's nothing to show (every creature has the same
+fixed stats).
+
 ## Headless check
 
 `simulation.py` has no pygame dependency, so the core can be run and tested
