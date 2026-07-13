@@ -37,7 +37,7 @@ DEFAULT_INIT_POP = 100
 DEFAULT_LANGUAGE_FILE = "language_model.json"
 DEFAULT_SAVE_FILE = "thronglets_save.json"
 
-HUD_H = 224
+HUD_H = 244
 # Placeholder sizes - main() overwrites these with the real screen resolution
 # so the world fills the whole display with no letterboxing on either axis.
 SCREEN_W, SCREEN_H = int(WIDTH * 5), int(HEIGHT * 5) + HUD_H
@@ -105,7 +105,7 @@ TEXT = {
         "hud_trained_tag": "   [trained vocabulary]",
         "hud_traits_tag": "   [adaptive traits]",
         "hud_header": ("tick {tick:>6}   pop {pop:>4}   births {births:>5}   deaths {deaths:>5}   "
-                        "{status}   (space=pause  up/down=speed  r=reset  s=save  g=graph  t=family  h=help){tag}"),
+                        "{status}   (space=pause  up/down=speed  r=reset  s=save  g=graph  t=family  h=help)"),
         "hud_manual": "mode: manual   click places: {placing} (P)",
         "hud_auto": "mode: automatic   predators: {count} ([ / ] act immediately)",
         "placing_food": "food",
@@ -211,7 +211,7 @@ TEXT = {
         "hud_trained_tag": "   [vocabulaire entraine]",
         "hud_traits_tag": "   [traits evolutifs]",
         "hud_header": ("tick {tick:>6}   pop {pop:>4}   naissances {births:>5}   morts {deaths:>5}   "
-                        "{status}   (espace=pause  haut/bas=vitesse  r=reset  s=sauver  g=graphique  t=famille  h=aide){tag}"),
+                        "{status}   (espace=pause  haut/bas=vitesse  r=reset  s=sauver  g=graphique  t=famille  h=aide)"),
         "hud_manual": "mode: manuel   clic pose : {placing} (P)",
         "hud_auto": "mode: auto   predateurs : {count} ([ / ] agit tout de suite)",
         "placing_food": "nourriture",
@@ -503,19 +503,21 @@ def draw_hud(screen, font, world, paused, speed, mode, placing, lang, trained=Fa
     status = t["hud_paused"] if paused else f"x{speed}"
     tag = (t["hud_trained_tag"] if trained else "") + (t["hud_traits_tag"] if world.adaptive_traits else "")
     header = t["hud_header"].format(tick=world.tick, pop=pop, births=world.births,
-                                     deaths=world.deaths, status=status, tag=tag)
+                                     deaths=world.deaths, status=status)
     screen.blit(font.render(header, True, TEXT_COLOR), (10, 8))
+    if tag:
+        screen.blit(font.render(tag, True, TEXT_COLOR), (10, 28))
 
     if mode == "manual":
         placing_label = t["placing_food"] if placing == "food" else t["placing_predator"]
         settings = t["hud_manual"].format(placing=placing_label)
     else:
         settings = t["hud_auto"].format(count=len(world.predators))
-    screen.blit(font.render(settings, True, TEXT_COLOR), (10, 28))
+    screen.blit(font.render(settings, True, TEXT_COLOR), (10, 48))
 
-    screen.blit(font.render(t["hud_vocab_title"], True, TEXT_COLOR), (10, 48))
+    screen.blit(font.render(t["hud_vocab_title"], True, TEXT_COLOR), (10, 68))
 
-    y = 70
+    y = 90
     breakdown = world.vocabulary_breakdown()
     for state in (DANGER, FOOD, DISTRESS, MATE, IDLE):
         draw_vocab_row(screen, font, y, labels[state], breakdown[state])
