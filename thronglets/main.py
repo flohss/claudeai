@@ -113,7 +113,7 @@ TEXT = {
         "hud_traits_tag": "[adaptive traits]",
         "hud_header": ("tick {tick:>6}   pop {pop:>4}   births {births:>5}   deaths {deaths:>5}   "
                         "{status}   (space=pause  up/down=speed  r=reset  s=save  g=graph  t=family  c=compare  "
-                        "d=translator  h=help)"),
+                        "d=translator  f=faq  h=help)"),
         "hud_manual": "mode: manual   click places: {placing} (P)",
         "hud_auto": "mode: automatic   predators: {count} ([ / ] act immediately)",
         "placing_food": "food",
@@ -196,6 +196,61 @@ TEXT = {
             ("  it resolves. Signaling costs energy, so silence is a real", False),
             ("  strategy, not a default.", False),
         ],
+        "faq_lines": [
+            ("Thronglets - FAQ", True),
+            ("", False),
+            ("Q: Why do creatures sometimes stay clustered even with food right", True),
+            ("   next to them?", True),
+            ("A: Following a neighbor's signal and heading for food are two", False),
+            ("   forces that can partly cancel out - an accepted trade-off,", False),
+            ("   not a bug.", False),
+            ("", False),
+            ("Q: Does distress make creatures help each other?", True),
+            ("A: No - there's no cooperation mechanic. Distress is treated like", False),
+            ("   any other signal, and creatures mostly learn to avoid it.", False),
+            ("", False),
+            ("Q: Why does the adaptive metabolism trait always drop to near its", True),
+            ("   minimum?", True),
+            ("A: Unlike speed/vision/hearing, a lower metabolism has zero", False),
+            ("   downside here - it's not a real trade-off, so selection", False),
+            ("   always pushes it down.", False),
+            ("", False),
+            ("Q: How can two creatures from very different generations be", True),
+            ("   siblings?", True),
+            ("A: Generation = max(both parents' generations)+1, and mate choice", False),
+            ("   only cares about proximity, not generation - a long-lived", False),
+            ("   parent can breed with a much 'deeper' partner late in life.", False),
+            ("", False),
+            ("Q: Can a creature really mate with its own descendant?", True),
+            ("A: Yes - same reason: mate choice is purely proximity-based,", False),
+            ("   with no notion of family.", False),
+            ("", False),
+            ("Q: Even a trained vocabulary can drift or 'flip back' - why?", True),
+            ("A: No creature learns anything during its life; genomes are", False),
+            ("   fixed at birth. Only mutation and selection across", False),
+            ("   generations change anything, and mutation never stops -", False),
+            ("   nothing is ever permanently locked in.", False),
+            ("", False),
+            ("Q: Two states share the same color (homonymy) - is that a bug?", True),
+            ("A: No - nothing in the model prevents it. Genomes mutate per", False),
+            ("   state independently, so two states can land on the same", False),
+            ("   token by pure chance. Check the Translator screen (D) to", False),
+            ("   see it clearly.", False),
+            ("", False),
+            ("Q: A single playthrough shows a surprising result - can I trust", True),
+            ("   it?", True),
+            ("A: Not on its own. Use the Compare screen (C) to run several", False),
+            ("   independent seeds and see whether the result actually", False),
+            ("   repeats, or was just one run's drift.", False),
+            ("", False),
+            ("Q: What's the real difference between the trained AI language", True),
+            ("   and the evolved one?", True),
+            ("A: The AI (train_language.py) uses gradient descent to directly", False),
+            ("   minimize communication error, every step. The evolved", False),
+            ("   language only rewards survival and reproduction - comm-", False),
+            ("   unicating well is never optimized directly, just indirectly", False),
+            ("   useful.", False),
+        ],
     },
     "fr": {
         "choose_mode_prompt": "Choisis le mode de depart :",
@@ -248,7 +303,7 @@ TEXT = {
         "hud_traits_tag": "[traits evolutifs]",
         "hud_header": ("tick {tick:>6}   pop {pop:>4}   naissances {births:>5}   morts {deaths:>5}   "
                         "{status}   (espace=pause  haut/bas=vitesse  r=reset  s=sauver  g=graphique  t=famille  "
-                        "c=comparer  d=traducteur  h=aide)"),
+                        "c=comparer  d=traducteur  f=faq  h=aide)"),
         "hud_manual": "mode: manuel   clic pose : {placing} (P)",
         "hud_auto": "mode: auto   predateurs : {count} ([ / ] agit tout de suite)",
         "placing_food": "nourriture",
@@ -331,6 +386,70 @@ TEXT = {
             ("  se resolve. Parler coute de l'energie : le silence est une", False),
             ("  vraie strategie, pas un defaut.", False),
         ],
+        "faq_lines": [
+            ("Thronglets — FAQ", True),
+            ("", False),
+            ("Q : Pourquoi les creatures restent parfois en groupe meme avec", True),
+            ("    de la nourriture juste a cote ?", True),
+            ("R : Suivre le signal d'un voisin et se diriger vers la", False),
+            ("    nourriture sont deux forces qui peuvent s'annuler en", False),
+            ("    partie - un compromis assume, pas un bug.", False),
+            ("", False),
+            ("Q : Est-ce que la detresse pousse les creatures a s'entraider ?", True),
+            ("R : Non - il n'y a aucun mecanisme de cooperation. La detresse", False),
+            ("    est traitee comme n'importe quel autre signal, et les", False),
+            ("    creatures apprennent surtout a l'eviter.", False),
+            ("", False),
+            ("Q : Pourquoi le metabolisme adaptatif tombe toujours pres de", True),
+            ("    son minimum ?", True),
+            ("R : Contrairement a la vitesse/vision/ouie, un metabolisme bas", False),
+            ("    n'a aucun inconvenient ici - ce n'est pas un vrai", False),
+            ("    compromis, donc la selection le pousse toujours vers le", False),
+            ("    bas.", False),
+            ("", False),
+            ("Q : Comment deux creatures de generations tres differentes", True),
+            ("    peuvent-elles etre frere et soeur ?", True),
+            ("R : Generation = max(generation des deux parents)+1, et le", False),
+            ("    choix du partenaire ne tient compte que de la proximite,", False),
+            ("    pas de la generation - un parent qui vit longtemps peut se", False),
+            ("    reproduire avec un partenaire bien plus 'profond' tard", False),
+            ("    dans sa vie.", False),
+            ("", False),
+            ("Q : Une creature peut-elle vraiment s'accoupler avec son propre", True),
+            ("    descendant ?", True),
+            ("R : Oui - meme raison : le choix du partenaire est purement", False),
+            ("    base sur la proximite, sans aucune notion de famille.", False),
+            ("", False),
+            ("Q : Meme un vocabulaire entraine peut deriver ou 'revenir en", True),
+            ("    arriere' - pourquoi ?", True),
+            ("R : Aucune creature n'apprend quoi que ce soit pendant sa vie ;", False),
+            ("    les genomes sont fixes a la naissance. Seules la mutation", False),
+            ("    et la selection a travers les generations changent quelque", False),
+            ("    chose, et la mutation ne s'arrete jamais - rien n'est", False),
+            ("    jamais definitivement acquis.", False),
+            ("", False),
+            ("Q : Deux etats partagent la meme couleur (homonymie) - c'est", True),
+            ("    un bug ?", True),
+            ("R : Non - rien dans le modele ne l'empeche. Les genomes mutent", False),
+            ("    independamment par etat, donc deux etats peuvent tomber", False),
+            ("    sur le meme token par pur hasard. L'ecran Traducteur (D)", False),
+            ("    permet de le reperer clairement.", False),
+            ("", False),
+            ("Q : Une seule partie donne un resultat surprenant - puis-je lui", True),
+            ("    faire confiance ?", True),
+            ("R : Pas telle quelle. Utilise l'ecran Comparer (C) pour lancer", False),
+            ("    plusieurs seeds independantes et voir si le resultat se", False),
+            ("    reproduit vraiment, ou si c'etait juste la derive d'une", False),
+            ("    seule partie.", False),
+            ("", False),
+            ("Q : Quelle est la vraie difference entre le langage entraine", True),
+            ("    par IA et celui qui evolue ?", True),
+            ("R : L'IA (train_language.py) utilise la descente de gradient", False),
+            ("    pour minimiser directement l'erreur de communication, a", False),
+            ("    chaque etape. Le langage evolue ne recompense que la", False),
+            ("    survie et la reproduction - bien communiquer n'est jamais", False),
+            ("    optimise directement, juste utile indirectement.", False),
+        ],
     },
 }
 
@@ -338,6 +457,34 @@ TEXT = {
 def show_help(screen, font, lang):
     t = TEXT[lang]
     lines = t["help_lines"]
+    line_h = 24
+    top = 20
+    page_size = max(1, (SCREEN_H - top - 50) // line_h)
+    for start in range(0, len(lines), page_size):
+        page = lines[start:start + page_size]
+        more = start + page_size < len(lines)
+        footer = t["help_more"] if more else t["help_dismiss"]
+        waiting = True
+        while waiting:
+            screen.fill(BG)
+            for i, (line, bold) in enumerate(page):
+                color = TEXT_COLOR if not bold else (255, 255, 255)
+                screen.blit(font.render(line, True, color), (20, top + i * line_h))
+            screen.blit(font.render(footer, True, (150, 155, 145)), (20, top + len(page) * line_h + 14))
+            pygame.display.flip()
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+                elif event.type == pygame.KEYDOWN:
+                    waiting = False
+
+
+def show_faq(screen, font, lang):
+    """Paginated the same way as show_help() - curated questions that came
+    up while building/playing this, with honest, specific answers."""
+    t = TEXT[lang]
+    lines = t["faq_lines"]
     line_h = 24
     top = 20
     page_size = max(1, (SCREEN_H - top - 50) // line_h)
@@ -1333,6 +1480,8 @@ def main():
                     run_compare_ui(screen, font, world, lang, init_pop, seed_genome)
                 elif event.key == pygame.K_d:
                     show_translator(screen, font, world, lang)
+                elif event.key == pygame.K_f:
+                    show_faq(screen, font, lang)
                 elif event.key == pygame.K_h:
                     show_help(screen, font, lang)
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
