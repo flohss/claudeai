@@ -68,15 +68,13 @@ TEXT = {
         "hud_trained_tag": "  [trained vocabulary]",
         "hud_traits_tag": "  [adaptive traits]",
         "hud_header": "tick {tick}  pop {pop}  births {births}  deaths {deaths}  {status}{tag}",
-        "hud_manual": "mode: manual   placing: {placing} (p)   arrows+enter to place",
+        "hud_manual": "mode: manual   arrows+enter place: {placing} (tab)",
         "hud_auto": "mode: automatic   predators: {count} ([ ] act immediately)",
         "placing_food": "food",
         "placing_predator": "predator",
         "hud_legend": "colored o = signaling   white o = silent   . = food   X = predator",
-        "hud_controls1": "space=pause  {food_hint}  r=reset  +/-=speed  q=quit",
-        "food_hint_auto": "f=food",
-        "food_hint_manual": "f=food (auto mode only)",
-        "hud_controls2": "p=place  [ ]=predator count  s=save  arrows/enter=place  g=graph  t=family  c=compare  d=translator  F=faq  h=help",
+        "hud_controls1": "space=pause  n=food  p=predator  r=reset  +/-=speed  q=quit",
+        "hud_controls2": "[ ]=predator count  s=save  arrows+enter=place (tab=switch)  g=graph  t=family  c=compare  d=translator  F=faq  h=help",
         "graph_title": "Vocabulary over time - dominant share per state",
         "graph_traits_title": "Physical traits over time - population average (share of range)",
         "graph_dismiss": "-- press any key to go back --",
@@ -157,15 +155,13 @@ TEXT = {
         "hud_trained_tag": "  [vocabulaire entraine]",
         "hud_traits_tag": "  [traits evolutifs]",
         "hud_header": "tick {tick}  pop {pop}  naissances {births}  morts {deaths}  {status}{tag}",
-        "hud_manual": "mode: manuel   pose: {placing} (p)   fleches+entree pour placer",
+        "hud_manual": "mode: manuel   fleches+entree pose : {placing} (tab)",
         "hud_auto": "mode: auto   predateurs: {count} ([ ] agit tout de suite)",
         "placing_food": "nourriture",
         "placing_predator": "predateur",
         "hud_legend": "o colore = signale   o blanc = silencieuse   . = nourriture   X = predateur",
-        "hud_controls1": "space=pause  {food_hint}  r=reset  +/-=speed  q=quit",
-        "food_hint_auto": "f=food",
-        "food_hint_manual": "f=food (auto uniquement)",
-        "hud_controls2": "p=placer  [ ]=nb predateurs  s=sauver  fleches/entree=placer  g=graphique  t=famille  c=comparer  d=traducteur  F=faq  h=aide",
+        "hud_controls1": "space=pause  n=nourriture  p=predateur  r=reset  +/-=vitesse  q=quitter",
+        "hud_controls2": "[ ]=nb predateurs  s=sauver  fleches+entree=placer (tab=changer)  g=graphique  t=famille  c=comparer  d=traducteur  F=faq  h=aide",
         "graph_title": "Vocabulaire dans le temps - part dominante par etat",
         "graph_traits_title": "Traits physiques dans le temps - moyenne population (part de la plage)",
         "graph_dismiss": "-- une touche pour revenir --",
@@ -1050,9 +1046,7 @@ def draw(stdscr, world, paused, speed, mode, placing, cursor, lang, trained=Fals
         _draw_vocab_row(stdscr, row, labels[state], breakdown[state])
 
     _safe_addstr(stdscr, HUD_H - 3, 0, t["hud_legend"], curses.color_pair(7) | curses.A_DIM)
-    food_hint = t["food_hint_auto"] if mode == "auto" else t["food_hint_manual"]
-    _safe_addstr(stdscr, HUD_H - 2, 0, t["hud_controls1"].format(food_hint=food_hint),
-                 curses.color_pair(7) | curses.A_DIM)
+    _safe_addstr(stdscr, HUD_H - 2, 0, t["hud_controls1"], curses.color_pair(7) | curses.A_DIM)
     _safe_addstr(stdscr, HUD_H - 1, 0, t["hud_controls2"], curses.color_pair(7) | curses.A_DIM)
 
     for fx, fy in world.food:
@@ -1144,9 +1138,11 @@ def run(stdscr, language_path=None):
             speed = min(200, speed + (1 if speed < 10 else 10))
         elif key in (ord("-"), ord("_")):
             speed = max(1, speed - (1 if speed <= 10 else 10))
-        elif key == ord("f") and mode == "auto":
+        elif key == ord("n"):
             world.add_food(*world.rng.uniform([10, 10], [WIDTH - 10, HEIGHT - 10]))
         elif key == ord("p"):
+            world.add_random_predator()
+        elif key == 9:  # Tab - switch what arrows+enter places
             placing = "predator" if placing == "food" else "food"
         elif key == ord("["):
             world.remove_predator()

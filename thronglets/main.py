@@ -39,7 +39,7 @@ DEFAULT_INIT_POP = 100
 DEFAULT_LANGUAGE_FILE = "language_model.json"
 DEFAULT_SAVE_FILE = "thronglets_save.json"
 
-HUD_H = 284
+HUD_H = 304
 # Placeholder sizes - main() overwrites these with the real screen resolution
 # so the world fills the whole display with no letterboxing on either axis.
 SCREEN_W, SCREEN_H = int(WIDTH * 5), int(HEIGHT * 5) + HUD_H
@@ -114,10 +114,9 @@ TEXT = {
         "hud_header": "tick {tick:>6}   pop {pop:>4}   births {births:>5}   deaths {deaths:>5}   {status}",
         "hud_controls_hint1": "(space=pause  up/down=speed  r=reset  s=save  g=graph",
         "hud_controls_hint2": " t=family  c=compare  d=translator  f=faq  h=help)",
-        "hud_manual": "mode: manual   click places: {placing} (P)",
+        "hud_controls_hint3": "n/click = food   p/right-click = predator",
+        "hud_manual": "mode: manual (no automatic spawning)",
         "hud_auto": "mode: automatic   predators: {count} ([ / ] act immediately)",
-        "placing_food": "food",
-        "placing_predator": "predator",
         "hud_vocab_title": "vocabulary — every color in use per state, population share:",
         "graph_title": "Vocabulary over time - dominant share per state",
         "graph_traits_title": "Physical traits over time - population average (share of range)",
@@ -304,10 +303,9 @@ TEXT = {
         "hud_header": "tick {tick:>6}   pop {pop:>4}   naissances {births:>5}   morts {deaths:>5}   {status}",
         "hud_controls_hint1": "(espace=pause  haut/bas=vitesse  r=reset  s=sauver  g=graphique",
         "hud_controls_hint2": " t=famille  c=comparer  d=traducteur  f=faq  h=aide)",
-        "hud_manual": "mode: manuel   clic pose : {placing} (P)",
+        "hud_controls_hint3": "n/clic = nourriture   p/clic droit = predateur",
+        "hud_manual": "mode: manuel (pas d'apparition automatique)",
         "hud_auto": "mode: auto   predateurs : {count} ([ / ] agit tout de suite)",
-        "placing_food": "nourriture",
-        "placing_predator": "predateur",
         "hud_vocab_title": "vocabulaire — toutes les couleurs en usage par etat, part de la population :",
         "graph_title": "Vocabulaire dans le temps - part dominante par etat",
         "graph_traits_title": "Traits physiques dans le temps - moyenne population (part de la plage)",
@@ -700,7 +698,7 @@ def show_family(screen, font, world, lang):
                 focus = siblings[i]
 
 
-def draw(screen, font, world, paused, speed, mode, placing, lang, trained=False):
+def draw(screen, font, world, paused, speed, mode, lang, trained=False):
     screen.fill(BG)
     pygame.draw.rect(screen, GROUND, (0, HUD_H, SCREEN_W, SCREEN_H - HUD_H))
 
@@ -719,7 +717,7 @@ def draw(screen, font, world, paused, speed, mode, placing, lang, trained=False)
         x, y = int(p.pos[0] * SCALE_X), int(p.pos[1] * SCALE_Y) + HUD_H
         pygame.draw.circle(screen, PREDATOR_COLOR, (x, y), 6)
 
-    draw_hud(screen, font, world, paused, speed, mode, placing, lang, trained)
+    draw_hud(screen, font, world, paused, speed, mode, lang, trained)
 
 
 SPARK_COLOR = (150, 200, 130)
@@ -773,7 +771,7 @@ def draw_vocab_row(screen, font, y, label, pairs):
         x += 16 + txt.get_width() + 14
 
 
-def draw_hud(screen, font, world, paused, speed, mode, placing, lang, trained=False):
+def draw_hud(screen, font, world, paused, speed, mode, lang, trained=False):
     t = TEXT[lang]
     labels = STATE_LABELS[lang]
     pygame.draw.rect(screen, HUD_BG, (0, 0, SCREEN_W, HUD_H))
@@ -788,19 +786,19 @@ def draw_hud(screen, font, world, paused, speed, mode, placing, lang, trained=Fa
     screen.blit(font.render(header, True, TEXT_COLOR), (10, 8))
     screen.blit(font.render(t["hud_controls_hint1"], True, TEXT_COLOR), (10, 28))
     screen.blit(font.render(t["hud_controls_hint2"], True, TEXT_COLOR), (10, 48))
+    screen.blit(font.render(t["hud_controls_hint3"], True, TEXT_COLOR), (10, 68))
     if tag:
-        screen.blit(font.render(tag, True, TEXT_COLOR), (10, 68))
+        screen.blit(font.render(tag, True, TEXT_COLOR), (10, 88))
 
     if mode == "manual":
-        placing_label = t["placing_food"] if placing == "food" else t["placing_predator"]
-        settings = t["hud_manual"].format(placing=placing_label)
+        settings = t["hud_manual"]
     else:
         settings = t["hud_auto"].format(count=len(world.predators))
-    screen.blit(font.render(settings, True, TEXT_COLOR), (10, 88))
+    screen.blit(font.render(settings, True, TEXT_COLOR), (10, 108))
 
-    screen.blit(font.render(t["hud_vocab_title"], True, TEXT_COLOR), (10, 108))
+    screen.blit(font.render(t["hud_vocab_title"], True, TEXT_COLOR), (10, 128))
 
-    y = 130
+    y = 150
     breakdown = world.vocabulary_breakdown()
     for state in (DANGER, FOOD, DISTRESS, MATE, IDLE):
         draw_vocab_row(screen, font, y, labels[state], breakdown[state])
@@ -1441,7 +1439,6 @@ def main():
     else:
         adaptive_traits = world.adaptive_traits
 
-    placing = "food"
     paused = False
     speed = 1  # ticks per real second
     tick_accumulator = 0.0
@@ -1465,8 +1462,10 @@ def main():
                     speed = min(200, speed + (1 if speed < 10 else 10))
                 elif event.key == pygame.K_DOWN:
                     speed = max(1, speed - (1 if speed <= 10 else 10))
+                elif event.key == pygame.K_n:
+                    world.add_food(*world.rng.uniform([10, 10], [WIDTH - 10, HEIGHT - 10]))
                 elif event.key == pygame.K_p:
-                    placing = "predator" if placing == "food" else "food"
+                    world.add_random_predator()
                 elif event.key == pygame.K_LEFTBRACKET:
                     world.remove_predator()
                 elif event.key == pygame.K_RIGHTBRACKET:
@@ -1486,11 +1485,11 @@ def main():
                     show_faq(screen, font, lang)
                 elif event.key == pygame.K_h:
                     show_help(screen, font, lang)
-            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button in (1, 3):
                 mx, my = event.pos
                 if my > HUD_H:
                     wx, wy = mx / SCALE_X, (my - HUD_H) / SCALE_Y
-                    if mode == "manual" and placing == "predator":
+                    if event.button == 3:
                         world.add_predator(wx, wy)
                     else:
                         world.add_food(wx, wy)
@@ -1504,7 +1503,7 @@ def main():
         else:
             tick_accumulator = 0.0
 
-        draw(screen, font, world, paused, speed, mode, placing, lang, trained=seed_genome is not None)
+        draw(screen, font, world, paused, speed, mode, lang, trained=seed_genome is not None)
         pygame.display.flip()
 
     pygame.quit()

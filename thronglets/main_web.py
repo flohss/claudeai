@@ -3,8 +3,8 @@
 Runs the simulation in a background thread and exposes it over plain HTTP:
   GET  /        the page (canvas + controls)
   GET  /state   a JSON snapshot of the world, polled by the page a few times a second
-  POST /control start/pause/resume/reset/speed/placing/predator_count/click,
-                driven by the page's buttons and clicks
+  POST /control start/pause/resume/reset/speed/predator_count/click/quick_place,
+                driven by the page's buttons, clicks, and n/p keys
 
 The world doesn't exist until the page's start screen picks a language,
 automatic or manual mode, and whether to seed the AI language - those
@@ -53,7 +53,6 @@ class SimState:
     def __init__(self, seed_genome=None):
         self.started = False
         self.mode = None
-        self.placing = "food"
         self.init_pop = DEFAULT_INIT_POP
         self.world = None
         self.paused = False
@@ -114,7 +113,6 @@ def snapshot(state):
         "adaptive_traits": w.adaptive_traits,
         "compare": _compare_payload(state),
         "mode": state.mode,
-        "placing": state.placing,
         "predator_count": len(w.predators),
         "width": WIDTH,
         "height": HEIGHT,
@@ -287,8 +285,6 @@ class Handler(BaseHTTPRequestHandler):
                 state.paused = False
             elif action == "speed":
                 state.speed = max(1, min(200, int(body.get("value", state.speed))))
-            elif action == "placing":
-                state.placing = "predator" if body.get("value") == "predator" else "food"
             elif action == "predator_count":
                 if int(body.get("delta", 0)) > 0:
                     state.world.add_random_predator()
@@ -296,10 +292,15 @@ class Handler(BaseHTTPRequestHandler):
                     state.world.remove_predator()
             elif action == "click":
                 x, y = float(body.get("x", 0)), float(body.get("y", 0))
-                if state.mode == "manual" and state.placing == "predator":
+                if body.get("button") == "right":
                     state.world.add_predator(x, y)
                 else:
                     state.world.add_food(x, y)
+            elif action == "quick_place":
+                if body.get("kind") == "predator":
+                    state.world.add_random_predator()
+                else:
+                    state.world.add_food(*state.world.rng.uniform([10, 10], [WIDTH - 10, HEIGHT - 10]))
             elif action == "family_open":
                 family_payload = _family_payload(state)
             elif action == "family_nav":
@@ -541,7 +542,6 @@ INDEX_HTML = """<!doctype html>
       <button id="openHelp" data-i18n="noticeText"></button>
     </div>
     <div id="controls2">
-      <button id="placing"></button>
       <button id="predLess" data-i18n="predLessText"></button>
       <button id="predMore" data-i18n="predMoreText"></button>
     </div>
@@ -771,9 +771,8 @@ const STRINGS = {
     faqA8: "A: Not on its own. Use the Compare panel to run several independent seeds and see whether the result actually repeats, or was just one run's drift.",
     faqQ9: "Q: What's the real difference between the trained AI language and the evolved one?",
     faqA9: "A: The AI (train_language.py) uses gradient descent to directly minimize communication error, every step. The evolved language only rewards survival and reproduction - communicating well is never optimized directly, just indirectly useful.",
-    placingFoodBtn: "Placing: food", placingPredatorBtn: "Placing: predator",
     predLessText: "- predators", predMoreText: "+ predators",
-    hint: "Click/tap the world to place food (or a predator in manual mode)",
+    hint: "n = food   p = predator   left-click = food   right-click = predator",
     closeText: "Close",
     errorResumeFailed: (file) => `'${file}' could not be read - start a fresh game instead.`,
 
@@ -782,8 +781,7 @@ const STRINGS = {
     wordBirths: "births", wordDeaths: "deaths", wordPaused: "PAUSE",
     trainedTag: "   [trained vocabulary]",
     traitsTag: "   [adaptive traits]",
-    placingWordFood: "food", placingWordPredator: "predator",
-    settingsManual: (placing) => `mode: manual   placing: ${placing}`,
+    settingsManual: () => `mode: manual (no automatic spawning)`,
     settingsAuto: (count) => `mode: automatic   predators: ${count} (+/- act immediately)`,
     errorAiMissing: (file) => `'${file}' not found - starting without AI.`,
 
@@ -865,9 +863,8 @@ const STRINGS = {
     faqA8: "R : Pas telle quelle. Utilise le panneau Comparer pour lancer plusieurs seeds independantes et voir si le resultat se reproduit vraiment, ou si c'etait juste la derive d'une seule partie.",
     faqQ9: "Q : Quelle est la vraie difference entre le langage entraine par IA et celui qui evolue ?",
     faqA9: "R : L'IA (train_language.py) utilise la descente de gradient pour minimiser directement l'erreur de communication, a chaque etape. Le langage evolue ne recompense que la survie et la reproduction - bien communiquer n'est jamais optimise directement, juste utile indirectement.",
-    placingFoodBtn: "Pose: nourriture", placingPredatorBtn: "Pose: predateur",
     predLessText: "- predateurs", predMoreText: "+ predateurs",
-    hint: "Clique/touche le monde pour placer de la nourriture (ou un predateur en mode manuel)",
+    hint: "n = nourriture   p = predateur   clic gauche = nourriture   clic droit = predateur",
     closeText: "Fermer",
     errorResumeFailed: (file) => `'${file}' illisible - nouvelle partie a la place.`,
 
@@ -876,8 +873,7 @@ const STRINGS = {
     wordBirths: "naissances", wordDeaths: "morts", wordPaused: "PAUSE",
     trainedTag: "   [vocabulaire entraine]",
     traitsTag: "   [traits evolutifs]",
-    placingWordFood: "nourriture", placingWordPredator: "predateur",
-    settingsManual: (placing) => `mode: manuel   pose: ${placing}`,
+    settingsManual: () => `mode: manuel (pas d'apparition automatique)`,
     settingsAuto: (count) => `mode: auto   predateurs: ${count} (+/- agit tout de suite)`,
     errorAiMissing: (file) => `'${file}' introuvable - lancement sans IA.`,
 
@@ -906,14 +902,13 @@ function applyLanguage(lang) {
   document.getElementById('langEn').classList.toggle('active', lang === 'en');
   document.getElementById('langFr').classList.toggle('active', lang === 'fr');
   document.getElementById('pause').textContent = paused ? t.resumeText : t.pauseText;
-  document.getElementById('placing').textContent = placing === 'food' ? t.placingFoodBtn : t.placingPredatorBtn;
 }
 
 const canvas = document.getElementById('world');
 const ctx = canvas.getContext('2d');
 let worldW = 200, worldH = 140, paused = false, currentSpeed = 1;
 
-let mode = 'auto', placing = 'food', predatorCount = 6;
+let mode = 'auto', predatorCount = 6;
 
 function render(state) {
   if (!state.started) {
@@ -928,7 +923,7 @@ function render(state) {
   const t = STRINGS[uiLang];
   worldW = state.width; worldH = state.height;
   paused = state.paused; currentSpeed = state.speed;
-  mode = state.mode; placing = state.placing; predatorCount = state.predator_count;
+  mode = state.mode; predatorCount = state.predator_count;
   const scale = canvas.width / worldW;
   canvas.height = worldH * scale;
 
@@ -971,10 +966,8 @@ function render(state) {
   document.getElementById('pause').textContent = state.paused ? t.resumeText : t.pauseText;
 
   document.getElementById('settings').textContent = mode === 'manual'
-    ? t.settingsManual(placing === 'food' ? t.placingWordFood : t.placingWordPredator)
+    ? t.settingsManual()
     : t.settingsAuto(predatorCount);
-  document.getElementById('placing').textContent = placing === 'food' ? t.placingFoodBtn : t.placingPredatorBtn;
-  document.getElementById('placing').style.display = mode === 'manual' ? 'inline-block' : 'none';
 
   if (graphOverlay.style.display === 'flex') renderGraphOverlay(state);
   if (compareOverlay.style.display === 'flex') renderCompare(state);
@@ -1106,7 +1099,6 @@ document.getElementById('reset').onclick = () => post('reset');
 document.getElementById('save').onclick = () => saveGame();
 document.getElementById('faster').onclick = () => post('speed', {value: stepSpeed(currentSpeed, 1)});
 document.getElementById('slower').onclick = () => post('speed', {value: stepSpeed(currentSpeed, -1)});
-document.getElementById('placing').onclick = () => post('placing', {value: placing === 'food' ? 'predator' : 'food'});
 document.getElementById('predLess').onclick = () => post('predator_count', {delta: -1});
 document.getElementById('predMore').onclick = () => post('predator_count', {delta: 1});
 
@@ -1317,7 +1309,24 @@ canvas.addEventListener('click', (ev) => {
   const px = (ev.clientX - rect.left) * (canvas.width / rect.width);
   const py = (ev.clientY - rect.top) * (canvas.height / rect.height);
   const scale = canvas.width / worldW;
-  post('click', {x: px / scale, y: py / scale});
+  post('click', {x: px / scale, y: py / scale, button: 'left'});
+});
+canvas.addEventListener('contextmenu', (ev) => {
+  ev.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const px = (ev.clientX - rect.left) * (canvas.width / rect.width);
+  const py = (ev.clientY - rect.top) * (canvas.height / rect.height);
+  const scale = canvas.width / worldW;
+  post('click', {x: px / scale, y: py / scale, button: 'right'});
+});
+
+document.addEventListener('keydown', (ev) => {
+  if (document.getElementById('app').style.display === 'none') return;
+  const anyOverlayOpen = [helpOverlay, faqOverlay, graphOverlay, familyOverlay, compareOverlay, translatorOverlay]
+    .some((el) => el.style.display === 'flex');
+  if (anyOverlayOpen) return;
+  if (ev.key === 'n' || ev.key === 'N') post('quick_place', {kind: 'food'});
+  else if (ev.key === 'p' || ev.key === 'P') post('quick_place', {kind: 'predator'});
 });
 
 applyLanguage(uiLang);

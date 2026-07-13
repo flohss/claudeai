@@ -27,9 +27,10 @@ real, if deliberately small, model of how a shared vocabulary can emerge from
   to mean anything to a creature's neighbors.
 - Food and predators can each be **automatic** (food spawns in periodic
   patches; predators all appear at once) or **manual** (nothing spawns on
-  its own — you place every food patch and every predator yourself). You
-  pick which, once, at startup in all three renderers — it's not something
-  you toggle mid-run.
+  its own). You pick which, once, at startup in all three renderers — it's
+  not something you toggle mid-run. Either way, you can always add food or
+  a predator yourself at any time (keyboard shortcuts / mouse clicks, see
+  below) — manual mode just means nothing *else* spawns them for you.
 - Nobody is told what a token should mean. Creatures whose signaling and
   listening genes happen to help them (and their offspring) find food or
   mates survive and reproduce more; genomes mutate a little at each birth.
@@ -95,7 +96,8 @@ if you just hit `ENTER` through all of them, and they stick for the whole run
 | `SPACE`       | pause / resume                                              |
 | `UP` / `DOWN` | speed up / slow down the simulation                         |
 | `R`           | reset to a fresh world (same mode, same predator count)      |
-| `P`           | toggle what manual clicks place (food / predator)             |
+| `N`           | drop a food patch at a random spot                            |
+| `P`           | add a predator at a random spot                               |
 | `[` / `]`     | remove / add a predator right now (also sets the reset count) |
 | `S`           | save the running game to `thronglets_save.json`               |
 | `G`           | vocabulary-over-time graph                                  |
@@ -104,8 +106,13 @@ if you just hit `ENTER` through all of them, and they stick for the whole run
 | `D`           | translator - what each color currently means                |
 | `F`           | FAQ - curated questions and answers                          |
 | `H`           | in-game notice explaining the mechanics                      |
-| left click    | place food (auto mode) or whatever's selected (manual mode)  |
+| left click    | place food                                                    |
+| right click   | place a predator                                              |
 | `ESC`         | quit                                                         |
+
+`N`/`P`, and left/right click, all work the same whether the world is
+running in automatic or manual mode - the mode only decides whether food
+and predators *also* keep spawning on their own.
 
 ### Termux (Android)
 
@@ -140,15 +147,16 @@ them, and all choices stick for the whole run.
 
 Creatures show up as a colored `o` (colored by whatever token they're
 currently signaling, white if silent), food as green `.`, predators as a red
-`X`. Controls: `space`=pause, `f`=drop a food patch (auto mode only),
-`r`=reset, `+`/`-`=speed, `q`=quit, `p`=toggle food/predator placement,
+`X`. Controls: `space`=pause, `n`=drop a food patch at a random spot,
+`p`=add a predator at a random spot, `r`=reset, `+`/`-`=speed, `q`=quit,
 `[`/`]`=remove/add a predator right now, `s`=save to `thronglets_save.json`,
 `g`=vocabulary-over-time graph, `t`=family tree, `c`=compare seeds,
 `d`=translator, `Shift+F`=FAQ, `h`=in-game notice (paginated so it fits any
-terminal height). There's no
-reliable mouse support in a terminal, so manual mode uses a keyboard cursor
-instead: the arrow keys move it, `enter` places whatever's currently
-selected.
+terminal height). `n` and `p` work the same in automatic or manual mode.
+There's no reliable mouse support in a terminal, so manual mode also offers a
+keyboard-cursor precision tool: the arrow keys move it, `tab` switches
+between food/predator, `enter` places whatever's currently selected exactly
+there.
 Works best in a wide/tall terminal — Termux's default font is fairly large,
 so consider shrinking it (pinch to zoom, or Termux's font settings) to see
 more of the world at once.
@@ -177,10 +185,13 @@ activate a pre-trained language (checked by default), and those four stick
 for the whole run (Reset doesn't ask again). Once
 started, the page polls the server a few times a second for a fresh
 snapshot and draws it to a `<canvas>`; buttons
-handle pause/reset/speed and what a manual placement adds. `+`/`- predateurs`
+handle pause/reset/speed. `+`/`- predateurs`
 remove or add a predator immediately (also setting how many a reset will
-use), tapping/clicking the world places food (auto mode) or whatever's
-selected (manual mode), a **Save** button writes the running game to
+use). `N`/`P` on the keyboard drop a food patch / add a predator at a
+random spot, left-click the world to place food, right-click to place a
+predator - all four work the same in automatic or manual mode, which only
+decides whether food and predators also keep spawning on their own. A
+**Save** button writes the running game to
 `thronglets_save.json`, a **Family** button opens the genealogy browser
 (arrow keys or on-screen ▲▼◀▶ buttons to navigate), a **Compare** button
 opens the seed-comparison panel, a **Translator** button opens the
@@ -489,13 +500,13 @@ sometimes resolve itself over further generations - and sometimes doesn't.
 
 This was built in a container without a display. The mechanics are verified
 via `test_smoke.py` (population survives, vocabulary converges across
-multiple random seeds); `main_tui.py`'s startup prompt, placing toggle,
+multiple random seeds); `main_tui.py`'s startup prompt, n/p quick-place keys,
 cursor movement, manual placement, and the paginated in-game notice were
 all driven end to end inside a real pseudo-terminal (read back through a
 VT100 emulator) — including on a genuinely small 24-row terminal, which is
 what caught the notice screen needing pagination in the first place (it
 silently ran off the bottom of a normal-sized terminal otherwise), and
-`main_web.py`'s start screen, placing, predator count, click-to-place, and
+`main_web.py`'s start screen, n/p keys, predator count, left/right-click-to-place, and
 notice modal were all confirmed working end to end in a real headless
 browser. `main.py`'s pygame window was exercised headlessly (SDL's dummy
 driver) to confirm the new logic doesn't crash, but hasn't been eyeballed
