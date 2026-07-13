@@ -649,6 +649,16 @@ class World:
             self.food.append(np.clip(center + self.rng.normal(0, 5, 2), [0, 0], [WIDTH, HEIGHT]))
 
 
+def top3_and_other(pairs):
+    """Collapse a (token, fraction) list from World.vocabulary_breakdown()
+    (already sorted, most common first) down to its 3 largest entries, folding
+    anything beyond that into one combined "other" fraction - a HUD display
+    helper, shared by main.py and main_tui.py so they agree on the cutoff."""
+    if len(pairs) <= 3:
+        return pairs, 0.0
+    return pairs[:3], sum(frac for _, frac in pairs[3:])
+
+
 def save_world(world, path):
     """Serialize the live population (full genomes included), food, predators,
     and tick counters to JSON - a complete snapshot, so a language that took

@@ -21,7 +21,7 @@ import time
 
 from i18n import STATE_LABELS, TRAIT_LABELS
 from simulation import (DANGER, DISTRESS, FOOD, HEIGHT, IDLE, MATE, MAX_POPULATION, N_TOKENS, N_TRAITS, World, WIDTH,
-                         compare_seeds, load_seed_genome, load_world, save_world)
+                         compare_seeds, load_seed_genome, load_world, save_world, top3_and_other)
 
 DEFAULT_INIT_POP = 100
 DEFAULT_LANGUAGE_FILE = "language_model.json"
@@ -74,6 +74,7 @@ TEXT = {
         "placing_food": "food",
         "placing_predator": "predator",
         "hud_legend": "colored o = signaling   white o = silent   . = food   X = predator",
+        "vocab_other": "other",
         "hud_controls1": "space=pause  n=food  p=predator  r=reset  +/-=speed  q=quit",
         "hud_controls2": "[ ]=predator count  s=save  arrows+enter=place (tab=switch)  g=graph  t=family  c=compare  d=translator  F=faq  h=help",
         "hud_expand_hint": "v = show full HUD",
@@ -162,6 +163,7 @@ TEXT = {
         "placing_food": "nourriture",
         "placing_predator": "predateur",
         "hud_legend": "o colore = signale   o blanc = silencieuse   . = nourriture   X = predateur",
+        "vocab_other": "autre",
         "hud_controls1": "space=pause  n=nourriture  p=predateur  r=reset  +/-=vitesse  q=quitter",
         "hud_controls2": "[ ]=nb predateurs  s=sauver  fleches+entree=placer (tab=changer)  g=graphique  t=famille  c=comparer  d=traducteur  F=faq  h=aide",
         "hud_expand_hint": "v = HUD complet",
@@ -487,16 +489,22 @@ def _sparkline(history, width=24):
     return "".join(chars)
 
 
-def _draw_vocab_row(stdscr, y, label, pairs):
+def _draw_vocab_row(stdscr, y, label, pairs, other_label):
     x = 0
     _safe_addstr(stdscr, y, x, f"{label}:", curses.color_pair(7) | curses.A_BOLD)
     x += len(label) + 2
-    for token, frac in pairs:
+    top, other = top3_and_other(pairs)
+    for token, frac in top:
         if token == 0:
             _safe_addstr(stdscr, y, x, "..", curses.color_pair(7) | curses.A_DIM)
         else:
             _safe_addstr(stdscr, y, x, "##", curses.color_pair(TOKEN_COLOR_PAIR[token]) | curses.A_BOLD)
         seg = f"{frac * 100:3.0f}% "
+        _safe_addstr(stdscr, y, x + 2, seg, curses.color_pair(7))
+        x += 2 + len(seg)
+    if other > 0:
+        _safe_addstr(stdscr, y, x, "~~", curses.color_pair(7) | curses.A_DIM)
+        seg = f"{other * 100:3.0f}% {other_label} "
         _safe_addstr(stdscr, y, x + 2, seg, curses.color_pair(7))
         x += 2 + len(seg)
 
@@ -1055,7 +1063,7 @@ def draw(stdscr, world, paused, speed, mode, placing, cursor, lang, expanded, tr
 
         breakdown = world.vocabulary_breakdown()
         for row, state in enumerate((DANGER, FOOD, DISTRESS, MATE, IDLE), start=2):
-            _draw_vocab_row(stdscr, row, labels[state], breakdown[state])
+            _draw_vocab_row(stdscr, row, labels[state], breakdown[state], t["vocab_other"])
 
         _safe_addstr(stdscr, EXPANDED_HUD_H - 3, 0, t["hud_legend"], curses.color_pair(7) | curses.A_DIM)
         _safe_addstr(stdscr, EXPANDED_HUD_H - 2, 0, t["hud_controls1"], curses.color_pair(7) | curses.A_DIM)

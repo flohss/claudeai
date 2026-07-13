@@ -782,6 +782,7 @@ const STRINGS = {
 
     labelIdle: "idle", labelFood: "food-call", labelMate: "mate-call", labelDanger: "alarm-call",
     labelDistress: "distress-call",
+    vocabOther: "other",
     wordBirths: "births", wordDeaths: "deaths", wordPaused: "PAUSE",
     trainedTag: "   [trained vocabulary]",
     traitsTag: "   [adaptive traits]",
@@ -875,6 +876,7 @@ const STRINGS = {
 
     labelIdle: "inactif", labelFood: "nourriture", labelMate: "partenaire", labelDanger: "alerte",
     labelDistress: "detresse",
+    vocabOther: "autre",
     wordBirths: "naissances", wordDeaths: "morts", wordPaused: "PAUSE",
     trainedTag: "   [vocabulaire entraine]",
     traitsTag: "   [traits evolutifs]",
@@ -986,6 +988,16 @@ function render(state) {
   if (translatorOverlay.style.display === 'flex') renderTranslator(state.translator);
 }
 
+function top3AndOther(pairs) {
+  // Mirrors simulation.py's top3_and_other() so all three renderers agree
+  // on the cutoff: the 3 largest entries, plus one combined "other" fraction
+  // for anything beyond that.
+  if (pairs.length <= 3) return [pairs, 0];
+  const top = pairs.slice(0, 3);
+  const other = pairs.slice(3).reduce((sum, [, frac]) => sum + frac, 0);
+  return [top, other];
+}
+
 function renderVocabRow(elId, label, pairs) {
   const el = document.getElementById(elId);
   el.innerHTML = '';
@@ -993,7 +1005,8 @@ function renderVocabRow(elId, label, pairs) {
   labelSpan.textContent = label + ': ';
   labelSpan.style.fontWeight = 'bold';
   el.appendChild(labelSpan);
-  for (const [token, frac] of pairs) {
+  const [top, other] = top3AndOther(pairs);
+  for (const [token, frac] of top) {
     const sw = document.createElement('span');
     sw.className = 'swatch';
     sw.style.background = TOKEN_COLORS[token];
@@ -1001,6 +1014,15 @@ function renderVocabRow(elId, label, pairs) {
     el.appendChild(sw);
     const txt = document.createElement('span');
     txt.textContent = Math.round(frac * 100) + '%  ';
+    el.appendChild(txt);
+  }
+  if (other > 0) {
+    const sw = document.createElement('span');
+    sw.className = 'swatch';
+    sw.style.background = '#666';
+    el.appendChild(sw);
+    const txt = document.createElement('span');
+    txt.textContent = Math.round(other * 100) + '% ' + STRINGS[uiLang].vocabOther + '  ';
     el.appendChild(txt);
   }
 }

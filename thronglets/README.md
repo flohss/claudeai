@@ -208,10 +208,12 @@ underneath. The HUD starts collapsed to just the tick/population line -
 vocabulary breakdown.
 
 All three renderers show a HUD with, for each internal state (danger / food-call /
-distress-call / mate-call / idle), every token currently in use and what share
-of the living population uses it — the numbers to watch are how fast a single
-token pulls ahead of the pack (starting near chance, ~17%, since there are 6
-tokens) and whether it stays there.
+distress-call / mate-call / idle), the 3 most common tokens currently in use and
+what share of the living population uses each (anything beyond that gets folded
+into a single "other" bucket, so the row stays readable even when many colors
+are still splitting the vote early on) — the numbers to watch are how fast a
+single token pulls ahead of the pack (starting near chance, ~17%, since there
+are 6 tokens) and whether it stays there.
 
 A separate **Graph** screen (`g`/`G` in pygame and the terminal, a "Graph"
 button on the web page — the same pattern as the in-game notice) plots each

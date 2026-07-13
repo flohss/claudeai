@@ -29,7 +29,7 @@ import pygame
 
 from i18n import STATE_LABELS, TRAIT_LABELS
 from simulation import (DANGER, DISTRESS, FOOD, Genome, HEIGHT, IDLE, MATE, MAX_POPULATION, N_TOKENS, N_TRAITS, World,
-                         WIDTH, compare_seeds, load_seed_genome, load_world, save_world)
+                         WIDTH, compare_seeds, load_seed_genome, load_world, save_world, top3_and_other)
 
 TRAIN_EPISODES = 3000
 TRAIN_BATCH_SIZE = 256
@@ -120,7 +120,8 @@ TEXT = {
         "hud_expand_hint": "V or click here = show full HUD",
         "hud_manual": "mode: manual (no automatic spawning)",
         "hud_auto": "mode: automatic   predators: {count} ([ / ] act immediately)",
-        "hud_vocab_title": "vocabulary — every color in use per state, population share:",
+        "hud_vocab_title": "vocabulary — top 3 colors per state, population share:",
+        "vocab_other": "other",
         "graph_title": "Vocabulary over time - dominant share per state",
         "graph_traits_title": "Physical traits over time - population average (share of range)",
         "graph_dismiss": "-- press any key to go back --",
@@ -310,7 +311,8 @@ TEXT = {
         "hud_expand_hint": "V ou clique ici = HUD complet",
         "hud_manual": "mode: manuel (pas d'apparition automatique)",
         "hud_auto": "mode: auto   predateurs : {count} ([ / ] agit tout de suite)",
-        "hud_vocab_title": "vocabulaire — toutes les couleurs en usage par etat, part de la population :",
+        "hud_vocab_title": "vocabulaire — top 3 couleurs par etat, part de la population :",
+        "vocab_other": "autre",
         "graph_title": "Vocabulaire dans le temps - part dominante par etat",
         "graph_traits_title": "Traits physiques dans le temps - moyenne population (part de la plage)",
         "graph_dismiss": "-- une touche pour revenir --",
@@ -760,17 +762,23 @@ def draw_sparkline(screen, x, y, w, h, history):
     pygame.draw.lines(screen, SPARK_COLOR, False, points, width=2)
 
 
-def draw_vocab_row(screen, font, y, label, pairs):
+def draw_vocab_row(screen, font, y, label, pairs, other_label):
     x = 10
     lbl = font.render(f"{label}:", True, TEXT_COLOR)
     screen.blit(lbl, (x, y))
     x += lbl.get_width() + 10
-    for token, frac in pairs:
+    top, other = top3_and_other(pairs)
+    for token, frac in top:
         if token == 0:
             pygame.draw.circle(screen, (110, 110, 110), (x + 6, y + 8), 6, width=1)
         else:
             pygame.draw.circle(screen, TOKEN_COLORS[token], (x + 6, y + 8), 6)
         txt = font.render(f"{frac * 100:3.0f}%", True, TEXT_COLOR)
+        screen.blit(txt, (x + 16, y))
+        x += 16 + txt.get_width() + 14
+    if other > 0:
+        pygame.draw.circle(screen, (110, 110, 110), (x + 6, y + 8), 6)
+        txt = font.render(f"{other * 100:3.0f}% {other_label}", True, TEXT_COLOR)
         screen.blit(txt, (x + 16, y))
         x += 16 + txt.get_width() + 14
 
@@ -813,7 +821,7 @@ def draw_hud(screen, font, world, paused, speed, mode, lang, expanded, trained=F
     y = 150
     breakdown = world.vocabulary_breakdown()
     for state in (DANGER, FOOD, DISTRESS, MATE, IDLE):
-        draw_vocab_row(screen, font, y, labels[state], breakdown[state])
+        draw_vocab_row(screen, font, y, labels[state], breakdown[state], t["vocab_other"])
         y += 22
 
     legend_y = y
