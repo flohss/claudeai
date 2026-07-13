@@ -113,9 +113,10 @@ if you just hit `ENTER` through all of them, and they stick for the whole run
 
 `N`/`P`, and left/right click, all work the same whether the world is
 running in automatic or manual mode - the mode only decides whether food
-and predators *also* keep spawning on their own. The HUD starts collapsed
-to just the tick/population line - `V`, or a click anywhere on that top
-strip, unfolds the full controls list, vocabulary breakdown, and legend.
+and predators *also* keep spawning on their own. The HUD starts collapsed to
+the tick/population line plus a one-line summary (each state's single
+strongest color) - `V`, or a click anywhere on that top strip, unfolds the
+full controls list, per-state top-3-plus-other breakdown, and legend.
 
 ### Termux (Android)
 
@@ -156,9 +157,10 @@ currently signaling, white if silent), food as green `.`, predators as a red
 `g`=vocabulary-over-time graph, `t`=family tree, `c`=compare seeds,
 `d`=translator, `Shift+F`=FAQ, `h`=in-game notice (paginated so it fits any
 terminal height), `v`=show/hide the full HUD. `n` and `p` work the same in
-automatic or manual mode. The HUD starts collapsed to just the tick/population
-line, freeing most of the terminal for the world - `v` unfolds the full
-controls list, vocabulary breakdown, and legend. There's no reliable mouse
+automatic or manual mode. The HUD starts collapsed to the tick/population
+line plus a one-line summary (each state's single strongest color), freeing
+most of the terminal for the world - `v` unfolds the full controls list,
+per-state top-3-plus-other breakdown, and legend. There's no reliable mouse
 support in a terminal, so manual mode also offers a keyboard-cursor precision
 tool: the arrow keys move it, `tab` switches between food/predator, `enter`
 places whatever's currently selected exactly there.
@@ -203,8 +205,9 @@ opens the seed-comparison panel, a **Translator** button opens the
 color-to-meaning dictionary, an **FAQ** button opens the curated
 questions/answers, and a **Notice** button opens an explainer of the
 mechanics without pausing the simulation
-underneath. The HUD starts collapsed to just the tick/population line -
-`V`, or a click on that line, unfolds the mode/settings text and the
+underneath. The HUD starts collapsed to the tick/population line plus a
+one-line summary (each state's single strongest color) - `V`, or a click on
+that line, unfolds the mode/settings text and the full top-3-plus-other
 vocabulary breakdown.
 
 All three renderers show a HUD with, for each internal state (danger / food-call /

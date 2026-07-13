@@ -522,6 +522,7 @@ INDEX_HTML = """<!doctype html>
   <div id="app">
     <div id="hud">
       <div class="row" id="header"></div>
+      <div class="row" id="hud-summary" style="display:none"></div>
       <div id="hud-details">
         <div class="row" id="settings"></div>
         <div class="row" id="vocab-danger"></div>
@@ -920,6 +921,35 @@ let hudExpanded = false;
 
 function applyHudExpanded() {
   document.getElementById('hud-details').style.display = hudExpanded ? '' : 'none';
+  document.getElementById('hud-summary').style.display = hudExpanded ? 'none' : '';
+}
+
+function renderVocabSummary(vocabulary) {
+  // The collapsed HUD's one-line version - just each state's single
+  // strongest token, no breakdown of the runners-up.
+  const t = STRINGS[uiLang];
+  const el = document.getElementById('hud-summary');
+  el.innerHTML = '';
+  const rows = [
+    [t.labelDanger, vocabulary['danger']], [t.labelFood, vocabulary['food']],
+    [t.labelDistress, vocabulary['distress']], [t.labelMate, vocabulary['mate']],
+    [t.labelIdle, vocabulary['idle']],
+  ];
+  for (const [label, pairs] of rows) {
+    const [token, frac] = pairs[0] || [0, 0];
+    const labelSpan = document.createElement('span');
+    labelSpan.textContent = label + ': ';
+    labelSpan.style.fontWeight = 'bold';
+    el.appendChild(labelSpan);
+    const sw = document.createElement('span');
+    sw.className = 'swatch';
+    sw.style.background = TOKEN_COLORS[token];
+    if (token === 0) sw.style.border = '1px solid #666';
+    el.appendChild(sw);
+    const txt = document.createElement('span');
+    txt.textContent = Math.round(frac * 100) + '%  ';
+    el.appendChild(txt);
+  }
 }
 
 function render(state) {
@@ -976,6 +1006,7 @@ function render(state) {
   renderVocabRow('vocab-distress', t.labelDistress, state.vocabulary['distress']);
   renderVocabRow('vocab-mate', t.labelMate, state.vocabulary['mate']);
   renderVocabRow('vocab-idle', t.labelIdle, state.vocabulary['idle']);
+  renderVocabSummary(state.vocabulary);
 
   document.getElementById('pause').textContent = state.paused ? t.resumeText : t.pauseText;
 

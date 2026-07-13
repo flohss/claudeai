@@ -29,7 +29,7 @@ DEFAULT_SAVE_FILE = "thronglets_save.json"
 
 TOKEN_COLOR_PAIR = {1: 1, 2: 2, 3: 3, 4: 4, 5: 5}
 EXPANDED_HUD_H = 10
-MINIMAL_HUD_H = 2
+MINIMAL_HUD_H = 3
 CURSOR_STEP = 4.0
 ENTER_KEYS = (10, 13, curses.KEY_ENTER)
 
@@ -507,6 +507,25 @@ def _draw_vocab_row(stdscr, y, label, pairs, other_label):
         seg = f"{other * 100:3.0f}% {other_label} "
         _safe_addstr(stdscr, y, x + 2, seg, curses.color_pair(7))
         x += 2 + len(seg)
+
+
+def _draw_vocab_summary_line(stdscr, y, world, labels):
+    """The one-line version shown in the collapsed HUD - just each state's
+    single strongest token, no breakdown of the runners-up."""
+    x = 0
+    vocab = world.vocabulary()
+    for state in (DANGER, FOOD, DISTRESS, MATE, IDLE):
+        token, frac = vocab[state]
+        label = f"{labels[state]}:"
+        _safe_addstr(stdscr, y, x, label, curses.color_pair(7) | curses.A_BOLD)
+        x += len(label) + 1
+        if token == 0:
+            _safe_addstr(stdscr, y, x, "..", curses.color_pair(7) | curses.A_DIM)
+        else:
+            _safe_addstr(stdscr, y, x, "##", curses.color_pair(TOKEN_COLOR_PAIR[token]) | curses.A_BOLD)
+        seg = f"{frac * 100:3.0f}% "
+        _safe_addstr(stdscr, y, x + 2, seg, curses.color_pair(7))
+        x += 2 + len(seg) + 1
 
 
 def show_graph(stdscr, world, lang):
@@ -1053,6 +1072,8 @@ def draw(stdscr, world, paused, speed, mode, placing, cursor, lang, expanded, tr
     if not expanded:
         hint = t["extinct"] if pop == 0 else t["hud_expand_hint"]
         _safe_addstr(stdscr, 1, 0, hint, curses.color_pair(7) | curses.A_DIM)
+        if pop != 0:
+            _draw_vocab_summary_line(stdscr, 2, world, labels)
     else:
         if mode == "manual":
             placing_label = t["placing_food"] if placing == "food" else t["placing_predator"]

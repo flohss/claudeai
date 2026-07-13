@@ -40,7 +40,7 @@ DEFAULT_LANGUAGE_FILE = "language_model.json"
 DEFAULT_SAVE_FILE = "thronglets_save.json"
 
 EXPANDED_HUD_H = 304
-MINIMAL_HUD_H = 56
+MINIMAL_HUD_H = 76
 HUD_H = MINIMAL_HUD_H  # the HUD starts collapsed; V or a click on it expands it
 # Placeholder sizes - main() overwrites these with the real screen resolution
 # so the world fills the whole display with no letterboxing on either axis.
@@ -783,6 +783,25 @@ def draw_vocab_row(screen, font, y, label, pairs, other_label):
         x += 16 + txt.get_width() + 14
 
 
+def draw_vocab_summary_line(screen, font, y, world, labels):
+    """The one-line version shown in the collapsed HUD - just each state's
+    single strongest token, no breakdown of the runners-up."""
+    x = 10
+    vocab = world.vocabulary()
+    for state in (DANGER, FOOD, DISTRESS, MATE, IDLE):
+        token, frac = vocab[state]
+        lbl = font.render(f"{labels[state]}:", True, TEXT_COLOR)
+        screen.blit(lbl, (x, y))
+        x += lbl.get_width() + 6
+        if token == 0:
+            pygame.draw.circle(screen, (110, 110, 110), (x + 6, y + 8), 6, width=1)
+        else:
+            pygame.draw.circle(screen, TOKEN_COLORS[token], (x + 6, y + 8), 6)
+        txt = font.render(f"{frac * 100:3.0f}%", True, TEXT_COLOR)
+        screen.blit(txt, (x + 16, y))
+        x += 16 + txt.get_width() + 16
+
+
 def draw_hud(screen, font, world, paused, speed, mode, lang, expanded, trained=False):
     t = TEXT[lang]
     labels = STATE_LABELS[lang]
@@ -802,6 +821,7 @@ def draw_hud(screen, font, world, paused, speed, mode, lang, expanded, trained=F
             screen.blit(font.render(t["extinct"], True, (235, 90, 90)), (10, 28))
         else:
             screen.blit(font.render(t["hud_expand_hint"], True, TEXT_COLOR), (10, 28))
+            draw_vocab_summary_line(screen, font, 48, world, labels)
         return
 
     screen.blit(font.render(t["hud_controls_hint1"], True, TEXT_COLOR), (10, 28))
