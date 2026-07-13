@@ -70,8 +70,7 @@ MAX_FOOD = 140
 MUTATION_RATE = 0.12
 MUTATION_SCALE = 0.35
 
-VOCAB_HISTORY_INTERVAL = 20  # ticks between samples
-VOCAB_HISTORY_LENGTH = 200   # samples kept per state - a rolling window, not the whole run
+VOCAB_HISTORY_INTERVAL = 20  # ticks between samples - unbounded, covers the whole run
 
 # Adaptive traits (opt-in, see World(adaptive_traits=...)): four physical
 # traits, evolved and mutated exactly like the signaling genes, each bounded
@@ -245,9 +244,8 @@ class World:
         self.births = 0
         self.deaths = 0
         self._cache = {"alive": []}
-        self.vocab_history = {state: deque(maxlen=VOCAB_HISTORY_LENGTH)
-                               for state in (IDLE, FOOD, MATE, DANGER, DISTRESS)}
-        self.trait_history = {trait: deque(maxlen=VOCAB_HISTORY_LENGTH) for trait in range(N_TRAITS)}
+        self.vocab_history = {state: deque() for state in (IDLE, FOOD, MATE, DANGER, DISTRESS)}
+        self.trait_history = {trait: deque() for trait in range(N_TRAITS)}
         if not manual_food:
             for _ in range(4):
                 self._spawn_food_patch()
@@ -695,12 +693,12 @@ def load_world(path, seed=None):
     world._cache = {"alive": []}
     saved_history = data.get("vocab_history", {})
     world.vocab_history = {
-        state: deque(saved_history.get(str(state), []), maxlen=VOCAB_HISTORY_LENGTH)
+        state: deque(saved_history.get(str(state), []))
         for state in (IDLE, FOOD, MATE, DANGER, DISTRESS)
     }
     saved_trait_history = data.get("trait_history", {})
     world.trait_history = {
-        trait: deque(saved_trait_history.get(str(trait), []), maxlen=VOCAB_HISTORY_LENGTH)
+        trait: deque(saved_trait_history.get(str(trait), []))
         for trait in range(N_TRAITS)
     }
     world.food = [np.array(f, dtype=float) for f in data["food"]]

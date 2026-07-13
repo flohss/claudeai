@@ -191,11 +191,14 @@ tokens) and whether it stays there.
 A separate **Graph** screen (`g`/`G` in pygame and the terminal, a "Graph"
 button on the web page — the same pattern as the in-game notice) plots each
 state's dominant-token share over time as a proper curve: a sample every 20
-ticks, the last 200 kept. A rising line is a color pulling ahead, a falling
-one is a consensus breaking apart, a flat line at the bottom is no agreement
-yet. This history rides along with `s`/save (so a resumed game keeps its
-curve, not just its population) but resets on `r`/reset, same as everything
-else about the world.
+ticks, covering the *entire* run from tick 0 to now, compressed to fit the
+screen rather than a recent-only window - so the curve never loses its
+earliest history, it just gets progressively more zoomed out the longer a
+game runs. A rising line is a color pulling ahead, a falling one is a
+consensus breaking apart, a flat line at the bottom is no agreement yet.
+This history rides along with `s`/save (so a resumed game keeps its curve,
+not just its population) but resets on `r`/reset, same as everything else
+about the world.
 
 Speed is measured in real time, not rendered frames: the default `x1` is a
 genuine one tick per second, slow enough to actually watch a single decision
@@ -237,7 +240,7 @@ between signaling and staying silent.
 When adaptive traits are on, the **Graph** screen gains a second section
 below the vocabulary curves: the population's average speed, vision,
 hearing, and metabolism over time, each as a share of that trait's allowed
-range (same sampling cadence and rolling window as the vocabulary curves).
+range (same sampling cadence and full-run coverage as the vocabulary curves).
 It's the same kind of evidence as watching a token's share climb - a rising
 or falling line means selection is actually pushing that trait somewhere,
 not just letting it drift. This section is hidden entirely when adaptive

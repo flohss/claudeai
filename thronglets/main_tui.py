@@ -278,13 +278,24 @@ SPARK_CHARS = " ▁▂▃▄▅▆▇█"  # blank + 8 block levels
 
 
 def _sparkline(history, width=24):
+    """Renders the *entire* history compressed into `width` characters, not
+    just its tail end - so the curve always spans the whole run, the same
+    way the pygame/web renderers' line plots naturally do."""
     if not history:
         return SPARK_CHARS[0] * width
-    values = list(history)[-width:]
-    values = [SPARK_CHARS[0]] * (width - len(values)) + [
-        SPARK_CHARS[1 + min(7, int(v * 8))] for v in values
-    ]
-    return "".join(values)
+    values = list(history)
+    if len(values) <= width:
+        chars = [SPARK_CHARS[0]] * (width - len(values)) + [
+            SPARK_CHARS[1 + min(7, int(v * 8))] for v in values
+        ]
+    else:
+        bucket = len(values) / width
+        chars = []
+        for i in range(width):
+            lo, hi = int(i * bucket), max(int(i * bucket) + 1, int((i + 1) * bucket))
+            avg = sum(values[lo:hi]) / (hi - lo)
+            chars.append(SPARK_CHARS[1 + min(7, int(avg * 8))])
+    return "".join(chars)
 
 
 def _draw_vocab_row(stdscr, y, label, pairs):
