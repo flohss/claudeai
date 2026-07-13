@@ -711,16 +711,35 @@ function renderVocabRow(elId, label, pairs) {
   }
 }
 
+function downsample(values, maxPoints) {
+  // Bucket-average down to at most maxPoints - once a run has thousands of
+  // samples squeezed into a few hundred pixels, plotting every raw point
+  // renders as a dense picket-fence of near-vertical spikes instead of a
+  // readable trend.
+  if (values.length <= maxPoints) return values;
+  const bucket = values.length / maxPoints;
+  const out = [];
+  for (let i = 0; i < maxPoints; i++) {
+    const lo = Math.floor(i * bucket);
+    const hi = Math.max(lo + 1, Math.floor((i + 1) * bucket));
+    let sum = 0;
+    for (let j = lo; j < hi; j++) sum += values[j];
+    out.push(sum / (hi - lo));
+  }
+  return out;
+}
+
 function renderSparkline(canvas, history) {
   const ctx = canvas.getContext('2d');
   const w = canvas.width, h = canvas.height;
   ctx.clearRect(0, 0, w, h);
   if (!history || history.length < 2) return;
+  const values = downsample(history, Math.max(2, Math.floor(w)));
   ctx.strokeStyle = '#96c882';
   ctx.lineWidth = 1.5;
   ctx.beginPath();
-  const step = w / (history.length - 1);
-  history.forEach((v, i) => {
+  const step = w / (values.length - 1);
+  values.forEach((v, i) => {
     const px = i * step;
     const py = h - 1 - v * (h - 2);
     if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);

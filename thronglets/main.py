@@ -495,12 +495,30 @@ SPARK_COLOR = (150, 200, 130)
 SPARK_BG = (26, 32, 20)
 
 
+def _downsample(values, max_points):
+    """Bucket-average down to at most max_points - plotting one line segment
+    per raw sample looks like a smooth curve for a short history, but once a
+    run has thousands of samples squeezed into a few hundred pixels, the
+    unavoidably tiny gaps between adjacent (noisy) points render as a dense
+    picket-fence of near-vertical spikes instead of a readable trend."""
+    if len(values) <= max_points:
+        return values
+    bucket = len(values) / max_points
+    return [
+        sum(values[lo:hi]) / (hi - lo)
+        for lo, hi in (
+            (int(i * bucket), max(int(i * bucket) + 1, int((i + 1) * bucket)))
+            for i in range(max_points)
+        )
+    ]
+
+
 def draw_sparkline(screen, x, y, w, h, history):
     rect = pygame.Rect(x, y, w, h)
     pygame.draw.rect(screen, SPARK_BG, rect)
     if len(history) < 2:
         return
-    values = list(history)
+    values = _downsample(list(history), max(2, int(w)))
     step = w / (len(values) - 1)
     points = [
         (x + i * step, y + h - 1 - v * (h - 2))
