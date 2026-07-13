@@ -28,7 +28,8 @@ DEFAULT_LANGUAGE_FILE = "language_model.json"
 DEFAULT_SAVE_FILE = "thronglets_save.json"
 
 TOKEN_COLOR_PAIR = {1: 1, 2: 2, 3: 3, 4: 4, 5: 5}
-HUD_H = 10
+EXPANDED_HUD_H = 10
+MINIMAL_HUD_H = 2
 CURSOR_STEP = 4.0
 ENTER_KEYS = (10, 13, curses.KEY_ENTER)
 
@@ -75,6 +76,7 @@ TEXT = {
         "hud_legend": "colored o = signaling   white o = silent   . = food   X = predator",
         "hud_controls1": "space=pause  n=food  p=predator  r=reset  +/-=speed  q=quit",
         "hud_controls2": "[ ]=predator count  s=save  arrows+enter=place (tab=switch)  g=graph  t=family  c=compare  d=translator  F=faq  h=help",
+        "hud_expand_hint": "v = show full HUD",
         "graph_title": "Vocabulary over time - dominant share per state",
         "graph_traits_title": "Physical traits over time - population average (share of range)",
         "graph_dismiss": "-- press any key to go back --",
@@ -162,6 +164,7 @@ TEXT = {
         "hud_legend": "o colore = signale   o blanc = silencieuse   . = nourriture   X = predateur",
         "hud_controls1": "space=pause  n=nourriture  p=predateur  r=reset  +/-=vitesse  q=quitter",
         "hud_controls2": "[ ]=nb predateurs  s=sauver  fleches+entree=placer (tab=changer)  g=graphique  t=famille  c=comparer  d=traducteur  F=faq  h=aide",
+        "hud_expand_hint": "v = HUD complet",
         "graph_title": "Vocabulaire dans le temps - part dominante par etat",
         "graph_traits_title": "Traits physiques dans le temps - moyenne population (part de la plage)",
         "graph_dismiss": "-- une touche pour revenir --",
@@ -1018,12 +1021,17 @@ def _flash_message(stdscr, lang, text):
     stdscr.nodelay(True)
 
 
-def draw(stdscr, world, paused, speed, mode, placing, cursor, lang, trained=False):
+def draw(stdscr, world, paused, speed, mode, placing, cursor, lang, expanded, trained=False):
     t = TEXT[lang]
     labels = STATE_LABELS[lang]
-    stdscr.erase()
+    # clear() forces a full repaint instead of erase()'s diff against the last
+    # frame - needed here because toggling `expanded` drastically changes how
+    # many rows are reserved for the HUD, and a partial diff can leave stale
+    # characters behind from rows that used to hold HUD text and now hold world.
+    stdscr.clear()
     rows, cols = stdscr.getmaxyx()
-    field_h = max(1, rows - HUD_H)
+    hud_h = EXPANDED_HUD_H if expanded else MINIMAL_HUD_H
+    field_h = max(1, rows - hud_h)
     field_w = max(1, cols)
     sx, sy = (field_w - 1) / WIDTH, (field_h - 1) / HEIGHT
 
@@ -1034,43 +1042,47 @@ def draw(stdscr, world, paused, speed, mode, placing, cursor, lang, trained=Fals
                                      deaths=world.deaths, status=status, tag=tag)
     _safe_addstr(stdscr, 0, 0, header, curses.color_pair(7) | curses.A_BOLD)
 
-    if mode == "manual":
-        placing_label = t["placing_food"] if placing == "food" else t["placing_predator"]
-        settings = t["hud_manual"].format(placing=placing_label)
+    if not expanded:
+        hint = t["extinct"] if pop == 0 else t["hud_expand_hint"]
+        _safe_addstr(stdscr, 1, 0, hint, curses.color_pair(7) | curses.A_DIM)
     else:
-        settings = t["hud_auto"].format(count=len(world.predators))
-    _safe_addstr(stdscr, 1, 0, settings, curses.color_pair(7) | curses.A_DIM)
+        if mode == "manual":
+            placing_label = t["placing_food"] if placing == "food" else t["placing_predator"]
+            settings = t["hud_manual"].format(placing=placing_label)
+        else:
+            settings = t["hud_auto"].format(count=len(world.predators))
+        _safe_addstr(stdscr, 1, 0, settings, curses.color_pair(7) | curses.A_DIM)
 
-    breakdown = world.vocabulary_breakdown()
-    for row, state in enumerate((DANGER, FOOD, DISTRESS, MATE, IDLE), start=2):
-        _draw_vocab_row(stdscr, row, labels[state], breakdown[state])
+        breakdown = world.vocabulary_breakdown()
+        for row, state in enumerate((DANGER, FOOD, DISTRESS, MATE, IDLE), start=2):
+            _draw_vocab_row(stdscr, row, labels[state], breakdown[state])
 
-    _safe_addstr(stdscr, HUD_H - 3, 0, t["hud_legend"], curses.color_pair(7) | curses.A_DIM)
-    _safe_addstr(stdscr, HUD_H - 2, 0, t["hud_controls1"], curses.color_pair(7) | curses.A_DIM)
-    _safe_addstr(stdscr, HUD_H - 1, 0, t["hud_controls2"], curses.color_pair(7) | curses.A_DIM)
+        _safe_addstr(stdscr, EXPANDED_HUD_H - 3, 0, t["hud_legend"], curses.color_pair(7) | curses.A_DIM)
+        _safe_addstr(stdscr, EXPANDED_HUD_H - 2, 0, t["hud_controls1"], curses.color_pair(7) | curses.A_DIM)
+        _safe_addstr(stdscr, EXPANDED_HUD_H - 1, 0, t["hud_controls2"], curses.color_pair(7) | curses.A_DIM)
 
     for fx, fy in world.food:
-        y, x = HUD_H + int(fy * sy), int(fx * sx)
+        y, x = hud_h + int(fy * sy), int(fx * sx)
         _safe_addstr(stdscr, y, x, ".", curses.color_pair(6))
 
     for c in world.creatures:
         if not c.alive:
             continue
-        y, x = HUD_H + int(c.pos[1] * sy), int(c.pos[0] * sx)
+        y, x = hud_h + int(c.pos[1] * sy), int(c.pos[0] * sx)
         pair = TOKEN_COLOR_PAIR.get(c.token, 7)
         _safe_addstr(stdscr, y, x, "o", curses.color_pair(pair) | curses.A_BOLD)
 
     for p in world.predators:
-        y, x = HUD_H + int(p.pos[1] * sy), int(p.pos[0] * sx)
+        y, x = hud_h + int(p.pos[1] * sy), int(p.pos[0] * sx)
         _safe_addstr(stdscr, y, x, "X", curses.color_pair(1) | curses.A_BOLD)
 
     if mode == "manual":
-        cy, cx = HUD_H + int(cursor[1] * sy), int(cursor[0] * sx)
+        cy, cx = hud_h + int(cursor[1] * sy), int(cursor[0] * sx)
         pair = 6 if placing == "food" else 1
         _safe_addstr(stdscr, cy, cx, "+", curses.color_pair(pair) | curses.A_BOLD | curses.A_REVERSE)
 
     if pop == 0:
-        _safe_addstr(stdscr, HUD_H + field_h // 2, max(0, cols // 2 - 12),
+        _safe_addstr(stdscr, hud_h + field_h // 2, max(0, cols // 2 - 12),
                      t["extinct"], curses.color_pair(1) | curses.A_BOLD)
 
     stdscr.refresh()
@@ -1120,6 +1132,7 @@ def run(stdscr, language_path=None):
 
     placing = "food"
     cursor = [WIDTH / 2, HEIGHT / 2]
+    hud_expanded = False
 
     paused = False
     speed = 1  # ticks per real second
@@ -1163,6 +1176,8 @@ def run(stdscr, language_path=None):
             show_faq(stdscr, lang)
         elif key == ord("h"):
             show_help(stdscr, lang)
+        elif key == ord("v"):
+            hud_expanded = not hud_expanded
         elif key == curses.KEY_UP:
             cursor[1] = max(0.0, cursor[1] - CURSOR_STEP)
         elif key == curses.KEY_DOWN:
@@ -1186,7 +1201,7 @@ def run(stdscr, language_path=None):
         else:
             tick_accumulator = 0.0
 
-        draw(stdscr, world, paused, speed, mode, placing, cursor, lang, trained=seed_genome is not None)
+        draw(stdscr, world, paused, speed, mode, placing, cursor, lang, hud_expanded, trained=seed_genome is not None)
         time.sleep(frame_time)
 
 

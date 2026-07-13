@@ -106,13 +106,16 @@ if you just hit `ENTER` through all of them, and they stick for the whole run
 | `D`           | translator - what each color currently means                |
 | `F`           | FAQ - curated questions and answers                          |
 | `H`           | in-game notice explaining the mechanics                      |
-| left click    | place food                                                    |
+| `V`           | show/hide the full HUD (or click the top HUD strip)          |
+| left click    | place food (or expand/collapse the HUD if clicked there)     |
 | right click   | place a predator                                              |
 | `ESC`         | quit                                                         |
 
 `N`/`P`, and left/right click, all work the same whether the world is
 running in automatic or manual mode - the mode only decides whether food
-and predators *also* keep spawning on their own.
+and predators *also* keep spawning on their own. The HUD starts collapsed
+to just the tick/population line - `V`, or a click anywhere on that top
+strip, unfolds the full controls list, vocabulary breakdown, and legend.
 
 ### Termux (Android)
 
@@ -152,11 +155,13 @@ currently signaling, white if silent), food as green `.`, predators as a red
 `[`/`]`=remove/add a predator right now, `s`=save to `thronglets_save.json`,
 `g`=vocabulary-over-time graph, `t`=family tree, `c`=compare seeds,
 `d`=translator, `Shift+F`=FAQ, `h`=in-game notice (paginated so it fits any
-terminal height). `n` and `p` work the same in automatic or manual mode.
-There's no reliable mouse support in a terminal, so manual mode also offers a
-keyboard-cursor precision tool: the arrow keys move it, `tab` switches
-between food/predator, `enter` places whatever's currently selected exactly
-there.
+terminal height), `v`=show/hide the full HUD. `n` and `p` work the same in
+automatic or manual mode. The HUD starts collapsed to just the tick/population
+line, freeing most of the terminal for the world - `v` unfolds the full
+controls list, vocabulary breakdown, and legend. There's no reliable mouse
+support in a terminal, so manual mode also offers a keyboard-cursor precision
+tool: the arrow keys move it, `tab` switches between food/predator, `enter`
+places whatever's currently selected exactly there.
 Works best in a wide/tall terminal — Termux's default font is fairly large,
 so consider shrinking it (pinch to zoom, or Termux's font settings) to see
 more of the world at once.
@@ -198,7 +203,9 @@ opens the seed-comparison panel, a **Translator** button opens the
 color-to-meaning dictionary, an **FAQ** button opens the curated
 questions/answers, and a **Notice** button opens an explainer of the
 mechanics without pausing the simulation
-underneath.
+underneath. The HUD starts collapsed to just the tick/population line -
+`V`, or a click on that line, unfolds the mode/settings text and the
+vocabulary breakdown.
 
 All three renderers show a HUD with, for each internal state (danger / food-call /
 distress-call / mate-call / idle), every token currently in use and what share

@@ -364,6 +364,7 @@ INDEX_HTML = """<!doctype html>
   }
   #hud { width: 100%; max-width: 900px; font-size: 13px; line-height: 1.6; }
   .row { white-space: nowrap; overflow-x: auto; }
+  #header { cursor: pointer; }
   .swatch {
     display: inline-block; width: 10px; height: 10px; border-radius: 50%;
     margin-right: 4px; vertical-align: middle;
@@ -521,12 +522,14 @@ INDEX_HTML = """<!doctype html>
   <div id="app">
     <div id="hud">
       <div class="row" id="header"></div>
-      <div class="row" id="settings"></div>
-      <div class="row" id="vocab-danger"></div>
-      <div class="row" id="vocab-food"></div>
-      <div class="row" id="vocab-distress"></div>
-      <div class="row" id="vocab-mate"></div>
-      <div class="row" id="vocab-idle"></div>
+      <div id="hud-details">
+        <div class="row" id="settings"></div>
+        <div class="row" id="vocab-danger"></div>
+        <div class="row" id="vocab-food"></div>
+        <div class="row" id="vocab-distress"></div>
+        <div class="row" id="vocab-mate"></div>
+        <div class="row" id="vocab-idle"></div>
+      </div>
     </div>
     <div id="controls">
       <button id="pause"></button>
@@ -773,6 +776,7 @@ const STRINGS = {
     faqA9: "A: The AI (train_language.py) uses gradient descent to directly minimize communication error, every step. The evolved language only rewards survival and reproduction - communicating well is never optimized directly, just indirectly useful.",
     predLessText: "- predators", predMoreText: "+ predators",
     hint: "n = food   p = predator   left-click = food   right-click = predator",
+    hudExpandHint: "   (V or click here = show full HUD)",
     closeText: "Close",
     errorResumeFailed: (file) => `'${file}' could not be read - start a fresh game instead.`,
 
@@ -865,6 +869,7 @@ const STRINGS = {
     faqA9: "R : L'IA (train_language.py) utilise la descente de gradient pour minimiser directement l'erreur de communication, a chaque etape. Le langage evolue ne recompense que la survie et la reproduction - bien communiquer n'est jamais optimise directement, juste utile indirectement.",
     predLessText: "- predateurs", predMoreText: "+ predateurs",
     hint: "n = nourriture   p = predateur   clic gauche = nourriture   clic droit = predateur",
+    hudExpandHint: "   (V ou clique ici = HUD complet)",
     closeText: "Fermer",
     errorResumeFailed: (file) => `'${file}' illisible - nouvelle partie a la place.`,
 
@@ -909,6 +914,11 @@ const ctx = canvas.getContext('2d');
 let worldW = 200, worldH = 140, paused = false, currentSpeed = 1;
 
 let mode = 'auto', predatorCount = 6;
+let hudExpanded = false;
+
+function applyHudExpanded() {
+  document.getElementById('hud-details').style.display = hudExpanded ? '' : 'none';
+}
 
 function render(state) {
   if (!state.started) {
@@ -955,7 +965,9 @@ function render(state) {
     `tick ${state.tick}   pop ${state.pop}   ${t.wordBirths} ${state.births}   ${t.wordDeaths} ${state.deaths}   ` +
     (state.paused ? t.wordPaused : "x" + state.speed) +
     (state.trained ? t.trainedTag : "") +
-    (state.adaptive_traits ? t.traitsTag : "");
+    (state.adaptive_traits ? t.traitsTag : "") +
+    (hudExpanded ? "" : t.hudExpandHint);
+  applyHudExpanded();
 
   renderVocabRow('vocab-danger', t.labelDanger, state.vocabulary['danger']);
   renderVocabRow('vocab-food', t.labelFood, state.vocabulary['food']);
@@ -1100,6 +1112,7 @@ document.getElementById('save').onclick = () => saveGame();
 document.getElementById('faster').onclick = () => post('speed', {value: stepSpeed(currentSpeed, 1)});
 document.getElementById('slower').onclick = () => post('speed', {value: stepSpeed(currentSpeed, -1)});
 document.getElementById('predLess').onclick = () => post('predator_count', {delta: -1});
+document.getElementById('header').onclick = () => { hudExpanded = !hudExpanded; applyHudExpanded(); };
 document.getElementById('predMore').onclick = () => post('predator_count', {delta: 1});
 
 const helpOverlay = document.getElementById('help-overlay');
@@ -1327,6 +1340,7 @@ document.addEventListener('keydown', (ev) => {
   if (anyOverlayOpen) return;
   if (ev.key === 'n' || ev.key === 'N') post('quick_place', {kind: 'food'});
   else if (ev.key === 'p' || ev.key === 'P') post('quick_place', {kind: 'predator'});
+  else if (ev.key === 'v' || ev.key === 'V') { hudExpanded = !hudExpanded; applyHudExpanded(); }
 });
 
 applyLanguage(uiLang);

@@ -39,7 +39,9 @@ DEFAULT_INIT_POP = 100
 DEFAULT_LANGUAGE_FILE = "language_model.json"
 DEFAULT_SAVE_FILE = "thronglets_save.json"
 
-HUD_H = 304
+EXPANDED_HUD_H = 304
+MINIMAL_HUD_H = 56
+HUD_H = MINIMAL_HUD_H  # the HUD starts collapsed; V or a click on it expands it
 # Placeholder sizes - main() overwrites these with the real screen resolution
 # so the world fills the whole display with no letterboxing on either axis.
 SCREEN_W, SCREEN_H = int(WIDTH * 5), int(HEIGHT * 5) + HUD_H
@@ -115,6 +117,7 @@ TEXT = {
         "hud_controls_hint1": "(space=pause  up/down=speed  r=reset  s=save  g=graph",
         "hud_controls_hint2": " t=family  c=compare  d=translator  f=faq  h=help)",
         "hud_controls_hint3": "n/click = food   p/right-click = predator",
+        "hud_expand_hint": "V or click here = show full HUD",
         "hud_manual": "mode: manual (no automatic spawning)",
         "hud_auto": "mode: automatic   predators: {count} ([ / ] act immediately)",
         "hud_vocab_title": "vocabulary — every color in use per state, population share:",
@@ -304,6 +307,7 @@ TEXT = {
         "hud_controls_hint1": "(espace=pause  haut/bas=vitesse  r=reset  s=sauver  g=graphique",
         "hud_controls_hint2": " t=famille  c=comparer  d=traducteur  f=faq  h=aide)",
         "hud_controls_hint3": "n/clic = nourriture   p/clic droit = predateur",
+        "hud_expand_hint": "V ou clique ici = HUD complet",
         "hud_manual": "mode: manuel (pas d'apparition automatique)",
         "hud_auto": "mode: auto   predateurs : {count} ([ / ] agit tout de suite)",
         "hud_vocab_title": "vocabulaire — toutes les couleurs en usage par etat, part de la population :",
@@ -698,7 +702,7 @@ def show_family(screen, font, world, lang):
                 focus = siblings[i]
 
 
-def draw(screen, font, world, paused, speed, mode, lang, trained=False):
+def draw(screen, font, world, paused, speed, mode, lang, expanded, trained=False):
     screen.fill(BG)
     pygame.draw.rect(screen, GROUND, (0, HUD_H, SCREEN_W, SCREEN_H - HUD_H))
 
@@ -717,7 +721,7 @@ def draw(screen, font, world, paused, speed, mode, lang, trained=False):
         x, y = int(p.pos[0] * SCALE_X), int(p.pos[1] * SCALE_Y) + HUD_H
         pygame.draw.circle(screen, PREDATOR_COLOR, (x, y), 6)
 
-    draw_hud(screen, font, world, paused, speed, mode, lang, trained)
+    draw_hud(screen, font, world, paused, speed, mode, lang, expanded, trained)
 
 
 SPARK_COLOR = (150, 200, 130)
@@ -771,7 +775,7 @@ def draw_vocab_row(screen, font, y, label, pairs):
         x += 16 + txt.get_width() + 14
 
 
-def draw_hud(screen, font, world, paused, speed, mode, lang, trained=False):
+def draw_hud(screen, font, world, paused, speed, mode, lang, expanded, trained=False):
     t = TEXT[lang]
     labels = STATE_LABELS[lang]
     pygame.draw.rect(screen, HUD_BG, (0, 0, SCREEN_W, HUD_H))
@@ -784,6 +788,14 @@ def draw_hud(screen, font, world, paused, speed, mode, lang, trained=False):
     header = t["hud_header"].format(tick=world.tick, pop=pop, births=world.births,
                                      deaths=world.deaths, status=status)
     screen.blit(font.render(header, True, TEXT_COLOR), (10, 8))
+
+    if not expanded:
+        if pop == 0:
+            screen.blit(font.render(t["extinct"], True, (235, 90, 90)), (10, 28))
+        else:
+            screen.blit(font.render(t["hud_expand_hint"], True, TEXT_COLOR), (10, 28))
+        return
+
     screen.blit(font.render(t["hud_controls_hint1"], True, TEXT_COLOR), (10, 28))
     screen.blit(font.render(t["hud_controls_hint2"], True, TEXT_COLOR), (10, 48))
     screen.blit(font.render(t["hud_controls_hint3"], True, TEXT_COLOR), (10, 68))
@@ -1397,7 +1409,7 @@ def main():
     # world is stretched per-axis to exactly fill it - no fixed aspect ratio,
     # so no letterboxing bars on wide/narrow screens.
     screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
-    global SCREEN_W, SCREEN_H, SCALE_X, SCALE_Y
+    global SCREEN_W, SCREEN_H, SCALE_X, SCALE_Y, HUD_H
     SCREEN_W, SCREEN_H = screen.get_size()
     SCALE_X = SCREEN_W / WIDTH
     SCALE_Y = (SCREEN_H - HUD_H) / HEIGHT
@@ -1441,6 +1453,7 @@ def main():
 
     paused = False
     speed = 1  # ticks per real second
+    hud_expanded = False
     tick_accumulator = 0.0
     running = True
 
@@ -1485,9 +1498,17 @@ def main():
                     show_faq(screen, font, lang)
                 elif event.key == pygame.K_h:
                     show_help(screen, font, lang)
+                elif event.key == pygame.K_v:
+                    hud_expanded = not hud_expanded
+                    HUD_H = EXPANDED_HUD_H if hud_expanded else MINIMAL_HUD_H
+                    SCALE_Y = (SCREEN_H - HUD_H) / HEIGHT
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button in (1, 3):
                 mx, my = event.pos
-                if my > HUD_H:
+                if my <= HUD_H:
+                    hud_expanded = not hud_expanded
+                    HUD_H = EXPANDED_HUD_H if hud_expanded else MINIMAL_HUD_H
+                    SCALE_Y = (SCREEN_H - HUD_H) / HEIGHT
+                else:
                     wx, wy = mx / SCALE_X, (my - HUD_H) / SCALE_Y
                     if event.button == 3:
                         world.add_predator(wx, wy)
@@ -1503,7 +1524,7 @@ def main():
         else:
             tick_accumulator = 0.0
 
-        draw(screen, font, world, paused, speed, mode, lang, trained=seed_genome is not None)
+        draw(screen, font, world, paused, speed, mode, lang, hud_expanded, trained=seed_genome is not None)
         pygame.display.flip()
 
     pygame.quit()
