@@ -28,8 +28,8 @@ import time
 import pygame
 
 from i18n import STATE_LABELS, TRAIT_LABELS
-from simulation import (DANGER, DISTRESS, FOOD, Genome, HEIGHT, IDLE, MATE, MAX_POPULATION, N_TRAITS, World, WIDTH,
-                         compare_seeds, load_seed_genome, load_world, save_world)
+from simulation import (DANGER, DISTRESS, FOOD, Genome, HEIGHT, IDLE, MATE, MAX_POPULATION, N_TOKENS, N_TRAITS, World,
+                         WIDTH, compare_seeds, load_seed_genome, load_world, save_world)
 
 TRAIN_EPISODES = 3000
 TRAIN_BATCH_SIZE = 256
@@ -112,7 +112,8 @@ TEXT = {
         "hud_trained_tag": "[trained vocabulary]",
         "hud_traits_tag": "[adaptive traits]",
         "hud_header": ("tick {tick:>6}   pop {pop:>4}   births {births:>5}   deaths {deaths:>5}   "
-                        "{status}   (space=pause  up/down=speed  r=reset  s=save  g=graph  t=family  c=compare  h=help)"),
+                        "{status}   (space=pause  up/down=speed  r=reset  s=save  g=graph  t=family  c=compare  "
+                        "d=translator  h=help)"),
         "hud_manual": "mode: manual   click places: {placing} (P)",
         "hud_auto": "mode: automatic   predators: {count} ([ / ] act immediately)",
         "placing_food": "food",
@@ -125,6 +126,10 @@ TEXT = {
         "legend_food": "food",
         "legend_predator": "predator",
         "extinct": "Extinct. Press R to start a new world.",
+
+        "translator_title": "Translator - what each color currently means",
+        "translator_unused": "unused / ambiguous",
+        "translator_homonym": "  ! homonym - shared with another state",
 
         "family_title": "Family tree",
         "family_gen": "generation {gen}",
@@ -242,7 +247,8 @@ TEXT = {
         "hud_trained_tag": "[vocabulaire entraine]",
         "hud_traits_tag": "[traits evolutifs]",
         "hud_header": ("tick {tick:>6}   pop {pop:>4}   naissances {births:>5}   morts {deaths:>5}   "
-                        "{status}   (espace=pause  haut/bas=vitesse  r=reset  s=sauver  g=graphique  t=famille  c=comparer  h=aide)"),
+                        "{status}   (espace=pause  haut/bas=vitesse  r=reset  s=sauver  g=graphique  t=famille  "
+                        "c=comparer  d=traducteur  h=aide)"),
         "hud_manual": "mode: manuel   clic pose : {placing} (P)",
         "hud_auto": "mode: auto   predateurs : {count} ([ / ] agit tout de suite)",
         "placing_food": "nourriture",
@@ -255,6 +261,10 @@ TEXT = {
         "legend_food": "nourriture",
         "legend_predator": "predateur",
         "extinct": "Extinction. Appuie sur R pour un nouveau monde.",
+
+        "translator_title": "Traducteur - ce que signifie chaque couleur en ce moment",
+        "translator_unused": "inutilisee / ambigue",
+        "translator_homonym": "  ! homonymie - partagee avec un autre etat",
 
         "family_title": "Arbre genealogique",
         "family_gen": "generation {gen}",
@@ -389,6 +399,44 @@ def show_graph(screen, font, world, lang):
                 y += row_h
 
         screen.blit(font.render(t["graph_dismiss"], True, (150, 155, 145)), (20, y))
+        pygame.display.flip()
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.KEYDOWN:
+                waiting = False
+
+
+def show_translator(screen, font, world, lang):
+    """A frozen snapshot - what each color means right now, inverted from
+    the HUD's state->color view into a color->state dictionary. Opened like
+    show_graph()/show_help(); no history, just this instant."""
+    t = TEXT[lang]
+    labels = STATE_LABELS[lang]
+    by_token = world.translator()
+
+    waiting = True
+    while waiting:
+        screen.fill(BG)
+        screen.blit(font.render(t["translator_title"], True, (255, 255, 255)), (20, 20))
+
+        y = 60
+        for token in range(N_TOKENS):
+            claims = by_token[token]
+            if token == 0:
+                pygame.draw.circle(screen, (110, 110, 110), (30, y + 8), 6, width=1)
+            else:
+                pygame.draw.circle(screen, TOKEN_COLORS[token], (30, y + 8), 6)
+            text = (" / ".join(f"{labels[state]} ({frac * 100:.0f}%)" for state, frac in claims)
+                    if claims else t["translator_unused"])
+            screen.blit(font.render(text, True, TEXT_COLOR), (46, y))
+            y += 24
+            if len(claims) > 1:
+                screen.blit(font.render(t["translator_homonym"], True, (235, 90, 90)), (46, y))
+                y += 24
+
+        screen.blit(font.render(t["graph_dismiss"], True, (150, 155, 145)), (20, y + 16))
         pygame.display.flip()
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -1283,6 +1331,8 @@ def main():
                     show_family(screen, font, world, lang)
                 elif event.key == pygame.K_c:
                     run_compare_ui(screen, font, world, lang, init_pop, seed_genome)
+                elif event.key == pygame.K_d:
+                    show_translator(screen, font, world, lang)
                 elif event.key == pygame.K_h:
                     show_help(screen, font, lang)
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
