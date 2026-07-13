@@ -888,23 +888,30 @@ def run_training_ui(screen, font, lang):
         state_to_token, token_to_state = train_language.compute_lookup(speaker, listener)
 
         outcome = t["training_collision"] if collision else t["training_clean"]
-        lines = [
+        header_lines = [
             "Thronglets",
             "",
             t["training_result"].format(seed=seed, outcome=outcome, acc=acc * 100),
-            "",
         ]
-        for state in (DANGER, FOOD, DISTRESS, MATE, IDLE):
-            token = state_to_token[state]
-            swatch = "*" if token != 0 else "."
-            lines.append(f"  {labels[state]:<14} -> {swatch} token {token}")
-        lines += ["", t["training_collision_hint"] if collision else t["training_validate_hint"]]
+        footer_line = t["training_collision_hint"] if collision else t["training_validate_hint"]
 
         choice = None
         while choice is None:
             screen.fill(BG)
-            for i, line in enumerate(lines):
+            for i, line in enumerate(header_lines):
                 screen.blit(font.render(line, True, TEXT_COLOR), (20, 20 + i * 26))
+            y = 20 + len(header_lines) * 26 + 20
+            for state in (DANGER, FOOD, DISTRESS, MATE, IDLE):
+                token = state_to_token[state]
+                lbl = font.render(f"  {labels[state]:<14}", True, TEXT_COLOR)
+                screen.blit(lbl, (20, y))
+                cx = 20 + lbl.get_width() + 16
+                if token == 0:
+                    pygame.draw.circle(screen, (110, 110, 110), (cx, y + 8), 6, width=1)
+                else:
+                    pygame.draw.circle(screen, TOKEN_COLORS[token], (cx, y + 8), 6)
+                y += 24
+            screen.blit(font.render(footer_line, True, TEXT_COLOR), (20, y + 20))
             pygame.display.flip()
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
