@@ -175,7 +175,13 @@ All three renderers show a HUD with, for each internal state (danger / food-call
 distress-call / mate-call / idle), every token currently in use and what share
 of the living population uses it — the numbers to watch are how fast a single
 token pulls ahead of the pack (starting near chance, ~17%, since there are 6
-tokens) and whether it stays there.
+tokens) and whether it stays there. Next to each row, a small sparkline plots
+the dominant token's share over time (a sample every 20 ticks, the last 200
+samples kept) — a rising line is a color pulling ahead, a falling one is a
+consensus breaking apart, and a flat line at the bottom is no agreement yet.
+This history rides along with `s`/save (so a resumed game keeps its curve,
+not just its population) but resets on `r`/reset, same as everything else
+about the world.
 
 Speed is measured in real time, not rendered frames: the default `x1` is a
 genuine one tick per second, slow enough to actually watch a single decision

@@ -87,6 +87,10 @@ def snapshot(state):
             STATE_IDS[s]: [[int(t), float(f)] for t, f in breakdown[s]]
             for s in (DANGER, FOOD, DISTRESS, MATE, IDLE)
         },
+        "vocab_history": {
+            STATE_IDS[s]: [float(v) for v in w.vocab_history[s]]
+            for s in (DANGER, FOOD, DISTRESS, MATE, IDLE)
+        },
     }
 
 
@@ -227,6 +231,9 @@ INDEX_HTML = """<!doctype html>
   }
   #hud { width: 100%; max-width: 900px; font-size: 13px; line-height: 1.6; }
   .row { white-space: nowrap; overflow-x: auto; }
+  .vocab-row { display: flex; align-items: center; gap: 10px; overflow: visible; }
+  .vocab-row .vocab-text { white-space: nowrap; overflow-x: auto; }
+  .vocab-row canvas.spark { flex: none; background: #1a2014; border-radius: 3px; }
   .swatch {
     display: inline-block; width: 10px; height: 10px; border-radius: 50%;
     margin-right: 4px; vertical-align: middle;
@@ -292,11 +299,11 @@ INDEX_HTML = """<!doctype html>
     <div id="hud">
       <div class="row" id="header"></div>
       <div class="row" id="settings"></div>
-      <div class="row" id="vocab-danger"></div>
-      <div class="row" id="vocab-food"></div>
-      <div class="row" id="vocab-distress"></div>
-      <div class="row" id="vocab-mate"></div>
-      <div class="row" id="vocab-idle"></div>
+      <div class="row vocab-row" id="vocab-danger"><span class="vocab-text"></span><canvas class="spark" width="140" height="16"></canvas></div>
+      <div class="row vocab-row" id="vocab-food"><span class="vocab-text"></span><canvas class="spark" width="140" height="16"></canvas></div>
+      <div class="row vocab-row" id="vocab-distress"><span class="vocab-text"></span><canvas class="spark" width="140" height="16"></canvas></div>
+      <div class="row vocab-row" id="vocab-mate"><span class="vocab-text"></span><canvas class="spark" width="140" height="16"></canvas></div>
+      <div class="row vocab-row" id="vocab-idle"><span class="vocab-text"></span><canvas class="spark" width="140" height="16"></canvas></div>
     </div>
     <div id="controls">
       <button id="pause"></button>
@@ -495,11 +502,11 @@ function render(state) {
     (state.paused ? t.wordPaused : "x" + state.speed) +
     (state.trained ? t.trainedTag : "");
 
-  renderVocabRow('vocab-danger', t.labelDanger, state.vocabulary['danger']);
-  renderVocabRow('vocab-food', t.labelFood, state.vocabulary['food']);
-  renderVocabRow('vocab-distress', t.labelDistress, state.vocabulary['distress']);
-  renderVocabRow('vocab-mate', t.labelMate, state.vocabulary['mate']);
-  renderVocabRow('vocab-idle', t.labelIdle, state.vocabulary['idle']);
+  renderVocabRow('vocab-danger', t.labelDanger, state.vocabulary['danger'], state.vocab_history['danger']);
+  renderVocabRow('vocab-food', t.labelFood, state.vocabulary['food'], state.vocab_history['food']);
+  renderVocabRow('vocab-distress', t.labelDistress, state.vocabulary['distress'], state.vocab_history['distress']);
+  renderVocabRow('vocab-mate', t.labelMate, state.vocabulary['mate'], state.vocab_history['mate']);
+  renderVocabRow('vocab-idle', t.labelIdle, state.vocabulary['idle'], state.vocab_history['idle']);
 
   document.getElementById('pause').textContent = state.paused ? t.resumeText : t.pauseText;
 
@@ -510,23 +517,42 @@ function render(state) {
   document.getElementById('placing').style.display = mode === 'manual' ? 'inline-block' : 'none';
 }
 
-function renderVocabRow(elId, label, pairs) {
+function renderVocabRow(elId, label, pairs, history) {
   const el = document.getElementById(elId);
-  el.innerHTML = '';
+  const textEl = el.querySelector('.vocab-text');
+  textEl.innerHTML = '';
   const labelSpan = document.createElement('span');
   labelSpan.textContent = label + ': ';
   labelSpan.style.fontWeight = 'bold';
-  el.appendChild(labelSpan);
+  textEl.appendChild(labelSpan);
   for (const [token, frac] of pairs) {
     const sw = document.createElement('span');
     sw.className = 'swatch';
     sw.style.background = TOKEN_COLORS[token];
     if (token === 0) sw.style.border = '1px solid #666';
-    el.appendChild(sw);
+    textEl.appendChild(sw);
     const txt = document.createElement('span');
     txt.textContent = Math.round(frac * 100) + '%  ';
-    el.appendChild(txt);
+    textEl.appendChild(txt);
   }
+  renderSparkline(el.querySelector('canvas.spark'), history);
+}
+
+function renderSparkline(canvas, history) {
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+  if (!history || history.length < 2) return;
+  ctx.strokeStyle = '#96c882';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  const step = w / (history.length - 1);
+  history.forEach((v, i) => {
+    const px = i * step;
+    const py = h - 1 - v * (h - 2);
+    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+  });
+  ctx.stroke();
 }
 
 async function poll() {

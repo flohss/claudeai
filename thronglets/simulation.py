@@ -16,6 +16,7 @@ be driven headlessly (see test_smoke.py); main.py is the renderer.
 """
 
 import json
+from collections import deque
 
 import numpy as np
 
@@ -68,6 +69,9 @@ MAX_FOOD = 140
 
 MUTATION_RATE = 0.12
 MUTATION_SCALE = 0.35
+
+VOCAB_HISTORY_INTERVAL = 20  # ticks between samples
+VOCAB_HISTORY_LENGTH = 200   # samples kept per state - a rolling window, not the whole run
 
 
 class Genome:
@@ -204,6 +208,8 @@ class World:
         self.births = 0
         self.deaths = 0
         self._cache = {"alive": []}
+        self.vocab_history = {state: deque(maxlen=VOCAB_HISTORY_LENGTH)
+                               for state in (IDLE, FOOD, MATE, DANGER, DISTRESS)}
         if not manual_food:
             for _ in range(4):
                 self._spawn_food_patch()
@@ -223,6 +229,12 @@ class World:
         self._age_and_cull()
         if not self.manual_food and self.tick % FOOD_SPAWN_INTERVAL == 0 and len(self.food) < MAX_FOOD:
             self._spawn_food_patch()
+        if self.tick % VOCAB_HISTORY_INTERVAL == 0:
+            self._record_vocab_history()
+
+    def _record_vocab_history(self):
+        for state, (_token, share) in self.vocabulary().items():
+            self.vocab_history[state].append(share)
 
     def add_food(self, x, y):
         if len(self.food) >= MAX_FOOD:
@@ -499,6 +511,7 @@ def save_world(world, path):
         "deaths": world.deaths,
         "manual_food": world.manual_food,
         "manual_predators": world.manual_predators,
+        "vocab_history": {state: list(hist) for state, hist in world.vocab_history.items()},
         "food": [[float(x), float(y)] for x, y in world.food],
         "predators": [[float(p.pos[0]), float(p.pos[1])] for p in world.predators],
         "creatures": [
@@ -530,6 +543,11 @@ def load_world(path, seed=None):
     world.births = data["births"]
     world.deaths = data["deaths"]
     world._cache = {"alive": []}
+    saved_history = data.get("vocab_history", {})
+    world.vocab_history = {
+        state: deque(saved_history.get(str(state), []), maxlen=VOCAB_HISTORY_LENGTH)
+        for state in (IDLE, FOOD, MATE, DANGER, DISTRESS)
+    }
     world.food = [np.array(f, dtype=float) for f in data["food"]]
     world.predators = [Predator(np.array(p, dtype=float)) for p in data["predators"]]
     world.creatures = []

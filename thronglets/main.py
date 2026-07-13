@@ -103,6 +103,7 @@ TEXT = {
         "placing_food": "food",
         "placing_predator": "predator",
         "hud_vocab_title": "vocabulary — every color in use per state, population share:",
+        "hud_history_title": "dominant share over time",
         "legend_creature": "creature (ring = its current signal)",
         "legend_food": "food",
         "legend_predator": "predator",
@@ -186,6 +187,7 @@ TEXT = {
         "placing_food": "nourriture",
         "placing_predator": "predateur",
         "hud_vocab_title": "vocabulaire — toutes les couleurs en usage par etat, part de la population :",
+        "hud_history_title": "part dominante dans le temps",
         "legend_creature": "creature (anneau = son signal actuel)",
         "legend_food": "nourriture",
         "legend_predator": "predateur",
@@ -277,7 +279,28 @@ def draw(screen, font, world, paused, speed, mode, placing, lang, trained=False)
     draw_hud(screen, font, world, paused, speed, mode, placing, lang, trained)
 
 
-def draw_vocab_row(screen, font, y, label, pairs):
+SPARK_X = 640
+SPARK_W = 180
+SPARK_H = 16
+SPARK_COLOR = (150, 200, 130)
+SPARK_BG = (26, 32, 20)
+
+
+def draw_sparkline(screen, x, y, history):
+    rect = pygame.Rect(x, y, SPARK_W, SPARK_H)
+    pygame.draw.rect(screen, SPARK_BG, rect)
+    if len(history) < 2:
+        return
+    values = list(history)
+    step = SPARK_W / (len(values) - 1)
+    points = [
+        (x + i * step, y + SPARK_H - 1 - v * (SPARK_H - 2))
+        for i, v in enumerate(values)
+    ]
+    pygame.draw.lines(screen, SPARK_COLOR, False, points, width=2)
+
+
+def draw_vocab_row(screen, font, y, label, pairs, history):
     x = 10
     lbl = font.render(f"{label}:", True, TEXT_COLOR)
     screen.blit(lbl, (x, y))
@@ -290,6 +313,7 @@ def draw_vocab_row(screen, font, y, label, pairs):
         txt = font.render(f"{frac * 100:3.0f}%", True, TEXT_COLOR)
         screen.blit(txt, (x + 16, y))
         x += 16 + txt.get_width() + 14
+    draw_sparkline(screen, SPARK_X, y, history)
 
 
 def draw_hud(screen, font, world, paused, speed, mode, placing, lang, trained=False):
@@ -311,11 +335,12 @@ def draw_hud(screen, font, world, paused, speed, mode, placing, lang, trained=Fa
     screen.blit(font.render(settings, True, TEXT_COLOR), (10, 28))
 
     screen.blit(font.render(t["hud_vocab_title"], True, TEXT_COLOR), (10, 48))
+    screen.blit(font.render(t["hud_history_title"], True, TEXT_COLOR), (SPARK_X, 48))
 
     y = 70
     breakdown = world.vocabulary_breakdown()
     for state in (DANGER, FOOD, DISTRESS, MATE, IDLE):
-        draw_vocab_row(screen, font, y, labels[state], breakdown[state])
+        draw_vocab_row(screen, font, y, labels[state], breakdown[state], world.vocab_history[state])
         y += 22
 
     legend_y = y

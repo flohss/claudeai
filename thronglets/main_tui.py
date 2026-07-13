@@ -224,7 +224,20 @@ def _safe_addstr(stdscr, y, x, text, attr):
             pass
 
 
-def _draw_vocab_row(stdscr, y, label, pairs):
+SPARK_CHARS = " ▁▂▃▄▅▆▇█"  # blank + 8 block levels
+
+
+def _sparkline(history, width=24):
+    if not history:
+        return SPARK_CHARS[0] * width
+    values = list(history)[-width:]
+    values = [SPARK_CHARS[0]] * (width - len(values)) + [
+        SPARK_CHARS[1 + min(7, int(v * 8))] for v in values
+    ]
+    return "".join(values)
+
+
+def _draw_vocab_row(stdscr, y, label, pairs, history=None):
     x = 0
     _safe_addstr(stdscr, y, x, f"{label}:", curses.color_pair(7) | curses.A_BOLD)
     x += len(label) + 2
@@ -236,6 +249,8 @@ def _draw_vocab_row(stdscr, y, label, pairs):
         seg = f"{frac * 100:3.0f}% "
         _safe_addstr(stdscr, y, x + 2, seg, curses.color_pair(7))
         x += 2 + len(seg)
+    if history is not None:
+        _safe_addstr(stdscr, y, x + 2, _sparkline(history), curses.color_pair(7) | curses.A_DIM)
 
 
 def choose_language(stdscr):
@@ -418,7 +433,7 @@ def draw(stdscr, world, paused, speed, mode, placing, cursor, lang, trained=Fals
 
     breakdown = world.vocabulary_breakdown()
     for row, state in enumerate((DANGER, FOOD, DISTRESS, MATE, IDLE), start=2):
-        _draw_vocab_row(stdscr, row, labels[state], breakdown[state])
+        _draw_vocab_row(stdscr, row, labels[state], breakdown[state], world.vocab_history[state])
 
     _safe_addstr(stdscr, HUD_H - 3, 0, t["hud_legend"], curses.color_pair(7) | curses.A_DIM)
     food_hint = t["food_hint_auto"] if mode == "auto" else t["food_hint_manual"]
