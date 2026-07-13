@@ -16,6 +16,7 @@ be driven headlessly (see test_smoke.py); main.py is the renderer.
 """
 
 import json
+import random
 from collections import deque
 
 import numpy as np
@@ -725,3 +726,55 @@ def load_world(path, seed=None):
             world._next_id += 1
         world.creatures.append(creature)
     return world
+
+
+def compare_seeds(n_seeds, ticks, init_pop, predator_count, adaptive_traits, seed_genome=None,
+                   progress_callback=None, cancel_event=None):
+    """Run n_seeds independent, headless worlds (always automatic mode - there's
+    no one to place food/predators by hand for a batch run) with identical
+    settings and only the RNG seed differing, for `ticks` ticks each. This is
+    the same kind of multi-seed reproducibility check as train_language.py
+    --sweep, but for the evolved (not gradient-trained) population: is a
+    result from one playthrough a real, repeatable pattern, or just where
+    that particular run's genetic drift happened to wander?
+
+    progress_callback(seed_index, n_seeds, tick, ticks) is called periodically.
+    cancel_event, if set, stops promptly (results already gathered for
+    completed seeds are still returned). Returns a list of per-seed dicts:
+    {"seed", "population", "vocab": {state: (token, fraction)}, "collision",
+    "traits": {trait: avg_percent} or None if adaptive_traits is off}."""
+    results = []
+    for i in range(n_seeds):
+        if cancel_event is not None and cancel_event.is_set():
+            break
+        seed = random.randint(0, 999_999)
+        w = World(init_pop=init_pop, predator_count=predator_count, seed=seed,
+                  seed_genome=seed_genome, adaptive_traits=adaptive_traits)
+        for t in range(ticks):
+            if cancel_event is not None and cancel_event.is_set():
+                break
+            w.step()
+            if progress_callback is not None and t % 200 == 0:
+                progress_callback(i, n_seeds, t, ticks)
+
+        vocab = w.vocabulary()
+        non_silent = [tok for tok, _frac in vocab.values() if tok != 0]
+        collision = len(set(non_silent)) < len(non_silent)
+
+        trait_avg = None
+        if adaptive_traits:
+            trait_avg = {}
+            for trait in range(N_TRAITS):
+                hist = list(w.trait_history[trait])[-25:]
+                trait_avg[trait] = (sum(hist) / len(hist)) if hist else float("nan")
+
+        results.append({
+            "seed": seed,
+            "population": w.population(),
+            "vocab": vocab,
+            "collision": collision,
+            "traits": trait_avg,
+        })
+        if progress_callback is not None:
+            progress_callback(i, n_seeds, ticks, ticks)
+    return results

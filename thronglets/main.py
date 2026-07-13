@@ -29,7 +29,7 @@ import pygame
 
 from i18n import STATE_LABELS, TRAIT_LABELS
 from simulation import (DANGER, DISTRESS, FOOD, Genome, HEIGHT, IDLE, MATE, MAX_POPULATION, N_TRAITS, World, WIDTH,
-                         load_seed_genome, load_world, save_world)
+                         compare_seeds, load_seed_genome, load_world, save_world)
 
 TRAIN_EPISODES = 3000
 TRAIN_BATCH_SIZE = 256
@@ -112,7 +112,7 @@ TEXT = {
         "hud_trained_tag": "[trained vocabulary]",
         "hud_traits_tag": "[adaptive traits]",
         "hud_header": ("tick {tick:>6}   pop {pop:>4}   births {births:>5}   deaths {deaths:>5}   "
-                        "{status}   (space=pause  up/down=speed  r=reset  s=save  g=graph  t=family  h=help)"),
+                        "{status}   (space=pause  up/down=speed  r=reset  s=save  g=graph  t=family  c=compare  h=help)"),
         "hud_manual": "mode: manual   click places: {placing} (P)",
         "hud_auto": "mode: automatic   predators: {count} ([ / ] act immediately)",
         "placing_food": "food",
@@ -138,6 +138,23 @@ TEXT = {
         "family_descendants": "Total descendants: {total} ({alive} still alive)",
         "family_hint": "UP=parent   DOWN=child   LEFT/RIGHT=siblings   T or ESC=go back",
         "family_none": "No creature to show yet.",
+
+        "compare_mode_prompt": "Compare seeds: what should be reproducible?",
+        "compare_mode_language": "  L = language - does the same word win across independent runs?",
+        "compare_mode_traits": "  T = physical traits - do speed/vision/hearing/metabolism converge the same way?",
+        "compare_mode_traits_unavailable": "  (traits unavailable - adaptive evolution is off for this world)",
+        "compare_mode_hint": "Press L or T, or ESC to cancel.",
+        "compare_depth_prompt": "How thorough?",
+        "compare_depth_quick": "  R = quick - 4 seeds x 8,000 ticks (default)",
+        "compare_depth_thorough": "  A = thorough - 8 seeds x 40,000 ticks, same as the manual check earlier",
+        "compare_depth_hint": "Press R or A, or ENTER for the default (quick). ESC cancels.",
+        "compare_progress": "seed {seed}/{n_seeds}   tick {tick}/{ticks}   ESC cancels",
+        "compare_result_title": "Comparison done ({n_seeds} seeds x {ticks} ticks)",
+        "compare_traits_header": "trait          mean   std dev    min     max",
+        "compare_lang_header": "state          seeds' dominant color",
+        "compare_collision_summary": "Collisions: {clean}/{n_seeds} seeds had none",
+        "compare_dismiss": "-- ESC to go back --",
+        "compare_cancelled": "Cancelled - {n} seed(s) completed before stopping.",
 
         "help_more": "-- space for more --",
         "help_dismiss": "-- press any key to resume --",
@@ -224,7 +241,7 @@ TEXT = {
         "hud_trained_tag": "[vocabulaire entraine]",
         "hud_traits_tag": "[traits evolutifs]",
         "hud_header": ("tick {tick:>6}   pop {pop:>4}   naissances {births:>5}   morts {deaths:>5}   "
-                        "{status}   (espace=pause  haut/bas=vitesse  r=reset  s=sauver  g=graphique  t=famille  h=aide)"),
+                        "{status}   (espace=pause  haut/bas=vitesse  r=reset  s=sauver  g=graphique  t=famille  c=comparer  h=aide)"),
         "hud_manual": "mode: manuel   clic pose : {placing} (P)",
         "hud_auto": "mode: auto   predateurs : {count} ([ / ] agit tout de suite)",
         "placing_food": "nourriture",
@@ -250,6 +267,23 @@ TEXT = {
         "family_descendants": "Descendants au total : {total} ({alive} encore en vie)",
         "family_hint": "HAUT=parent   BAS=enfant   GAUCHE/DROITE=freres et soeurs   T ou ESC=revenir",
         "family_none": "Aucune creature a montrer pour le moment.",
+
+        "compare_mode_prompt": "Comparer des seeds : qu'est-ce qui doit etre reproductible ?",
+        "compare_mode_language": "  L = langage - le meme mot gagne-t-il sur des parties independantes ?",
+        "compare_mode_traits": "  T = traits physiques - vitesse/vision/ouie/metabolisme convergent-ils pareil ?",
+        "compare_mode_traits_unavailable": "  (traits indisponibles - evolution adaptative desactivee pour ce monde)",
+        "compare_mode_hint": "Appuie sur L ou T, ou ESC pour annuler.",
+        "compare_depth_prompt": "Quelle profondeur ?",
+        "compare_depth_quick": "  R = rapide - 4 seeds x 8 000 ticks (defaut)",
+        "compare_depth_thorough": "  A = approfondi - 8 seeds x 40 000 ticks, comme la verif faite plus tot",
+        "compare_depth_hint": "Appuie sur R ou A, ou ENTREE pour le defaut (rapide). ESC annule.",
+        "compare_progress": "seed {seed}/{n_seeds}   tick {tick}/{ticks}   ESC annule",
+        "compare_result_title": "Comparaison terminee ({n_seeds} seeds x {ticks} ticks)",
+        "compare_traits_header": "trait          moyenne  ecart-type  min     max",
+        "compare_lang_header": "etat           couleur dominante par seed",
+        "compare_collision_summary": "Collisions : {clean}/{n_seeds} seeds sans collision",
+        "compare_dismiss": "-- ESC pour revenir --",
+        "compare_cancelled": "Annule - {n} seed(s) terminee(s) avant l'arret.",
 
         "help_more": "-- espace pour la suite --",
         "help_dismiss": "-- une touche pour reprendre --",
@@ -969,6 +1003,186 @@ def run_training_ui(screen, font, lang):
         seed = next_seed()
 
 
+COMPARE_QUICK = (4, 8000)
+COMPARE_THOROUGH = (8, 40000)
+
+
+def choose_compare_mode(screen, font, lang, traits_available):
+    t = TEXT[lang]
+    lines = [
+        "Thronglets",
+        "",
+        t["compare_mode_prompt"],
+        t["compare_mode_language"],
+        t["compare_mode_traits"] if traits_available else t["compare_mode_traits_unavailable"],
+        "",
+        t["compare_mode_hint"],
+    ]
+    while True:
+        screen.fill(BG)
+        for i, line in enumerate(lines):
+            screen.blit(font.render(line, True, TEXT_COLOR), (20, 20 + i * 26))
+        pygame.display.flip()
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_l:
+                    return "language"
+                if event.key == pygame.K_t and traits_available:
+                    return "traits"
+                if event.key == pygame.K_ESCAPE:
+                    return None
+
+
+def choose_compare_depth(screen, font, lang):
+    t = TEXT[lang]
+    lines = [
+        "Thronglets",
+        "",
+        t["compare_depth_prompt"],
+        t["compare_depth_quick"],
+        t["compare_depth_thorough"],
+        "",
+        t["compare_depth_hint"],
+    ]
+    while True:
+        screen.fill(BG)
+        for i, line in enumerate(lines):
+            screen.blit(font.render(line, True, TEXT_COLOR), (20, 20 + i * 26))
+        pygame.display.flip()
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_r or event.key == pygame.K_RETURN:
+                    return COMPARE_QUICK
+                if event.key == pygame.K_a:
+                    return COMPARE_THOROUGH
+                if event.key == pygame.K_ESCAPE:
+                    return None
+
+
+def run_compare_ui(screen, font, world, lang, init_pop, seed_genome):
+    """Runs simulation.compare_seeds() in a background thread with a live
+    progress screen (same shape as run_training_ui's), then shows a results
+    table. Purely a side experiment - never touches the live `world`."""
+    t = TEXT[lang]
+    labels = STATE_LABELS[lang]
+    trait_labels = TRAIT_LABELS[lang]
+
+    mode = choose_compare_mode(screen, font, lang, world.adaptive_traits)
+    if mode is None:
+        return
+    depth = choose_compare_depth(screen, font, lang)
+    if depth is None:
+        return
+    n_seeds, ticks = depth
+
+    clock = pygame.time.Clock()
+    cancel_event = threading.Event()
+    progress = {"seed": 0, "tick": 0}
+    progress_lock = threading.Lock()
+    result = {}
+
+    def on_progress(seed_i, n, tick, total_ticks):
+        with progress_lock:
+            progress.update(seed=seed_i + 1, tick=tick)
+
+    def worker():
+        result["results"] = compare_seeds(
+            n_seeds, ticks, init_pop, len(world.predators), mode == "traits",
+            seed_genome=seed_genome, progress_callback=on_progress, cancel_event=cancel_event,
+        )
+
+    thread = threading.Thread(target=worker, daemon=True)
+    thread.start()
+
+    cancelled = False
+    while thread.is_alive():
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                cancel_event.set()
+                cancelled = True
+
+        with progress_lock:
+            seed_n, tick = progress["seed"], progress["tick"]
+        screen.fill(BG)
+        lines = [
+            "Thronglets",
+            "",
+            t["compare_progress"].format(seed=max(1, seed_n), n_seeds=n_seeds, tick=tick, ticks=ticks),
+        ]
+        for i, line in enumerate(lines):
+            screen.blit(font.render(line, True, TEXT_COLOR), (20, 20 + i * 26))
+        pygame.display.flip()
+        clock.tick(30)
+
+    thread.join()
+    results = result.get("results", [])
+    if cancelled and not results:
+        flash_message(screen, font, lang, t["compare_cancelled"].format(n=len(results)))
+        return
+
+    waiting = True
+    while waiting:
+        screen.fill(BG)
+        y = 20
+        screen.blit(font.render(t["compare_result_title"].format(n_seeds=len(results), ticks=ticks),
+                                 True, (255, 255, 255)), (20, y))
+        y += 40
+
+        if mode == "traits":
+            screen.blit(font.render(t["compare_traits_header"], True, TEXT_COLOR), (20, y))
+            y += 26
+            for trait in range(N_TRAITS):
+                vals = [r["traits"][trait] * 100 for r in results if r["traits"] is not None]
+                mean = sum(vals) / len(vals)
+                std = (sum((v - mean) ** 2 for v in vals) / len(vals)) ** 0.5
+                row = f"{trait_labels[trait]:<14} {mean:5.1f}%   {std:5.1f}%   {min(vals):5.1f}%  {max(vals):5.1f}%"
+                screen.blit(font.render(row, True, TEXT_COLOR), (20, y))
+                y += 24
+        else:
+            screen.blit(font.render(t["compare_lang_header"], True, TEXT_COLOR), (20, y))
+            y += 26
+            for state in (DANGER, FOOD, DISTRESS, MATE, IDLE):
+                lbl = font.render(f"  {labels[state]:<14}", True, TEXT_COLOR)
+                screen.blit(lbl, (20, y))
+                cx = 20 + lbl.get_width() + 10
+                for r in results:
+                    token = r["vocab"][state][0]
+                    if token == 0:
+                        pygame.draw.circle(screen, (110, 110, 110), (cx, y + 8), 6, width=1)
+                    else:
+                        pygame.draw.circle(screen, TOKEN_COLORS[token], (cx, y + 8), 6)
+                    cx += 20
+                y += 24
+            y += 10
+            clean = sum(1 for r in results if not r["collision"])
+            screen.blit(font.render(t["compare_collision_summary"].format(clean=clean, n_seeds=len(results)),
+                                     True, TEXT_COLOR), (20, y))
+            y += 26
+
+        if cancelled:
+            y += 10
+            screen.blit(font.render(t["compare_cancelled"].format(n=len(results)), True, (235, 90, 90)), (20, y))
+            y += 26
+
+        screen.blit(font.render(t["compare_dismiss"], True, (150, 155, 145)), (20, y + 14))
+        pygame.display.flip()
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                waiting = False
+
+
 def main():
     parser = argparse.ArgumentParser(description="Thronglets - pygame renderer")
     parser.add_argument("--language", type=str, default=None,
@@ -1061,6 +1275,8 @@ def main():
                     show_graph(screen, font, world, lang)
                 elif event.key == pygame.K_t:
                     show_family(screen, font, world, lang)
+                elif event.key == pygame.K_c:
+                    run_compare_ui(screen, font, world, lang, init_pop, seed_genome)
                 elif event.key == pygame.K_h:
                     show_help(screen, font, lang)
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
