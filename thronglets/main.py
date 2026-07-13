@@ -20,6 +20,7 @@ Controls:
 
 import argparse
 import os
+import random
 import sys
 import threading
 
@@ -779,7 +780,16 @@ def run_training_ui(screen, font, lang):
     labels = STATE_LABELS[lang]
     validate_key = pygame.K_v
     clock = pygame.time.Clock()
-    seed = 0
+    tried_seeds = set()
+
+    def next_seed():
+        while True:
+            s = random.randint(0, 999_999)
+            if s not in tried_seeds:
+                tried_seeds.add(s)
+                return s
+
+    seed = next_seed()
 
     while True:
         cancel_event = threading.Event()
@@ -872,7 +882,7 @@ def run_training_ui(screen, font, lang):
             return Genome.from_lookup(state_to_token, token_to_state)
         if choice == "cancel":
             return None
-        seed += 1
+        seed = next_seed()
 
 
 def main():
