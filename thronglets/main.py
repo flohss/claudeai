@@ -92,6 +92,7 @@ TEXT = {
         "training_clean": "no collisions - every state got its own color",
         "training_collision": "collision - two states share a color",
         "training_validate_hint": "V = use this seed   N = try another seed   ESC = cancel, no AI",
+        "training_collision_hint": "This seed has a collision, can't be used as-is - N = try another seed   ESC = cancel, no AI",
 
         "choose_resume_prompt": "A saved game was found. Resume it?",
         "choose_resume_subtitle": "  (reads '{file}' - the population, food, and predators as you left them)",
@@ -198,6 +199,7 @@ TEXT = {
         "training_clean": "aucune collision - chaque etat a sa propre couleur",
         "training_collision": "collision - deux etats partagent une couleur",
         "training_validate_hint": "V = utiliser cette seed   N = essayer une autre   ESC = annuler, sans IA",
+        "training_collision_hint": "Cette seed a une collision, inutilisable telle quelle - N = essayer une autre   ESC = annuler, sans IA",
 
         "choose_resume_prompt": "Une partie sauvegardee existe. La reprendre ?",
         "choose_resume_subtitle": "  (relit '{file}' - la population, la nourriture et les predateurs tels que laisses)",
@@ -844,7 +846,7 @@ def run_training_ui(screen, font, lang):
             token = state_to_token[state]
             swatch = "*" if token != 0 else "."
             lines.append(f"  {labels[state]:<14} -> {swatch} token {token}")
-        lines += ["", t["training_validate_hint"]]
+        lines += ["", t["training_collision_hint"] if collision else t["training_validate_hint"]]
 
         choice = None
         while choice is None:
@@ -857,7 +859,7 @@ def run_training_ui(screen, font, lang):
                     pygame.quit()
                     sys.exit()
                 elif event.type == pygame.KEYDOWN:
-                    if event.key == validate_key:
+                    if event.key == validate_key and not collision:
                         choice = "accept"
                     elif event.key == pygame.K_n:
                         choice = "next"
