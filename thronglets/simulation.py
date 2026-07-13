@@ -73,13 +73,36 @@ MUTATION_SCALE = 0.35
 VOCAB_HISTORY_INTERVAL = 20  # ticks between samples
 VOCAB_HISTORY_LENGTH = 200   # samples kept per state - a rolling window, not the whole run
 
+# Adaptive traits (opt-in, see World(adaptive_traits=...)): four physical
+# traits, evolved and mutated exactly like the signaling genes, each bounded
+# so mutation can't run away to something absurd. Speed/vision/hearing all
+# carry a real energy cost (SPEED_ENERGY_COST etc. below) - being fast,
+# far-sighted, and sharp-eared all at once is expensive, so selection has to
+# actually weigh the trade-off instead of every trait just maxing out.
+TRAIT_SPEED, TRAIT_VISION, TRAIT_HEARING, TRAIT_METABOLISM = 0, 1, 2, 3
+N_TRAITS = 4
+TRAIT_BOUNDS = np.array([
+    [0.8, 2.6],    # speed
+    [10.0, 28.0],  # vision (equivalent to SEE_RADIUS)
+    [20.0, 50.0],  # hearing (equivalent to HEAR_RADIUS)
+    [0.03, 0.10],  # baseline metabolism
+])
+DEFAULT_TRAITS = np.array([SPEED, SEE_RADIUS, HEAR_RADIUS, METABOLISM])
+TRAIT_MUTATION_SCALE = (TRAIT_BOUNDS[:, 1] - TRAIT_BOUNDS[:, 0]) * 0.08
+
+SPEED_ENERGY_COST = 0.011     # extra metabolism per unit of speed above the minimum
+VISION_ENERGY_COST = 0.00083  # extra metabolism per unit of vision above the minimum
+HEARING_ENERGY_COST = 0.00033  # extra metabolism per unit of hearing above the minimum
+DANGER_VISION_RATIO = DANGER_RADIUS / SEE_RADIUS  # keeps danger-spotting proportional to vision
+
 
 class Genome:
-    __slots__ = ("emission_logits", "response_weights")
+    __slots__ = ("emission_logits", "response_weights", "traits")
 
-    def __init__(self, emission_logits, response_weights):
+    def __init__(self, emission_logits, response_weights, traits=None):
         self.emission_logits = emission_logits
         self.response_weights = response_weights
+        self.traits = DEFAULT_TRAITS.copy() if traits is None else traits
 
     def token_for(self, state):
         return int(np.argmax(self.emission_logits[state]))
@@ -89,21 +112,24 @@ class Genome:
         return Genome(
             emission_logits=rng.normal(0, 0.6, size=(N_STATES, N_TOKENS)),
             response_weights=rng.normal(0, 1.0, size=N_TOKENS),
+            traits=rng.uniform(TRAIT_BOUNDS[:, 0], TRAIT_BOUNDS[:, 1]),
         )
 
     @staticmethod
     def crossover(a, b, rng):
         mask_e = rng.random(a.emission_logits.shape) < 0.5
         mask_r = rng.random(a.response_weights.shape) < 0.5
+        mask_t = rng.random(a.traits.shape) < 0.5
         child = Genome(
             np.where(mask_e, a.emission_logits, b.emission_logits).copy(),
             np.where(mask_r, a.response_weights, b.response_weights).copy(),
+            np.where(mask_t, a.traits, b.traits).copy(),
         )
         child.mutate(rng)
         return child
 
     def clone(self, rng):
-        child = Genome(self.emission_logits.copy(), self.response_weights.copy())
+        child = Genome(self.emission_logits.copy(), self.response_weights.copy(), self.traits.copy())
         child.mutate(rng)
         return child
 
@@ -112,12 +138,17 @@ class Genome:
         self.emission_logits += mask_e * rng.normal(0, MUTATION_SCALE, self.emission_logits.shape)
         mask_r = rng.random(self.response_weights.shape) < MUTATION_RATE
         self.response_weights += mask_r * rng.normal(0, MUTATION_SCALE, self.response_weights.shape)
+        mask_t = rng.random(self.traits.shape) < MUTATION_RATE
+        self.traits += mask_t * rng.normal(0, 1.0, self.traits.shape) * TRAIT_MUTATION_SCALE
+        np.clip(self.traits, TRAIT_BOUNDS[:, 0], TRAIT_BOUNDS[:, 1], out=self.traits)
 
     @staticmethod
     def from_lookup(state_to_token, token_to_state):
         """Build a fixed genome from train_language.py's exported vocabulary - a
         population can start already "fluent" instead of evolving from scratch.
-        No PyTorch involved here, just the two small lookup tables it exported."""
+        No PyTorch involved here, just the two small lookup tables it exported.
+        Physical traits aren't part of that export, so they start at the same
+        defaults every non-adaptive creature uses."""
         emission_logits = np.zeros((N_STATES, N_TOKENS))
         for state, token in enumerate(state_to_token):
             emission_logits[state, token] = 5.0
@@ -182,8 +213,9 @@ def _edge_push(pos):
 
 class World:
     def __init__(self, init_pop=70, seed=None, manual_food=False, manual_predators=False,
-                 predator_count=None, seed_genome=None):
+                 predator_count=None, seed_genome=None, adaptive_traits=False):
         self.rng = np.random.default_rng(seed)
+        self.adaptive_traits = adaptive_traits
         if seed_genome is None:
             self.creatures = [
                 Creature(self.rng.uniform([0, 0], [WIDTH, HEIGHT]), INIT_ENERGY, Genome.random(self.rng))
@@ -196,7 +228,8 @@ class World:
             self.creatures = [
                 Creature(
                     self.rng.uniform([0, 0], [WIDTH, HEIGHT]), INIT_ENERGY,
-                    Genome(seed_genome.emission_logits.copy(), seed_genome.response_weights.copy()),
+                    Genome(seed_genome.emission_logits.copy(), seed_genome.response_weights.copy(),
+                           seed_genome.traits.copy()),
                 )
                 for _ in range(init_pop)
             ]
@@ -320,14 +353,23 @@ class World:
             nearest_pred_d = np.full(len(alive), np.inf)
             nearest_pred_i = np.zeros(len(alive), dtype=int)
 
+        if self.adaptive_traits:
+            vision = np.array([c.genome.traits[TRAIT_VISION] for c in alive])
+            hearing = np.array([c.genome.traits[TRAIT_HEARING] for c in alive])
+            danger_r = vision * DANGER_VISION_RATIO
+        else:
+            vision = np.full(len(alive), SEE_RADIUS)
+            hearing = np.full(len(alive), HEAR_RADIUS)
+            danger_r = np.full(len(alive), DANGER_RADIUS)
+
         for idx, c in enumerate(alive):
-            if nearest_pred_d[idx] < DANGER_RADIUS:
+            if nearest_pred_d[idx] < danger_r[idx]:
                 c.state = DANGER
-            elif nearest_food_d[idx] < SEE_RADIUS:
+            elif nearest_food_d[idx] < vision[idx]:
                 c.state = FOOD
             elif c.energy < DISTRESS_ENERGY:
                 c.state = DISTRESS
-            elif mate_ready[idx] and nearest_mate_d[idx] < SEE_RADIUS:
+            elif mate_ready[idx] and nearest_mate_d[idx] < vision[idx]:
                 c.state = MATE
             else:
                 c.state = IDLE
@@ -338,6 +380,7 @@ class World:
             nearest_food_d=nearest_food_d, nearest_food_i=nearest_food_i,
             pair_d=pair_d, nearest_mate_d=nearest_mate_d, nearest_mate_i=nearest_mate_i,
             predator_pos=predator_pos, nearest_pred_d=nearest_pred_d, nearest_pred_i=nearest_pred_i,
+            hearing=hearing,
         )
 
     def _move(self):
@@ -347,7 +390,8 @@ class World:
             return
         positions, pair_d = c_["positions"], c_["pair_d"]
         tokens = np.array([c.token for c in alive])
-        heard = pair_d < HEAR_RADIUS
+        hearing = c_["hearing"]
+        heard = pair_d < hearing[:, None]
 
         for i, c in enumerate(alive):
             move = self.rng.normal(0, 1, 2) * WANDER_STRENGTH
@@ -369,10 +413,19 @@ class World:
 
             move += _edge_push(c.pos)
             speed = np.linalg.norm(move)
-            if speed > SPEED:
-                move = move / speed * SPEED
+            if self.adaptive_traits:
+                own_speed, own_metabolism = c.genome.traits[TRAIT_SPEED], c.genome.traits[TRAIT_METABOLISM]
+                metabolism = own_metabolism + (
+                    SPEED_ENERGY_COST * (own_speed - TRAIT_BOUNDS[TRAIT_SPEED, 0])
+                    + VISION_ENERGY_COST * (c.genome.traits[TRAIT_VISION] - TRAIT_BOUNDS[TRAIT_VISION, 0])
+                    + HEARING_ENERGY_COST * (c.genome.traits[TRAIT_HEARING] - TRAIT_BOUNDS[TRAIT_HEARING, 0])
+                )
+            else:
+                own_speed, metabolism = SPEED, METABOLISM
+            if speed > own_speed:
+                move = move / speed * own_speed
             c.pos = np.clip(c.pos + move, [0, 0], [WIDTH, HEIGHT])
-            c.energy -= METABOLISM
+            c.energy -= metabolism
             if c.token != 0:
                 c.energy -= SIGNAL_COST
 
@@ -511,6 +564,7 @@ def save_world(world, path):
         "deaths": world.deaths,
         "manual_food": world.manual_food,
         "manual_predators": world.manual_predators,
+        "adaptive_traits": world.adaptive_traits,
         "vocab_history": {state: list(hist) for state, hist in world.vocab_history.items()},
         "food": [[float(x), float(y)] for x, y in world.food],
         "predators": [[float(p.pos[0]), float(p.pos[1])] for p in world.predators],
@@ -521,6 +575,7 @@ def save_world(world, path):
                 "age": c.age,
                 "emission_logits": c.genome.emission_logits.tolist(),
                 "response_weights": c.genome.response_weights.tolist(),
+                "traits": c.genome.traits.tolist(),
             }
             for c in world.creatures if c.alive
         ],
@@ -539,6 +594,7 @@ def load_world(path, seed=None):
     world.rng = np.random.default_rng(seed)
     world.manual_food = data["manual_food"]
     world.manual_predators = data["manual_predators"]
+    world.adaptive_traits = data.get("adaptive_traits", False)
     world.tick = data["tick"]
     world.births = data["births"]
     world.deaths = data["deaths"]
@@ -552,7 +608,8 @@ def load_world(path, seed=None):
     world.predators = [Predator(np.array(p, dtype=float)) for p in data["predators"]]
     world.creatures = []
     for cd in data["creatures"]:
-        genome = Genome(np.array(cd["emission_logits"]), np.array(cd["response_weights"]))
+        traits = np.array(cd["traits"]) if "traits" in cd else None
+        genome = Genome(np.array(cd["emission_logits"]), np.array(cd["response_weights"]), traits)
         creature = Creature(np.array(cd["pos"], dtype=float), cd["energy"], genome)
         creature.age = cd["age"]
         world.creatures.append(creature)

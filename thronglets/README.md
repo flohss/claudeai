@@ -81,12 +81,14 @@ defaulting to French. If a save from a previous run exists
 and everything else is skipped, you're straight back where you left off.
 Otherwise you pick `A` (automatic) or `M` (manual), how many creatures to
 start with (type a number, 1-220, `ENTER` to confirm or skip for the
-default of 100), then `Y`/`N`/`T` (`O`/`N`/`T` in French) for whether to
-start already speaking a pre-trained language, train a fresh one live right
-there, or skip it (see below for both) — every screen defaults to
-French/automatic/100/yes if you just hit `ENTER` through all of them, and
-they stick for the whole run (`R` resets using them again, it doesn't ask
-a second time).
+default of 100), `Y`/`N` (`O`/`N` in French) for whether physical traits
+(speed, vision, hearing, metabolism) evolve too — see
+[Adaptive traits](#adaptive-traits-optional) below, off by default — then
+`Y`/`N`/`T` (`O`/`N`/`T` in French) for whether to start already speaking a
+pre-trained language, train a fresh one live right there, or skip it (see
+below for both) — every screen defaults to French/automatic/100/no-traits/yes
+if you just hit `ENTER` through all of them, and they stick for the whole run
+(`R` resets using them again, it doesn't ask a second time).
 
 | Key           | Effect                                                       |
 |---------------|----------------------------------------------------------------|
@@ -123,11 +125,14 @@ defaulting to French. If a save from a previous run exists, you're then
 asked whether to resume it — say yes and the population, food, and
 predators come back exactly as you left them, skipping every other
 question. Otherwise: `A` (automatic) or `M` (manual), how many creatures to
-start with (1-220, `enter` to confirm or skip for the default of 100), then
-a yes/no for whether to start already speaking a pre-trained language (see
-below, `y`/`n` in English, `o`/`n` in French) — every screen defaults to
-French/automatic/100/yes if you just hit `enter` through all of them, and
-all choices stick for the whole run.
+start with (1-220, `enter` to confirm or skip for the default of 100), a
+yes/no for whether physical traits evolve too (`y`/`n` in English, `o`/`n`
+in French, off by default — see
+[Adaptive traits](#adaptive-traits-optional) below), then a yes/no for
+whether to start already speaking a pre-trained language (see below,
+`y`/`n` in English, `o`/`n` in French) — every screen defaults to
+French/automatic/100/no-traits/yes if you just hit `enter` through all of
+them, and all choices stick for the whole run.
 
 Creatures show up as a colored `o` (colored by whatever token they're
 currently signaling, white if silent), food as green `.`, predators as a red
@@ -161,9 +166,10 @@ this one isn't a one-time choice like the others. The world doesn't exist
 yet — if a save from a previous run exists, a **Resume saved game** button
 appears on the start screen and skips every other question. Otherwise,
 pick automatic or manual mode, how many creatures to start with (pre-filled
-with 100), and whether to activate a pre-trained language (checked by
-default), and those three stick for the whole run (Reset doesn't ask
-again). Once
+with 100), whether physical traits evolve too (unchecked by default — see
+[Adaptive traits](#adaptive-traits-optional) below), and whether to
+activate a pre-trained language (checked by default), and those four stick
+for the whole run (Reset doesn't ask again). Once
 started, the page polls the server a few times a second for a fresh
 snapshot and draws it to a `<canvas>`; buttons
 handle pause/reset/speed and what a manual placement adds. `+`/`- predateurs`
@@ -194,6 +200,21 @@ happen, and `x10`/`x50`/etc. scale from that same one-second baseline
 (capped at `x200`) rather than from whatever frame rate the renderer happens
 to draw at.
 
+## Adaptive traits (optional)
+
+By default every creature has the same fixed speed, vision range, hearing
+range, and metabolism — only signaling and listening evolve. Turning on
+**"Adaptive evolution"** at startup (asked right after population size, in
+all three renderers — off by default, since it changes the balance of the
+simulation) makes those four physical traits part of the genome too:
+inherited from parents, mutated a little at each birth, and bounded within a
+sane range. A faster, sharper-sensed creature isn't a free upgrade, though —
+speed, vision, and hearing each add to that individual's energy cost per
+tick, so a genome that maxes everything out just starves faster. Selection
+has to actually weigh "can sense more of the world" against "burns energy
+faster doing it," the same kind of real trade-off that already exists
+between signaling and staying silent.
+
 ## Headless check
 
 `simulation.py` has no pygame dependency, so the core can be run and tested
@@ -212,7 +233,6 @@ not just that the window doesn't crash.
 The simulation core (`simulation.py`) and renderer (`main.py`) are split on
 purpose so this is easy to extend:
 
-- Evolvable traits beyond signaling (speed, senses, metabolism)
 - A "translator" panel logging the emerging token → meaning dictionary over time
 - Swapping the fixed 2D field for a proper toroidal world, or a richer
   pixel-art renderer for the creatures themselves

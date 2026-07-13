@@ -37,10 +37,12 @@ DEFAULT_SAVE_FILE = "thronglets_save.json"
 STATE_IDS = {IDLE: "idle", FOOD: "food", MATE: "mate", DANGER: "danger", DISTRESS: "distress"}
 
 
-def _new_world(mode, predator_count, init_pop=DEFAULT_INIT_POP, seed_genome=None):
+def _new_world(mode, predator_count, init_pop=DEFAULT_INIT_POP, seed_genome=None, adaptive_traits=False):
     if mode == "manual":
-        return World(init_pop=init_pop, manual_food=True, manual_predators=True, seed_genome=seed_genome)
-    return World(init_pop=init_pop, predator_count=predator_count, seed_genome=seed_genome)
+        return World(init_pop=init_pop, manual_food=True, manual_predators=True, seed_genome=seed_genome,
+                     adaptive_traits=adaptive_traits)
+    return World(init_pop=init_pop, predator_count=predator_count, seed_genome=seed_genome,
+                 adaptive_traits=adaptive_traits)
 
 
 class SimState:
@@ -54,6 +56,7 @@ class SimState:
         self.speed = 1
         self.cli_seed_genome = seed_genome
         self.active_seed_genome = None
+        self.adaptive_traits = False
         self.lock = threading.Lock()
 
 
@@ -72,6 +75,7 @@ def snapshot(state):
         "paused": state.paused,
         "speed": state.speed,
         "trained": state.active_seed_genome is not None,
+        "adaptive_traits": w.adaptive_traits,
         "mode": state.mode,
         "placing": state.placing,
         "predator_count": len(w.predators),
@@ -150,6 +154,7 @@ class Handler(BaseHTTPRequestHandler):
                     state.mode = "manual" if (state.world.manual_food or state.world.manual_predators) else "auto"
                     state.init_pop = state.world.population()
                     state.active_seed_genome = None
+                    state.adaptive_traits = state.world.adaptive_traits
                     state.started = True
                 except (OSError, ValueError, KeyError):
                     error_code = "resume_failed"
@@ -160,6 +165,7 @@ class Handler(BaseHTTPRequestHandler):
                 except (TypeError, ValueError):
                     init_pop = DEFAULT_INIT_POP
                 state.init_pop = max(1, min(MAX_POPULATION, init_pop))
+                state.adaptive_traits = bool(body.get("adaptive_traits"))
 
                 if state.cli_seed_genome is not None:
                     state.active_seed_genome = state.cli_seed_genome
@@ -172,7 +178,8 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     state.active_seed_genome = None
 
-                state.world = _new_world(state.mode, 6, state.init_pop, state.active_seed_genome)
+                state.world = _new_world(state.mode, 6, state.init_pop, state.active_seed_genome,
+                                          state.adaptive_traits)
                 state.started = True
             elif not state.started:
                 pass  # ignore every other action until a mode has been chosen
@@ -184,7 +191,7 @@ class Handler(BaseHTTPRequestHandler):
                 save_world(state.world, DEFAULT_SAVE_FILE)
             elif action == "reset":
                 state.world = _new_world(state.mode, len(state.world.predators), state.init_pop,
-                                          state.active_seed_genome)
+                                          state.active_seed_genome, state.adaptive_traits)
                 state.paused = False
             elif action == "speed":
                 state.speed = max(1, min(200, int(body.get("value", state.speed))))
@@ -302,6 +309,8 @@ INDEX_HTML = """<!doctype html>
       <input type="number" id="initPop" value="100" min="1" max="220">
     </label>
     <label><input type="checkbox" id="useAi" checked> <span data-i18n="useAiLabel"></span></label>
+    <label><input type="checkbox" id="adaptiveTraits"> <span data-i18n="adaptiveTraitsLabel"></span></label>
+    <p data-i18n="adaptiveTraitsExplain" style="font-size:12px; opacity:0.65; margin-top:-8px;"></p>
     <button id="startAuto" data-i18n="startAuto"></button>
     <button id="startManual" data-i18n="startManual"></button>
     <button id="startResume" data-i18n="resumeSaveText" style="display:none"></button>
@@ -400,6 +409,8 @@ const STRINGS = {
     startPrompt: "Choose the starting mode - this choice does not change during the game.",
     initPopLabel: "Number of creatures to start with:",
     useAiLabel: "Activate the pre-trained AI language (language_model.json)",
+    adaptiveTraitsLabel: "Adaptive evolution: speed, vision, hearing, metabolism",
+    adaptiveTraitsExplain: "Each creature gets its own physical stats, inherited and mutated - but faster/keener senses cost more energy, a real trade-off. Off by default.",
     startAuto: "Automatic — food and predators spawn on their own",
     startManual: "Manual — I place everything myself",
     resumeSaveText: "Resume saved game",
@@ -419,6 +430,7 @@ const STRINGS = {
     labelDistress: "distress-call",
     wordBirths: "births", wordDeaths: "deaths", wordPaused: "PAUSE",
     trainedTag: "   [trained vocabulary]",
+    traitsTag: "   [adaptive traits]",
     placingWordFood: "food", placingWordPredator: "predator",
     settingsManual: (placing) => `mode: manual   placing: ${placing}`,
     settingsAuto: (count) => `mode: automatic   predators: ${count} (+/- act immediately)`,
@@ -440,6 +452,8 @@ const STRINGS = {
     startPrompt: "Choisis le mode de depart - ce choix ne se change pas en cours de partie.",
     initPopLabel: "Nombre de creatures au depart :",
     useAiLabel: "Activer le langage pre-entraine par IA (language_model.json)",
+    adaptiveTraitsLabel: "Evolution adaptative : vitesse, vision, ouie, metabolisme",
+    adaptiveTraitsExplain: "Chaque creature a ses propres stats physiques, heritees et mutees - mais etre rapide/perceptif coute plus d'energie, un vrai compromis. Desactive par defaut.",
     startAuto: "Automatique — nourriture et predateurs apparaissent seuls",
     startManual: "Manuel — je place tout moi-meme",
     resumeSaveText: "Reprendre la partie sauvegardee",
@@ -459,6 +473,7 @@ const STRINGS = {
     labelDistress: "detresse",
     wordBirths: "naissances", wordDeaths: "morts", wordPaused: "PAUSE",
     trainedTag: "   [vocabulaire entraine]",
+    traitsTag: "   [traits evolutifs]",
     placingWordFood: "nourriture", placingWordPredator: "predateur",
     settingsManual: (placing) => `mode: manuel   pose: ${placing}`,
     settingsAuto: (count) => `mode: auto   predateurs: ${count} (+/- agit tout de suite)`,
@@ -542,7 +557,8 @@ function render(state) {
   document.getElementById('header').textContent =
     `tick ${state.tick}   pop ${state.pop}   ${t.wordBirths} ${state.births}   ${t.wordDeaths} ${state.deaths}   ` +
     (state.paused ? t.wordPaused : "x" + state.speed) +
-    (state.trained ? t.trainedTag : "");
+    (state.trained ? t.trainedTag : "") +
+    (state.adaptive_traits ? t.traitsTag : "");
 
   renderVocabRow('vocab-danger', t.labelDanger, state.vocabulary['danger']);
   renderVocabRow('vocab-food', t.labelFood, state.vocabulary['food']);
@@ -633,7 +649,8 @@ function startingInitPop() {
 }
 async function startGame(mode) {
   const useAi = document.getElementById('useAi').checked;
-  const res = await post('start', {mode, init_pop: startingInitPop(), use_ai: useAi});
+  const adaptiveTraits = document.getElementById('adaptiveTraits').checked;
+  const res = await post('start', {mode, init_pop: startingInitPop(), use_ai: useAi, adaptive_traits: adaptiveTraits});
   if (res.error === 'ai_missing') alert(STRINGS[uiLang].errorAiMissing(res.file));
 }
 async function resumeGame() {
