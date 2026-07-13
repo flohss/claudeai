@@ -105,7 +105,7 @@ TEXT = {
         "hud_trained_tag": "   [trained vocabulary]",
         "hud_traits_tag": "   [adaptive traits]",
         "hud_header": ("tick {tick:>6}   pop {pop:>4}   births {births:>5}   deaths {deaths:>5}   "
-                        "{status}   (space=pause  up/down=speed  r=reset  s=save  g=graph  h=help){tag}"),
+                        "{status}   (space=pause  up/down=speed  r=reset  s=save  g=graph  t=family  h=help){tag}"),
         "hud_manual": "mode: manual   click places: {placing} (P)",
         "hud_auto": "mode: automatic   predators: {count} ([ / ] act immediately)",
         "placing_food": "food",
@@ -117,6 +117,19 @@ TEXT = {
         "legend_food": "food",
         "legend_predator": "predator",
         "extinct": "Extinct. Press R to start a new world.",
+
+        "family_title": "Family tree",
+        "family_gen": "generation {gen}",
+        "family_alive": "alive - token {token}, age {age}",
+        "family_dead": "dead since tick {death}",
+        "family_born": "born at tick {tick}",
+        "family_parents": "Parents:",
+        "family_founder": "none - founding generation",
+        "family_children": "Children ({n}):",
+        "family_no_children": "none yet",
+        "family_descendants": "Total descendants: {total} ({alive} still alive)",
+        "family_hint": "UP=parent   DOWN=child   LEFT/RIGHT=siblings   T or ESC=go back",
+        "family_none": "No creature to show yet.",
 
         "help_more": "-- space for more --",
         "help_dismiss": "-- press any key to resume --",
@@ -198,7 +211,7 @@ TEXT = {
         "hud_trained_tag": "   [vocabulaire entraine]",
         "hud_traits_tag": "   [traits evolutifs]",
         "hud_header": ("tick {tick:>6}   pop {pop:>4}   naissances {births:>5}   morts {deaths:>5}   "
-                        "{status}   (espace=pause  haut/bas=vitesse  r=reset  s=sauver  g=graphique  h=aide){tag}"),
+                        "{status}   (espace=pause  haut/bas=vitesse  r=reset  s=sauver  g=graphique  t=famille  h=aide){tag}"),
         "hud_manual": "mode: manuel   clic pose : {placing} (P)",
         "hud_auto": "mode: auto   predateurs : {count} ([ / ] agit tout de suite)",
         "placing_food": "nourriture",
@@ -210,6 +223,19 @@ TEXT = {
         "legend_food": "nourriture",
         "legend_predator": "predateur",
         "extinct": "Extinction. Appuie sur R pour un nouveau monde.",
+
+        "family_title": "Arbre genealogique",
+        "family_gen": "generation {gen}",
+        "family_alive": "vivant - token {token}, age {age}",
+        "family_dead": "mort depuis le tick {death}",
+        "family_born": "ne au tick {tick}",
+        "family_parents": "Parents :",
+        "family_founder": "aucun - generation fondatrice",
+        "family_children": "Enfants ({n}) :",
+        "family_no_children": "aucun pour le moment",
+        "family_descendants": "Descendants au total : {total} ({alive} encore en vie)",
+        "family_hint": "HAUT=parent   BAS=enfant   GAUCHE/DROITE=freres et soeurs   T ou ESC=revenir",
+        "family_none": "Aucune creature a montrer pour le moment.",
 
         "help_more": "-- espace pour la suite --",
         "help_dismiss": "-- une touche pour reprendre --",
@@ -305,6 +331,113 @@ def show_graph(screen, font, world, lang):
                 sys.exit()
             elif event.type == pygame.KEYDOWN:
                 waiting = False
+
+
+def _family_short_label(world, cid):
+    rec = world.lineage.get(cid)
+    if rec is None:
+        return f"#{cid}"
+    if rec["death"] is None:
+        return f"#{cid} (gen {rec['gen']}, alive)"
+    return f"#{cid} (gen {rec['gen']}, dead t{rec['death']})"
+
+
+def show_family(screen, font, world, lang):
+    """An ego-centric genealogy browser, opened like show_graph()/show_help():
+    one creature in focus at a time, arrow keys walk the tree (parent above,
+    first child below, siblings sideways) instead of trying to cram a whole
+    population's tree onto one screen."""
+    t = TEXT[lang]
+    focus = world.default_family_focus()
+    if focus is None:
+        waiting = True
+        while waiting:
+            screen.fill(BG)
+            screen.blit(font.render(t["family_none"], True, (255, 255, 255)), (20, 20))
+            screen.blit(font.render(t["graph_dismiss"], True, (150, 155, 145)), (20, 60))
+            pygame.display.flip()
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+                elif event.type == pygame.KEYDOWN:
+                    waiting = False
+        return
+
+    line_h = 26
+    while True:
+        info = world.family_info(focus)
+        screen.fill(BG)
+        y = 20
+        screen.blit(font.render(t["family_title"], True, (255, 255, 255)), (20, y))
+        y += line_h * 2
+
+        screen.blit(font.render(f"#{info['id']}  {t['family_gen'].format(gen=info['gen'])}",
+                                 True, (255, 255, 255)), (20, y))
+        y += line_h
+        status = (t["family_alive"].format(token=info["token"], age=info["age"]) if info["alive"]
+                  else t["family_dead"].format(death=info["death"]))
+        color = TOKEN_COLORS[info["token"]] if info["alive"] and info["token"] else TEXT_COLOR
+        screen.blit(font.render(status, True, color), (20, y))
+        y += line_h
+        screen.blit(font.render(t["family_born"].format(tick=info["birth"]), True, (150, 155, 145)), (20, y))
+        y += line_h * 2
+
+        screen.blit(font.render(t["family_parents"], True, (255, 255, 255)), (20, y))
+        y += line_h
+        if info["parents"]:
+            for pid in info["parents"]:
+                screen.blit(font.render(_family_short_label(world, pid), True, TEXT_COLOR), (40, y))
+                y += line_h
+        else:
+            screen.blit(font.render(t["family_founder"], True, (150, 155, 145)), (40, y))
+            y += line_h
+        y += line_h // 2
+
+        screen.blit(font.render(t["family_children"].format(n=len(info["children"])),
+                                 True, (255, 255, 255)), (20, y))
+        y += line_h
+        if info["children"]:
+            for cid in info["children"][:8]:
+                screen.blit(font.render(_family_short_label(world, cid), True, TEXT_COLOR), (40, y))
+                y += line_h
+            if len(info["children"]) > 8:
+                screen.blit(font.render(f"... +{len(info['children']) - 8}", True, (150, 155, 145)), (40, y))
+                y += line_h
+        else:
+            screen.blit(font.render(t["family_no_children"], True, (150, 155, 145)), (40, y))
+            y += line_h
+        y += line_h // 2
+
+        descendants = t["family_descendants"].format(total=info["total_descendants"], alive=info["alive_descendants"])
+        screen.blit(font.render(descendants, True, TEXT_COLOR), (20, y))
+        y += line_h * 2
+        screen.blit(font.render(t["family_hint"], True, (150, 155, 145)), (20, y))
+        pygame.display.flip()
+
+        event_key = None
+        waiting = True
+        while waiting:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+                elif event.type == pygame.KEYDOWN:
+                    event_key = event.key
+                    waiting = False
+
+        if event_key in (pygame.K_ESCAPE, pygame.K_t):
+            break
+        elif event_key == pygame.K_UP and info["parents"]:
+            focus = info["parents"][0]
+        elif event_key == pygame.K_DOWN and info["children"]:
+            focus = info["children"][0]
+        elif event_key in (pygame.K_LEFT, pygame.K_RIGHT) and info["parents"]:
+            siblings = world.family_info(info["parents"][0])["children"]
+            if focus in siblings and len(siblings) > 1:
+                i = siblings.index(focus)
+                i = (i + (1 if event_key == pygame.K_RIGHT else -1)) % len(siblings)
+                focus = siblings[i]
 
 
 def draw(screen, font, world, paused, speed, mode, placing, lang, trained=False):
@@ -825,6 +958,8 @@ def main():
                     flash_message(screen, font, lang, TEXT[lang]["save_confirmed"].format(file=DEFAULT_SAVE_FILE))
                 elif event.key == pygame.K_g:
                     show_graph(screen, font, world, lang)
+                elif event.key == pygame.K_t:
+                    show_family(screen, font, world, lang)
                 elif event.key == pygame.K_h:
                     show_help(screen, font, lang)
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:

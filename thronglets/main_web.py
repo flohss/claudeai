@@ -57,6 +57,7 @@ class SimState:
         self.cli_seed_genome = seed_genome
         self.active_seed_genome = None
         self.adaptive_traits = False
+        self.family_focus_id = None
         self.lock = threading.Lock()
 
 
@@ -96,6 +97,18 @@ def snapshot(state):
             for s in (DANGER, FOOD, DISTRESS, MATE, IDLE)
         },
     }
+
+
+def _family_payload(state):
+    """The current focus creature's family_info(), auto-picking a fresh focus
+    if there isn't one yet (or the old one no longer resolves, e.g. after a
+    reset). Returns None only if the world has no creatures at all."""
+    w = state.world
+    if state.family_focus_id is None or w.family_info(state.family_focus_id) is None:
+        state.family_focus_id = w.default_family_focus()
+    if state.family_focus_id is None:
+        return None
+    return w.family_info(state.family_focus_id)
 
 
 def simulation_loop(state):
@@ -147,6 +160,7 @@ class Handler(BaseHTTPRequestHandler):
         state = self.server.state
         action = body.get("action")
         error_code = None
+        family_payload = None
         with state.lock:
             if action == "start" and not state.started and body.get("resume_save"):
                 try:
@@ -155,6 +169,7 @@ class Handler(BaseHTTPRequestHandler):
                     state.init_pop = state.world.population()
                     state.active_seed_genome = None
                     state.adaptive_traits = state.world.adaptive_traits
+                    state.family_focus_id = None
                     state.started = True
                 except (OSError, ValueError, KeyError):
                     error_code = "resume_failed"
@@ -180,6 +195,7 @@ class Handler(BaseHTTPRequestHandler):
 
                 state.world = _new_world(state.mode, 6, state.init_pop, state.active_seed_genome,
                                           state.adaptive_traits)
+                state.family_focus_id = None
                 state.started = True
             elif not state.started:
                 pass  # ignore every other action until a mode has been chosen
@@ -192,6 +208,7 @@ class Handler(BaseHTTPRequestHandler):
             elif action == "reset":
                 state.world = _new_world(state.mode, len(state.world.predators), state.init_pop,
                                           state.active_seed_genome, state.adaptive_traits)
+                state.family_focus_id = None
                 state.paused = False
             elif action == "speed":
                 state.speed = max(1, min(200, int(body.get("value", state.speed))))
@@ -208,9 +225,26 @@ class Handler(BaseHTTPRequestHandler):
                     state.world.add_predator(x, y)
                 else:
                     state.world.add_food(x, y)
+            elif action == "family_open":
+                family_payload = _family_payload(state)
+            elif action == "family_nav":
+                info = _family_payload(state)
+                if info is not None:
+                    direction = body.get("dir")
+                    if direction == "up" and info["parents"]:
+                        state.family_focus_id = info["parents"][0]
+                    elif direction == "down" and info["children"]:
+                        state.family_focus_id = info["children"][0]
+                    elif direction in ("left", "right") and info["parents"]:
+                        siblings = state.world.family_info(info["parents"][0])["children"]
+                        if state.family_focus_id in siblings and len(siblings) > 1:
+                            i = siblings.index(state.family_focus_id)
+                            i = (i + (1 if direction == "right" else -1)) % len(siblings)
+                            state.family_focus_id = siblings[i]
+                    family_payload = _family_payload(state)
         error_file = DEFAULT_SAVE_FILE if error_code == "resume_failed" else DEFAULT_LANGUAGE_FILE
         self._send(200, "application/json",
-                   json.dumps({"ok": True, "error": error_code, "file": error_file}).encode())
+                   json.dumps({"ok": True, "error": error_code, "file": error_file, "family": family_payload}).encode())
 
     def _send(self, code, content_type, body, no_store=False):
         self.send_response(code)
@@ -294,6 +328,24 @@ INDEX_HTML = """<!doctype html>
   .graph-row .graph-label { display: flex; justify-content: space-between; margin-bottom: 4px; color: #c3c8b6; }
   .graph-row canvas { width: 100%; height: 44px; background: #1a2014; border-radius: 4px; display: block; }
   #graph-panel .close-row { text-align: right; margin-top: 16px; }
+
+  #family-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+    align-items: center; justify-content: center; padding: 16px; z-index: 10;
+  }
+  #family-panel {
+    background: #171d13; border: 1px solid #3a4530; border-radius: 10px;
+    max-width: 480px; width: 100%; max-height: 85vh; overflow-y: auto;
+    padding: 22px 24px; line-height: 1.6; font-size: 13.5px;
+  }
+  #family-panel h2 { font-size: 17px; margin: 0 0 10px; }
+  #family-content p { margin: 3px 0; color: #c3c8b6; }
+  #family-content .fam-id { font-size: 15px; font-weight: bold; color: #dcdcd2; }
+  #family-content .fam-label { font-weight: bold; color: #dcdcd2; margin-top: 10px; }
+  #family-content .fam-item { margin-left: 14px; }
+  #family-nav { display: flex; justify-content: center; gap: 10px; margin: 14px 0 4px; }
+  #family-nav button { padding: 8px 14px; }
+  #family-panel .close-row { text-align: right; margin-top: 12px; }
 </style>
 </head>
 <body>
@@ -333,6 +385,7 @@ INDEX_HTML = """<!doctype html>
       <button id="faster" data-i18n="fasterText"></button>
       <button id="save" data-i18n="saveText"></button>
       <button id="openGraph" data-i18n="graphText"></button>
+      <button id="openFamily" data-i18n="familyText"></button>
       <button id="openHelp" data-i18n="noticeText"></button>
     </div>
     <div id="controls2">
@@ -398,6 +451,20 @@ INDEX_HTML = """<!doctype html>
     </div>
   </div>
 
+  <div id="family-overlay">
+    <div id="family-panel">
+      <h2 data-i18n="familyTitle"></h2>
+      <div id="family-content"></div>
+      <div id="family-nav">
+        <button id="famUp">&uarr;</button>
+        <button id="famLeft">&larr;</button>
+        <button id="famDown">&darr;</button>
+        <button id="famRight">&rarr;</button>
+      </div>
+      <div class="close-row"><button id="closeFamily" data-i18n="closeText"></button></div>
+    </div>
+  </div>
+
 <script>
 const TOKEN_COLORS = ["#a0a0a0", "#eb4646", "#4682eb", "#f5c83c", "#c85ae6", "#46e1d2"];
 const FOOD_COLOR = "#6edc5a";
@@ -420,6 +487,15 @@ const STRINGS = {
     saveText: "Save", savedText: "Saved!",
     noticeText: "Notice",
     graphText: "Graph", graphTitle: "Vocabulary over time - dominant share per state",
+    familyText: "Family", familyTitle: "Family tree",
+    familyGen: (gen) => `generation ${gen}`,
+    familyAlive: (token, age) => `alive - token ${token}, age ${age}`,
+    familyDead: (death) => `dead since tick ${death}`,
+    familyBorn: (tick) => `born at tick ${tick}`,
+    familyParents: "Parents:", familyFounder: "none - founding generation",
+    familyChildren: (n) => `Children (${n}):`, familyNoChildren: "none yet",
+    familyDescendants: (total, alive) => `Total descendants: ${total} (${alive} still alive)`,
+    familyNone: "No creature to show yet.",
     placingFoodBtn: "Placing: food", placingPredatorBtn: "Placing: predator",
     predLessText: "- predators", predMoreText: "+ predators",
     hint: "Click/tap the world to place food (or a predator in manual mode)",
@@ -463,6 +539,15 @@ const STRINGS = {
     saveText: "Sauvegarder", savedText: "Sauvegarde !",
     noticeText: "Notice",
     graphText: "Graphique", graphTitle: "Vocabulaire dans le temps - part dominante par etat",
+    familyText: "Famille", familyTitle: "Arbre genealogique",
+    familyGen: (gen) => `generation ${gen}`,
+    familyAlive: (token, age) => `vivant - token ${token}, age ${age}`,
+    familyDead: (death) => `mort depuis le tick ${death}`,
+    familyBorn: (tick) => `ne au tick ${tick}`,
+    familyParents: "Parents :", familyFounder: "aucun - generation fondatrice",
+    familyChildren: (n) => `Enfants (${n}) :`, familyNoChildren: "aucun pour le moment",
+    familyDescendants: (total, alive) => `Descendants au total : ${total} (${alive} encore en vie)`,
+    familyNone: "Aucune creature a montrer pour le moment.",
     placingFoodBtn: "Pose: nourriture", placingPredatorBtn: "Pose: predateur",
     predLessText: "- predateurs", predMoreText: "+ predateurs",
     hint: "Clique/touche le monde pour placer de la nourriture (ou un predateur en mode manuel)",
@@ -690,6 +775,63 @@ document.getElementById('openGraph').onclick = () => { graphOverlay.style.displa
 document.getElementById('closeGraph').onclick = () => { graphOverlay.style.display = 'none'; };
 graphOverlay.addEventListener('click', (ev) => {
   if (ev.target === graphOverlay) graphOverlay.style.display = 'none';
+});
+
+const familyOverlay = document.getElementById('family-overlay');
+const familyContent = document.getElementById('family-content');
+
+function renderFamily(info) {
+  const t = STRINGS[uiLang];
+  if (!info) {
+    familyContent.innerHTML = `<p>${t.familyNone}</p>`;
+    return;
+  }
+  const status = info.alive ? t.familyAlive(info.token, info.age) : t.familyDead(info.death);
+  let html = `<p class="fam-id">#${info.id} — ${t.familyGen(info.gen)}</p>`;
+  html += `<p>${status}</p>`;
+  html += `<p>${t.familyBorn(info.birth)}</p>`;
+  html += `<p class="fam-label">${t.familyParents}</p>`;
+  if (info.parents.length) {
+    for (const pid of info.parents) html += `<p class="fam-item">#${pid}</p>`;
+  } else {
+    html += `<p class="fam-item">${t.familyFounder}</p>`;
+  }
+  html += `<p class="fam-label">${t.familyChildren(info.children.length)}</p>`;
+  if (info.children.length) {
+    for (const cid of info.children.slice(0, 8)) html += `<p class="fam-item">#${cid}</p>`;
+    if (info.children.length > 8) html += `<p class="fam-item">... +${info.children.length - 8}</p>`;
+  } else {
+    html += `<p class="fam-item">${t.familyNoChildren}</p>`;
+  }
+  html += `<p class="fam-label">${t.familyDescendants(info.total_descendants, info.alive_descendants)}</p>`;
+  familyContent.innerHTML = html;
+}
+
+async function openFamily() {
+  const res = await post('family_open');
+  familyOverlay.style.display = 'flex';
+  renderFamily(res.family);
+}
+async function navFamily(dir) {
+  const res = await post('family_nav', {dir});
+  renderFamily(res.family);
+}
+document.getElementById('openFamily').onclick = () => { openFamily(); };
+document.getElementById('closeFamily').onclick = () => { familyOverlay.style.display = 'none'; };
+document.getElementById('famUp').onclick = () => navFamily('up');
+document.getElementById('famDown').onclick = () => navFamily('down');
+document.getElementById('famLeft').onclick = () => navFamily('left');
+document.getElementById('famRight').onclick = () => navFamily('right');
+familyOverlay.addEventListener('click', (ev) => {
+  if (ev.target === familyOverlay) familyOverlay.style.display = 'none';
+});
+document.addEventListener('keydown', (ev) => {
+  if (familyOverlay.style.display !== 'flex') return;
+  if (ev.key === 'ArrowUp') navFamily('up');
+  else if (ev.key === 'ArrowDown') navFamily('down');
+  else if (ev.key === 'ArrowLeft') navFamily('left');
+  else if (ev.key === 'ArrowRight') navFamily('right');
+  else if (ev.key === 'Escape') familyOverlay.style.display = 'none';
 });
 
 canvas.addEventListener('click', (ev) => {

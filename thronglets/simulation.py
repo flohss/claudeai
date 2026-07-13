@@ -173,7 +173,7 @@ def load_seed_genome(path):
 
 
 class Creature:
-    __slots__ = ("pos", "energy", "age", "genome", "state", "token", "alive")
+    __slots__ = ("pos", "energy", "age", "genome", "state", "token", "alive", "id")
 
     def __init__(self, pos, energy, genome):
         self.pos = pos
@@ -183,6 +183,7 @@ class Creature:
         self.state = IDLE
         self.token = 0
         self.alive = True
+        self.id = -1  # assigned by World._register_birth right after construction
 
 
 class Predator:
@@ -216,28 +217,31 @@ class World:
                  predator_count=None, seed_genome=None, adaptive_traits=False):
         self.rng = np.random.default_rng(seed)
         self.adaptive_traits = adaptive_traits
+        self.tick = 0
+        self._next_id = 0
+        self.lineage = {}
+        self.creatures = []
         if seed_genome is None:
-            self.creatures = [
-                Creature(self.rng.uniform([0, 0], [WIDTH, HEIGHT]), INIT_ENERGY, Genome.random(self.rng))
-                for _ in range(init_pop)
-            ]
+            for _ in range(init_pop):
+                c = Creature(self.rng.uniform([0, 0], [WIDTH, HEIGHT]), INIT_ENERGY, Genome.random(self.rng))
+                self._register_birth(c, (), 0)
+                self.creatures.append(c)
         else:
             # Every creature starts as an exact copy of the trained vocabulary -
             # no mutation yet, so generation 0 is genuinely, fully "fluent".
             # Ordinary reproduction (and its mutation) still applies from then on.
-            self.creatures = [
-                Creature(
+            for _ in range(init_pop):
+                c = Creature(
                     self.rng.uniform([0, 0], [WIDTH, HEIGHT]), INIT_ENERGY,
                     Genome(seed_genome.emission_logits.copy(), seed_genome.response_weights.copy(),
                            seed_genome.traits.copy()),
                 )
-                for _ in range(init_pop)
-            ]
+                self._register_birth(c, (), 0)
+                self.creatures.append(c)
         self.food = []
         self.predators = []
         self.manual_food = manual_food
         self.manual_predators = manual_predators
-        self.tick = 0
         self.births = 0
         self.deaths = 0
         self._cache = {"alive": []}
@@ -319,6 +323,65 @@ class World:
 
     def _alive(self):
         return [c for c in self.creatures if c.alive]
+
+    def _register_birth(self, creature, parent_ids, gen):
+        creature.id = self._next_id
+        self.lineage[creature.id] = {"parents": parent_ids, "gen": gen, "birth": self.tick, "death": None}
+        self._next_id += 1
+
+    def _children_index(self):
+        idx = {}
+        for cid, rec in self.lineage.items():
+            for pid in rec["parents"]:
+                idx.setdefault(pid, []).append(cid)
+        return idx
+
+    def _count_descendants(self, cid, idx):
+        total = 0
+        alive = 0
+        stack = list(idx.get(cid, []))
+        while stack:
+            nid = stack.pop()
+            total += 1
+            if self.lineage[nid]["death"] is None:
+                alive += 1
+            stack.extend(idx.get(nid, []))
+        return total, alive
+
+    def default_family_focus(self):
+        """A reasonable creature to open the Family screen on: whoever alive
+        right now has bred the most children so far."""
+        alive = self._alive()
+        if not alive:
+            return None
+        idx = self._children_index()
+        return max(alive, key=lambda c: len(idx.get(c.id, []))).id
+
+    def family_info(self, cid):
+        """Everything the Family screen needs about one creature: its
+        parents/children (for tree navigation), and how big its lineage is."""
+        rec = self.lineage.get(cid)
+        if rec is None:
+            return None
+        idx = self._children_index()
+        children = sorted(idx.get(cid, []))
+        total_descendants, alive_descendants = self._count_descendants(cid, idx)
+        creature = None
+        if rec["death"] is None:
+            creature = next((c for c in self.creatures if c.id == cid), None)
+        return {
+            "id": cid,
+            "gen": rec["gen"],
+            "parents": rec["parents"],
+            "children": children,
+            "birth": rec["birth"],
+            "death": rec["death"],
+            "alive": creature is not None,
+            "token": creature.token if creature is not None else None,
+            "age": creature.age if creature is not None else None,
+            "total_descendants": total_descendants,
+            "alive_descendants": alive_descendants,
+        }
 
     def _sense_and_signal(self):
         alive = self._alive()
@@ -472,6 +535,7 @@ class World:
             i = int(np.argmin(d))
             if i not in killed and d[i] < PREDATOR_KILL_RADIUS:
                 alive[i].alive = False
+                self.lineage[alive[i].id]["death"] = self.tick
                 killed.add(i)
         self.deaths += len(killed)
 
@@ -516,7 +580,10 @@ class World:
             if partner.energy < MATE_ENERGY or partner.age < MIN_MATE_AGE:
                 continue
             child_genome = Genome.crossover(c.genome, partner.genome, self.rng)
-            newborns.append(Creature((c.pos + partner.pos) / 2, INIT_ENERGY * 0.6, child_genome))
+            child = Creature((c.pos + partner.pos) / 2, INIT_ENERGY * 0.6, child_genome)
+            gen = max(self.lineage[c.id]["gen"], self.lineage[partner.id]["gen"]) + 1
+            self._register_birth(child, (c.id, partner.id), gen)
+            newborns.append(child)
             c.energy -= MATE_COST
             partner.energy -= MATE_COST
             paired.add(i)
@@ -526,7 +593,9 @@ class World:
             if i in paired or c.energy < BUD_ENERGY:
                 continue
             child_pos = np.clip(c.pos + self.rng.normal(0, 3, 2), [0, 0], [WIDTH, HEIGHT])
-            newborns.append(Creature(child_pos, INIT_ENERGY * 0.6, c.genome.clone(self.rng)))
+            child = Creature(child_pos, INIT_ENERGY * 0.6, c.genome.clone(self.rng))
+            self._register_birth(child, (c.id,), self.lineage[c.id]["gen"] + 1)
+            newborns.append(child)
             c.energy -= BUD_COST
 
         for child in newborns:
@@ -542,6 +611,7 @@ class World:
             if c.energy <= 0 or c.age > MAX_AGE:
                 c.alive = False
                 self.deaths += 1
+                self.lineage[c.id]["death"] = self.tick
         if self.tick % 200 == 0:
             self.creatures = [c for c in self.creatures if c.alive]
 
@@ -568,8 +638,15 @@ def save_world(world, path):
         "vocab_history": {state: list(hist) for state, hist in world.vocab_history.items()},
         "food": [[float(x), float(y)] for x, y in world.food],
         "predators": [[float(p.pos[0]), float(p.pos[1])] for p in world.predators],
+        "next_id": world._next_id,
+        "lineage": {
+            str(cid): {"parents": list(rec["parents"]), "gen": rec["gen"],
+                       "birth": rec["birth"], "death": rec["death"]}
+            for cid, rec in world.lineage.items()
+        },
         "creatures": [
             {
+                "id": c.id,
                 "pos": [float(c.pos[0]), float(c.pos[1])],
                 "energy": float(c.energy),
                 "age": c.age,
@@ -606,11 +683,25 @@ def load_world(path, seed=None):
     }
     world.food = [np.array(f, dtype=float) for f in data["food"]]
     world.predators = [Predator(np.array(p, dtype=float)) for p in data["predators"]]
+    world._next_id = data.get("next_id", 0)
+    world.lineage = {
+        int(cid): {"parents": tuple(rec["parents"]), "gen": rec["gen"],
+                   "birth": rec["birth"], "death": rec["death"]}
+        for cid, rec in data.get("lineage", {}).items()
+    }
     world.creatures = []
     for cd in data["creatures"]:
         traits = np.array(cd["traits"]) if "traits" in cd else None
         genome = Genome(np.array(cd["emission_logits"]), np.array(cd["response_weights"]), traits)
         creature = Creature(np.array(cd["pos"], dtype=float), cd["energy"], genome)
         creature.age = cd["age"]
+        if "id" in cd and cd["id"] in world.lineage:
+            creature.id = cd["id"]
+        else:
+            # Backward-compat: a save from before lineage tracking existed -
+            # register this creature as a fresh founder from here on.
+            creature.id = world._next_id
+            world.lineage[creature.id] = {"parents": (), "gen": 0, "birth": world.tick, "death": None}
+            world._next_id += 1
         world.creatures.append(creature)
     return world

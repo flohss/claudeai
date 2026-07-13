@@ -75,10 +75,24 @@ TEXT = {
         "hud_controls1": "space=pause  {food_hint}  r=reset  +/-=speed  q=quit",
         "food_hint_auto": "f=food",
         "food_hint_manual": "f=food (auto mode only)",
-        "hud_controls2": "p=place  [ ]=predator count  s=save  arrows/enter=place  g=graph  h=help",
+        "hud_controls2": "p=place  [ ]=predator count  s=save  arrows/enter=place  g=graph  t=family  h=help",
         "graph_title": "Vocabulary over time - dominant share per state",
         "graph_dismiss": "-- press any key to go back --",
         "extinct": "Extinct. Press r to reset.",
+
+        "family_title": "Family tree",
+        "family_gen": "generation {gen}",
+        "family_alive": "alive - token {token}, age {age}",
+        "family_dead": "dead since tick {death}",
+        "family_born": "born at tick {tick}",
+        "family_parents": "Parents:",
+        "family_founder": "none - founding generation",
+        "family_children": "Children ({n}):",
+        "family_no_children": "none yet",
+        "family_descendants": "Total descendants: {total} ({alive} still alive)",
+        "family_hint": "UP=parent  DOWN=child  LEFT/RIGHT=siblings  -- t or ESC to go back --",
+        "family_none": "No creature to show yet.",
+        "family_dismiss": "-- press any key to go back --",
 
         "help_more": "-- space for more --",
         "help_dismiss": "-- press any key to resume --",
@@ -126,10 +140,24 @@ TEXT = {
         "hud_controls1": "space=pause  {food_hint}  r=reset  +/-=speed  q=quit",
         "food_hint_auto": "f=food",
         "food_hint_manual": "f=food (auto uniquement)",
-        "hud_controls2": "p=placer  [ ]=nb predateurs  s=sauver  fleches/entree=placer  g=graphique  h=aide",
+        "hud_controls2": "p=placer  [ ]=nb predateurs  s=sauver  fleches/entree=placer  g=graphique  t=famille  h=aide",
         "graph_title": "Vocabulaire dans le temps - part dominante par etat",
         "graph_dismiss": "-- une touche pour revenir --",
         "extinct": "Extinction. Appuie sur r pour recommencer.",
+
+        "family_title": "Arbre genealogique",
+        "family_gen": "generation {gen}",
+        "family_alive": "vivant - token {token}, age {age}",
+        "family_dead": "mort depuis le tick {death}",
+        "family_born": "ne au tick {tick}",
+        "family_parents": "Parents :",
+        "family_founder": "aucun - generation fondatrice",
+        "family_children": "Enfants ({n}) :",
+        "family_no_children": "aucun pour le moment",
+        "family_descendants": "Descendants au total : {total} ({alive} encore en vie)",
+        "family_hint": "HAUT=parent  BAS=enfant  GAUCHE/DROITE=freres et soeurs  -- t ou ESC pour revenir --",
+        "family_none": "Aucune creature a montrer pour le moment.",
+        "family_dismiss": "-- une touche pour revenir --",
 
         "help_more": "-- espace pour la suite --",
         "help_dismiss": "-- une touche pour reprendre --",
@@ -296,6 +324,99 @@ def show_graph(stdscr, world, lang):
     _safe_addstr(stdscr, min(rows - 1, y), 0, t["graph_dismiss"], curses.color_pair(7) | curses.A_DIM)
     stdscr.refresh()
     stdscr.getch()
+    stdscr.nodelay(True)
+
+
+def _family_short_label(world, cid):
+    rec = world.lineage.get(cid)
+    if rec is None:
+        return f"#{cid}"
+    if rec["death"] is None:
+        return f"#{cid} (gen {rec['gen']}, alive)"
+    return f"#{cid} (gen {rec['gen']}, dead t{rec['death']})"
+
+
+def show_family(stdscr, world, lang):
+    """An ego-centric genealogy browser, opened like show_graph()/show_help():
+    one creature in focus at a time, arrow keys walk the tree (parent above,
+    first child below, siblings sideways) instead of trying to cram a whole
+    population's tree onto one screen."""
+    t = TEXT[lang]
+    stdscr.nodelay(False)
+    focus = world.default_family_focus()
+    if focus is None:
+        stdscr.erase()
+        _safe_addstr(stdscr, 0, 0, t["family_none"], curses.color_pair(7) | curses.A_BOLD)
+        _safe_addstr(stdscr, 2, 0, t["family_dismiss"], curses.color_pair(7) | curses.A_DIM)
+        stdscr.refresh()
+        stdscr.getch()
+        stdscr.nodelay(True)
+        return
+
+    while True:
+        info = world.family_info(focus)
+        stdscr.erase()
+        _safe_addstr(stdscr, 0, 0, t["family_title"], curses.color_pair(7) | curses.A_BOLD)
+
+        y = 2
+        _safe_addstr(stdscr, y, 0, f"#{info['id']}  {t['family_gen'].format(gen=info['gen'])}",
+                     curses.color_pair(7) | curses.A_BOLD)
+        y += 1
+        status = (t["family_alive"].format(token=info["token"], age=info["age"]) if info["alive"]
+                  else t["family_dead"].format(death=info["death"]))
+        pair = TOKEN_COLOR_PAIR.get(info["token"], 7) if info["alive"] else 7
+        _safe_addstr(stdscr, y, 0, status, curses.color_pair(pair))
+        y += 1
+        _safe_addstr(stdscr, y, 0, t["family_born"].format(tick=info["birth"]), curses.color_pair(7) | curses.A_DIM)
+        y += 2
+
+        _safe_addstr(stdscr, y, 0, t["family_parents"], curses.color_pair(7) | curses.A_BOLD)
+        y += 1
+        if info["parents"]:
+            for pid in info["parents"]:
+                _safe_addstr(stdscr, y, 2, _family_short_label(world, pid), curses.color_pair(7))
+                y += 1
+        else:
+            _safe_addstr(stdscr, y, 2, t["family_founder"], curses.color_pair(7) | curses.A_DIM)
+            y += 1
+        y += 1
+
+        _safe_addstr(stdscr, y, 0, t["family_children"].format(n=len(info["children"])),
+                     curses.color_pair(7) | curses.A_BOLD)
+        y += 1
+        if info["children"]:
+            for cid in info["children"][:8]:
+                _safe_addstr(stdscr, y, 2, _family_short_label(world, cid), curses.color_pair(7))
+                y += 1
+            if len(info["children"]) > 8:
+                _safe_addstr(stdscr, y, 2, f"... +{len(info['children']) - 8}", curses.color_pair(7) | curses.A_DIM)
+                y += 1
+        else:
+            _safe_addstr(stdscr, y, 2, t["family_no_children"], curses.color_pair(7) | curses.A_DIM)
+            y += 1
+        y += 1
+
+        _safe_addstr(stdscr, y, 0,
+                     t["family_descendants"].format(total=info["total_descendants"], alive=info["alive_descendants"]),
+                     curses.color_pair(7))
+        y += 2
+        _safe_addstr(stdscr, y, 0, t["family_hint"], curses.color_pair(7) | curses.A_DIM)
+        stdscr.refresh()
+
+        key = stdscr.getch()
+        if key in (27, ord("t"), ord("T")):
+            break
+        elif key == curses.KEY_UP and info["parents"]:
+            focus = info["parents"][0]
+        elif key == curses.KEY_DOWN and info["children"]:
+            focus = info["children"][0]
+        elif key in (curses.KEY_LEFT, curses.KEY_RIGHT) and info["parents"]:
+            siblings = world.family_info(info["parents"][0])["children"]
+            if focus in siblings and len(siblings) > 1:
+                i = siblings.index(focus)
+                i = (i + (1 if key == curses.KEY_RIGHT else -1)) % len(siblings)
+                focus = siblings[i]
+
     stdscr.nodelay(True)
 
 
@@ -621,6 +742,8 @@ def run(stdscr, language_path=None):
             _flash_message(stdscr, lang, TEXT[lang]["save_confirmed"].format(file=DEFAULT_SAVE_FILE))
         elif key == ord("g"):
             show_graph(stdscr, world, lang)
+        elif key == ord("t"):
+            show_family(stdscr, world, lang)
         elif key == ord("h"):
             show_help(stdscr, lang)
         elif key == curses.KEY_UP:

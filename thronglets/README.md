@@ -99,6 +99,7 @@ if you just hit `ENTER` through all of them, and they stick for the whole run
 | `[` / `]`     | remove / add a predator right now (also sets the reset count) |
 | `S`           | save the running game to `thronglets_save.json`               |
 | `G`           | vocabulary-over-time graph                                  |
+| `T`           | family tree - browse ancestors/descendants                  |
 | `H`           | in-game notice explaining the mechanics                      |
 | left click    | place food (auto mode) or whatever's selected (manual mode)  |
 | `ESC`         | quit                                                         |
@@ -139,8 +140,8 @@ currently signaling, white if silent), food as green `.`, predators as a red
 `X`. Controls: `space`=pause, `f`=drop a food patch (auto mode only),
 `r`=reset, `+`/`-`=speed, `q`=quit, `p`=toggle food/predator placement,
 `[`/`]`=remove/add a predator right now, `s`=save to `thronglets_save.json`,
-`g`=vocabulary-over-time graph, `h`=in-game notice (paginated so it fits any
-terminal height). There's no
+`g`=vocabulary-over-time graph, `t`=family tree, `h`=in-game notice
+(paginated so it fits any terminal height). There's no
 reliable mouse support in a terminal, so manual mode uses a keyboard cursor
 instead: the arrow keys move it, `enter` places whatever's currently
 selected.
@@ -176,8 +177,10 @@ handle pause/reset/speed and what a manual placement adds. `+`/`- predateurs`
 remove or add a predator immediately (also setting how many a reset will
 use), tapping/clicking the world places food (auto mode) or whatever's
 selected (manual mode), a **Save** button writes the running game to
-`thronglets_save.json`, and a **Notice** button opens an explainer of the
-mechanics without pausing the simulation underneath.
+`thronglets_save.json`, a **Family** button opens the genealogy browser
+(arrow keys or on-screen ▲▼◀▶ buttons to navigate), and a **Notice** button
+opens an explainer of the mechanics without pausing the simulation
+underneath.
 
 All three renderers show a HUD with, for each internal state (danger / food-call /
 distress-call / mate-call / idle), every token currently in use and what share
@@ -199,6 +202,22 @@ genuine one tick per second, slow enough to actually watch a single decision
 happen, and `x10`/`x50`/etc. scale from that same one-second baseline
 (capped at `x200`) rather than from whatever frame rate the renderer happens
 to draw at.
+
+Every creature is tracked back to its parent(s) - a **Family** screen
+(`t`/`T` in pygame and the terminal, a "Family" button on the web page, same
+pattern as the Graph/Notice screens) is an ego-centric genealogy browser
+rather than one giant tree crammed onto a screen: it shows one creature at a
+time - its generation number, whether it's alive or when it died, its
+parent(s), its children, and how many total descendants it has (and how many
+of those are still alive) - and the arrow keys walk the tree from there (up
+to a parent, down to a first child, left/right between siblings). Since
+mating just picks the nearest eligible neighbor with no notion of family,
+it's entirely possible - and something you may actually run into - for a
+creature to end up mating with its own descendant; the browser doesn't hide
+this, a lineage isn't a strict tree. Opening it doesn't reset or pause
+anything (the web version even keeps ticking live behind it); unlike
+Graph/Notice, which dismiss on any key, `t`/`ESC` close this one specifically
+since the arrow keys are busy navigating.
 
 ## Adaptive traits (optional)
 
