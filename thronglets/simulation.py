@@ -333,6 +333,17 @@ class World:
             result[state] = pairs
         return result
 
+    def translator(self):
+        """Inverts vocabulary(): for each token (0 = silence), which state(s)
+        currently treat it as their dominant color, and with what confidence.
+        A token claimed by two or more states is a homonym; one claimed by
+        none is unused/ambiguous. A read-only snapshot of right now, not
+        tracked over time - see vocab_history for that instead."""
+        by_token = {token: [] for token in range(N_TOKENS)}
+        for state, (token, frac) in self.vocabulary().items():
+            by_token[token].append((state, frac))
+        return by_token
+
     def population(self):
         return len(self._alive())
 

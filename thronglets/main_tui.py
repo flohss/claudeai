@@ -20,7 +20,7 @@ import threading
 import time
 
 from i18n import STATE_LABELS, TRAIT_LABELS
-from simulation import (DANGER, DISTRESS, FOOD, HEIGHT, IDLE, MATE, MAX_POPULATION, N_TRAITS, World, WIDTH,
+from simulation import (DANGER, DISTRESS, FOOD, HEIGHT, IDLE, MATE, MAX_POPULATION, N_TOKENS, N_TRAITS, World, WIDTH,
                          compare_seeds, load_seed_genome, load_world, save_world)
 
 DEFAULT_INIT_POP = 100
@@ -76,11 +76,16 @@ TEXT = {
         "hud_controls1": "space=pause  {food_hint}  r=reset  +/-=speed  q=quit",
         "food_hint_auto": "f=food",
         "food_hint_manual": "f=food (auto mode only)",
-        "hud_controls2": "p=place  [ ]=predator count  s=save  arrows/enter=place  g=graph  t=family  c=compare  h=help",
+        "hud_controls2": "p=place  [ ]=predator count  s=save  arrows/enter=place  g=graph  t=family  c=compare  d=translator  h=help",
         "graph_title": "Vocabulary over time - dominant share per state",
         "graph_traits_title": "Physical traits over time - population average (share of range)",
         "graph_dismiss": "-- press any key to go back --",
         "extinct": "Extinct. Press r to reset.",
+
+        "translator_title": "Translator - what each color currently means",
+        "translator_unused": "unused / ambiguous",
+        "translator_homonym": "  ! homonym - shared with another state",
+        "translator_dismiss": "-- press any key to go back --",
 
         "family_title": "Family tree",
         "family_gen": "generation {gen}",
@@ -160,11 +165,16 @@ TEXT = {
         "hud_controls1": "space=pause  {food_hint}  r=reset  +/-=speed  q=quit",
         "food_hint_auto": "f=food",
         "food_hint_manual": "f=food (auto uniquement)",
-        "hud_controls2": "p=placer  [ ]=nb predateurs  s=sauver  fleches/entree=placer  g=graphique  t=famille  c=comparer  h=aide",
+        "hud_controls2": "p=placer  [ ]=nb predateurs  s=sauver  fleches/entree=placer  g=graphique  t=famille  c=comparer  d=traducteur  h=aide",
         "graph_title": "Vocabulaire dans le temps - part dominante par etat",
         "graph_traits_title": "Traits physiques dans le temps - moyenne population (part de la plage)",
         "graph_dismiss": "-- une touche pour revenir --",
         "extinct": "Extinction. Appuie sur r pour recommencer.",
+
+        "translator_title": "Traducteur - ce que signifie chaque couleur en ce moment",
+        "translator_unused": "inutilisee / ambigue",
+        "translator_homonym": "  ! homonymie - partagee avec un autre etat",
+        "translator_dismiss": "-- une touche pour revenir --",
 
         "family_title": "Arbre genealogique",
         "family_gen": "generation {gen}",
@@ -386,6 +396,41 @@ def show_graph(stdscr, world, lang):
             y += 3
 
     _safe_addstr(stdscr, min(rows - 1, y), 0, t["graph_dismiss"], curses.color_pair(7) | curses.A_DIM)
+    stdscr.refresh()
+    stdscr.getch()
+    stdscr.nodelay(True)
+
+
+def show_translator(stdscr, world, lang):
+    """A frozen snapshot - what each color means right now, inverted from
+    the HUD's state->color view into a color->state dictionary. Opened like
+    show_help()/show_graph(); no history, just this instant."""
+    t = TEXT[lang]
+    labels = STATE_LABELS[lang]
+    stdscr.nodelay(False)
+    stdscr.erase()
+
+    _safe_addstr(stdscr, 0, 0, t["translator_title"], curses.color_pair(7) | curses.A_BOLD)
+
+    by_token = world.translator()
+    y = 2
+    for token in range(N_TOKENS):
+        if token == 0:
+            _safe_addstr(stdscr, y, 0, "..", curses.color_pair(7) | curses.A_DIM)
+        else:
+            _safe_addstr(stdscr, y, 0, "##", curses.color_pair(TOKEN_COLOR_PAIR[token]) | curses.A_BOLD)
+        claims = by_token[token]
+        if claims:
+            text = " / ".join(f"{labels[state]} ({frac * 100:.0f}%)" for state, frac in claims)
+        else:
+            text = t["translator_unused"]
+        _safe_addstr(stdscr, y, 3, text, curses.color_pair(7))
+        y += 1
+        if len(claims) > 1:
+            _safe_addstr(stdscr, y, 0, t["translator_homonym"], curses.color_pair(1))
+            y += 1
+
+    _safe_addstr(stdscr, y + 1, 0, t["translator_dismiss"], curses.color_pair(7) | curses.A_DIM)
     stdscr.refresh()
     stdscr.getch()
     stdscr.nodelay(True)
@@ -973,6 +1018,8 @@ def run(stdscr, language_path=None):
             show_family(stdscr, world, lang)
         elif key == ord("c"):
             run_compare_ui(stdscr, world, lang, init_pop, seed_genome)
+        elif key == ord("d"):
+            show_translator(stdscr, world, lang)
         elif key == ord("h"):
             show_help(stdscr, lang)
         elif key == curses.KEY_UP:
