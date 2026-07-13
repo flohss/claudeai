@@ -405,6 +405,20 @@ INDEX_HTML = """<!doctype html>
   #help-panel ul { margin: 4px 0; padding-left: 1.3em; }
   #help-panel .close-row { text-align: right; margin-top: 16px; }
 
+  #faq-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+    align-items: center; justify-content: center; padding: 16px; z-index: 10;
+  }
+  #faq-panel {
+    background: #171d13; border: 1px solid #3a4530; border-radius: 10px;
+    max-width: 640px; width: 100%; max-height: 85vh; overflow-y: auto;
+    padding: 22px 24px; line-height: 1.6; font-size: 13.5px;
+  }
+  #faq-panel h2 { font-size: 15px; margin: 18px 0 4px; }
+  #faq-panel h2:first-child { margin-top: 0; }
+  #faq-panel p { color: #c3c8b6; margin: 4px 0; }
+  #faq-panel .close-row { text-align: right; margin-top: 16px; }
+
   #graph-overlay {
     display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6);
     align-items: center; justify-content: center; padding: 16px; z-index: 10;
@@ -523,6 +537,7 @@ INDEX_HTML = """<!doctype html>
       <button id="openFamily" data-i18n="familyText"></button>
       <button id="openCompare" data-i18n="compareText"></button>
       <button id="openTranslator" data-i18n="translatorText"></button>
+      <button id="openFaq" data-i18n="faqText"></button>
       <button id="openHelp" data-i18n="noticeText"></button>
     </div>
     <div id="controls2">
@@ -558,6 +573,30 @@ INDEX_HTML = """<!doctype html>
       <p data-i18n="helpP5"></p>
 
       <div class="close-row"><button id="closeHelp" data-i18n="closeText"></button></div>
+    </div>
+  </div>
+
+  <div id="faq-overlay">
+    <div id="faq-panel">
+      <h2 data-i18n="faqQ1"></h2>
+      <p data-i18n="faqA1"></p>
+      <h2 data-i18n="faqQ2"></h2>
+      <p data-i18n="faqA2"></p>
+      <h2 data-i18n="faqQ3"></h2>
+      <p data-i18n="faqA3"></p>
+      <h2 data-i18n="faqQ4"></h2>
+      <p data-i18n="faqA4"></p>
+      <h2 data-i18n="faqQ5"></h2>
+      <p data-i18n="faqA5"></p>
+      <h2 data-i18n="faqQ6"></h2>
+      <p data-i18n="faqA6"></p>
+      <h2 data-i18n="faqQ7"></h2>
+      <p data-i18n="faqA7"></p>
+      <h2 data-i18n="faqQ8"></h2>
+      <p data-i18n="faqA8"></p>
+      <h2 data-i18n="faqQ9"></h2>
+      <p data-i18n="faqA9"></p>
+      <div class="close-row"><button id="closeFaq" data-i18n="closeText"></button></div>
     </div>
   </div>
 
@@ -713,6 +752,25 @@ const STRINGS = {
     translatorText: "Translator", translatorTitle: "Translator - what each color currently means",
     translatorUnused: "unused / ambiguous",
     translatorHomonym: "! homonym - shared with another state",
+    faqText: "FAQ",
+    faqQ1: "Q: Why do creatures sometimes stay clustered even with food right next to them?",
+    faqA1: "A: Following a neighbor's signal and heading for food are two forces that can partly cancel out - an accepted trade-off, not a bug.",
+    faqQ2: "Q: Does distress make creatures help each other?",
+    faqA2: "A: No - there's no cooperation mechanic. Distress is treated like any other signal, and creatures mostly learn to avoid it.",
+    faqQ3: "Q: Why does the adaptive metabolism trait always drop to near its minimum?",
+    faqA3: "A: Unlike speed/vision/hearing, a lower metabolism has zero downside here - it's not a real trade-off, so selection always pushes it down.",
+    faqQ4: "Q: How can two creatures from very different generations be siblings?",
+    faqA4: "A: Generation = max(both parents' generations)+1, and mate choice only cares about proximity, not generation - a long-lived parent can breed with a much ‘deeper’ partner late in life.",
+    faqQ5: "Q: Can a creature really mate with its own descendant?",
+    faqA5: "A: Yes - same reason: mate choice is purely proximity-based, with no notion of family.",
+    faqQ6: "Q: Even a trained vocabulary can drift or ‘flip back’ - why?",
+    faqA6: "A: No creature learns anything during its life; genomes are fixed at birth. Only mutation and selection across generations change anything, and mutation never stops - nothing is ever permanently locked in.",
+    faqQ7: "Q: Two states share the same color (homonymy) - is that a bug?",
+    faqA7: "A: No - nothing in the model prevents it. Genomes mutate per state independently, so two states can land on the same token by pure chance. Check the Translator panel to see it clearly.",
+    faqQ8: "Q: A single playthrough shows a surprising result - can I trust it?",
+    faqA8: "A: Not on its own. Use the Compare panel to run several independent seeds and see whether the result actually repeats, or was just one run's drift.",
+    faqQ9: "Q: What's the real difference between the trained AI language and the evolved one?",
+    faqA9: "A: The AI (train_language.py) uses gradient descent to directly minimize communication error, every step. The evolved language only rewards survival and reproduction - communicating well is never optimized directly, just indirectly useful.",
     placingFoodBtn: "Placing: food", placingPredatorBtn: "Placing: predator",
     predLessText: "- predators", predMoreText: "+ predators",
     hint: "Click/tap the world to place food (or a predator in manual mode)",
@@ -788,6 +846,25 @@ const STRINGS = {
     translatorText: "Traducteur", translatorTitle: "Traducteur - ce que signifie chaque couleur en ce moment",
     translatorUnused: "inutilisee / ambigue",
     translatorHomonym: "! homonymie - partagee avec un autre etat",
+    faqText: "FAQ",
+    faqQ1: "Q : Pourquoi les creatures restent parfois en groupe meme avec de la nourriture juste a cote ?",
+    faqA1: "R : Suivre le signal d'un voisin et se diriger vers la nourriture sont deux forces qui peuvent s'annuler en partie - un compromis assume, pas un bug.",
+    faqQ2: "Q : Est-ce que la detresse pousse les creatures a s'entraider ?",
+    faqA2: "R : Non - il n'y a aucun mecanisme de cooperation. La detresse est traitee comme n'importe quel autre signal, et les creatures apprennent surtout a l'eviter.",
+    faqQ3: "Q : Pourquoi le metabolisme adaptatif tombe toujours pres de son minimum ?",
+    faqA3: "R : Contrairement a la vitesse/vision/ouie, un metabolisme bas n'a aucun inconvenient ici - ce n'est pas un vrai compromis, donc la selection le pousse toujours vers le bas.",
+    faqQ4: "Q : Comment deux creatures de generations tres differentes peuvent-elles etre frere et soeur ?",
+    faqA4: "R : Generation = max(generation des deux parents)+1, et le choix du partenaire ne tient compte que de la proximite, pas de la generation - un parent qui vit longtemps peut se reproduire avec un partenaire bien plus « profond » tard dans sa vie.",
+    faqQ5: "Q : Une creature peut-elle vraiment s'accoupler avec son propre descendant ?",
+    faqA5: "R : Oui - meme raison : le choix du partenaire est purement base sur la proximite, sans aucune notion de famille.",
+    faqQ6: "Q : Meme un vocabulaire entraine peut deriver ou « revenir en arriere » - pourquoi ?",
+    faqA6: "R : Aucune creature n'apprend quoi que ce soit pendant sa vie ; les genomes sont fixes a la naissance. Seules la mutation et la selection a travers les generations changent quelque chose, et la mutation ne s'arrete jamais - rien n'est jamais definitivement acquis.",
+    faqQ7: "Q : Deux etats partagent la meme couleur (homonymie) - c'est un bug ?",
+    faqA7: "R : Non - rien dans le modele ne l'empeche. Les genomes mutent independamment par etat, donc deux etats peuvent tomber sur le meme token par pur hasard. L'ecran Traducteur permet de le reperer clairement.",
+    faqQ8: "Q : Une seule partie donne un resultat surprenant - puis-je lui faire confiance ?",
+    faqA8: "R : Pas telle quelle. Utilise le panneau Comparer pour lancer plusieurs seeds independantes et voir si le resultat se reproduit vraiment, ou si c'etait juste la derive d'une seule partie.",
+    faqQ9: "Q : Quelle est la vraie difference entre le langage entraine par IA et celui qui evolue ?",
+    faqA9: "R : L'IA (train_language.py) utilise la descente de gradient pour minimiser directement l'erreur de communication, a chaque etape. Le langage evolue ne recompense que la survie et la reproduction - bien communiquer n'est jamais optimise directement, juste utile indirectement.",
     placingFoodBtn: "Pose: nourriture", placingPredatorBtn: "Pose: predateur",
     predLessText: "- predateurs", predMoreText: "+ predateurs",
     hint: "Clique/touche le monde pour placer de la nourriture (ou un predateur en mode manuel)",
@@ -1038,6 +1115,13 @@ document.getElementById('openHelp').onclick = () => { helpOverlay.style.display 
 document.getElementById('closeHelp').onclick = () => { helpOverlay.style.display = 'none'; };
 helpOverlay.addEventListener('click', (ev) => {
   if (ev.target === helpOverlay) helpOverlay.style.display = 'none';
+});
+
+const faqOverlay = document.getElementById('faq-overlay');
+document.getElementById('openFaq').onclick = () => { faqOverlay.style.display = 'flex'; };
+document.getElementById('closeFaq').onclick = () => { faqOverlay.style.display = 'none'; };
+faqOverlay.addEventListener('click', (ev) => {
+  if (ev.target === faqOverlay) faqOverlay.style.display = 'none';
 });
 
 const graphOverlay = document.getElementById('graph-overlay');

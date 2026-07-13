@@ -102,6 +102,7 @@ if you just hit `ENTER` through all of them, and they stick for the whole run
 | `T`           | family tree - browse ancestors/descendants                  |
 | `C`           | compare seeds - is a result reproducible?                   |
 | `D`           | translator - what each color currently means                |
+| `F`           | FAQ - curated questions and answers                          |
 | `H`           | in-game notice explaining the mechanics                      |
 | left click    | place food (auto mode) or whatever's selected (manual mode)  |
 | `ESC`         | quit                                                         |
@@ -143,8 +144,8 @@ currently signaling, white if silent), food as green `.`, predators as a red
 `r`=reset, `+`/`-`=speed, `q`=quit, `p`=toggle food/predator placement,
 `[`/`]`=remove/add a predator right now, `s`=save to `thronglets_save.json`,
 `g`=vocabulary-over-time graph, `t`=family tree, `c`=compare seeds,
-`d`=translator, `h`=in-game notice (paginated so it fits any terminal
-height). There's no
+`d`=translator, `Shift+F`=FAQ, `h`=in-game notice (paginated so it fits any
+terminal height). There's no
 reliable mouse support in a terminal, so manual mode uses a keyboard cursor
 instead: the arrow keys move it, `enter` places whatever's currently
 selected.
@@ -183,8 +184,9 @@ selected (manual mode), a **Save** button writes the running game to
 `thronglets_save.json`, a **Family** button opens the genealogy browser
 (arrow keys or on-screen ▲▼◀▶ buttons to navigate), a **Compare** button
 opens the seed-comparison panel, a **Translator** button opens the
-color-to-meaning dictionary, and a **Notice** button opens an explainer of
-the mechanics without pausing the simulation
+color-to-meaning dictionary, an **FAQ** button opens the curated
+questions/answers, and a **Notice** button opens an explainer of the
+mechanics without pausing the simulation
 underneath.
 
 All three renderers show a HUD with, for each internal state (danger / food-call /
@@ -292,6 +294,19 @@ as a homonym right there instead of you having to notice it by eye across
 five separate HUD rows. Unlike the Graph screen this is a frozen snapshot of
 right now, not a history - open it again later to see how the mapping has
 moved on.
+
+## FAQ
+
+A curated in-game FAQ (`F` in pygame, `Shift+F` in the terminal since
+lowercase `f` is already the manual food-drop key, an "FAQ" button on the
+web page) answers nine questions that actually came up while building and
+playing this - why creatures cluster near food they're not eating, whether
+distress leads to cooperation, why adaptive metabolism always bottoms out,
+how siblings end up with wildly different generation numbers, why a
+creature can end up mating with its own descendant, why even a trained
+vocabulary can drift, what homonyms are, why a single playthrough isn't
+proof of anything, and how the trained-AI language actually differs from
+the evolved one. Paginated the same way as the Notice screen.
 
 ## Headless check
 
