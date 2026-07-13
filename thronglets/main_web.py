@@ -28,7 +28,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from simulation import (DANGER, DISTRESS, FOOD, HEIGHT, IDLE, MATE, MAX_POPULATION, N_TRAITS, TRAIT_HEARING,
                          TRAIT_METABOLISM, TRAIT_SPEED, TRAIT_VISION, World, WIDTH,
-                         load_seed_genome, load_world, save_world)
+                         compare_seeds, load_seed_genome, load_world, save_world)
 
 DEFAULT_PORT = 8765
 STEP_INTERVAL = 0.05
@@ -38,6 +38,7 @@ DEFAULT_SAVE_FILE = "thronglets_save.json"
 TRAIT_IDS = {TRAIT_SPEED: "speed", TRAIT_VISION: "vision", TRAIT_HEARING: "hearing",
              TRAIT_METABOLISM: "metabolism"}
 STATE_IDS = {IDLE: "idle", FOOD: "food", MATE: "mate", DANGER: "danger", DISTRESS: "distress"}
+COMPARE_DEPTHS = {"quick": (4, 8000), "thorough": (8, 40000)}
 
 
 def _new_world(mode, predator_count, init_pop=DEFAULT_INIT_POP, seed_genome=None, adaptive_traits=False):
@@ -63,6 +64,37 @@ class SimState:
         self.family_focus_id = None
         self.lock = threading.Lock()
 
+        # Seed comparison runs in its own thread with its own lock - it never
+        # touches state.world (it builds independent World instances), so it
+        # can run alongside the live simulation without blocking it.
+        self.compare_lock = threading.Lock()
+        self.compare_running = False
+        self.compare_mode = None
+        self.compare_progress = {"seed": 0, "n_seeds": 0, "tick": 0, "ticks": 0}
+        self.compare_result = None
+        self.compare_cancel_event = threading.Event()
+
+
+def _serialize_compare_result(r):
+    return {
+        "seed": r["seed"],
+        "population": r["population"],
+        "vocab": {STATE_IDS[s]: [int(tok), float(frac)] for s, (tok, frac) in r["vocab"].items()},
+        "collision": r["collision"],
+        "traits": ({TRAIT_IDS[t]: float(v) for t, v in r["traits"].items()}
+                    if r["traits"] is not None else None),
+    }
+
+
+def _compare_payload(state):
+    with state.compare_lock:
+        return {
+            "running": state.compare_running,
+            "mode": state.compare_mode,
+            "progress": dict(state.compare_progress),
+            "result": state.compare_result,
+        }
+
 
 def snapshot(state):
     if not state.started:
@@ -80,6 +112,7 @@ def snapshot(state):
         "speed": state.speed,
         "trained": state.active_seed_genome is not None,
         "adaptive_traits": w.adaptive_traits,
+        "compare": _compare_payload(state),
         "mode": state.mode,
         "placing": state.placing,
         "predator_count": len(w.predators),
@@ -116,6 +149,37 @@ def _family_payload(state):
     if state.family_focus_id is None:
         return None
     return w.family_info(state.family_focus_id)
+
+
+def _start_compare_worker(state, mode, n_seeds, ticks):
+    """Runs compare_seeds() in its own daemon thread, independent of the live
+    simulation_loop thread - it builds its own World instances and never
+    touches state.world, so it can't interfere with (or be blocked by) the
+    running game."""
+    init_pop = state.init_pop
+    predator_count = len(state.world.predators)
+    seed_genome = state.active_seed_genome
+    cancel_event = state.compare_cancel_event
+
+    def on_progress(seed_i, n, tick, total_ticks):
+        with state.compare_lock:
+            state.compare_progress.update(seed=seed_i + 1, tick=tick)
+
+    def worker():
+        results = compare_seeds(n_seeds, ticks, init_pop, predator_count, mode == "traits",
+                                 seed_genome=seed_genome, progress_callback=on_progress,
+                                 cancel_event=cancel_event)
+        with state.compare_lock:
+            state.compare_result = {
+                "mode": mode,
+                "n_seeds": len(results),
+                "ticks": ticks,
+                "cancelled": cancel_event.is_set() and len(results) < n_seeds,
+                "results": [_serialize_compare_result(r) for r in results],
+            }
+            state.compare_running = False
+
+    threading.Thread(target=worker, daemon=True).start()
 
 
 def simulation_loop(state):
@@ -249,6 +313,22 @@ class Handler(BaseHTTPRequestHandler):
                             i = (i + (1 if direction == "right" else -1)) % len(siblings)
                             state.family_focus_id = siblings[i]
                     family_payload = _family_payload(state)
+            elif action == "compare_start" and not state.compare_running:
+                mode = body.get("mode")
+                if mode == "traits" and not state.world.adaptive_traits:
+                    mode = None
+                if mode in ("language", "traits"):
+                    n_seeds, ticks = COMPARE_DEPTHS.get(body.get("depth"), COMPARE_DEPTHS["quick"])
+                    state.compare_running = True
+                    state.compare_mode = mode
+                    state.compare_result = None
+                    state.compare_cancel_event = threading.Event()
+                    state.compare_progress = {"seed": 0, "n_seeds": n_seeds, "tick": 0, "ticks": ticks}
+                    _start_compare_worker(state, mode, n_seeds, ticks)
+            elif action == "compare_cancel":
+                state.compare_cancel_event.set()
+            elif action == "compare_dismiss":
+                state.compare_result = None
         error_file = DEFAULT_SAVE_FILE if error_code == "resume_failed" else DEFAULT_LANGUAGE_FILE
         self._send(200, "application/json",
                    json.dumps({"ok": True, "error": error_code, "file": error_file, "family": family_payload}).encode())
@@ -353,6 +433,35 @@ INDEX_HTML = """<!doctype html>
   #family-nav { display: flex; justify-content: center; gap: 10px; margin: 14px 0 4px; }
   #family-nav button { padding: 8px 14px; }
   #family-panel .close-row { text-align: right; margin-top: 12px; }
+
+  #compare-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+    align-items: center; justify-content: center; padding: 16px; z-index: 10;
+  }
+  #compare-panel {
+    background: #171d13; border: 1px solid #3a4530; border-radius: 10px;
+    max-width: 560px; width: 100%; max-height: 85vh; overflow-y: auto;
+    padding: 22px 24px; line-height: 1.6; font-size: 13.5px;
+  }
+  #compare-panel h2 { font-size: 17px; margin: 0 0 10px; }
+  #compare-panel p { color: #c3c8b6; margin: 10px 0 4px; }
+  #compare-panel label {
+    display: block; font-size: 13px; margin: 4px 0; color: #dcdcd2; cursor: pointer;
+  }
+  #compare-panel label.disabled { color: #6b7263; cursor: default; }
+  #compareStart { margin-top: 14px; padding: 10px 16px; }
+  #compare-progress-bar-track { background: #232a1c; border-radius: 4px; height: 12px; margin: 10px 0; overflow: hidden; }
+  #compare-progress-bar-fill { background: #6edc5a; height: 100%; width: 0%; }
+  #compareCancel { margin-top: 10px; }
+  #compare-results-content table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  #compare-results-content th, #compare-results-content td {
+    text-align: left; padding: 3px 10px 3px 0; color: #c3c8b6; white-space: nowrap;
+  }
+  #compare-results-content th { color: #dcdcd2; border-bottom: 1px solid #3a4530; }
+  #compare-results-content .swatch {
+    display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px;
+  }
+  #compare-panel .close-row { text-align: right; margin-top: 16px; }
 </style>
 </head>
 <body>
@@ -393,6 +502,7 @@ INDEX_HTML = """<!doctype html>
       <button id="save" data-i18n="saveText"></button>
       <button id="openGraph" data-i18n="graphText"></button>
       <button id="openFamily" data-i18n="familyText"></button>
+      <button id="openCompare" data-i18n="compareText"></button>
       <button id="openHelp" data-i18n="noticeText"></button>
     </div>
     <div id="controls2">
@@ -491,6 +601,35 @@ INDEX_HTML = """<!doctype html>
     </div>
   </div>
 
+  <div id="compare-overlay">
+    <div id="compare-panel">
+      <h2 data-i18n="compareTitle"></h2>
+
+      <div id="compare-config">
+        <p data-i18n="compareModePrompt"></p>
+        <label><input type="radio" name="compareMode" value="language" checked> <span data-i18n="compareModeLanguage"></span></label>
+        <label id="compare-mode-traits-label"><input type="radio" name="compareMode" value="traits"> <span data-i18n="compareModeTraits"></span></label>
+        <p data-i18n="compareDepthPrompt"></p>
+        <label><input type="radio" name="compareDepth" value="quick" checked> <span data-i18n="compareDepthQuick"></span></label>
+        <label><input type="radio" name="compareDepth" value="thorough"> <span data-i18n="compareDepthThorough"></span></label>
+        <button id="compareStart" data-i18n="compareStartText"></button>
+      </div>
+
+      <div id="compare-progress-view" style="display:none">
+        <p id="compare-progress-text"></p>
+        <div id="compare-progress-bar-track"><div id="compare-progress-bar-fill"></div></div>
+        <button id="compareCancel" data-i18n="compareCancelText"></button>
+      </div>
+
+      <div id="compare-results-view" style="display:none">
+        <div id="compare-results-content"></div>
+        <button id="compareAgain" data-i18n="compareAgainText"></button>
+      </div>
+
+      <div class="close-row"><button id="closeCompare" data-i18n="closeText"></button></div>
+    </div>
+  </div>
+
 <script>
 const TOKEN_COLORS = ["#a0a0a0", "#eb4646", "#4682eb", "#f5c83c", "#c85ae6", "#46e1d2"];
 const FOOD_COLOR = "#6edc5a";
@@ -524,6 +663,23 @@ const STRINGS = {
     familyChildren: (n) => `Children (${n}):`, familyNoChildren: "none yet",
     familyDescendants: (total, alive) => `Total descendants: ${total} (${alive} still alive)`,
     familyNone: "No creature to show yet.",
+    compareText: "Compare", compareTitle: "Compare seeds",
+    compareModePrompt: "What should be reproducible?",
+    compareModeLanguage: "Language - does the same word win across independent runs?",
+    compareModeTraits: "Physical traits - do speed/vision/hearing/metabolism converge the same way?",
+    compareModeTraitsUnavailable: "Physical traits (unavailable - adaptive evolution is off for this world)",
+    compareDepthPrompt: "How thorough?",
+    compareDepthQuick: "Quick - 4 seeds x 8,000 ticks",
+    compareDepthThorough: "Thorough - 8 seeds x 40,000 ticks",
+    compareStartText: "Start comparison", compareCancelText: "Cancel",
+    compareAgainText: "Compare again",
+    compareProgress: (seed, nSeeds, tick, ticks) => `seed ${seed}/${nSeeds}   tick ${tick}/${ticks}`,
+    compareResultTitle: (nSeeds, ticks) => `Comparison done (${nSeeds} seeds x ${ticks} ticks)`,
+    compareCancelledNote: (n) => `Cancelled - ${n} seed(s) completed before stopping.`,
+    compareCollisionSummary: (clean, nSeeds) => `Collisions: ${clean}/${nSeeds} seeds had none`,
+    compareColState: "state", compareColSeed: (i) => `seed ${i}`,
+    compareColTrait: "trait", compareColMean: "mean", compareColStd: "std dev",
+    compareColMin: "min", compareColMax: "max",
     placingFoodBtn: "Placing: food", placingPredatorBtn: "Placing: predator",
     predLessText: "- predators", predMoreText: "+ predators",
     hint: "Click/tap the world to place food (or a predator in manual mode)",
@@ -578,6 +734,23 @@ const STRINGS = {
     familyChildren: (n) => `Enfants (${n}) :`, familyNoChildren: "aucun pour le moment",
     familyDescendants: (total, alive) => `Descendants au total : ${total} (${alive} encore en vie)`,
     familyNone: "Aucune creature a montrer pour le moment.",
+    compareText: "Comparer", compareTitle: "Comparer des seeds",
+    compareModePrompt: "Qu'est-ce qui doit etre reproductible ?",
+    compareModeLanguage: "Langage - le meme mot gagne-t-il sur des parties independantes ?",
+    compareModeTraits: "Traits physiques - vitesse/vision/ouie/metabolisme convergent-ils pareil ?",
+    compareModeTraitsUnavailable: "Traits physiques (indisponibles - evolution adaptative desactivee)",
+    compareDepthPrompt: "Quelle profondeur ?",
+    compareDepthQuick: "Rapide - 4 seeds x 8 000 ticks",
+    compareDepthThorough: "Approfondi - 8 seeds x 40 000 ticks",
+    compareStartText: "Lancer la comparaison", compareCancelText: "Annuler",
+    compareAgainText: "Comparer a nouveau",
+    compareProgress: (seed, nSeeds, tick, ticks) => `seed ${seed}/${nSeeds}   tick ${tick}/${ticks}`,
+    compareResultTitle: (nSeeds, ticks) => `Comparaison terminee (${nSeeds} seeds x ${ticks} ticks)`,
+    compareCancelledNote: (n) => `Annule - ${n} seed(s) terminee(s) avant l'arret.`,
+    compareCollisionSummary: (clean, nSeeds) => `Collisions : ${clean}/${nSeeds} seeds sans collision`,
+    compareColState: "etat", compareColSeed: (i) => `seed ${i}`,
+    compareColTrait: "trait", compareColMean: "moyenne", compareColStd: "ecart-type",
+    compareColMin: "min", compareColMax: "max",
     placingFoodBtn: "Pose: nourriture", placingPredatorBtn: "Pose: predateur",
     predLessText: "- predateurs", predMoreText: "+ predateurs",
     hint: "Clique/touche le monde pour placer de la nourriture (ou un predateur en mode manuel)",
@@ -690,6 +863,7 @@ function render(state) {
   document.getElementById('placing').style.display = mode === 'manual' ? 'inline-block' : 'none';
 
   if (graphOverlay.style.display === 'flex') renderGraphOverlay(state);
+  if (compareOverlay.style.display === 'flex') renderCompare(state);
 }
 
 function renderVocabRow(elId, label, pairs) {
@@ -890,6 +1064,102 @@ document.addEventListener('keydown', (ev) => {
   else if (ev.key === 'ArrowLeft') navFamily('left');
   else if (ev.key === 'ArrowRight') navFamily('right');
   else if (ev.key === 'Escape') familyOverlay.style.display = 'none';
+});
+
+const compareOverlay = document.getElementById('compare-overlay');
+const compareConfig = document.getElementById('compare-config');
+const compareProgressView = document.getElementById('compare-progress-view');
+const compareResultsView = document.getElementById('compare-results-view');
+const compareResultsContent = document.getElementById('compare-results-content');
+const compareTraitsLabel = document.getElementById('compare-mode-traits-label');
+const compareTraitsRadio = document.querySelector('input[name="compareMode"][value="traits"]');
+
+function renderCompare(state) {
+  const t = STRINGS[uiLang];
+  const compare = state.compare || {running: false, result: null, progress: {}};
+
+  compareTraitsRadio.disabled = !state.adaptive_traits;
+  compareTraitsLabel.classList.toggle('disabled', !state.adaptive_traits);
+  compareTraitsLabel.querySelector('span').textContent =
+    state.adaptive_traits ? t.compareModeTraits : t.compareModeTraitsUnavailable;
+  if (!state.adaptive_traits && compareTraitsRadio.checked) {
+    document.querySelector('input[name="compareMode"][value="language"]').checked = true;
+  }
+
+  if (compare.result) {
+    compareConfig.style.display = 'none';
+    compareProgressView.style.display = 'none';
+    compareResultsView.style.display = 'block';
+    renderCompareResults(compare.result);
+  } else if (compare.running) {
+    compareConfig.style.display = 'none';
+    compareProgressView.style.display = 'block';
+    compareResultsView.style.display = 'none';
+    const p = compare.progress;
+    document.getElementById('compare-progress-text').textContent =
+      t.compareProgress(Math.max(1, p.seed || 0), p.n_seeds || 0, p.tick || 0, p.ticks || 0);
+    const frac = p.ticks ? Math.min(1, (p.tick || 0) / p.ticks) : 0;
+    document.getElementById('compare-progress-bar-fill').style.width = (frac * 100) + '%';
+  } else {
+    compareConfig.style.display = 'block';
+    compareProgressView.style.display = 'none';
+    compareResultsView.style.display = 'none';
+  }
+}
+
+function renderCompareResults(result) {
+  const t = STRINGS[uiLang];
+  let html = `<p>${t.compareResultTitle(result.n_seeds, result.ticks)}</p>`;
+  if (result.mode === 'traits') {
+    html += `<table><tr><th>${t.compareColTrait}</th><th>${t.compareColMean}</th>` +
+      `<th>${t.compareColStd}</th><th>${t.compareColMin}</th><th>${t.compareColMax}</th></tr>`;
+    const traitKeys = ['speed', 'vision', 'hearing', 'metabolism'];
+    const traitLabels = {speed: t.traitSpeed, vision: t.traitVision, hearing: t.traitHearing, metabolism: t.traitMetabolism};
+    for (const key of traitKeys) {
+      const vals = result.results.map((r) => r.traits[key] * 100);
+      const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
+      const std = Math.sqrt(vals.reduce((a, b) => a + (b - mean) ** 2, 0) / vals.length);
+      html += `<tr><td>${traitLabels[key]}</td><td>${mean.toFixed(1)}%</td><td>${std.toFixed(1)}%</td>` +
+        `<td>${Math.min(...vals).toFixed(1)}%</td><td>${Math.max(...vals).toFixed(1)}%</td></tr>`;
+    }
+    html += '</table>';
+  } else {
+    html += `<table><tr><th>${t.compareColState}</th>`;
+    result.results.forEach((_, i) => { html += `<th>${t.compareColSeed(i + 1)}</th>`; });
+    html += '</tr>';
+    const stateKeys = ['danger', 'food', 'distress', 'mate', 'idle'];
+    const stateLabels = {danger: t.labelDanger, food: t.labelFood, distress: t.labelDistress,
+                          mate: t.labelMate, idle: t.labelIdle};
+    for (const key of stateKeys) {
+      html += `<tr><td>${stateLabels[key]}</td>`;
+      for (const r of result.results) {
+        const token = r.vocab[key][0];
+        const style = token === 0
+          ? 'border:1px solid #666; background:transparent'
+          : `background:${TOKEN_COLORS[token] || TOKEN_COLORS[0]}`;
+        html += `<td><span class="swatch" style="${style}"></span></td>`;
+      }
+      html += '</tr>';
+    }
+    html += '</table>';
+    const clean = result.results.filter((r) => !r.collision).length;
+    html += `<p>${t.compareCollisionSummary(clean, result.n_seeds)}</p>`;
+  }
+  if (result.cancelled) html += `<p>${t.compareCancelledNote(result.n_seeds)}</p>`;
+  compareResultsContent.innerHTML = html;
+}
+
+document.getElementById('openCompare').onclick = () => { compareOverlay.style.display = 'flex'; };
+document.getElementById('closeCompare').onclick = () => { compareOverlay.style.display = 'none'; };
+document.getElementById('compareStart').onclick = () => {
+  const mode = document.querySelector('input[name="compareMode"]:checked').value;
+  const depth = document.querySelector('input[name="compareDepth"]:checked').value;
+  post('compare_start', {mode, depth});
+};
+document.getElementById('compareCancel').onclick = () => post('compare_cancel');
+document.getElementById('compareAgain').onclick = () => post('compare_dismiss');
+compareOverlay.addEventListener('click', (ev) => {
+  if (ev.target === compareOverlay) compareOverlay.style.display = 'none';
 });
 
 canvas.addEventListener('click', (ev) => {
