@@ -76,7 +76,7 @@ TEXT = {
         "hud_controls1": "space=pause  {food_hint}  r=reset  +/-=speed  q=quit",
         "food_hint_auto": "f=food",
         "food_hint_manual": "f=food (auto mode only)",
-        "hud_controls2": "p=place  [ ]=predator count  s=save  arrows/enter=place  g=graph  t=family  c=compare  d=translator  h=help",
+        "hud_controls2": "p=place  [ ]=predator count  s=save  arrows/enter=place  g=graph  t=family  c=compare  d=translator  F=faq  h=help",
         "graph_title": "Vocabulary over time - dominant share per state",
         "graph_traits_title": "Physical traits over time - population average (share of range)",
         "graph_dismiss": "-- press any key to go back --",
@@ -165,7 +165,7 @@ TEXT = {
         "hud_controls1": "space=pause  {food_hint}  r=reset  +/-=speed  q=quit",
         "food_hint_auto": "f=food",
         "food_hint_manual": "f=food (auto uniquement)",
-        "hud_controls2": "p=placer  [ ]=nb predateurs  s=sauver  fleches/entree=placer  g=graphique  t=famille  c=comparer  d=traducteur  h=aide",
+        "hud_controls2": "p=placer  [ ]=nb predateurs  s=sauver  fleches/entree=placer  g=graphique  t=famille  c=comparer  d=traducteur  F=faq  h=aide",
         "graph_title": "Vocabulaire dans le temps - part dominante par etat",
         "graph_traits_title": "Traits physiques dans le temps - moyenne population (part de la plage)",
         "graph_dismiss": "-- une touche pour revenir --",
@@ -286,6 +286,149 @@ def show_help(stdscr, lang):
     stdscr.nodelay(False)
     rows, _ = stdscr.getmaxyx()
     lines = HELP_LINES[lang]
+    page_size = max(1, rows - 2)
+    for start in range(0, len(lines), page_size):
+        page = lines[start:start + page_size]
+        stdscr.erase()
+        for i, (line, attr) in enumerate(page):
+            _safe_addstr(stdscr, i, 0, line, curses.color_pair(7) | attr)
+        more = start + page_size < len(lines)
+        footer = TEXT[lang]["help_more"] if more else TEXT[lang]["help_dismiss"]
+        _safe_addstr(stdscr, min(rows - 1, len(page) + 1), 0, footer, curses.color_pair(7) | curses.A_DIM)
+        stdscr.refresh()
+        stdscr.getch()
+    stdscr.nodelay(True)
+
+
+FAQ_LINES = {
+    "en": [
+        ("Thronglets - FAQ", curses.A_BOLD),
+        ("", 0),
+        ("Q: Why do creatures sometimes stay clustered even with food right", curses.A_BOLD),
+        ("   next to them?", curses.A_BOLD),
+        ("A: Following a neighbor's signal and heading for food are two", 0),
+        ("   forces that can partly cancel out - an accepted trade-off,", 0),
+        ("   not a bug.", 0),
+        ("", 0),
+        ("Q: Does distress make creatures help each other?", curses.A_BOLD),
+        ("A: No - there's no cooperation mechanic. Distress is treated like", 0),
+        ("   any other signal, and creatures mostly learn to avoid it.", 0),
+        ("", 0),
+        ("Q: Why does the adaptive metabolism trait always drop to near its", curses.A_BOLD),
+        ("   minimum?", curses.A_BOLD),
+        ("A: Unlike speed/vision/hearing, a lower metabolism has zero", 0),
+        ("   downside here - it's not a real trade-off, so selection", 0),
+        ("   always pushes it down.", 0),
+        ("", 0),
+        ("Q: How can two creatures from very different generations be", curses.A_BOLD),
+        ("   siblings?", curses.A_BOLD),
+        ("A: Generation = max(both parents' generations)+1, and mate choice", 0),
+        ("   only cares about proximity, not generation - a long-lived", 0),
+        ("   parent can breed with a much 'deeper' partner late in life.", 0),
+        ("", 0),
+        ("Q: Can a creature really mate with its own descendant?", curses.A_BOLD),
+        ("A: Yes - same reason: mate choice is purely proximity-based,", 0),
+        ("   with no notion of family.", 0),
+        ("", 0),
+        ("Q: Even a trained vocabulary can drift or 'flip back' - why?", curses.A_BOLD),
+        ("A: No creature learns anything during its life; genomes are", 0),
+        ("   fixed at birth. Only mutation and selection across", 0),
+        ("   generations change anything, and mutation never stops -", 0),
+        ("   nothing is ever permanently locked in.", 0),
+        ("", 0),
+        ("Q: Two states share the same color (homonymy) - is that a bug?", curses.A_BOLD),
+        ("A: No - nothing in the model prevents it. Genomes mutate per", 0),
+        ("   state independently, so two states can land on the same", 0),
+        ("   token by pure chance. Check the Translator screen (d) to", 0),
+        ("   see it clearly.", 0),
+        ("", 0),
+        ("Q: A single playthrough shows a surprising result - can I trust", curses.A_BOLD),
+        ("   it?", curses.A_BOLD),
+        ("A: Not on its own. Use the Compare screen (c) to run several", 0),
+        ("   independent seeds and see whether the result actually", 0),
+        ("   repeats, or was just one run's drift.", 0),
+        ("", 0),
+        ("Q: What's the real difference between the trained AI language", curses.A_BOLD),
+        ("   and the evolved one?", curses.A_BOLD),
+        ("A: The AI (train_language.py) uses gradient descent to directly", 0),
+        ("   minimize communication error, every step. The evolved", 0),
+        ("   language only rewards survival and reproduction - comm-", 0),
+        ("   unicating well is never optimized directly, just indirectly", 0),
+        ("   useful.", 0),
+    ],
+    "fr": [
+        ("Thronglets — FAQ", curses.A_BOLD),
+        ("", 0),
+        ("Q : Pourquoi les creatures restent parfois en groupe meme avec", curses.A_BOLD),
+        ("    de la nourriture juste a cote ?", curses.A_BOLD),
+        ("R : Suivre le signal d'un voisin et se diriger vers la", 0),
+        ("    nourriture sont deux forces qui peuvent s'annuler en", 0),
+        ("    partie - un compromis assume, pas un bug.", 0),
+        ("", 0),
+        ("Q : Est-ce que la detresse pousse les creatures a s'entraider ?", curses.A_BOLD),
+        ("R : Non - il n'y a aucun mecanisme de cooperation. La detresse", 0),
+        ("    est traitee comme n'importe quel autre signal, et les", 0),
+        ("    creatures apprennent surtout a l'eviter.", 0),
+        ("", 0),
+        ("Q : Pourquoi le metabolisme adaptatif tombe toujours pres de", curses.A_BOLD),
+        ("    son minimum ?", curses.A_BOLD),
+        ("R : Contrairement a la vitesse/vision/ouie, un metabolisme bas", 0),
+        ("    n'a aucun inconvenient ici - ce n'est pas un vrai", 0),
+        ("    compromis, donc la selection le pousse toujours vers le", 0),
+        ("    bas.", 0),
+        ("", 0),
+        ("Q : Comment deux creatures de generations tres differentes", curses.A_BOLD),
+        ("    peuvent-elles etre frere et soeur ?", curses.A_BOLD),
+        ("R : Generation = max(generation des deux parents)+1, et le", 0),
+        ("    choix du partenaire ne tient compte que de la proximite,", 0),
+        ("    pas de la generation - un parent qui vit longtemps peut se", 0),
+        ("    reproduire avec un partenaire bien plus 'profond' tard", 0),
+        ("    dans sa vie.", 0),
+        ("", 0),
+        ("Q : Une creature peut-elle vraiment s'accoupler avec son propre", curses.A_BOLD),
+        ("    descendant ?", curses.A_BOLD),
+        ("R : Oui - meme raison : le choix du partenaire est purement", 0),
+        ("    base sur la proximite, sans aucune notion de famille.", 0),
+        ("", 0),
+        ("Q : Meme un vocabulaire entraine peut deriver ou 'revenir en", curses.A_BOLD),
+        ("    arriere' - pourquoi ?", curses.A_BOLD),
+        ("R : Aucune creature n'apprend quoi que ce soit pendant sa vie ;", 0),
+        ("    les genomes sont fixes a la naissance. Seules la mutation", 0),
+        ("    et la selection a travers les generations changent quelque", 0),
+        ("    chose, et la mutation ne s'arrete jamais - rien n'est", 0),
+        ("    jamais definitivement acquis.", 0),
+        ("", 0),
+        ("Q : Deux etats partagent la meme couleur (homonymie) - c'est", curses.A_BOLD),
+        ("    un bug ?", curses.A_BOLD),
+        ("R : Non - rien dans le modele ne l'empeche. Les genomes mutent", 0),
+        ("    independamment par etat, donc deux etats peuvent tomber", 0),
+        ("    sur le meme token par pur hasard. L'ecran Traducteur (d)", 0),
+        ("    permet de le reperer clairement.", 0),
+        ("", 0),
+        ("Q : Une seule partie donne un resultat surprenant - puis-je lui", curses.A_BOLD),
+        ("    faire confiance ?", curses.A_BOLD),
+        ("R : Pas telle quelle. Utilise l'ecran Comparer (c) pour lancer", 0),
+        ("    plusieurs seeds independantes et voir si le resultat se", 0),
+        ("    reproduit vraiment, ou si c'etait juste la derive d'une", 0),
+        ("    seule partie.", 0),
+        ("", 0),
+        ("Q : Quelle est la vraie difference entre le langage entraine", curses.A_BOLD),
+        ("    par IA et celui qui evolue ?", curses.A_BOLD),
+        ("R : L'IA (train_language.py) utilise la descente de gradient", 0),
+        ("    pour minimiser directement l'erreur de communication, a", 0),
+        ("    chaque etape. Le langage evolue ne recompense que la", 0),
+        ("    survie et la reproduction - bien communiquer n'est jamais", 0),
+        ("    optimise directement, juste utile indirectement.", 0),
+    ],
+}
+
+
+def show_faq(stdscr, lang):
+    """Paginated the same way as show_help() - curated questions that came
+    up while building/playing this, with honest, specific answers."""
+    stdscr.nodelay(False)
+    rows, _ = stdscr.getmaxyx()
+    lines = FAQ_LINES[lang]
     page_size = max(1, rows - 2)
     for start in range(0, len(lines), page_size):
         page = lines[start:start + page_size]
@@ -1020,6 +1163,8 @@ def run(stdscr, language_path=None):
             run_compare_ui(stdscr, world, lang, init_pop, seed_genome)
         elif key == ord("d"):
             show_translator(stdscr, world, lang)
+        elif key == ord("F"):
+            show_faq(stdscr, lang)
         elif key == ord("h"):
             show_help(stdscr, lang)
         elif key == curses.KEY_UP:
