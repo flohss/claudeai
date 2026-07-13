@@ -107,9 +107,18 @@ if you just hit `ENTER` through all of them, and they stick for the whole run
 | `F`           | FAQ - curated questions and answers                          |
 | `H`           | in-game notice explaining the mechanics                      |
 | `V`           | show/hide the full HUD (or click the top HUD strip)          |
+| `M`           | mute the proximity-listening sound                          |
 | left click    | place food (or expand/collapse the HUD if clicked there)     |
 | right click   | place a predator                                              |
 | `ESC`         | quit                                                         |
+
+Move the mouse near a creature to hear it: a tone plays for whatever it's
+currently signaling (one fixed pitch per color, so alarm-call always
+sounds the same note wherever it comes from), and fades out as you move
+away or it falls silent. It's a way to listen to one creature at a time
+instead of the whole population's noise. If your machine has no audio
+device the game just runs silently - it never crashes over something
+this optional.
 
 `N`/`P`, and left/right click, all work the same whether the world is
 running in automatic or manual mode - the mode only decides whether food
@@ -163,7 +172,10 @@ most of the terminal for the world - `v` unfolds the full controls list,
 per-state top-3-plus-other breakdown, and legend. There's no reliable mouse
 support in a terminal, so manual mode also offers a keyboard-cursor precision
 tool: the arrow keys move it, `tab` switches between food/predator, `enter`
-places whatever's currently selected exactly there.
+places whatever's currently selected exactly there. There's no proximity
+sound here either (pygame and web have it) - a terminal has no
+dependency-free way to synthesize distinct tones per token, unlike
+`pygame.mixer` or the browser's Web Audio API.
 Works best in a wide/tall terminal — Termux's default font is fairly large,
 so consider shrinking it (pinch to zoom, or Termux's font settings) to see
 more of the world at once.
@@ -208,7 +220,13 @@ mechanics without pausing the simulation
 underneath. The HUD starts collapsed to the tick/population line plus a
 one-line summary (each state's single strongest color) - `V`, or a click on
 that line, unfolds the mode/settings text and the full top-3-plus-other
-vocabulary breakdown.
+vocabulary breakdown. Move the mouse over a creature (or close to one) to
+hear it - a tone plays for whatever it's currently signaling, one fixed
+pitch per color, fading out as the mouse moves away or the creature falls
+silent; a **Mute** button (or `M`) turns it off. It uses the browser's
+Web Audio API directly, no plugin or extra permission needed, and starts
+the first time you click a start button (browsers require a click before
+they'll let a page play audio).
 
 All three renderers show a HUD with, for each internal state (danger / food-call /
 distress-call / mate-call / idle), the 3 most common tokens currently in use and

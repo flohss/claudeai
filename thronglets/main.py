@@ -11,9 +11,11 @@ Controls:
   SPACE        pause / resume
   UP / DOWN    simulation speed (ticks per real second - x1 is a genuine 1 tick/s)
   R            reset to a fresh world
-  LEFT CLICK   place food (auto mode) or whatever's selected (manual mode)
-  P            toggle what manual clicks place (food / predator)
+  N / P        drop food / add a predator at a random spot
+  LEFT/RIGHT CLICK   place food / a predator at the clicked spot
   [ / ]        remove/add a predator right now
+  V            show/hide the full HUD (or click the top HUD strip)
+  M            mute the proximity-listening sound
   H            in-game notice/help screen
   ESC          quit
 """
@@ -25,6 +27,7 @@ import sys
 import threading
 import time
 
+import numpy as np
 import pygame
 
 from i18n import STATE_LABELS, TRAIT_LABELS
@@ -62,6 +65,10 @@ TOKEN_COLORS = [
     (200, 90, 230),
     (70, 225, 210),
 ]
+# A pentatonic scale (C4 D4 E4 G4 A4) so any combination of tokens sounds
+# pleasant together - index 0 (silence) is never looked up, no tone assigned.
+TOKEN_FREQS = [0, 261.63, 293.66, 329.63, 392.00, 440.00]
+LISTEN_RADIUS = 10.0  # world units - how close the mouse must be to hear a creature
 
 TEXT = {
     "en": {
@@ -113,9 +120,10 @@ TEXT = {
         "hud_paused": "PAUSED",
         "hud_trained_tag": "[trained vocabulary]",
         "hud_traits_tag": "[adaptive traits]",
+        "hud_muted_tag": "[sound muted]",
         "hud_header": "tick {tick:>6}   pop {pop:>4}   births {births:>5}   deaths {deaths:>5}   {status}",
         "hud_controls_hint1": "(space=pause  up/down=speed  r=reset  s=save  g=graph",
-        "hud_controls_hint2": " t=family  c=compare  d=translator  f=faq  h=help)",
+        "hud_controls_hint2": " t=family  c=compare  d=translator  f=faq  h=help  m=mute)",
         "hud_controls_hint3": "n/click = food   p/right-click = predator",
         "hud_expand_hint": "V or click here = show full HUD",
         "hud_manual": "mode: manual (no automatic spawning)",
@@ -304,9 +312,10 @@ TEXT = {
         "hud_paused": "PAUSE",
         "hud_trained_tag": "[vocabulaire entraine]",
         "hud_traits_tag": "[traits evolutifs]",
+        "hud_muted_tag": "[son coupe]",
         "hud_header": "tick {tick:>6}   pop {pop:>4}   naissances {births:>5}   morts {deaths:>5}   {status}",
         "hud_controls_hint1": "(espace=pause  haut/bas=vitesse  r=reset  s=sauver  g=graphique",
-        "hud_controls_hint2": " t=famille  c=comparer  d=traducteur  f=faq  h=aide)",
+        "hud_controls_hint2": " t=famille  c=comparer  d=traducteur  f=faq  h=aide  m=silence)",
         "hud_controls_hint3": "n/clic = nourriture   p/clic droit = predateur",
         "hud_expand_hint": "V ou clique ici = HUD complet",
         "hud_manual": "mode: manuel (pas d'apparition automatique)",
@@ -704,7 +713,63 @@ def show_family(screen, font, world, lang):
                 focus = siblings[i]
 
 
-def draw(screen, font, world, paused, speed, mode, lang, expanded, trained=False):
+def init_sound():
+    """Best-effort mixer setup - returns {token: Sound} and a dedicated Channel
+    to play them on, or (None, None) if there's no audio device at all (a
+    headless box, a sandbox, a machine with sound disabled). Never crashes
+    the game over something this optional."""
+    try:
+        pygame.mixer.init(frequency=22050, size=-16, channels=2)
+        sample_rate = pygame.mixer.get_init()[0]
+        tones = {token: _make_tone(freq, sample_rate) for token, freq in enumerate(TOKEN_FREQS) if token != 0}
+        return tones, pygame.mixer.Channel(0)
+    except pygame.error:
+        return None, None
+
+
+def _make_tone(freq, sample_rate, duration=0.6, volume=0.25):
+    """A short sine-wave tone with a fade in/out envelope - looped by the
+    caller, so the fades also soften the seam where the loop repeats."""
+    n = int(sample_rate * duration)
+    t = np.linspace(0, duration, n, endpoint=False)
+    wave = np.sin(2 * np.pi * freq * t)
+    fade = min(n // 20, 400)
+    envelope = np.ones(n)
+    envelope[:fade] = np.linspace(0, 1, fade)
+    envelope[-fade:] = np.linspace(1, 0, fade)
+    wave = (wave * envelope * volume * 32767).astype(np.int16)
+    stereo = np.column_stack([wave, wave])
+    return pygame.sndarray.make_sound(np.ascontiguousarray(stereo))
+
+
+def update_listening(channel, tones, world, mouse_pos, hud_h, muted, listening_token):
+    """Plays a sustained tone for whichever living creature is closest to the
+    mouse, within LISTEN_RADIUS - a way to "listen in" on one creature's
+    signal instead of the whole population's noise. Returns the token now
+    playing (or None), so the caller can track it across frames without
+    re-querying the mixer every time."""
+    if channel is None:
+        return None
+    target = None
+    if not muted and mouse_pos[1] > hud_h:
+        wx, wy = mouse_pos[0] / SCALE_X, (mouse_pos[1] - hud_h) / SCALE_Y
+        best_dist = LISTEN_RADIUS
+        for c in world.creatures:
+            if not c.alive or c.token == 0:
+                continue
+            dist = ((c.pos[0] - wx) ** 2 + (c.pos[1] - wy) ** 2) ** 0.5
+            if dist < best_dist:
+                best_dist = dist
+                target = c.token
+    if target != listening_token:
+        if target is None:
+            channel.stop()
+        else:
+            channel.play(tones[target], loops=-1)
+    return target
+
+
+def draw(screen, font, world, paused, speed, mode, lang, expanded, trained=False, muted=False):
     screen.fill(BG)
     pygame.draw.rect(screen, GROUND, (0, HUD_H, SCREEN_W, SCREEN_H - HUD_H))
 
@@ -723,7 +788,7 @@ def draw(screen, font, world, paused, speed, mode, lang, expanded, trained=False
         x, y = int(p.pos[0] * SCALE_X), int(p.pos[1] * SCALE_Y) + HUD_H
         pygame.draw.circle(screen, PREDATOR_COLOR, (x, y), 6)
 
-    draw_hud(screen, font, world, paused, speed, mode, lang, expanded, trained)
+    draw_hud(screen, font, world, paused, speed, mode, lang, expanded, trained, muted)
 
 
 SPARK_COLOR = (150, 200, 130)
@@ -802,7 +867,7 @@ def draw_vocab_summary_line(screen, font, y, world, labels):
         x += 16 + txt.get_width() + 16
 
 
-def draw_hud(screen, font, world, paused, speed, mode, lang, expanded, trained=False):
+def draw_hud(screen, font, world, paused, speed, mode, lang, expanded, trained=False, muted=False):
     t = TEXT[lang]
     labels = STATE_LABELS[lang]
     pygame.draw.rect(screen, HUD_BG, (0, 0, SCREEN_W, HUD_H))
@@ -811,6 +876,8 @@ def draw_hud(screen, font, world, paused, speed, mode, lang, expanded, trained=F
     tag_parts = [t["hud_trained_tag"]] if trained else []
     if world.adaptive_traits:
         tag_parts.append(t["hud_traits_tag"])
+    if muted:
+        tag_parts.append(t["hud_muted_tag"])
     tag = "   ".join(tag_parts)
     header = t["hud_header"].format(tick=world.tick, pop=pop, births=world.births,
                                      deaths=world.deaths, status=status)
@@ -1432,6 +1499,7 @@ def main():
     args = parser.parse_args()
 
     pygame.init()
+    tones, sound_channel = init_sound()
     pygame.display.set_caption("Thronglets - a tiny language is being born")
     # (0, 0) + FULLSCREEN asks SDL for the desktop's own resolution, then the
     # world is stretched per-axis to exactly fill it - no fixed aspect ratio,
@@ -1482,6 +1550,8 @@ def main():
     paused = False
     speed = 1  # ticks per real second
     hud_expanded = False
+    sound_muted = False
+    listening_token = None
     tick_accumulator = 0.0
     running = True
 
@@ -1530,6 +1600,8 @@ def main():
                     hud_expanded = not hud_expanded
                     HUD_H = EXPANDED_HUD_H if hud_expanded else MINIMAL_HUD_H
                     SCALE_Y = (SCREEN_H - HUD_H) / HEIGHT
+                elif event.key == pygame.K_m:
+                    sound_muted = not sound_muted
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button in (1, 3):
                 mx, my = event.pos
                 if my <= HUD_H:
@@ -1552,9 +1624,15 @@ def main():
         else:
             tick_accumulator = 0.0
 
-        draw(screen, font, world, paused, speed, mode, lang, hud_expanded, trained=seed_genome is not None)
+        listening_token = update_listening(sound_channel, tones, world, pygame.mouse.get_pos(),
+                                            HUD_H, sound_muted, listening_token)
+
+        draw(screen, font, world, paused, speed, mode, lang, hud_expanded,
+             trained=seed_genome is not None, muted=sound_muted)
         pygame.display.flip()
 
+    if sound_channel is not None:
+        sound_channel.stop()
     pygame.quit()
     sys.exit()
 

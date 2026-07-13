@@ -544,6 +544,7 @@ INDEX_HTML = """<!doctype html>
       <button id="openTranslator" data-i18n="translatorText"></button>
       <button id="openFaq" data-i18n="faqText"></button>
       <button id="openHelp" data-i18n="noticeText"></button>
+      <button id="muteSound"></button>
     </div>
     <div id="controls2">
       <button id="predLess" data-i18n="predLessText"></button>
@@ -704,6 +705,10 @@ INDEX_HTML = """<!doctype html>
 
 <script>
 const TOKEN_COLORS = ["#a0a0a0", "#eb4646", "#4682eb", "#f5c83c", "#c85ae6", "#46e1d2"];
+// A pentatonic scale (C4 D4 E4 G4 A4) so any combination of tokens sounds
+// pleasant together - index 0 (silence) is never looked up, no tone assigned.
+const TOKEN_FREQS = [0, 261.63, 293.66, 329.63, 392.00, 440.00];
+const LISTEN_RADIUS = 10.0;  // world units - how close the mouse must be to hear a creature
 const FOOD_COLOR = "#6edc5a";
 const PREDATOR_COLOR = "#dc1e1e";
 
@@ -776,8 +781,9 @@ const STRINGS = {
     faqQ9: "Q: What's the real difference between the trained AI language and the evolved one?",
     faqA9: "A: The AI (train_language.py) uses gradient descent to directly minimize communication error, every step. The evolved language only rewards survival and reproduction - communicating well is never optimized directly, just indirectly useful.",
     predLessText: "- predators", predMoreText: "+ predators",
-    hint: "n = food   p = predator   left-click = food   right-click = predator",
+    hint: "n = food   p = predator   left-click = food   right-click = predator   move the mouse near a creature to hear it (m = mute)",
     hudExpandHint: "   (V or click here = show full HUD)",
+    muteText: "Mute sound", unmuteText: "Unmute sound",
     closeText: "Close",
     errorResumeFailed: (file) => `'${file}' could not be read - start a fresh game instead.`,
 
@@ -870,8 +876,9 @@ const STRINGS = {
     faqQ9: "Q : Quelle est la vraie difference entre le langage entraine par IA et celui qui evolue ?",
     faqA9: "R : L'IA (train_language.py) utilise la descente de gradient pour minimiser directement l'erreur de communication, a chaque etape. Le langage evolue ne recompense que la survie et la reproduction - bien communiquer n'est jamais optimise directement, juste utile indirectement.",
     predLessText: "- predateurs", predMoreText: "+ predateurs",
-    hint: "n = nourriture   p = predateur   clic gauche = nourriture   clic droit = predateur",
+    hint: "n = nourriture   p = predateur   clic gauche = nourriture   clic droit = predateur   approche la souris d'une creature pour l'entendre (m = muet)",
     hudExpandHint: "   (V ou clique ici = HUD complet)",
+    muteText: "Couper le son", unmuteText: "Activer le son",
     closeText: "Fermer",
     errorResumeFailed: (file) => `'${file}' illisible - nouvelle partie a la place.`,
 
@@ -910,6 +917,7 @@ function applyLanguage(lang) {
   document.getElementById('langEn').classList.toggle('active', lang === 'en');
   document.getElementById('langFr').classList.toggle('active', lang === 'fr');
   document.getElementById('pause').textContent = paused ? t.resumeText : t.pauseText;
+  updateMuteButton();
 }
 
 const canvas = document.getElementById('world');
@@ -918,6 +926,60 @@ let worldW = 200, worldH = 140, paused = false, currentSpeed = 1;
 
 let mode = 'auto', predatorCount = 6;
 let hudExpanded = false;
+let lastCreatures = [];
+
+let audioCtx = null, oscillator = null, gainNode = null, soundMuted = false;
+
+function initSound() {
+  // Best-effort - browsers require a user gesture to start audio, so this is
+  // only ever called from a click handler, and it's fine if it silently
+  // fails (older browser, autoplay blocked, whatever): sound is optional.
+  if (audioCtx) return;
+  try {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    oscillator = audioCtx.createOscillator();
+    gainNode = audioCtx.createGain();
+    gainNode.gain.value = 0;
+    oscillator.type = 'sine';
+    oscillator.frequency.value = TOKEN_FREQS[1];
+    oscillator.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+    oscillator.start();
+  } catch (e) {
+    audioCtx = null;
+  }
+}
+
+function updateMuteButton() {
+  const t = STRINGS[uiLang];
+  document.getElementById('muteSound').textContent = soundMuted ? t.unmuteText : t.muteText;
+}
+
+function updateListening(px, py) {
+  // Plays a sustained tone for whichever living creature is closest to the
+  // mouse, within LISTEN_RADIUS - a way to "listen in" on one creature's
+  // signal instead of the whole population's noise.
+  if (!gainNode) return;
+  const now = audioCtx.currentTime;
+  if (soundMuted) {
+    gainNode.gain.linearRampToValueAtTime(0, now + 0.05);
+    return;
+  }
+  const scale = canvas.width / worldW;
+  const wx = px / scale, wy = py / scale;
+  let bestDist = LISTEN_RADIUS, token = null;
+  for (const c of lastCreatures) {
+    if (c.token === 0) continue;
+    const dist = Math.hypot(c.x - wx, c.y - wy);
+    if (dist < bestDist) { bestDist = dist; token = c.token; }
+  }
+  if (token === null) {
+    gainNode.gain.linearRampToValueAtTime(0, now + 0.05);
+  } else {
+    oscillator.frequency.setValueAtTime(TOKEN_FREQS[token], now);
+    gainNode.gain.linearRampToValueAtTime(0.12, now + 0.05);
+  }
+}
 
 function applyHudExpanded() {
   document.getElementById('hud-details').style.display = hudExpanded ? '' : 'none';
@@ -1007,6 +1069,7 @@ function render(state) {
   renderVocabRow('vocab-mate', t.labelMate, state.vocabulary['mate']);
   renderVocabRow('vocab-idle', t.labelIdle, state.vocabulary['idle']);
   renderVocabSummary(state.vocabulary);
+  lastCreatures = state.creatures;
 
   document.getElementById('pause').textContent = state.paused ? t.resumeText : t.pauseText;
 
@@ -1156,9 +1219,9 @@ async function saveGame() {
 }
 document.getElementById('langEn').onclick = () => applyLanguage('en');
 document.getElementById('langFr').onclick = () => applyLanguage('fr');
-document.getElementById('startAuto').onclick = () => startGame('auto');
-document.getElementById('startManual').onclick = () => startGame('manual');
-document.getElementById('startResume').onclick = () => resumeGame();
+document.getElementById('startAuto').onclick = () => { initSound(); startGame('auto'); };
+document.getElementById('startManual').onclick = () => { initSound(); startGame('manual'); };
+document.getElementById('startResume').onclick = () => { initSound(); resumeGame(); };
 document.getElementById('pause').onclick = () => post(paused ? 'resume' : 'pause');
 document.getElementById('reset').onclick = () => post('reset');
 document.getElementById('save').onclick = () => saveGame();
@@ -1385,6 +1448,21 @@ canvas.addEventListener('contextmenu', (ev) => {
   const scale = canvas.width / worldW;
   post('click', {x: px / scale, y: py / scale, button: 'right'});
 });
+canvas.addEventListener('mousemove', (ev) => {
+  const rect = canvas.getBoundingClientRect();
+  const px = (ev.clientX - rect.left) * (canvas.width / rect.width);
+  const py = (ev.clientY - rect.top) * (canvas.height / rect.height);
+  updateListening(px, py);
+});
+canvas.addEventListener('mouseleave', () => {
+  if (gainNode) gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.05);
+});
+
+document.getElementById('muteSound').onclick = () => {
+  soundMuted = !soundMuted;
+  updateMuteButton();
+  if (soundMuted && gainNode) gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.05);
+};
 
 document.addEventListener('keydown', (ev) => {
   if (document.getElementById('app').style.display === 'none') return;
@@ -1394,6 +1472,11 @@ document.addEventListener('keydown', (ev) => {
   if (ev.key === 'n' || ev.key === 'N') post('quick_place', {kind: 'food'});
   else if (ev.key === 'p' || ev.key === 'P') post('quick_place', {kind: 'predator'});
   else if (ev.key === 'v' || ev.key === 'V') { hudExpanded = !hudExpanded; applyHudExpanded(); }
+  else if (ev.key === 'm' || ev.key === 'M') {
+    soundMuted = !soundMuted;
+    updateMuteButton();
+    if (soundMuted && gainNode) gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.05);
+  }
 });
 
 applyLanguage(uiLang);
