@@ -38,7 +38,7 @@ DEFAULT_SAVE_FILE = "thronglets_save.json"
 TRAIT_IDS = {TRAIT_SPEED: "speed", TRAIT_VISION: "vision", TRAIT_HEARING: "hearing",
              TRAIT_METABOLISM: "metabolism"}
 STATE_IDS = {IDLE: "idle", FOOD: "food", MATE: "mate", DANGER: "danger", DISTRESS: "distress"}
-COMPARE_DEPTHS = {"quick": (4, 8000), "thorough": (8, 40000)}
+COMPARE_DEPTHS = {"quick": (4, 8000), "thorough": (8, 40000), "expert": (16, 60000)}
 
 
 def _new_world(mode, predator_count, init_pop=DEFAULT_INIT_POP, seed_genome=None, adaptive_traits=False):
@@ -612,6 +612,7 @@ INDEX_HTML = """<!doctype html>
         <p data-i18n="compareDepthPrompt"></p>
         <label><input type="radio" name="compareDepth" value="quick" checked> <span data-i18n="compareDepthQuick"></span></label>
         <label><input type="radio" name="compareDepth" value="thorough"> <span data-i18n="compareDepthThorough"></span></label>
+        <label><input type="radio" name="compareDepth" value="expert"> <span data-i18n="compareDepthExpert"></span></label>
         <button id="compareStart" data-i18n="compareStartText"></button>
       </div>
 
@@ -671,6 +672,7 @@ const STRINGS = {
     compareDepthPrompt: "How thorough?",
     compareDepthQuick: "Quick - 4 seeds x 8,000 ticks",
     compareDepthThorough: "Thorough - 8 seeds x 40,000 ticks",
+    compareDepthExpert: "Expert - 16 seeds x 60,000 ticks, one at a time - can take a while",
     compareStartText: "Start comparison", compareCancelText: "Cancel",
     compareAgainText: "Compare again",
     compareProgress: (seed, nSeeds, tick, ticks) => `seed ${seed}/${nSeeds}   tick ${tick}/${ticks}`,
@@ -742,6 +744,7 @@ const STRINGS = {
     compareDepthPrompt: "Quelle profondeur ?",
     compareDepthQuick: "Rapide - 4 seeds x 8 000 ticks",
     compareDepthThorough: "Approfondi - 8 seeds x 40 000 ticks",
+    compareDepthExpert: "Expert - 16 seeds x 60 000 ticks, une par une - peut prendre du temps",
     compareStartText: "Lancer la comparaison", compareCancelText: "Annuler",
     compareAgainText: "Comparer a nouveau",
     compareProgress: (seed, nSeeds, tick, ticks) => `seed ${seed}/${nSeeds}   tick ${tick}/${ticks}`,

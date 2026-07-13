@@ -147,7 +147,8 @@ TEXT = {
         "compare_depth_prompt": "How thorough?",
         "compare_depth_quick": "  R = quick - 4 seeds x 8,000 ticks (default)",
         "compare_depth_thorough": "  A = thorough - 8 seeds x 40,000 ticks, same as the manual check earlier",
-        "compare_depth_hint": "Press R or A, or ENTER for the default (quick). ESC cancels.",
+        "compare_depth_expert": "  E = expert - 16 seeds x 60,000 ticks, runs one at a time - can take a while",
+        "compare_depth_hint": "Press R, A, or E, or ENTER for the default (quick). ESC cancels.",
         "compare_progress": "seed {seed}/{n_seeds}   tick {tick}/{ticks}   ESC cancels",
         "compare_result_title": "Comparison done ({n_seeds} seeds x {ticks} ticks)",
         "compare_traits_header": "trait          mean   std dev    min     max",
@@ -276,7 +277,8 @@ TEXT = {
         "compare_depth_prompt": "Quelle profondeur ?",
         "compare_depth_quick": "  R = rapide - 4 seeds x 8 000 ticks (defaut)",
         "compare_depth_thorough": "  A = approfondi - 8 seeds x 40 000 ticks, comme la verif faite plus tot",
-        "compare_depth_hint": "Appuie sur R ou A, ou ENTREE pour le defaut (rapide). ESC annule.",
+        "compare_depth_expert": "  E = expert - 16 seeds x 60 000 ticks, une par une - peut prendre du temps",
+        "compare_depth_hint": "Appuie sur R, A ou E, ou ENTREE pour le defaut (rapide). ESC annule.",
         "compare_progress": "seed {seed}/{n_seeds}   tick {tick}/{ticks}   ESC annule",
         "compare_result_title": "Comparaison terminee ({n_seeds} seeds x {ticks} ticks)",
         "compare_traits_header": "trait          moyenne  ecart-type  min     max",
@@ -1005,6 +1007,7 @@ def run_training_ui(screen, font, lang):
 
 COMPARE_QUICK = (4, 8000)
 COMPARE_THOROUGH = (8, 40000)
+COMPARE_EXPERT = (16, 60000)
 
 
 def choose_compare_mode(screen, font, lang, traits_available):
@@ -1044,6 +1047,7 @@ def choose_compare_depth(screen, font, lang):
         t["compare_depth_prompt"],
         t["compare_depth_quick"],
         t["compare_depth_thorough"],
+        t["compare_depth_expert"],
         "",
         t["compare_depth_hint"],
     ]
@@ -1061,6 +1065,8 @@ def choose_compare_depth(screen, font, lang):
                     return COMPARE_QUICK
                 if event.key == pygame.K_a:
                     return COMPARE_THOROUGH
+                if event.key == pygame.K_e:
+                    return COMPARE_EXPERT
                 if event.key == pygame.K_ESCAPE:
                     return None
 

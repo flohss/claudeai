@@ -104,7 +104,8 @@ TEXT = {
         "compare_depth_prompt": "How thorough?",
         "compare_depth_quick": "  R = quick - 4 seeds x 8,000 ticks (default)",
         "compare_depth_thorough": "  A = thorough - 8 seeds x 40,000 ticks",
-        "compare_depth_hint": "Press R or A, or ENTER for the default (quick). ESC cancels.",
+        "compare_depth_expert": "  E = expert - 16 seeds x 60,000 ticks, one at a time - can take a while",
+        "compare_depth_hint": "Press R, A, or E, or ENTER for the default (quick). ESC cancels.",
         "compare_progress": "seed {seed}/{n_seeds}   tick {tick}/{ticks}   ESC cancels",
         "compare_result_title": "Comparison done ({n_seeds} seeds x {ticks} ticks)",
         "compare_traits_header": "trait          mean    std dev   min      max",
@@ -187,7 +188,8 @@ TEXT = {
         "compare_depth_prompt": "Quelle profondeur ?",
         "compare_depth_quick": "  R = rapide - 4 seeds x 8 000 ticks (defaut)",
         "compare_depth_thorough": "  A = approfondi - 8 seeds x 40 000 ticks",
-        "compare_depth_hint": "Appuie sur R ou A, ou ENTREE pour le defaut (rapide). ESC annule.",
+        "compare_depth_expert": "  E = expert - 16 seeds x 60 000 ticks, une par une - peut prendre du temps",
+        "compare_depth_hint": "Appuie sur R, A ou E, ou ENTREE pour le defaut (rapide). ESC annule.",
         "compare_progress": "seed {seed}/{n_seeds}   tick {tick}/{ticks}   ESC annule",
         "compare_result_title": "Comparaison terminee ({n_seeds} seeds x {ticks} ticks)",
         "compare_traits_header": "trait          moyenne ecart-type  min      max",
@@ -484,6 +486,7 @@ def show_family(stdscr, world, lang):
 
 COMPARE_QUICK = (4, 8000)
 COMPARE_THOROUGH = (8, 40000)
+COMPARE_EXPERT = (16, 60000)
 
 
 def choose_compare_mode(stdscr, lang, traits_available):
@@ -527,6 +530,7 @@ def choose_compare_depth(stdscr, lang):
         (t["compare_depth_prompt"], curses.A_BOLD),
         (t["compare_depth_quick"], 0),
         (t["compare_depth_thorough"], 0),
+        (t["compare_depth_expert"], 0),
         ("", 0),
         (t["compare_depth_hint"], curses.A_DIM),
     ]
@@ -541,6 +545,8 @@ def choose_compare_depth(stdscr, lang):
             depth = COMPARE_QUICK
         elif key in (ord("a"), ord("A")):
             depth = COMPARE_THOROUGH
+        elif key in (ord("e"), ord("E")):
+            depth = COMPARE_EXPERT
         elif key == 27:
             stdscr.nodelay(True)
             return None

@@ -100,6 +100,7 @@ if you just hit `ENTER` through all of them, and they stick for the whole run
 | `S`           | save the running game to `thronglets_save.json`               |
 | `G`           | vocabulary-over-time graph                                  |
 | `T`           | family tree - browse ancestors/descendants                  |
+| `C`           | compare seeds - is a result reproducible?                   |
 | `H`           | in-game notice explaining the mechanics                      |
 | left click    | place food (auto mode) or whatever's selected (manual mode)  |
 | `ESC`         | quit                                                         |
@@ -140,8 +141,8 @@ currently signaling, white if silent), food as green `.`, predators as a red
 `X`. Controls: `space`=pause, `f`=drop a food patch (auto mode only),
 `r`=reset, `+`/`-`=speed, `q`=quit, `p`=toggle food/predator placement,
 `[`/`]`=remove/add a predator right now, `s`=save to `thronglets_save.json`,
-`g`=vocabulary-over-time graph, `t`=family tree, `h`=in-game notice
-(paginated so it fits any terminal height). There's no
+`g`=vocabulary-over-time graph, `t`=family tree, `c`=compare seeds,
+`h`=in-game notice (paginated so it fits any terminal height). There's no
 reliable mouse support in a terminal, so manual mode uses a keyboard cursor
 instead: the arrow keys move it, `enter` places whatever's currently
 selected.
@@ -178,8 +179,9 @@ remove or add a predator immediately (also setting how many a reset will
 use), tapping/clicking the world places food (auto mode) or whatever's
 selected (manual mode), a **Save** button writes the running game to
 `thronglets_save.json`, a **Family** button opens the genealogy browser
-(arrow keys or on-screen ▲▼◀▶ buttons to navigate), and a **Notice** button
-opens an explainer of the mechanics without pausing the simulation
+(arrow keys or on-screen ▲▼◀▶ buttons to navigate), a **Compare** button
+opens the seed-comparison panel, and a **Notice** button opens an explainer
+of the mechanics without pausing the simulation
 underneath.
 
 All three renderers show a HUD with, for each internal state (danger / food-call /
@@ -246,6 +248,34 @@ or falling line means selection is actually pushing that trait somewhere,
 not just letting it drift. This section is hidden entirely when adaptive
 traits are off, since there's nothing to show (every creature has the same
 fixed stats).
+
+## Comparing seeds: is a result reproducible, or did you just get lucky?
+
+A single playthrough only tells you what happened on *that* run - maybe
+speed happened to evolve high because selection genuinely favors it, or
+maybe it's just where that particular random walk wandered. The **Compare**
+screen (`c`/`C` in pygame and the terminal, a "Compare" button on the web
+page - same pattern as Graph/Family) answers that by running several
+independent, headless worlds back-to-back with identical settings (same
+population, predator count, adaptive-traits flag, and starting
+vocabulary/language as your current game) and only the RNG seed differing,
+then summarizing what happened across all of them:
+
+- **Language**: each state's dominant color per seed, plus how many of the
+  seeds ended up collision-free - the same question `train_language.py
+  --sweep` asks, but for the evolved (not gradient-trained) population.
+- **Physical traits** (only offered if adaptive evolution is on): mean,
+  standard deviation, min, and max for each trait's final value across the
+  seeds - a wide spread means that trait's outcome is mostly noise; a tight
+  spread means it's a genuine, repeatable result.
+
+Three depths to pick from - quick (4 seeds x 8,000 ticks), thorough (8 x
+40,000), or expert (16 x 60,000, prioritizing more seeds over more ticks
+since that's what actually buys statistical confidence). Unlike a script run
+from the command line, this runs one seed at a time in the background while
+showing live progress, and `ESC`/Cancel stops it early without losing
+whatever seeds already finished. It's a side experiment - it builds its own
+worlds from scratch and never touches the game you're actually playing.
 
 ## Headless check
 
