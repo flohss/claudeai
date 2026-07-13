@@ -511,8 +511,8 @@ INDEX_HTML = """<!doctype html>
       <span data-i18n="initPopLabel"></span>
       <input type="number" id="initPop" value="100" min="1" max="220">
     </label>
-    <label><input type="checkbox" id="useAi" checked> <span data-i18n="useAiLabel"></span></label>
-    <label><input type="checkbox" id="adaptiveTraits"> <span data-i18n="adaptiveTraitsLabel"></span></label>
+    <label><input type="checkbox" id="useAi"> <span data-i18n="useAiLabel"></span></label>
+    <label><input type="checkbox" id="adaptiveTraits" checked> <span data-i18n="adaptiveTraitsLabel"></span></label>
     <p data-i18n="adaptiveTraitsExplain" style="font-size:12px; opacity:0.65; margin-top:-8px;"></p>
     <button id="startAuto" data-i18n="startAuto"></button>
     <button id="startManual" data-i18n="startManual"></button>
@@ -713,7 +713,7 @@ const STRINGS = {
     initPopLabel: "Number of creatures to start with:",
     useAiLabel: "Activate the pre-trained AI language (language_model.json)",
     adaptiveTraitsLabel: "Adaptive evolution: speed, vision, hearing, metabolism",
-    adaptiveTraitsExplain: "Each creature gets its own physical stats, inherited and mutated - but faster/keener senses cost more energy, a real trade-off. Off by default.",
+    adaptiveTraitsExplain: "Each creature gets its own physical stats, inherited and mutated - but faster/keener senses cost more energy, a real trade-off. On by default.",
     startAuto: "Automatic — food and predators spawn on their own",
     startManual: "Manual — I place everything myself",
     resumeSaveText: "Resume saved game",
@@ -807,7 +807,7 @@ const STRINGS = {
     initPopLabel: "Nombre de creatures au depart :",
     useAiLabel: "Activer le langage pre-entraine par IA (language_model.json)",
     adaptiveTraitsLabel: "Evolution adaptative : vitesse, vision, ouie, metabolisme",
-    adaptiveTraitsExplain: "Chaque creature a ses propres stats physiques, heritees et mutees - mais etre rapide/perceptif coute plus d'energie, un vrai compromis. Desactive par defaut.",
+    adaptiveTraitsExplain: "Chaque creature a ses propres stats physiques, heritees et mutees - mais etre rapide/perceptif coute plus d'energie, un vrai compromis. Active par defaut.",
     startAuto: "Automatique — nourriture et predateurs apparaissent seuls",
     startManual: "Manuel — je place tout moi-meme",
     resumeSaveText: "Reprendre la partie sauvegardee",

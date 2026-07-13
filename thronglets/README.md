@@ -84,10 +84,10 @@ Otherwise you pick `A` (automatic) or `M` (manual), how many creatures to
 start with (type a number, 1-220, `ENTER` to confirm or skip for the
 default of 100), `Y`/`N` (`O`/`N` in French) for whether physical traits
 (speed, vision, hearing, metabolism) evolve too — see
-[Adaptive traits](#adaptive-traits-optional) below, off by default — then
+[Adaptive traits](#adaptive-traits-on-by-default) below, on by default — then
 `Y`/`N`/`T` (`O`/`N`/`T` in French) for whether to start already speaking a
 pre-trained language, train a fresh one live right there, or skip it (see
-below for both) — every screen defaults to French/automatic/100/no-traits/yes
+below for both) — every screen defaults to French/automatic/100/with-traits/no
 if you just hit `ENTER` through all of them, and they stick for the whole run
 (`R` resets using them again, it doesn't ask a second time).
 
@@ -141,11 +141,11 @@ predators come back exactly as you left them, skipping every other
 question. Otherwise: `A` (automatic) or `M` (manual), how many creatures to
 start with (1-220, `enter` to confirm or skip for the default of 100), a
 yes/no for whether physical traits evolve too (`y`/`n` in English, `o`/`n`
-in French, off by default — see
-[Adaptive traits](#adaptive-traits-optional) below), then a yes/no for
+in French, on by default — see
+[Adaptive traits](#adaptive-traits-on-by-default) below), then a yes/no for
 whether to start already speaking a pre-trained language (see below,
 `y`/`n` in English, `o`/`n` in French) — every screen defaults to
-French/automatic/100/no-traits/yes if you just hit `enter` through all of
+French/automatic/100/with-traits/no if you just hit `enter` through all of
 them, and all choices stick for the whole run.
 
 Creatures show up as a colored `o` (colored by whatever token they're
@@ -184,9 +184,9 @@ this one isn't a one-time choice like the others. The world doesn't exist
 yet — if a save from a previous run exists, a **Resume saved game** button
 appears on the start screen and skips every other question. Otherwise,
 pick automatic or manual mode, how many creatures to start with (pre-filled
-with 100), whether physical traits evolve too (unchecked by default — see
-[Adaptive traits](#adaptive-traits-optional) below), and whether to
-activate a pre-trained language (checked by default), and those four stick
+with 100), whether physical traits evolve too (checked by default — see
+[Adaptive traits](#adaptive-traits-on-by-default) below), and whether to
+activate a pre-trained language (unchecked by default), and those four stick
 for the whole run (Reset doesn't ask again). Once
 started, the page polls the server a few times a second for a fresh
 snapshot and draws it to a `<canvas>`; buttons
@@ -249,13 +249,14 @@ anything (the web version even keeps ticking live behind it); unlike
 Graph/Notice, which dismiss on any key, `t`/`ESC` close this one specifically
 since the arrow keys are busy navigating.
 
-## Adaptive traits (optional)
+## Adaptive traits (on by default)
 
-By default every creature has the same fixed speed, vision range, hearing
-range, and metabolism — only signaling and listening evolve. Turning on
-**"Adaptive evolution"** at startup (asked right after population size, in
-all three renderers — off by default, since it changes the balance of the
-simulation) makes those four physical traits part of the genome too:
+By default every creature also has its own speed, vision range, hearing
+range, and metabolism, on top of signaling and listening. **"Adaptive
+evolution"** is asked about at startup right after population size, in all
+three renderers — on by default, but you can turn it off if you'd rather
+keep physical stats fixed and isolate how just signaling/listening evolve.
+When it's on, those four physical traits are part of the genome too:
 inherited from parents, mutated a little at each birth, and bounded within a
 sane range. A faster, sharper-sensed creature isn't a free upgrade, though —
 speed, vision, and hearing each add to that individual's energy cost per
