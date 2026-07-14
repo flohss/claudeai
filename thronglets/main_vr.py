@@ -56,6 +56,18 @@ a second creature exists, whether that second one came from this button
 or arrived some other way. There's no limit on how many times you can
 use it.
 
+The panel's last two buttons are the episode's dark side, included on
+purpose: a flame and a knife. Clicking one arms it - its border turns
+red and the HUD says so - and clicking it again puts it away. With the
+knife armed, clicking a creature kills it on the spot, leaving a blood
+mark that fades from the grass. With fire armed, clicking a creature
+sets it alight: it keeps living, moving, and burning for a second or so
+before it dies where it stands, leaving a scorch mark. Both act through
+World.kill_creature(), the same path as a natural death, so the family
+tree and the death count stay honest about what you did. Creatures
+still waiting inside their birth egg can't be targeted - only ones
+you've already hatched.
+
 The creature design is an original, simplified, geometric interpretation
 of the look (round yellow body, big eyes, blue lower half) - not a
 reproduction of the show's or the licensed game's actual pixel art.
@@ -116,7 +128,8 @@ distance as you zoom - things get uniformly bigger or smaller, the
 perspective itself never distorts.
 
 Controls:
-  LEFT CLICK     crack an egg / use the needs panel (feed, or add a new egg)
+  LEFT CLICK     crack an egg / use the needs panel (feed, add an egg,
+                 or arm the fire/knife and click a creature to use it)
   CLICK + DRAG   pan the view with the mouse
   LEFT / RIGHT   pan the view with the keyboard
   SCROLL         zoom in / out
@@ -329,6 +342,17 @@ NEED_PANEL_X = 10
 NEED_PANEL_Y = 90
 NEED_BUTTON_SIZE = 44
 NEED_BUTTON_GAP = 56
+
+# The episode's dark side, faithfully included: the panel's last two
+# slots are weapons, not care. Fire burns a creature alive for
+# BURN_DURATION seconds before it dies; the knife kills instantly.
+# Both leave a mark on the ground that fades over DECAL_DURATION.
+BURN_DURATION = 1.2
+DECAL_DURATION = 1.0
+FLAME_COLORS = ((255, 110, 25), (255, 185, 55), (255, 240, 150))
+BLOOD_COLOR = (150, 20, 20)
+SCORCH_COLOR = (45, 38, 32)
+ARMED_BORDER_COLOR = (230, 50, 40)
 
 # Bundles the three "how should this frame be projected/lit" values that
 # almost every draw_* function needs together, instead of three separate
@@ -680,6 +704,95 @@ def spawn_egg_near_population(world, birth_eggs):
     return creature
 
 
+def find_creature_at(mx, my, world, pan_x, zoom=1.0, birth_eggs=None, t=0.0):
+    """The living creature under a screen point, or None. Mirrors
+    draw_critter's own geometry (projection, idle offset, body circle)
+    so the clickable area is exactly what the player sees. Creatures
+    still pending as birth eggs aren't targetable - those belong to
+    BirthEggs.try_click. When bodies overlap, the nearest-to-camera one
+    wins, matching the painter's-algorithm draw order."""
+    best = None
+    best_z = -1.0
+    for c in world.creatures:
+        if not c.alive:
+            continue
+        if birth_eggs is not None and birth_eggs.is_pending(c.id):
+            continue
+        x, z = world_to_stage(c.pos)
+        sx, sy, scale = project(x - pan_x, z, zoom)
+        body_r = int(24 * scale)
+        if body_r < 2:
+            continue
+        ox, oy = idle_offset(c.id, t)
+        sx += ox * scale
+        sy += oy * scale
+        cx, cy = sx, sy - body_r * 0.55
+        r = body_r * 1.3
+        if (mx - cx) ** 2 + (my - cy) ** 2 <= r * r and z > best_z:
+            best, best_z = c, z
+    return best
+
+
+class HorrorState:
+    """The game's Black Mirror dark side: the fire and knife buttons.
+    Clicking one arms it (clicking again, or the other one, puts it
+    away); with a weapon armed, clicking a creature applies it. The
+    knife kills instantly and leaves a blood mark; fire sets the
+    creature alight - it keeps living and moving, on fire, for
+    BURN_DURATION seconds before it dies and leaves a scorch mark. Both
+    kill through World.kill_creature(), the same path as a natural
+    death, so the family tree and stats stay honest about what the
+    player did."""
+
+    def __init__(self):
+        self.armed = None       # None, "fire" or "knife"
+        self.burning = {}       # creature id -> seconds left before it dies
+        self.decals = []        # [x_stage, z, kind, seconds left]; kind: "blood"/"scorch"
+
+    def toggle(self, tool):
+        self.armed = None if self.armed == tool else tool
+
+    def is_burning(self, creature_id):
+        return creature_id in self.burning
+
+    def stab(self, creature, world):
+        if world.kill_creature(creature):
+            x, z = world_to_stage(creature.pos)
+            self.decals.append([x, z, "blood", DECAL_DURATION])
+            self.burning.pop(creature.id, None)
+            return True
+        return False
+
+    def ignite(self, creature):
+        if creature.id in self.burning:
+            return False
+        self.burning[creature.id] = BURN_DURATION
+        return True
+
+    def update(self, world, dt):
+        """Advance burn timers and age out ground marks - call once per
+        unpaused frame. A creature that dies of something else mid-burn
+        just stops burning; one whose timer runs out dies where it
+        stands and leaves a scorch mark there."""
+        for d in self.decals:
+            d[3] -= dt
+        self.decals = [d for d in self.decals if d[3] > 0]
+        if not self.burning:
+            return
+        by_id = {c.id: c for c in world.creatures}
+        for cid in list(self.burning):
+            c = by_id.get(cid)
+            if c is None or not c.alive:
+                del self.burning[cid]
+                continue
+            self.burning[cid] -= dt
+            if self.burning[cid] <= 0:
+                del self.burning[cid]
+                if world.kill_creature(c):
+                    x, z = world_to_stage(c.pos)
+                    self.decals.append([x, z, "scorch", DECAL_DURATION])
+
+
 class NeedsState:
     """A small Tamagotchi-style care loop layered on top of the real
     creature: each need drains slowly and is topped up by clicking the
@@ -766,6 +879,33 @@ def draw_icon_egg(screen, rect):
         pygame.draw.circle(screen, EGG_SPECKLE, (int(cx + ox * w), int(cy + oy * h)), max(1, int(w * 0.08)))
 
 
+def draw_icon_fire(screen, rect):
+    cx, cy = rect.center
+    w, h = rect.width * 0.5, rect.height * 0.62
+    base_y = cy + h * 0.5
+    # three nested flame tongues, hot core last
+    for color, f in zip(FLAME_COLORS, (1.0, 0.68, 0.4)):
+        fw, fh = w * f, h * f
+        pygame.draw.polygon(screen, color, [
+            (cx - fw * 0.5, base_y), (cx + fw * 0.5, base_y),
+            (cx + fw * 0.18, base_y - fh * 0.62), (cx, base_y - fh),
+            (cx - fw * 0.22, base_y - fh * 0.55),
+        ])
+
+
+def draw_icon_knife(screen, rect):
+    cx, cy = rect.center
+    L = rect.width * 0.36
+    # blade (light gray, angled) + brown handle
+    pygame.draw.polygon(screen, (205, 210, 218), [
+        (cx - L, cy + L * 0.75), (cx + L * 0.15, cy - L * 0.4),
+        (cx + L * 0.45, cy - L * 0.1), (cx - L * 0.65, cy + L),
+    ])
+    pygame.draw.line(screen, (120, 75, 40),
+                     (cx + L * 0.3, cy - L * 0.25), (cx + L * 0.85, cy - L * 0.8),
+                     max(3, int(rect.width * 0.12)))
+
+
 NEED_ICON_DRAWERS = {
     "hunger": draw_icon_pizza,
     "thirst": draw_icon_water,
@@ -778,12 +918,25 @@ NEED_ICON_DRAWERS = {
 # player still has to go find and hatch, same as any other newborn.
 ADD_EGG_SLOT = len(NEED_ITEMS)
 
+# Slots 6 and 7: the weapons. Clicking one arms it (click again to put
+# it away); with a weapon armed, clicking a creature applies it.
+FIRE_SLOT = ADD_EGG_SLOT + 1
+KNIFE_SLOT = ADD_EGG_SLOT + 2
+
 
 def add_egg_button_rect():
     return need_button_rect(ADD_EGG_SLOT)
 
 
-def draw_needs_panel(screen, needs):
+def fire_button_rect():
+    return need_button_rect(FIRE_SLOT)
+
+
+def knife_button_rect():
+    return need_button_rect(KNIFE_SLOT)
+
+
+def draw_needs_panel(screen, needs, armed_tool=None):
     for i, kind in enumerate(NEED_ITEMS):
         rect = need_button_rect(i)
         pulse = needs.pulses[kind]
@@ -798,6 +951,14 @@ def draw_needs_panel(screen, needs):
     pygame.draw.rect(screen, (28, 32, 28), egg_rect_ui, border_radius=8)
     pygame.draw.rect(screen, (95, 100, 90), egg_rect_ui, width=1, border_radius=8)
     draw_icon_egg(screen, egg_rect_ui)
+
+    for tool, rect, icon in (("fire", fire_button_rect(), draw_icon_fire),
+                             ("knife", knife_button_rect(), draw_icon_knife)):
+        pygame.draw.rect(screen, (28, 32, 28), rect, border_radius=8)
+        border = ARMED_BORDER_COLOR if armed_tool == tool else (95, 100, 90)
+        width = 2 if armed_tool == tool else 1
+        pygame.draw.rect(screen, border, rect, width=width, border_radius=8)
+        icon(screen, rect)
 
 
 class AlertState:
@@ -1320,7 +1481,47 @@ def _tree_and_rock_entities(landscape):
     return entities
 
 
-def _draw_entity(screen, kind, x, z, extra, creature_id, day_amount, distressed, t, ctx, birth_eggs=None):
+def draw_flames(screen, x, z, creature_id, t, ctx=DEFAULT_CTX):
+    """Animated fire drawn over a burning creature - same projection,
+    idle offset, and body radius as draw_critter, so the flames sit
+    exactly on the body they're consuming."""
+    sx, sy, scale = project(x, z, ctx.zoom)
+    body_r = int(24 * scale)
+    if body_r < 2:
+        return
+    ox, oy = idle_offset(creature_id, t)
+    sx += ox * scale
+    sy += oy * scale
+    base_y = sy + body_r * 0.15
+    for k in (-0.6, 0.0, 0.6):
+        for color, f in zip(FLAME_COLORS, (1.0, 0.66, 0.38)):
+            flicker = 1.0 + 0.3 * math.sin(t * 13.0 + k * 5.0 + f * 7.0)
+            fh = body_r * 2.0 * f * flicker
+            fw = body_r * 0.5 * f
+            fx = sx + k * body_r * 0.7
+            tip_x = fx + math.sin(t * 9.0 + k * 3.0) * fw * 0.7
+            pygame.draw.polygon(screen, color, [
+                (fx - fw, base_y), (fx + fw, base_y), (tip_x, base_y - fh),
+            ])
+
+
+def draw_decals(screen, horror, pan_x, ctx=DEFAULT_CTX):
+    """The marks the weapons leave on the ground (blood, scorch),
+    fading out over DECAL_DURATION - drawn right on the ground plane,
+    before the depth-sorted entities, like shadows are."""
+    for x, z, kind, left in horror.decals:
+        sx, sy, scale = project(x - pan_x, z, ctx.zoom)
+        w = max(4, int(44 * scale))
+        h = max(2, int(14 * scale))
+        alpha = int(200 * max(0.0, min(1.0, left / DECAL_DURATION)))
+        color = BLOOD_COLOR if kind == "blood" else SCORCH_COLOR
+        surf = pygame.Surface((w, h), pygame.SRCALPHA)
+        pygame.draw.ellipse(surf, (*color, alpha), (0, 0, w, h))
+        screen.blit(surf, (sx - w / 2, sy - h / 2))
+
+
+def _draw_entity(screen, kind, x, z, extra, creature_id, day_amount, distressed, t, ctx, birth_eggs=None,
+                 horror=None):
     if kind == "tree":
         draw_tree(screen, x, z, day_amount, ctx)
     elif kind == "rock":
@@ -1330,6 +1531,8 @@ def _draw_entity(screen, kind, x, z, extra, creature_id, day_amount, distressed,
             draw_birth_egg(screen, x, z, birth_eggs.pending[creature_id], t, creature_id, ctx)
         else:
             draw_critter(screen, x, z, extra, distressed, creature_id, t, ctx)
+            if horror is not None and horror.is_burning(creature_id):
+                draw_flames(screen, x, z, creature_id, t, ctx)
     else:
         draw_predator(screen, x, z, ctx)
 
@@ -1343,7 +1546,7 @@ def draw_decor(screen, pan_x, day_amount, landscape, ctx=DEFAULT_CTX):
 
 
 def draw_scene(screen, world, pan_x, day_amount, landscape, distressed=False, t=0.0, ctx=DEFAULT_CTX,
-               birth_eggs=None):
+               birth_eggs=None, horror=None):
     """Depth-sorts and draws everything that has real height - trees,
     rocks, creatures, predators - together in one painter's-algorithm
     pass (farthest first), so nearer things correctly occlude farther
@@ -1364,8 +1567,11 @@ def draw_scene(screen, world, pan_x, day_amount, landscape, distressed=False, t=
     for fx, fy in world.food:
         x, z = world_to_stage((fx, fy))
         draw_food(screen, x - pan_x, z, ctx.zoom)
+    if horror is not None:
+        draw_decals(screen, horror, pan_x, ctx)
     for z, kind, x, extra, creature_id in entities:
-        _draw_entity(screen, kind, x - pan_x, z, extra, creature_id, day_amount, distressed, t, ctx, birth_eggs)
+        _draw_entity(screen, kind, x - pan_x, z, extra, creature_id, day_amount, distressed, t, ctx, birth_eggs,
+                     horror)
 
 
 def draw_meter(screen, x, y, w, h, level, color):
@@ -1383,7 +1589,8 @@ def sensor_label(enabled, available):
 
 
 def draw_status(screen, font, world, paused, speed, sensors, threshold, alert_flash,
-                 hatched, egg_cracks, sound_muted=False, zoom=1.0, ambient_enabled=True, pending_eggs=0):
+                 hatched, egg_cracks, sound_muted=False, zoom=1.0, ambient_enabled=True, pending_eggs=0,
+                 armed_tool=None):
     if hatched:
         status = "PAUSED" if paused else f"x{speed}"
         top_line = f"pop {world.population()}   {status}   zoom {zoom:.1f}x"
@@ -1406,6 +1613,13 @@ def draw_status(screen, font, world, paused, speed, sensors, threshold, alert_fl
     meter_y = 10 + len(lines) * 22 + 4
     draw_meter(screen, 10, meter_y, 140, 10, sensors.mic_level, (120, 200, 255))
     draw_meter(screen, 160, meter_y, 140, 10, sensors.motion_level, (255, 180, 120))
+
+    if hatched and armed_tool is not None:
+        action = "set it alight" if armed_tool == "fire" else "kill it"
+        warn = font.render(
+            f"{armed_tool.upper()} armed - click a creature to {action} (click the button again to put it away)",
+            True, (255, 80, 60))
+        screen.blit(warn, (10, meter_y + 16))
 
     hint = font.render(
         "LEFT/RIGHT pan   SCROLL zoom   SPACE pause   UP/DOWN speed   G chorus   M mute sound   R reset   ESC quit",
@@ -1457,6 +1671,7 @@ def main():
     egg = EggState()
     birth_eggs = BirthEggs()
     needs = NeedsState()
+    horror = HorrorState()
     hatch_flash = 0.0
     t = 0.0
     day_phase = 0.1  # start in early-morning light
@@ -1498,6 +1713,21 @@ def main():
                         if not hit_button and add_egg_button_rect().collidepoint(drag_start):
                             spawn_egg_near_population(world, birth_eggs)
                             hit_button = True
+                        if not hit_button and fire_button_rect().collidepoint(drag_start):
+                            horror.toggle("fire")
+                            hit_button = True
+                        if not hit_button and knife_button_rect().collidepoint(drag_start):
+                            horror.toggle("knife")
+                            hit_button = True
+                        if not hit_button and horror.armed is not None:
+                            target = find_creature_at(drag_start[0], drag_start[1], world,
+                                                      pan_x, zoom, birth_eggs, t)
+                            if target is not None:
+                                if horror.armed == "fire":
+                                    horror.ignite(target)
+                                else:
+                                    horror.stab(target, world)
+                                hit_button = True
                         if not hit_button:
                             birth_eggs.try_click(drag_start[0], drag_start[1], world, pan_x, zoom)
                 dragging_view = False
@@ -1518,6 +1748,7 @@ def main():
                     egg = EggState()
                     birth_eggs = BirthEggs()
                     needs = NeedsState()
+                    horror = HorrorState()
                     hatch_flash = 0.0
                     if sound_channel is not None:
                         sound_channel.stop()
@@ -1570,6 +1801,7 @@ def main():
             alert.update(world, sensors, threshold, dt)
             if not paused:
                 needs.update(dt)
+                horror.update(world, dt)
             listening_token = update_listening(sound_channel, tones, world, pygame.mouse.get_pos(),
                                                 pan_x, sound_muted, listening_token, zoom, birth_eggs)
             update_ambient(ambient_channels, ambient_tones, world, sound_muted, ambient_enabled, birth_eggs)
@@ -1586,16 +1818,18 @@ def main():
         draw_background(screen, day_phase, pan_x, zoom, landscape, t)
         if egg.hatched:
             draw_scene(screen, world, pan_x, day_amount, landscape,
-                       distressed=needs.lowest() < NEED_LOW_THRESHOLD, t=t, ctx=ctx, birth_eggs=birth_eggs)
+                       distressed=needs.lowest() < NEED_LOW_THRESHOLD, t=t, ctx=ctx, birth_eggs=birth_eggs,
+                       horror=horror)
         else:
             draw_decor(screen, pan_x, day_amount, landscape, ctx)
             wobble = math.sin(t * 14.0) * (2 + egg.cracks * 1.5)
             draw_egg(screen, EGG_STAGE_X - pan_x, EGG_STAGE_Z, egg.cracks, wobble, egg.pulse, ctx)
         draw_night_overlay(screen, day_amount)
         draw_status(screen, font, world, paused, speed, sensors, threshold, alert.flash,
-                    egg.hatched, egg.cracks, sound_muted, zoom, ambient_enabled, len(birth_eggs.pending))
+                    egg.hatched, egg.cracks, sound_muted, zoom, ambient_enabled, len(birth_eggs.pending),
+                    armed_tool=horror.armed)
         if egg.hatched:
-            draw_needs_panel(screen, needs)
+            draw_needs_panel(screen, needs, horror.armed)
         if hatch_flash > 0:
             overlay = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
             overlay.fill((255, 255, 255, int(200 * min(1.0, hatch_flash / 0.4))))

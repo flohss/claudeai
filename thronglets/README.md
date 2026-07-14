@@ -407,6 +407,19 @@ open too. The HUD shows how many new eggs are waiting whenever there are
 any. One that dies before being hatched just quietly disappears - no
 leftover egg.
 
+The panel's last two buttons are the episode's dark side, included on
+purpose: a **flame** and a **knife**. Clicking one arms it (red border
+on the button, a warning line in the HUD; click it again to put it
+away). With the knife armed, clicking a creature kills it on the spot
+and leaves a blood mark that fades from the grass. With fire armed,
+clicking a creature sets it alight - it keeps living, moving and burning
+for a second or so before dying where it stands, leaving a scorch mark.
+Both act through the same code path as a natural death, so the family
+tree and death count stay honest about what you did. Creatures still
+waiting inside their birth egg can't be targeted, only ones you've
+already hatched - and killing the population back down to one re-blocks
+reproduction until you add someone new, exactly like at the start.
+
 Standing still doesn't mean frozen: each creature blinks on its own
 schedule and wanders a couple of pixels in place between simulation
 steps, purely cosmetic idle motion meant to make it read as alive rather

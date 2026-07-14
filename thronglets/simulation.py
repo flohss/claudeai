@@ -327,6 +327,19 @@ class World:
     def add_random_creature(self):
         return self.add_creature(*self.rng.uniform([0, 0], [WIDTH, HEIGHT]))
 
+    def kill_creature(self, creature):
+        """Kills one creature immediately, through the exact same path a
+        natural death takes (_age_and_cull / _predator_kills): alive flag
+        down, deaths counter up, death tick recorded in the lineage - so
+        the family tree and stats stay consistent. Returns True if it
+        died now, False if it was already dead."""
+        if not creature.alive:
+            return False
+        creature.alive = False
+        self.deaths += 1
+        self.lineage[creature.id]["death"] = self.tick
+        return True
+
     def vocabulary(self):
         """Per-state (dominant token, agreement fraction) across the living population."""
         return {state: (pairs[0] if pairs else (0, 0.0))
