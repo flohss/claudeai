@@ -373,9 +373,9 @@ A separate, standalone pygame window with a classic "pseudo-3D driving
 game" ground-plane projection (things shrink and converge toward a
 horizon line as they get farther away) instead of the top-down view the
 other three renderers use. It reproduces the creatures' *look* - round
-yellow body, two red hair-tufts, big eyes, blue lower half, all drawn as
-simple original shapes, not a copy of the show's or the licensed game's
-actual pixel art - over a basic sky/sun/hills/grass landscape.
+yellow body, big eyes, blue lower half, all drawn as simple original
+shapes, not a copy of the show's or the licensed game's actual pixel
+art - over a basic sky/sun/hills/grass landscape.
 
 This is **not** real VR: no headset, no stereoscopic or WebXR/OpenXR
 output, nothing here targets or was tested with any VR hardware. It's a

@@ -40,9 +40,9 @@ the creature's expression turns visibly worried; there's no harsher
 penalty than that.
 
 The creature design is an original, simplified, geometric interpretation
-of the look (round yellow body, two hair-tufts, big eyes, blue lower
-half) - not a reproduction of the show's or the licensed game's actual
-pixel art. Each one blinks on its own schedule and wanders a couple of
+of the look (round yellow body, big eyes, blue lower half) - not a
+reproduction of the show's or the licensed game's actual pixel art.
+Each one blinks on its own schedule and wanders a couple of
 pixels in place even when the simulation isn't moving it, so a standing
 creature still reads as alive rather than a frozen sprite.
 
@@ -129,7 +129,6 @@ STAR_POSITIONS = [
 ]
 
 BODY_COLOR = (245, 210, 70)
-HAIR_COLOR = (225, 90, 60)
 EYE_WHITE = (250, 250, 245)
 EYE_PUPIL = (35, 30, 30)
 MOUTH_COLOR = (100, 65, 45)
@@ -635,11 +634,6 @@ def draw_critter(screen, x, z, token, distressed=False, creature_id=0, t=0.0):
     if token != 0:
         pygame.draw.circle(screen, TOKEN_COLORS[token], body_center,
                             int(body_r * 1.12), width=max(1, int(body_r * 0.12)))
-
-    tuft_r = max(2, int(body_r * 0.36))
-    for dx in (-0.42, 0.42):
-        pygame.draw.circle(screen, HAIR_COLOR,
-                            (int(sx + dx * body_r), int(sy - body_r * 1.05)), tuft_r)
 
     eye_r = max(1, int(body_r * 0.26))
     eye_y = sy - body_r * 0.58
