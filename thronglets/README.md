@@ -410,15 +410,33 @@ leftover egg.
 The panel's last two buttons are the episode's dark side, included on
 purpose: a **flame** and a **knife**. Clicking one arms it (red border
 on the button, a warning line in the HUD; click it again to put it
-away). With the knife armed, clicking a creature kills it on the spot
-and leaves a blood mark that fades from the grass. With fire armed,
-clicking a creature sets it alight - it keeps living, moving and burning
-for a second or so before dying where it stands, leaving a scorch mark.
-Both act through the same code path as a natural death, so the family
-tree and death count stay honest about what you did. Creatures still
-waiting inside their birth egg can't be targeted, only ones you've
-already hatched - and killing the population back down to one re-blocks
-reproduction until you add someone new, exactly like at the start.
+away). Neither is a clean kill: with the knife armed, clicking a
+creature makes it **agonize** - it collapses and writhes where it
+stands, screaming - and only then dies, leaving a blood mark that fades
+from the grass. With fire armed, clicking a creature sets it alight - it
+**screams and bolts in panic**, burning, for a second or two before it
+dies where it stops, leaving a scorch mark. Both finish through the same
+code path as a natural death, so the family tree and death count stay
+honest about what you did. Creatures still waiting inside their birth
+egg can't be targeted, only ones you've already hatched - and killing
+the population back down to one re-blocks reproduction until you add
+someone new, exactly like at the start.
+
+These creatures are meant to read as sentient beings, not dots, so they
+**feel** what happens - to themselves and to one another. Every hatched
+creature carries an emotion, worked out each frame from its situation,
+and wears it on its face: **pain** (a screwed-shut, screaming face) when
+it is itself burning or under the knife; **fear** (wide eyes, a small
+round mouth) when it can see another creature in agony nearby - and it
+flees the sight, out of empathy; **sadness** (a downturned mouth and a
+tear) where a companion has just died, which the survivors nearby grieve
+for a while, or when its own needs are neglected; and plain **joy** (a
+smile, happy eyes) when it is safe and not alone. The whole population
+has a voice to match: a strident **scream** rises whenever anyone is in
+pain, a lower frightened **whimper** while others are merely afraid, and
+quiet otherwise (`M` mutes it along with everything else). None of this
+touches the evolutionary simulation's own logic - it's a feeling,
+expressive layer laid over the real creatures.
 
 Standing still doesn't mean frozen: each creature blinks on its own
 schedule and wanders a couple of pixels in place between simulation

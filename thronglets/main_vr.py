@@ -58,15 +58,31 @@ use it.
 
 The panel's last two buttons are the episode's dark side, included on
 purpose: a flame and a knife. Clicking one arms it - its border turns
-red and the HUD says so - and clicking it again puts it away. With the
-knife armed, clicking a creature kills it on the spot, leaving a blood
-mark that fades from the grass. With fire armed, clicking a creature
-sets it alight: it keeps living, moving, and burning for a second or so
-before it dies where it stands, leaving a scorch mark. Both act through
-World.kill_creature(), the same path as a natural death, so the family
-tree and the death count stay honest about what you did. Creatures
-still waiting inside their birth egg can't be targeted - only ones
-you've already hatched.
+red and the HUD says so - and clicking it again puts it away. Neither
+is a clean kill. With the knife armed, clicking a creature makes it
+agonize - it collapses and writhes where it stands, screaming - and
+only then dies, leaving a blood mark that fades from the grass. With
+fire armed, clicking a creature sets it alight: it screams and bolts in
+panic, burning, for a second or two before it dies, leaving a scorch
+mark. Both finish through World.kill_creature(), the same path as a
+natural death, so the family tree and the death count stay honest about
+what you did. Creatures still waiting inside their birth egg can't be
+targeted - only ones you've already hatched.
+
+These creatures are meant to read as sentient beings, not dots, so they
+FEEL what happens - to themselves and to each other (see
+SentienceState). Every hatched creature carries an emotion, worked out
+each frame from its situation, and wears it on its face: pain (a
+screwed-shut, screaming face) when it is itself burning or under the
+knife; fear (wide eyes, a small round mouth) when it can see another
+creature in agony nearby, and it flees from the sight; sadness (a
+downturned mouth and a tear) where a companion has just died - the
+survivors grieve the spot for a while - or when its own needs are
+neglected; and plain joy (a smile and happy eyes) when it is safe and
+not alone. The whole population has a voice to match: a strident scream
+rises whenever anyone is in pain, a lower frightened whimper while
+others are merely afraid, and quiet otherwise (the master mute silences
+it like everything else).
 
 The creature design is an original, simplified, geometric interpretation
 of the look (round yellow body, big eyes, blue lower half) - not a
@@ -345,14 +361,37 @@ NEED_BUTTON_GAP = 56
 
 # The episode's dark side, faithfully included: the panel's last two
 # slots are weapons, not care. Fire burns a creature alive for
-# BURN_DURATION seconds before it dies; the knife kills instantly.
-# Both leave a mark on the ground that fades over DECAL_DURATION.
-BURN_DURATION = 1.2
+# BURN_DURATION seconds - it screams and bolts in panic the whole time -
+# before it dies; the knife doesn't kill on the spot either, the
+# creature agonizes for AGONY_DURATION, writhing where it stands, and
+# then dies. Both leave a mark on the ground that fades over
+# DECAL_DURATION.
+BURN_DURATION = 1.6
+AGONY_DURATION = 1.4
 DECAL_DURATION = 1.0
 FLAME_COLORS = ((255, 110, 25), (255, 185, 55), (255, 240, 150))
 BLOOD_COLOR = (150, 20, 20)
 SCORCH_COLOR = (45, 38, 32)
 ARMED_BORDER_COLOR = (230, 50, 40)
+
+# Sentience: every hatched creature feels something, computed each frame
+# from its situation, and shows it on its face, in how it moves, and in
+# the sound the population makes. Emotions, in priority order:
+#   pain  - it is itself burning or being knifed
+#   fear  - it can see another creature in pain within SENSE_RADIUS, and
+#           flees from it (empathy: others' suffering frightens it)
+#   sad   - a companion died near here recently (grief), or its own
+#           needs are critically low
+#   joy   - content and not alone: a companion within COMPANION_RADIUS
+#   calm  - none of the above
+# The radii and speeds are in world units (the World is 200x140).
+SENSE_RADIUS = 46.0
+COMPANION_RADIUS = 55.0
+GRIEF_RADIUS = 42.0
+GRIEF_DURATION = 6.0      # seconds a death keeps grieving the survivors near it
+PANIC_RUN_SPEED = 34.0    # a burning creature bolting, world units / second
+FEAR_FLEE_SPEED = 20.0    # fleeing a nearby horror, world units / second
+TEAR_COLOR = (150, 205, 245)
 
 # Bundles the three "how should this frame be projected/lit" values that
 # almost every draw_* function needs together, instead of three separate
@@ -736,17 +775,19 @@ def find_creature_at(mx, my, world, pan_x, zoom=1.0, birth_eggs=None, t=0.0):
 class HorrorState:
     """The game's Black Mirror dark side: the fire and knife buttons.
     Clicking one arms it (clicking again, or the other one, puts it
-    away); with a weapon armed, clicking a creature applies it. The
-    knife kills instantly and leaves a blood mark; fire sets the
-    creature alight - it keeps living and moving, on fire, for
-    BURN_DURATION seconds before it dies and leaves a scorch mark. Both
-    kill through World.kill_creature(), the same path as a natural
-    death, so the family tree and stats stay honest about what the
-    player did."""
+    away); with a weapon armed, clicking a creature applies it. Neither
+    is a clean, instant death: the knife makes the creature agonize for
+    AGONY_DURATION - writhing where it stands - before it dies, and fire
+    sets it alight for BURN_DURATION while it screams and runs, before
+    it dies. Both finish through World.kill_creature(), the same path as
+    a natural death, so the family tree and stats stay honest about what
+    the player did. A creature already in pain can't be hurt a second
+    way at once."""
 
     def __init__(self):
         self.armed = None       # None, "fire" or "knife"
         self.burning = {}       # creature id -> seconds left before it dies
+        self.agonizing = {}     # creature id -> seconds left before it dies
         self.decals = []        # [x_stage, z, kind, seconds left]; kind: "blood"/"scorch"
 
     def toggle(self, tool):
@@ -755,42 +796,172 @@ class HorrorState:
     def is_burning(self, creature_id):
         return creature_id in self.burning
 
+    def is_agonizing(self, creature_id):
+        return creature_id in self.agonizing
+
+    def in_pain(self, creature_id):
+        return creature_id in self.burning or creature_id in self.agonizing
+
     def stab(self, creature, world):
-        if world.kill_creature(creature):
-            x, z = world_to_stage(creature.pos)
-            self.decals.append([x, z, "blood", DECAL_DURATION])
-            self.burning.pop(creature.id, None)
-            return True
-        return False
+        """Doesn't kill on the spot: the creature starts agonizing and
+        bleeds where it was struck. It dies once the agony runs out (in
+        update())."""
+        if not creature.alive or self.in_pain(creature.id):
+            return False
+        self.agonizing[creature.id] = AGONY_DURATION
+        x, z = world_to_stage(creature.pos)
+        self.decals.append([x, z, "blood", DECAL_DURATION])
+        return True
 
     def ignite(self, creature):
-        if creature.id in self.burning:
+        if not creature.alive or self.in_pain(creature.id):
             return False
         self.burning[creature.id] = BURN_DURATION
         return True
 
+    def _advance(self, world, timers, dt, decal_kind):
+        """Shared countdown for burning/agonizing: tick each timer down,
+        drop the ones whose creature already died some other way, and
+        kill + mark the ones that reach zero."""
+        by_id = {c.id: c for c in world.creatures}
+        for cid in list(timers):
+            c = by_id.get(cid)
+            if c is None or not c.alive:
+                del timers[cid]
+                continue
+            timers[cid] -= dt
+            if timers[cid] <= 0:
+                del timers[cid]
+                if world.kill_creature(c):
+                    x, z = world_to_stage(c.pos)
+                    self.decals.append([x, z, decal_kind, DECAL_DURATION])
+
     def update(self, world, dt):
-        """Advance burn timers and age out ground marks - call once per
-        unpaused frame. A creature that dies of something else mid-burn
-        just stops burning; one whose timer runs out dies where it
-        stands and leaves a scorch mark there."""
+        """Advance burn/agony timers and age out ground marks - call once
+        per unpaused frame. A creature that dies of something else
+        mid-pain just stops; one whose timer runs out dies where it
+        stands, leaving a scorch (fire) or blood (knife) mark there."""
         for d in self.decals:
             d[3] -= dt
         self.decals = [d for d in self.decals if d[3] > 0]
-        if not self.burning:
+        self._advance(world, self.burning, dt, "scorch")
+        self._advance(world, self.agonizing, dt, "blood")
+
+
+def _dist2(a, b):
+    dx = a[0] - b[0]
+    dy = a[1] - b[1]
+    return dx * dx + dy * dy
+
+
+class SentienceState:
+    """Makes the population feel like living, sentient beings rather than
+    dots. Each frame it works out what every hatched creature is feeling
+    from its situation - and, crucially, from what's happening to the
+    others around it - then that emotion drives the face it wears, the
+    way it moves, and the sound the whole population makes.
+
+    A creature on fire or under the knife feels pain (it screams; a
+    burning one bolts, a knifed one writhes). A creature that can see
+    another in pain nearby feels fear and flees it - empathy, the horror
+    of watching it happen to someone else. Where a companion has just
+    died, the survivors nearby grieve for a while. Otherwise, a creature
+    that is safe and not alone is simply joyful, and a neglected or
+    lonely one is sad. Nothing here touches the evolutionary simulation's
+    own logic; it's a feeling, expressive layer laid over the real
+    creatures."""
+
+    def __init__(self):
+        self.emotions = {}       # creature id -> emotion string (for this frame)
+        self.grief_marks = []    # [x, y, seconds left]: where a companion died
+        self._known = {}         # id -> last known (x, y), to catch deaths
+        self.cry = None          # "scream" / "whimper" / None: the population's voice
+
+    def _living_ids(self, world, birth_eggs):
+        return {c.id for c in world.creatures if c.alive
+                and not (birth_eggs is not None and birth_eggs.is_pending(c.id))}
+
+    def update(self, world, horror, needs_low, birth_eggs, t, dt, paused):
+        # 1. a creature that vanished since last frame just died - grieve
+        #    the spot, so survivors nearby will feel it (skip ones still
+        #    inside a birth egg, they never "appeared").
+        living = self._living_ids(world, birth_eggs)
+        for cid, pos in self._known.items():
+            if cid not in living:
+                self.grief_marks.append([pos[0], pos[1], GRIEF_DURATION])
+        self._known = {c.id: (float(c.pos[0]), float(c.pos[1]))
+                       for c in world.creatures if c.id in living}
+
+        # 2. age grief out
+        if not paused:
+            for g in self.grief_marks:
+                g[2] -= dt
+        self.grief_marks = [g for g in self.grief_marks if g[2] > 0]
+
+        # 3. how everyone feels, 4. how the population sounds
+        self.emotions = self._compute(world, horror, needs_low, birth_eggs)
+        self.cry = self._dominant_cry()
+
+        # 5. pain and fear move the body, not just the face
+        if not paused:
+            self._apply_panic(world, horror, t, dt)
+        return self.emotions
+
+    def _compute(self, world, horror, needs_low, birth_eggs):
+        alive = [c for c in world.creatures if c.alive
+                 and not (birth_eggs is not None and birth_eggs.is_pending(c.id))]
+        pain_pos = [c.pos for c in alive if horror is not None and horror.in_pain(c.id)]
+        emotions = {}
+        for c in alive:
+            if horror is not None and horror.in_pain(c.id):
+                emotions[c.id] = "pain"
+            elif any(_dist2(c.pos, p) <= SENSE_RADIUS ** 2 for p in pain_pos if p is not c.pos):
+                emotions[c.id] = "fear"
+            elif any(_dist2(c.pos, (g[0], g[1])) <= GRIEF_RADIUS ** 2 for g in self.grief_marks):
+                emotions[c.id] = "sad"
+            elif needs_low:
+                emotions[c.id] = "sad"
+            elif any(o is not c and _dist2(c.pos, o.pos) <= COMPANION_RADIUS ** 2 for o in alive):
+                emotions[c.id] = "joy"
+            else:
+                emotions[c.id] = "calm"
+        return emotions
+
+    def _dominant_cry(self):
+        vals = self.emotions.values()
+        if "pain" in vals:
+            return "scream"
+        if "fear" in vals:
+            return "whimper"
+        return None
+
+    def _apply_panic(self, world, horror, t, dt):
+        if horror is None:
             return
-        by_id = {c.id: c for c in world.creatures}
-        for cid in list(self.burning):
-            c = by_id.get(cid)
-            if c is None or not c.alive:
-                del self.burning[cid]
-                continue
-            self.burning[cid] -= dt
-            if self.burning[cid] <= 0:
-                del self.burning[cid]
-                if world.kill_creature(c):
-                    x, z = world_to_stage(c.pos)
-                    self.decals.append([x, z, "scorch", DECAL_DURATION])
+        alive = [c for c in world.creatures if c.alive]
+        pain = [c for c in alive if horror.in_pain(c.id)]
+        for c in alive:
+            if horror.is_burning(c.id):
+                # bolting in blind panic - a seeded heading that swerves
+                seed = _creature_seed(c.id)
+                ang = seed * 6.28318 + math.sin(t * 6.0 + seed * 6.0) * 1.4
+                self._move(c, math.cos(ang), math.sin(ang), PANIC_RUN_SPEED, dt)
+            elif horror.is_agonizing(c.id):
+                continue  # collapses and writhes in place, doesn't travel
+            elif self.emotions.get(c.id) == "fear":
+                src = min((p for p in pain if p is not c),
+                          key=lambda p: _dist2(c.pos, p.pos), default=None)
+                if src is not None:
+                    dx = float(c.pos[0] - src.pos[0])
+                    dy = float(c.pos[1] - src.pos[1])
+                    n = math.hypot(dx, dy) or 1.0
+                    self._move(c, dx / n, dy / n, FEAR_FLEE_SPEED, dt)
+
+    @staticmethod
+    def _move(creature, ux, uy, speed, dt):
+        nx = float(creature.pos[0]) + ux * speed * dt
+        ny = float(creature.pos[1]) + uy * speed * dt
+        creature.pos = np.clip(np.array([nx, ny]), [0, 0], [WIDTH, HEIGHT])
 
 
 class NeedsState:
@@ -986,15 +1157,17 @@ class AlertState:
 
 def init_sound():
     """Best-effort mixer setup - returns (tones, hover_channel,
-    ambient_tones, ambient_channels), or (None, None, None, None) if
-    there's no audio device at all. Never crashes the game over
+    ambient_tones, ambient_channels, cry_sounds, cry_channel), or six
+    Nones if there's no audio device at all. Never crashes the game over
     something this optional (same pattern as SensorHub).
 
-    Two independent things share the mixer: hover_channel plays one
+    Several independent things share the mixer: hover_channel plays one
     tone for whichever single creature the mouse is over (Channel 0),
-    while ambient_channels (Channels 1-5, one per token) can each play
-    at the same time, quieter, for the population-chorus sound - so
-    both can sound together without one cutting the other off."""
+    ambient_channels (Channels 1-5, one per token) each play at the same
+    time, quieter, for the population-chorus sound, and cry_channel
+    (Channel 6) plays the population's emotional voice - a strident
+    scream when any creature is in pain, a lower frightened whimper when
+    others are afraid - louder than and independent of the chorus."""
     try:
         pygame.mixer.init(frequency=22050, size=-16, channels=2)
         pygame.mixer.set_num_channels(max(8, pygame.mixer.get_num_channels()))
@@ -1005,9 +1178,14 @@ def init_sound():
                           for token, freq in enumerate(TOKEN_FREQS) if token != 0}
         hover_channel = pygame.mixer.Channel(0)
         ambient_channels = {token: pygame.mixer.Channel(token) for token in range(1, 6)}
-        return tones, hover_channel, ambient_tones, ambient_channels
+        cry_sounds = {
+            "scream": _make_cry(sample_rate, base=720, harsh=True, volume=0.5),
+            "whimper": _make_cry(sample_rate, base=300, harsh=False, volume=0.22),
+        }
+        cry_channel = pygame.mixer.Channel(6)
+        return tones, hover_channel, ambient_tones, ambient_channels, cry_sounds, cry_channel
     except pygame.error:
-        return None, None, None, None
+        return None, None, None, None, None, None
 
 
 def _make_tone(freq, sample_rate, duration=0.6, volume=0.25):
@@ -1023,6 +1201,49 @@ def _make_tone(freq, sample_rate, duration=0.6, volume=0.25):
     wave = (wave * envelope * volume * 32767).astype(np.int16)
     stereo = np.column_stack([wave, wave])
     return pygame.sndarray.make_sound(np.ascontiguousarray(stereo))
+
+
+def _make_cry(sample_rate, base=700, harsh=True, volume=0.4, duration=0.8):
+    """A raw, unsettling voiced cry, deliberately *not* a clean musical
+    tone like the communication signals: a fast vibrato that swoops the
+    pitch up and down, and (for a scream) added dissonant overtones plus
+    a bit of noise, so it reads as a living thing shrieking rather than a
+    beep. Looped by the caller for as long as the pain/fear lasts."""
+    n = int(sample_rate * duration)
+    ts = np.linspace(0, duration, n, endpoint=False)
+    vibrato = 1.0 + 0.06 * np.sin(2 * np.pi * 11.0 * ts)   # a wavering, panicked pitch
+    swoop = 1.0 + 0.25 * np.sin(2 * np.pi * 1.3 * ts)      # rises and falls like a wail
+    phase = 2 * np.pi * base * vibrato * swoop * ts
+    wave = np.sin(phase)
+    if harsh:
+        wave += 0.6 * np.sin(2.76 * phase)   # inharmonic partial -> a rough, screamed timbre
+        wave += 0.4 * np.sin(5.13 * phase)
+        wave += 0.25 * np.random.default_rng(0).standard_normal(n)  # breathy rasp
+    wave = np.clip(wave, -1.5, 1.5) / 1.5
+    fade = min(n // 20, 400)
+    envelope = np.ones(n)
+    envelope[:fade] = np.linspace(0, 1, fade)
+    envelope[-fade:] = np.linspace(1, 0, fade)
+    wave = (wave * envelope * volume * 32767).astype(np.int16)
+    stereo = np.column_stack([wave, wave])
+    return pygame.sndarray.make_sound(np.ascontiguousarray(stereo))
+
+
+def update_cry(cry_channel, cry_sounds, sentience_cry, muted, current_cry):
+    """Plays the population's emotional voice: whichever cry SentienceState
+    settled on this frame (a scream while anyone's in pain, a whimper while
+    others are afraid, or nothing). Returns what's now playing so the caller
+    can track it across frames without re-hitting the mixer every time.
+    Silenced by the master mute, independent of the chorus toggle."""
+    if cry_channel is None:
+        return None
+    target = None if muted else sentience_cry
+    if target != current_cry:
+        if target is None:
+            cry_channel.stop()
+        else:
+            cry_channel.play(cry_sounds[target], loops=-1)
+    return target
 
 
 def update_listening(channel, tones, world, mouse_pos, pan_x, muted, listening_token, zoom=1.0,
@@ -1345,7 +1566,8 @@ def eye_openness(creature_id, t):
     return 1.0
 
 
-def draw_critter(screen, x, z, token, distressed=False, creature_id=0, t=0.0, ctx=DEFAULT_CTX):
+def draw_critter(screen, x, z, token, distressed=False, creature_id=0, t=0.0, ctx=DEFAULT_CTX,
+                 emotion=None, writhe=0.0):
     sx, sy, scale = project(x, z, ctx.zoom)
     body_r = int(24 * scale)
     if body_r < 2:
@@ -1354,6 +1576,10 @@ def draw_critter(screen, x, z, token, distressed=False, creature_id=0, t=0.0, ct
     ox, oy = idle_offset(creature_id, t)
     sx += ox * scale
     sy += oy * scale
+    # agony makes the whole body convulse; the caller passes writhe > 0
+    if writhe:
+        sx += math.sin(t * 42.0 + creature_id) * body_r * 0.35 * writhe
+        sy += math.sin(t * 37.0 + creature_id * 2) * body_r * 0.18 * writhe
 
     shadow_w, shadow_h = body_r * 1.7, body_r * 0.5
     draw_ground_shadow(screen, sx, sy + body_r * 0.55, shadow_w, shadow_h, ctx.shadow_dx, ctx.shadow_len)
@@ -1368,26 +1594,71 @@ def draw_critter(screen, x, z, token, distressed=False, creature_id=0, t=0.0, ct
         pygame.draw.circle(screen, TOKEN_COLORS[token], body_center,
                             int(body_r * 1.12), width=max(1, int(body_r * 0.12)))
 
+    # When no explicit emotion is given, keep the old two-state face so
+    # every existing caller (and the pre-hatch decor) is unchanged; the
+    # needs-driven "distressed" frown maps onto the sad face.
+    if emotion is None:
+        emotion = "sad" if distressed else "calm"
+    _draw_face(screen, sx, sy, body_r, creature_id, t, emotion)
+
+
+def _draw_face(screen, sx, sy, body_r, creature_id, t, emotion):
+    """The expressive face - eyes and mouth shaped by the emotion the
+    creature is feeling this frame (see SentienceState)."""
     eye_r = max(1, int(body_r * 0.26))
     eye_y = sy - body_r * 0.58
-    openness = eye_openness(creature_id, t)
-    for dx in (-0.34, 0.34):
-        ex = sx + dx * body_r
-        eye_h = max(1, int(eye_r * 2 * openness))
-        pygame.draw.ellipse(screen, EYE_WHITE,
-                             (ex - eye_r, eye_y - eye_h / 2, eye_r * 2, eye_h))
-        if openness > 0.35:
-            pygame.draw.circle(screen, EYE_PUPIL, (int(ex), int(eye_y + eye_r * 0.2)),
-                                max(1, int(eye_r * 0.45)))
+    lw = max(1, int(body_r * 0.11))
 
-    mouth_w, mouth_h = max(1, int(body_r * 0.22)), max(1, int(body_r * 0.16))
-    if distressed:
-        mouth_rect = (sx - mouth_w, sy - body_r * 0.10, mouth_w * 2, mouth_h * 2)
-        pygame.draw.arc(screen, MOUTH_COLOR, mouth_rect, math.pi * 0.15, math.pi * 0.85,
-                         max(1, int(body_r * 0.1)))
-    else:
-        pygame.draw.ellipse(screen, MOUTH_COLOR,
-                             (sx - mouth_w / 2, sy - body_r * 0.22, mouth_w, mouth_h))
+    def draw_eyes(openness, pupil=True, pupil_dy=0.2):
+        for dx in (-0.34, 0.34):
+            ex = sx + dx * body_r
+            eye_h = max(1, int(eye_r * 2 * openness))
+            pygame.draw.ellipse(screen, EYE_WHITE, (ex - eye_r, eye_y - eye_h / 2, eye_r * 2, eye_h))
+            if pupil and openness > 0.35:
+                pygame.draw.circle(screen, EYE_PUPIL, (int(ex), int(eye_y + eye_r * pupil_dy)),
+                                   max(1, int(eye_r * 0.45)))
+
+    def draw_squeezed_eyes():
+        # eyes screwed shut: a downward arc over each socket
+        for dx in (-0.34, 0.34):
+            ex = sx + dx * body_r
+            rect = (ex - eye_r, eye_y - eye_r * 0.5, eye_r * 2, eye_r * 1.4)
+            pygame.draw.arc(screen, EYE_PUPIL, rect, math.pi * 1.1, math.pi * 1.9, lw)
+
+    if emotion == "pain":
+        draw_squeezed_eyes()
+        # a wide, round screaming mouth
+        mw = max(2, int(body_r * 0.4))
+        mh = max(2, int(body_r * 0.5))
+        pygame.draw.ellipse(screen, MOUTH_COLOR, (sx - mw / 2, sy - body_r * 0.12, mw, mh))
+    elif emotion == "fear":
+        # wide, staring eyes with small high pupils; a small trembling "o"
+        draw_eyes(1.35, pupil_dy=-0.15)
+        tremble = math.sin(t * 22.0 + creature_id) * body_r * 0.05
+        mw = max(2, int(body_r * 0.24))
+        pygame.draw.ellipse(screen, MOUTH_COLOR, (sx - mw / 2 + tremble, sy - body_r * 0.08, mw, mw))
+    elif emotion == "sad":
+        draw_eyes(0.6)
+        # downturned frown (top half of an ellipse -> a sad arch)
+        mw, mh = max(1, int(body_r * 0.24)), max(1, int(body_r * 0.18))
+        rect = (sx - mw, sy - body_r * 0.02, mw * 2, mh * 2)
+        pygame.draw.arc(screen, MOUTH_COLOR, rect, math.pi * 0.15, math.pi * 0.85, lw)
+        # a single tear under one eye
+        pygame.draw.circle(screen, TEAR_COLOR, (int(sx - 0.34 * body_r), int(eye_y + eye_r * 1.2)),
+                           max(1, int(eye_r * 0.4)))
+    elif emotion == "joy":
+        # happy upcurved eyes and a big smile (bottom half of an ellipse)
+        for dx in (-0.34, 0.34):
+            ex = sx + dx * body_r
+            rect = (ex - eye_r, eye_y - eye_r * 0.8, eye_r * 2, eye_r * 1.4)
+            pygame.draw.arc(screen, EYE_PUPIL, rect, math.pi * 1.15, math.pi * 1.85, lw)
+        mw, mh = max(1, int(body_r * 0.3)), max(1, int(body_r * 0.22))
+        rect = (sx - mw, sy - body_r * 0.2, mw * 2, mh * 2)
+        pygame.draw.arc(screen, MOUTH_COLOR, rect, math.pi * 1.15, math.pi * 1.85, lw)
+    else:  # calm
+        draw_eyes(eye_openness(creature_id, t))
+        mw, mh = max(1, int(body_r * 0.22)), max(1, int(body_r * 0.16))
+        pygame.draw.ellipse(screen, MOUTH_COLOR, (sx - mw / 2, sy - body_r * 0.22, mw, mh))
 
 
 def draw_predator(screen, x, z, ctx=DEFAULT_CTX):
@@ -1521,7 +1792,7 @@ def draw_decals(screen, horror, pan_x, ctx=DEFAULT_CTX):
 
 
 def _draw_entity(screen, kind, x, z, extra, creature_id, day_amount, distressed, t, ctx, birth_eggs=None,
-                 horror=None):
+                 horror=None, emotion=None):
     if kind == "tree":
         draw_tree(screen, x, z, day_amount, ctx)
     elif kind == "rock":
@@ -1530,7 +1801,8 @@ def _draw_entity(screen, kind, x, z, extra, creature_id, day_amount, distressed,
         if birth_eggs is not None and birth_eggs.is_pending(creature_id):
             draw_birth_egg(screen, x, z, birth_eggs.pending[creature_id], t, creature_id, ctx)
         else:
-            draw_critter(screen, x, z, extra, distressed, creature_id, t, ctx)
+            writhe = 1.0 if horror is not None and horror.is_agonizing(creature_id) else 0.0
+            draw_critter(screen, x, z, extra, distressed, creature_id, t, ctx, emotion, writhe)
             if horror is not None and horror.is_burning(creature_id):
                 draw_flames(screen, x, z, creature_id, t, ctx)
     else:
@@ -1546,7 +1818,7 @@ def draw_decor(screen, pan_x, day_amount, landscape, ctx=DEFAULT_CTX):
 
 
 def draw_scene(screen, world, pan_x, day_amount, landscape, distressed=False, t=0.0, ctx=DEFAULT_CTX,
-               birth_eggs=None, horror=None):
+               birth_eggs=None, horror=None, sentience=None):
     """Depth-sorts and draws everything that has real height - trees,
     rocks, creatures, predators - together in one painter's-algorithm
     pass (farthest first), so nearer things correctly occlude farther
@@ -1569,9 +1841,11 @@ def draw_scene(screen, world, pan_x, day_amount, landscape, distressed=False, t=
         draw_food(screen, x - pan_x, z, ctx.zoom)
     if horror is not None:
         draw_decals(screen, horror, pan_x, ctx)
+    emotions = sentience.emotions if sentience is not None else {}
     for z, kind, x, extra, creature_id in entities:
+        emotion = emotions.get(creature_id) if kind == "creature" else None
         _draw_entity(screen, kind, x - pan_x, z, extra, creature_id, day_amount, distressed, t, ctx, birth_eggs,
-                     horror)
+                     horror, emotion)
 
 
 def draw_meter(screen, x, y, w, h, level, color):
@@ -1660,7 +1934,7 @@ def main():
     world = new_egg_world()
     landscape = generate_landscape()  # random, different every new game
     sensors = SensorHub()
-    tones, sound_channel, ambient_tones, ambient_channels = init_sound()
+    tones, sound_channel, ambient_tones, ambient_channels, cry_sounds, cry_channel = init_sound()
 
     pan_x = 0.0
     paused = False
@@ -1672,12 +1946,14 @@ def main():
     birth_eggs = BirthEggs()
     needs = NeedsState()
     horror = HorrorState()
+    sentience = SentienceState()
     hatch_flash = 0.0
     t = 0.0
     day_phase = 0.1  # start in early-morning light
     running = True
     sound_muted = False
     listening_token = None
+    current_cry = None
     ambient_enabled = True  # the population's chorus is on by default
     zoom = 1.0
 
@@ -1749,13 +2025,17 @@ def main():
                     birth_eggs = BirthEggs()
                     needs = NeedsState()
                     horror = HorrorState()
+                    sentience = SentienceState()
                     hatch_flash = 0.0
                     if sound_channel is not None:
                         sound_channel.stop()
                     if ambient_channels:
                         for channel in ambient_channels.values():
                             channel.stop()
+                    if cry_channel is not None:
+                        cry_channel.stop()
                     listening_token = None
+                    current_cry = None
                 elif event.key == pygame.K_a:
                     sensors.toggle_mic()
                 elif event.key == pygame.K_c:
@@ -1802,14 +2082,18 @@ def main():
             if not paused:
                 needs.update(dt)
                 horror.update(world, dt)
+            needs_low = needs.lowest() < NEED_LOW_THRESHOLD
+            sentience.update(world, horror, needs_low, birth_eggs, t, dt, paused)
             listening_token = update_listening(sound_channel, tones, world, pygame.mouse.get_pos(),
                                                 pan_x, sound_muted, listening_token, zoom, birth_eggs)
             update_ambient(ambient_channels, ambient_tones, world, sound_muted, ambient_enabled, birth_eggs)
+            current_cry = update_cry(cry_channel, cry_sounds, sentience.cry, sound_muted, current_cry)
         else:
             if listening_token is not None:
                 if sound_channel is not None:
                     sound_channel.stop()
                 listening_token = None
+            current_cry = update_cry(cry_channel, cry_sounds, None, sound_muted, current_cry)
             update_ambient(ambient_channels, ambient_tones, world, True, ambient_enabled, birth_eggs)
 
         _, _, day_amount, _ = celestial_state(day_phase)
@@ -1819,7 +2103,7 @@ def main():
         if egg.hatched:
             draw_scene(screen, world, pan_x, day_amount, landscape,
                        distressed=needs.lowest() < NEED_LOW_THRESHOLD, t=t, ctx=ctx, birth_eggs=birth_eggs,
-                       horror=horror)
+                       horror=horror, sentience=sentience)
         else:
             draw_decor(screen, pan_x, day_amount, landscape, ctx)
             wobble = math.sin(t * 14.0) * (2 + egg.cracks * 1.5)
@@ -1843,6 +2127,8 @@ def main():
     if ambient_channels:
         for channel in ambient_channels.values():
             channel.stop()
+    if cry_channel is not None:
+        cry_channel.stop()
     pygame.quit()
     sys.exit()
 
