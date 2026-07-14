@@ -30,13 +30,22 @@ The world starts with exactly one creature, not hatched yet - it sits on
 screen as an egg. Left-click it a few times to crack it open; nothing
 else in the world moves or steps until it hatches.
 
+Once hatched, a small needs panel appears top-left: pizza (hunger), a
+glass of water (thirst), soap (cleanliness), and a toy (joy). Each need
+drains slowly on its own; click an item to top its need back up to full.
+Feeding the pizza also tops up the creature's *real* simulation.py energy
+- the rest are cosmetic, local to this file's single-companion mode, not
+part of the shared simulation model. Neglect all four for long enough and
+the creature's expression turns visibly worried; there's no harsher
+penalty than that.
+
 The creature design is an original, simplified, geometric interpretation
 of the look (round yellow body, two hair-tufts, big eyes, blue lower
 half) - not a reproduction of the show's or the licensed game's actual
 pixel art.
 
 Controls:
-  LEFT CLICK     crack the egg (before it hatches)
+  LEFT CLICK     crack the egg / feed an item from the needs panel
   LEFT / RIGHT   pan the view
   SPACE          pause / resume
   UP / DOWN      simulation speed
@@ -55,7 +64,7 @@ import threading
 import numpy as np
 import pygame
 
-from simulation import HEIGHT, WIDTH, World
+from simulation import HEIGHT, MAX_ENERGY, WIDTH, World
 
 SCREEN_W, SCREEN_H = 1000, 700
 HORIZON_Y = int(SCREEN_H * 0.42)
@@ -149,6 +158,27 @@ EGG_CRACK_LINES = [
     [(0.26, 0.08), (0.40, -0.08)],
     [(-0.20, 0.36), (-0.36, 0.14)],
 ]
+
+# The needs panel - a little care-taking loop on top of the real
+# simulation: feeding the pizza also tops up the creature's actual
+# simulation.py energy, but thirst/cleanliness/joy are purely cosmetic
+# local state, tracked here rather than in simulation.py since they only
+# make sense for this file's single-companion mode.
+NEED_ITEMS = ("hunger", "thirst", "clean", "joy")
+NEED_LABELS = {"hunger": "pizza", "thirst": "water", "clean": "soap", "joy": "toy"}
+NEED_COLORS = {
+    "hunger": (235, 140, 60),
+    "thirst": (90, 170, 230),
+    "clean": (210, 225, 200),
+    "joy": (230, 120, 170),
+}
+NEED_DECAY_PER_SECOND = 1.0 / 120.0  # empties in 2 minutes if never fed
+NEED_LOW_THRESHOLD = 0.2
+FEED_ENERGY_BOOST = 40.0
+NEED_PANEL_X = 10
+NEED_PANEL_Y = 90
+NEED_BUTTON_SIZE = 44
+NEED_BUTTON_GAP = 56
 
 
 def lerp_color(c1, c2, t):
@@ -307,6 +337,101 @@ class EggState:
         self.pulse = max(0.0, self.pulse - dt * 4.0)
 
 
+class NeedsState:
+    """A small Tamagotchi-style care loop layered on top of the real
+    creature: each need drains slowly and is topped up by clicking the
+    matching item in the needs panel. Only hunger reaches back into the
+    real simulation (it tops up the creature's actual energy) - the rest
+    are cosmetic, specific to this file's single-companion mode."""
+
+    def __init__(self):
+        self.levels = {kind: 1.0 for kind in NEED_ITEMS}
+        self.pulses = {kind: 0.0 for kind in NEED_ITEMS}
+
+    def update(self, dt):
+        for kind in NEED_ITEMS:
+            self.levels[kind] = max(0.0, self.levels[kind] - NEED_DECAY_PER_SECOND * dt)
+            self.pulses[kind] = max(0.0, self.pulses[kind] - dt * 4.0)
+
+    def lowest(self):
+        return min(self.levels.values())
+
+    def feed(self, kind, world):
+        if kind not in self.levels:
+            return
+        self.levels[kind] = 1.0
+        self.pulses[kind] = 1.0
+        if kind == "hunger":
+            for c in world.creatures:
+                if c.alive:
+                    c.energy = min(MAX_ENERGY, c.energy + FEED_ENERGY_BOOST)
+
+
+def need_button_rect(index):
+    return pygame.Rect(NEED_PANEL_X + index * NEED_BUTTON_GAP, NEED_PANEL_Y,
+                        NEED_BUTTON_SIZE, NEED_BUTTON_SIZE)
+
+
+def draw_icon_pizza(screen, rect):
+    cx, cy = rect.center
+    r = rect.width * 0.42
+    points = [(cx, cy - r), (cx - r * 0.87, cy + r * 0.5), (cx + r * 0.87, cy + r * 0.5)]
+    pygame.draw.polygon(screen, (235, 195, 110), points)
+    pygame.draw.polygon(screen, (200, 80, 60), points, width=2)
+    for fx, fy in ((-0.15, 0.15), (0.2, 0.0), (0.0, -0.3)):
+        pygame.draw.circle(screen, (190, 60, 50), (int(cx + fx * r), int(cy + fy * r)), max(1, int(r * 0.14)))
+
+
+def draw_icon_water(screen, rect):
+    cx, cy = rect.center
+    w, h = rect.width * 0.5, rect.height * 0.6
+    glass = [(cx - w / 2, cy - h / 2), (cx + w / 2, cy - h / 2),
+             (cx + w * 0.4, cy + h / 2), (cx - w * 0.4, cy + h / 2)]
+    water = [(cx - w * 0.45, cy - h * 0.05), (cx + w * 0.45, cy - h * 0.05),
+             (cx + w * 0.38, cy + h / 2), (cx - w * 0.38, cy + h / 2)]
+    pygame.draw.polygon(screen, (230, 245, 250), glass)
+    pygame.draw.polygon(screen, (100, 175, 230), water)
+    pygame.draw.polygon(screen, (150, 165, 165), glass, width=2)
+
+
+def draw_icon_soap(screen, rect):
+    cx, cy = rect.center
+    w, h = rect.width * 0.62, rect.height * 0.4
+    bar = pygame.Rect(0, 0, w, h)
+    bar.center = (cx, cy)
+    pygame.draw.ellipse(screen, (225, 235, 205), bar)
+    pygame.draw.ellipse(screen, (175, 190, 155), bar, width=2)
+    for ox, oy, r in ((-w * 0.2, -h * 1.5, 3), (w * 0.12, -h * 2.0, 4), (w * 0.3, -h * 1.2, 2)):
+        pygame.draw.circle(screen, (255, 255, 255), (int(cx + ox), int(cy + oy)), r, width=1)
+
+
+def draw_icon_toy(screen, rect):
+    cx, cy = rect.center
+    r = int(rect.width * 0.38)
+    pygame.draw.circle(screen, (235, 90, 140), (cx, cy), r)
+    pygame.draw.arc(screen, (255, 220, 230), (cx - r, cy - r, r * 2, r * 2), 0.3, 2.6, 2)
+
+
+NEED_ICON_DRAWERS = {
+    "hunger": draw_icon_pizza,
+    "thirst": draw_icon_water,
+    "clean": draw_icon_soap,
+    "joy": draw_icon_toy,
+}
+
+
+def draw_needs_panel(screen, needs):
+    for i, kind in enumerate(NEED_ITEMS):
+        rect = need_button_rect(i)
+        pulse = needs.pulses[kind]
+        bg_rect = rect.inflate(int(pulse * 6), int(pulse * 6))
+        pygame.draw.rect(screen, (28, 32, 28), bg_rect, border_radius=8)
+        pygame.draw.rect(screen, (95, 100, 90), bg_rect, width=1, border_radius=8)
+        NEED_ICON_DRAWERS[kind](screen, bg_rect)
+        draw_meter(screen, rect.x, rect.bottom + 4, NEED_BUTTON_SIZE, 6,
+                   needs.levels[kind], NEED_COLORS[kind])
+
+
 class AlertState:
     """Turns a sensor's alert_level() into a transient predator sighting:
     reused via World.add_random_predator()/remove_predator() rather than
@@ -445,7 +570,7 @@ def draw_night_overlay(screen, day_amount):
     screen.blit(overlay, (0, 0))
 
 
-def draw_critter(screen, x, z, token):
+def draw_critter(screen, x, z, token, distressed=False):
     sx, sy, scale = project(x, z)
     body_r = int(24 * scale)
     if body_r < 2:
@@ -479,8 +604,13 @@ def draw_critter(screen, x, z, token):
                             max(1, int(eye_r * 0.45)))
 
     mouth_w, mouth_h = max(1, int(body_r * 0.22)), max(1, int(body_r * 0.16))
-    pygame.draw.ellipse(screen, MOUTH_COLOR,
-                         (sx - mouth_w / 2, sy - body_r * 0.22, mouth_w, mouth_h))
+    if distressed:
+        mouth_rect = (sx - mouth_w, sy - body_r * 0.10, mouth_w * 2, mouth_h * 2)
+        pygame.draw.arc(screen, MOUTH_COLOR, mouth_rect, math.pi * 0.15, math.pi * 0.85,
+                         max(1, int(body_r * 0.1)))
+    else:
+        pygame.draw.ellipse(screen, MOUTH_COLOR,
+                             (sx - mouth_w / 2, sy - body_r * 0.22, mouth_w, mouth_h))
 
 
 def draw_predator(screen, x, z):
@@ -556,7 +686,7 @@ _EGG_SPECKLE_RNG = [
 ]
 
 
-def draw_population(screen, world, pan_x):
+def draw_population(screen, world, pan_x, distressed=False):
     entities = []
     for c in world.creatures:
         if c.alive:
@@ -572,7 +702,7 @@ def draw_population(screen, world, pan_x):
         draw_food(screen, x - pan_x, z)
     for z, kind, x, token in entities:
         if kind == "creature":
-            draw_critter(screen, x - pan_x, z, token)
+            draw_critter(screen, x - pan_x, z, token, distressed)
         else:
             draw_predator(screen, x - pan_x, z)
 
@@ -651,6 +781,7 @@ def main():
     threshold = DEFAULT_ALERT_THRESHOLD
     alert = AlertState()
     egg = EggState()
+    needs = NeedsState()
     hatch_flash = 0.0
     t = 0.0
     day_phase = 0.1  # start in early-morning light
@@ -675,6 +806,7 @@ def main():
                     world = new_egg_world()
                     alert = AlertState()
                     egg = EggState()
+                    needs = NeedsState()
                     hatch_flash = 0.0
                 elif event.key == pygame.K_a:
                     sensors.toggle_mic()
@@ -687,6 +819,11 @@ def main():
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 if egg.register_click(event.pos[0], event.pos[1]):
                     hatch_flash = 0.4
+                elif egg.hatched:
+                    for i, kind in enumerate(NEED_ITEMS):
+                        if need_button_rect(i).collidepoint(event.pos):
+                            needs.feed(kind, world)
+                            break
 
         keys = pygame.key.get_pressed()
         if keys[pygame.K_LEFT]:
@@ -710,10 +847,12 @@ def main():
 
         if egg.hatched:
             alert.update(world, sensors, threshold, dt)
+            if not paused:
+                needs.update(dt)
 
         draw_background(screen, day_phase)
         if egg.hatched:
-            draw_population(screen, world, pan_x)
+            draw_population(screen, world, pan_x, distressed=needs.lowest() < NEED_LOW_THRESHOLD)
         else:
             wobble = math.sin(t * 14.0) * (2 + egg.cracks * 1.5)
             draw_egg(screen, EGG_STAGE_X - pan_x, EGG_STAGE_Z, egg.cracks, wobble, egg.pulse)
@@ -721,6 +860,8 @@ def main():
         draw_night_overlay(screen, day_amount)
         draw_status(screen, font, world, paused, speed, sensors, threshold, alert.flash,
                     egg.hatched, egg.cracks)
+        if egg.hatched:
+            draw_needs_panel(screen, needs)
         if hatch_flash > 0:
             overlay = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
             overlay.fill((255, 255, 255, int(200 * min(1.0, hatch_flash / 0.4))))

@@ -432,6 +432,17 @@ webcam.) On Linux, `sounddevice` also needs the system PortAudio library
 fails and the mic just reports unavailable, same as any other missing
 piece.
 
+Once hatched, a small needs panel appears top-left with four clickable
+icons: a pizza (hunger), a glass of water (thirst), a bar of soap
+(cleanliness), and a toy (joy). Each need slowly drains on its own -
+about two minutes from full to empty if left alone - and clicking its
+icon tops it back up to full. Feeding the pizza also restores some of
+the creature's *real* `simulation.py` energy, same field the other
+renderers read from; the other three icons are local to this window and
+don't touch the simulation. Neglect all four for long enough and the
+creature's expression turns visibly worried - there's no harsher penalty
+than that, it's just something to look after while you watch it.
+
 ## Where to take it next
 
 The simulation core (`simulation.py`) and renderer (`main.py`) are split on
