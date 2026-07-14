@@ -52,15 +52,22 @@ main_web.py, but judged by *screen* distance instead of world distance,
 since depth already changes how big and how far apart things look here.
 Press M to mute it.
 
-The landscape got a pass too: bigger, fuller trees, a scattering of
-rocks, and a river winding across the field toward the camera - all
-just background decoration, drawn once per frame from fixed positions,
-no gameplay effect.
+The landscape is scaled the way a real one would be: trees tower several
+times a creature's height, rocks are boulders rather than pebbles, and a
+river winds across the field toward the camera - all fixed background
+decoration, no gameplay effect, just proportioned properly.
+
+The scroll wheel zooms, Minecraft-style: it magnifies the ground-plane
+scene around a fixed point on the horizon rather than moving the camera
+forward, so every distance keeps the same size ratio to every other
+distance as you zoom - things get uniformly bigger or smaller, the
+perspective itself never distorts.
 
 Controls:
   LEFT CLICK     crack the egg / feed an item from the needs panel
   CLICK + DRAG   pan the view with the mouse
   LEFT / RIGHT   pan the view with the keyboard
+  SCROLL         zoom in / out
   SPACE          pause / resume
   UP / DOWN      simulation speed
   M              mute/unmute the hover-listening sound
@@ -92,6 +99,14 @@ PAN_DRAG_SENSITIVITY = 1.6 / SCREEN_W
 # pixels - lets a light click and a deliberate drag coexist on the same
 # button.
 PAN_DRAG_CLICK_THRESHOLD = 6
+
+# Scroll-wheel zoom, Minecraft-style: it magnifies the ground-plane scene
+# around a fixed screen point rather than moving the camera, so
+# perspective proportions between near and far objects stay the same as
+# you zoom - everything just gets uniformly bigger or smaller.
+ZOOM_MIN = 0.6
+ZOOM_MAX = 3.5
+ZOOM_STEP = 0.1
 
 DAY_CYCLE_SECONDS = 60.0  # a full day+night loop, real time
 
@@ -383,8 +398,8 @@ class EggState:
         self.hatched = False
         self.pulse = 0.0
 
-    def register_click(self, mx, my):
-        if self.hatched or not egg_contains(mx, my, EGG_STAGE_X, EGG_STAGE_Z):
+    def register_click(self, mx, my, zoom=1.0):
+        if self.hatched or not egg_contains(mx, my, EGG_STAGE_X, EGG_STAGE_Z, zoom):
             return False
         self.cracks += 1
         self.pulse = 1.0
@@ -546,7 +561,7 @@ def _make_tone(freq, sample_rate, duration=0.6, volume=0.25):
     return pygame.sndarray.make_sound(np.ascontiguousarray(stereo))
 
 
-def update_listening(channel, tones, world, mouse_pos, pan_x, muted, listening_token):
+def update_listening(channel, tones, world, mouse_pos, pan_x, muted, listening_token, zoom=1.0):
     """Plays a sustained tone for whichever living creature's *screen*
     position is closest to the mouse, within LISTEN_RADIUS_PX - the
     pseudo-3D counterpart of main.py's proximity-listening sound. Returns
@@ -561,7 +576,7 @@ def update_listening(channel, tones, world, mouse_pos, pan_x, muted, listening_t
             if not c.alive or c.token == 0:
                 continue
             x, z = world_to_stage(c.pos)
-            sx, sy, _ = project(x - pan_x, z)
+            sx, sy, _ = project(x - pan_x, z, zoom)
             dist = ((sx - mouse_pos[0]) ** 2 + (sy - mouse_pos[1]) ** 2) ** 0.5
             if dist < best_dist:
                 best_dist = dist
@@ -583,19 +598,28 @@ def world_to_stage(pos):
     return x_norm, z
 
 
-def project(x, z):
+def project(x, z, zoom=1.0):
     """x: lateral offset (roughly -1.3..1.3), z: depth, 0 = far/near the
     horizon, 1 = close to the camera. Returns (screen_x, screen_y, scale) -
     farther things are smaller and closer to the screen's horizontal
-    center, the classic converging-perspective illusion."""
+    center, the classic converging-perspective illusion.
+
+    zoom magnifies the whole ground-plane scene around a fixed screen
+    point (the horizon, centered) rather than moving the camera - like a
+    telephoto lens, not a dolly - so every distance keeps the same size
+    ratio to every other distance as zoom changes, just larger overall."""
     scale = 0.1 + z * 1.05
     spread = SCREEN_W * 0.55 * (0.12 + z * 0.9)
     screen_x = SCREEN_W / 2 + x * spread
     screen_y = HORIZON_Y + z * (SCREEN_H - HORIZON_Y)
+    if zoom != 1.0:
+        screen_x = SCREEN_W / 2 + (screen_x - SCREEN_W / 2) * zoom
+        screen_y = HORIZON_Y + (screen_y - HORIZON_Y) * zoom
+        scale *= zoom
     return screen_x, screen_y, scale
 
 
-def draw_background(screen, day_phase):
+def draw_background(screen, day_phase, zoom=1.0):
     sun_height, moon_height, day_amount, twilight_amount = celestial_state(day_phase)
 
     sky_top = lerp_color(SKY_TOP_NIGHT, SKY_TOP_DAY, day_amount)
@@ -656,30 +680,32 @@ def draw_background(screen, day_phase):
 
     grid_color = lerp_color(GRID_COLOR_NIGHT, GRID_COLOR_DAY, day_amount)
     for i in range(1, 9):
-        _, sy, _ = project(0, i / 9)
+        _, sy, _ = project(0, i / 9, zoom)
         pygame.draw.line(screen, grid_color, (0, sy), (SCREEN_W, sy), 1)
     for x in (-1.2, -0.8, -0.4, 0.0, 0.4, 0.8, 1.2):
-        sx0, sy0, _ = project(x, 0.0)
-        sx1, sy1, _ = project(x, 1.0)
+        sx0, sy0, _ = project(x, 0.0, zoom)
+        sx1, sy1, _ = project(x, 1.0, zoom)
         pygame.draw.line(screen, grid_color, (sx0, sy0), (sx1, sy1), 1)
 
-    draw_river(screen, day_amount)
+    draw_river(screen, day_amount, zoom)
 
     for x, z, size in ROCK_POSITIONS:
-        draw_rock(screen, x, z, day_amount, size)
+        draw_rock(screen, x, z, day_amount, size, zoom)
 
     for x, z in TREE_POSITIONS:
-        draw_tree(screen, x, z, day_amount)
+        draw_tree(screen, x, z, day_amount, zoom)
 
 
-def draw_tree(screen, x, z, day_amount):
-    sx, sy, scale = project(x, z)
-    trunk_h = int(46 * scale)
-    trunk_w = max(3, int(9 * scale))
+def draw_tree(screen, x, z, day_amount, zoom=1.0):
+    sx, sy, scale = project(x, z, zoom)
+    # A tree towers over a creature the way a real tree towers over a
+    # small child - roughly 4-5x its standing height, not a shrub.
+    trunk_h = int(130 * scale)
+    trunk_w = max(4, int(16 * scale))
     trunk_color = lerp_color(TREE_TRUNK_NIGHT, TREE_TRUNK_DAY, day_amount)
     leaves_color = lerp_color(TREE_LEAVES_NIGHT, TREE_LEAVES_DAY, day_amount)
     pygame.draw.rect(screen, trunk_color, (sx - trunk_w / 2, sy - trunk_h, trunk_w, trunk_h))
-    leaf_r = max(4, int(30 * scale))
+    leaf_r = max(6, int(48 * scale))
     canopy_y = sy - trunk_h - leaf_r * 0.5
     # Three overlapping lobes instead of one circle - a fuller, less
     # perfectly-round canopy without needing real foliage art.
@@ -689,9 +715,11 @@ def draw_tree(screen, x, z, day_amount):
                             max(3, int(leaf_r * rr)))
 
 
-def draw_rock(screen, x, z, day_amount, size=1.0):
-    sx, sy, scale = project(x, z)
-    r = max(2, int(14 * scale * size))
+def draw_rock(screen, x, z, day_amount, size=1.0, zoom=1.0):
+    sx, sy, scale = project(x, z, zoom)
+    # Boulders, not pebbles - roughly creature-sized to well over head
+    # height depending on the size multiplier.
+    r = max(3, int(30 * scale * size))
     if r < 2:
         return
     color = lerp_color(ROCK_COLOR_NIGHT, ROCK_COLOR_DAY, day_amount)
@@ -709,14 +737,14 @@ def draw_rock(screen, x, z, day_amount, size=1.0):
     pygame.draw.polygon(screen, shade, lit_face)
 
 
-def draw_river(screen, day_amount):
+def draw_river(screen, day_amount, zoom=1.0):
     water = lerp_color(RIVER_COLOR_NIGHT, RIVER_COLOR_DAY, day_amount)
     highlight = lerp_color(RIVER_HIGHLIGHT_NIGHT, RIVER_HIGHLIGHT_DAY, day_amount)
     left_bank, right_bank, mid = [], [], []
     for x, z, half_width in RIVER_PATH:
-        lx, ly, _ = project(x - half_width, z)
-        rx, ry, _ = project(x + half_width, z)
-        mx, my, _ = project(x, z)
+        lx, ly, _ = project(x - half_width, z, zoom)
+        rx, ry, _ = project(x + half_width, z, zoom)
+        mx, my, _ = project(x, z, zoom)
         left_bank.append((lx, ly))
         right_bank.append((rx, ry))
         mid.append((mx, my))
@@ -763,8 +791,8 @@ def eye_openness(creature_id, t):
     return 1.0
 
 
-def draw_critter(screen, x, z, token, distressed=False, creature_id=0, t=0.0):
-    sx, sy, scale = project(x, z)
+def draw_critter(screen, x, z, token, distressed=False, creature_id=0, t=0.0, zoom=1.0):
+    sx, sy, scale = project(x, z, zoom)
     body_r = int(24 * scale)
     if body_r < 2:
         return
@@ -809,8 +837,8 @@ def draw_critter(screen, x, z, token, distressed=False, creature_id=0, t=0.0):
                              (sx - mouth_w / 2, sy - body_r * 0.22, mouth_w, mouth_h))
 
 
-def draw_predator(screen, x, z):
-    sx, sy, scale = project(x, z)
+def draw_predator(screen, x, z, zoom=1.0):
+    sx, sy, scale = project(x, z, zoom)
     r = int(20 * scale)
     if r < 2:
         return
@@ -823,14 +851,14 @@ def draw_predator(screen, x, z):
         pygame.draw.circle(screen, (20, 10, 10), (int(ex), int(ey)), max(1, int(eye_r * 0.5)))
 
 
-def draw_food(screen, x, z):
-    sx, sy, scale = project(x, z)
+def draw_food(screen, x, z, zoom=1.0):
+    sx, sy, scale = project(x, z, zoom)
     r = max(1, int(6 * scale))
     pygame.draw.circle(screen, FOOD_COLOR, (int(sx), int(sy)), r)
 
 
-def egg_rect(x, z, pulse=0.0):
-    sx, sy, scale = project(x, z)
+def egg_rect(x, z, pulse=0.0, zoom=1.0):
+    sx, sy, scale = project(x, z, zoom)
     egg_w = 30 * scale * (1.0 + pulse * 0.15)
     egg_h = 40 * scale * (1.0 + pulse * 0.15)
     rect = pygame.Rect(0, 0, egg_w, egg_h)
@@ -838,8 +866,8 @@ def egg_rect(x, z, pulse=0.0):
     return rect
 
 
-def egg_contains(mx, my, x, z):
-    rect = egg_rect(x, z)
+def egg_contains(mx, my, x, z, zoom=1.0):
+    rect = egg_rect(x, z, zoom=zoom)
     if rect.width < 2:
         return False
     dx = (mx - rect.centerx) / (rect.width / 2 + 6)
@@ -847,8 +875,8 @@ def egg_contains(mx, my, x, z):
     return dx * dx + dy * dy <= 1.0
 
 
-def draw_egg(screen, x, z, cracks, wobble, pulse):
-    rect = egg_rect(x, z, pulse)
+def draw_egg(screen, x, z, cracks, wobble, pulse, zoom=1.0):
+    rect = egg_rect(x, z, pulse, zoom)
     if rect.width < 2:
         return
 
@@ -882,7 +910,7 @@ _EGG_SPECKLE_RNG = [
 ]
 
 
-def draw_population(screen, world, pan_x, distressed=False, t=0.0):
+def draw_population(screen, world, pan_x, distressed=False, t=0.0, zoom=1.0):
     entities = []
     for c in world.creatures:
         if c.alive:
@@ -895,12 +923,12 @@ def draw_population(screen, world, pan_x, distressed=False, t=0.0):
 
     for fx, fy in world.food:
         x, z = world_to_stage((fx, fy))
-        draw_food(screen, x - pan_x, z)
+        draw_food(screen, x - pan_x, z, zoom)
     for z, kind, x, token, creature_id in entities:
         if kind == "creature":
-            draw_critter(screen, x - pan_x, z, token, distressed, creature_id, t)
+            draw_critter(screen, x - pan_x, z, token, distressed, creature_id, t, zoom)
         else:
-            draw_predator(screen, x - pan_x, z)
+            draw_predator(screen, x - pan_x, z, zoom)
 
 
 def draw_meter(screen, x, y, w, h, level, color):
@@ -918,10 +946,10 @@ def sensor_label(enabled, available):
 
 
 def draw_status(screen, font, world, paused, speed, sensors, threshold, alert_flash,
-                 hatched, egg_cracks, sound_muted=False):
+                 hatched, egg_cracks, sound_muted=False, zoom=1.0):
     if hatched:
         status = "PAUSED" if paused else f"x{speed}"
-        top_line = f"pop {world.population()}   {status}"
+        top_line = f"pop {world.population()}   {status}   zoom {zoom:.1f}x"
     else:
         top_line = f"Left-click the egg to crack it open ({egg_cracks}/{EGG_CLICKS_NEEDED})"
     lines = [
@@ -938,8 +966,9 @@ def draw_status(screen, font, world, paused, speed, sensors, threshold, alert_fl
     draw_meter(screen, 10, meter_y, 140, 10, sensors.mic_level, (120, 200, 255))
     draw_meter(screen, 160, meter_y, 140, 10, sensors.motion_level, (255, 180, 120))
 
-    hint = font.render("LEFT/RIGHT pan   SPACE pause   UP/DOWN speed   M mute sound   R reset   ESC quit",
-                        True, (255, 255, 255))
+    hint = font.render(
+        "LEFT/RIGHT pan   SCROLL zoom   SPACE pause   UP/DOWN speed   M mute sound   R reset   ESC quit",
+        True, (255, 255, 255))
     screen.blit(hint, (10, SCREEN_H - 26))
 
     if hatched and world.population() == 0:
@@ -986,6 +1015,7 @@ def main():
     running = True
     sound_muted = False
     listening_token = None
+    zoom = 1.0
 
     dragging_view = False
     drag_start = None
@@ -1001,10 +1031,12 @@ def main():
                 if dragging_view:
                     pan_x -= event.rel[0] * PAN_DRAG_SENSITIVITY
                     drag_traveled += abs(event.rel[0])
+            elif event.type == pygame.MOUSEWHEEL:
+                zoom = max(ZOOM_MIN, min(ZOOM_MAX, zoom + event.y * ZOOM_STEP))
             elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
                 if dragging_view and drag_start is not None and drag_traveled < PAN_DRAG_CLICK_THRESHOLD:
                     # barely moved - treat it as a click, not a drag
-                    if egg.register_click(drag_start[0], drag_start[1]):
+                    if egg.register_click(drag_start[0], drag_start[1], zoom):
                         hatch_flash = 0.4
                     elif egg.hatched:
                         for i, kind in enumerate(NEED_ITEMS):
@@ -1071,22 +1103,22 @@ def main():
             if not paused:
                 needs.update(dt)
             listening_token = update_listening(sound_channel, tones, world, pygame.mouse.get_pos(),
-                                                pan_x, sound_muted, listening_token)
+                                                pan_x, sound_muted, listening_token, zoom)
         elif listening_token is not None:
             if sound_channel is not None:
                 sound_channel.stop()
             listening_token = None
 
-        draw_background(screen, day_phase)
+        draw_background(screen, day_phase, zoom)
         if egg.hatched:
-            draw_population(screen, world, pan_x, distressed=needs.lowest() < NEED_LOW_THRESHOLD, t=t)
+            draw_population(screen, world, pan_x, distressed=needs.lowest() < NEED_LOW_THRESHOLD, t=t, zoom=zoom)
         else:
             wobble = math.sin(t * 14.0) * (2 + egg.cracks * 1.5)
-            draw_egg(screen, EGG_STAGE_X - pan_x, EGG_STAGE_Z, egg.cracks, wobble, egg.pulse)
+            draw_egg(screen, EGG_STAGE_X - pan_x, EGG_STAGE_Z, egg.cracks, wobble, egg.pulse, zoom)
         _, _, day_amount, _ = celestial_state(day_phase)
         draw_night_overlay(screen, day_amount)
         draw_status(screen, font, world, paused, speed, sensors, threshold, alert.flash,
-                    egg.hatched, egg.cracks, sound_muted)
+                    egg.hatched, egg.cracks, sound_muted, zoom)
         if egg.hatched:
             draw_needs_panel(screen, needs)
         if hatch_flash > 0:

@@ -389,11 +389,12 @@ sits on screen as a speckled egg. Left-click it a few times to crack it
 open (the HUD counts the clicks); nothing in the world moves or steps
 until it hatches, so there's no risk of a predator finding it first.
 Once hatched, `LEFT`/`RIGHT` pans the view (or click and drag with the
-mouse), `SPACE` pauses, `UP`/`DOWN` change speed, `R` resets back to a
-fresh egg, `ESC` quits. Since it only ever starts from a single creature,
-the population can't grow on its own (reproduction needs two) - it's a
-solitary companion to watch and listen to, not a repeat of the
-language-evolution demo from the other three renderers.
+mouse), the scroll wheel zooms in/out, `SPACE` pauses, `UP`/`DOWN` change
+speed, `R` resets back to a fresh egg, `ESC` quits. Since it only ever
+starts from a single creature, the population can't grow on its own
+(reproduction needs two) - it's a solitary companion to watch and listen
+to, not a repeat of the language-evolution demo from the other three
+renderers.
 
 Standing still doesn't mean frozen: each creature blinks on its own
 schedule and wanders a couple of pixels in place between simulation
@@ -406,9 +407,18 @@ evolved signal - the same proximity-listening idea as `main.py`/
 by *screen* position rather than world position, since depth already
 changes how big and how far apart things look. Press `M` to mute it.
 
-The background is a bit more filled in now too: bigger, fuller trees
-scattered more densely, a handful of rocks, and a river winding across
-the field toward the camera - all fixed decoration, no gameplay effect.
+The background is a bit more filled in now too, and scaled the way a
+real landscape would be: trees tower several times a creature's height
+rather than standing barely taller than one, rocks read as boulders
+instead of pebbles, and a river winds across the field toward the
+camera - all fixed decoration, no gameplay effect, just sized to
+actually look like a landscape a small creature stands in.
+
+Scrolling zooms in and out on that landscape, Minecraft-style: it
+magnifies the whole scene around a fixed point on the horizon instead of
+moving the camera forward, so every distance keeps the same size ratio
+to every other distance as you zoom - nothing gets distorted, it's
+purely "closer/farther," with proportions preserved the whole way.
 
 The sky runs its own day/night cycle the whole time (a full loop every
 60 real seconds, running even before the egg hatches) - the sun and moon
