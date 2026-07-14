@@ -879,11 +879,17 @@ def draw_background(screen, day_phase, pan_x=0.0, zoom=1.0, landscape=None):
 def draw_ground_shadow(screen, sx, top_y, w, h, shadow_dx=0.0, shadow_len=1.0):
     """A cast shadow that stretches and leans away from the light source
     instead of always sitting as a fixed puddle directly underneath -
-    shadow_dx/shadow_len come from light_direction(). At the defaults
-    (dx=0, len=1) this is pixel-identical to a plain centered ellipse."""
-    stretched_w = w * shadow_len
+    shadow_dx/shadow_len come from light_direction(). Translucent, not a
+    solid fill: a tree's wide shadow can overlap something small sitting
+    nearby (a birth egg, another creature) in the depth-sorted draw
+    order, and a solid shadow would fully erase it instead of just
+    darkening it, which reads as a rendering glitch rather than shade."""
+    stretched_w = max(1, int(w * shadow_len))
+    rect_h = max(1, int(h))
     offset = shadow_dx * w * 0.5 * (shadow_len - 1.0)
-    pygame.draw.ellipse(screen, SHADOW_COLOR, (sx + offset - stretched_w / 2, top_y, stretched_w, h))
+    shadow_surf = pygame.Surface((stretched_w, rect_h), pygame.SRCALPHA)
+    pygame.draw.ellipse(shadow_surf, (*SHADOW_COLOR, 130), (0, 0, stretched_w, rect_h))
+    screen.blit(shadow_surf, (sx + offset - stretched_w / 2, top_y))
 
 
 def draw_tree(screen, x, z, day_amount, ctx=DEFAULT_CTX):
