@@ -567,8 +567,10 @@ class EggState:
         self.hatched = False
         self.pulse = 0.0
 
-    def register_click(self, mx, my, zoom=1.0):
-        if self.hatched or not egg_contains(mx, my, EGG_STAGE_X, EGG_STAGE_Z, zoom):
+    def register_click(self, mx, my, zoom=1.0, pan_x=0.0):
+        # Hit-test where the egg is actually drawn - the view may have
+        # been panned before the first hatch, and the egg pans with it.
+        if self.hatched or not egg_contains(mx, my, EGG_STAGE_X - pan_x, EGG_STAGE_Z, zoom):
             return False
         self.cracks += 1
         self.pulse = 1.0
@@ -1485,7 +1487,7 @@ def main():
             elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
                 if dragging_view and drag_start is not None and drag_traveled < PAN_DRAG_CLICK_THRESHOLD:
                     # barely moved - treat it as a click, not a drag
-                    if egg.register_click(drag_start[0], drag_start[1], zoom):
+                    if egg.register_click(drag_start[0], drag_start[1], zoom, pan_x):
                         hatch_flash = 0.4
                         birth_eggs.seed_known(world)
                     elif egg.hatched:
