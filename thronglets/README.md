@@ -443,10 +443,13 @@ schedule and wanders a couple of pixels in place between simulation
 steps, purely cosmetic idle motion meant to make it read as alive rather
 than a static sprite sitting on the grass.
 
-By default the whole population sounds at once: every evolved signal
-(token) currently used by a living creature plays continuously and
-together, a running chorus rather than silence until you go hunting for
-it. Press `G` to turn that off and hear only individual creatures.
+By default the whole population sounds as a gentle chorus of its own
+evolved signals - but struck as an **arpeggio, not a chord**: each
+colour currently in use rings its note in turn, one at a time on a slow
+rolling cycle, instead of all droning together. The token frequencies
+are a pentatonic scale, so spread out in time like a wind chime they
+ring as shifting harmony rather than a wall of sound. Press `G` to turn
+that off and hear only individual creatures.
 Hovering the mouse over a creature always plays a sustained tone for its
 evolved signal too, independently of the chorus toggle - the same
 proximity-listening idea as `main.py`/`main_web.py`, adapted for a 3D

@@ -91,11 +91,14 @@ Each one blinks on its own schedule and wanders a couple of
 pixels in place even when the simulation isn't moving it, so a standing
 creature still reads as alive rather than a frozen sprite.
 
-By default, the whole population sounds at once: every evolved signal
-(token) currently used by a living creature plays continuously, all
-together - a running chorus of the group's communication rather than
-silence until you go looking for it. Press G to turn that off and hear
-only individual creatures instead. Hovering the mouse over a creature
+By default the whole population sounds as a gentle, shifting chorus of
+its own communication signals - but struck as an arpeggio, not a chord:
+each colour currently in use rings its note in turn, one at a time on a
+slow rolling cycle, rather than all droning together (see
+AmbientChorus). The token frequencies are a pentatonic scale, so spread
+out in time like a wind chime they ring as harmony instead of a wall of
+sound. Press G to turn that off and hear only individual creatures
+instead. Hovering the mouse over a creature
 always plays a sustained tone for its evolved signal too - same idea as
 the proximity-listening sound in main.py/main_web.py, but judged by
 *screen* distance instead of world distance, since depth already
@@ -1163,18 +1166,21 @@ def init_sound():
 
     Several independent things share the mixer: hover_channel plays one
     tone for whichever single creature the mouse is over (Channel 0),
-    ambient_channels (Channels 1-5, one per token) each play at the same
-    time, quieter, for the population-chorus sound, and cry_channel
-    (Channel 6) plays the population's emotional voice - a strident
-    scream when any creature is in pain, a lower frightened whimper when
-    others are afraid - louder than and independent of the chorus."""
+    ambient_channels (Channels 1-5, one per token) carry the population
+    chorus - but struck intermittently, one colour's note at a time on a
+    rolling cycle (see AmbientChorus), not all sounding at once - and
+    cry_channel (Channel 6) plays the population's emotional voice - a
+    strident scream when any creature is in pain, a lower frightened
+    whimper when others are afraid - louder than and independent of the
+    chorus."""
     try:
         pygame.mixer.init(frequency=22050, size=-16, channels=2)
         pygame.mixer.set_num_channels(max(8, pygame.mixer.get_num_channels()))
         sample_rate = pygame.mixer.get_init()[0]
         tones = {token: _make_tone(freq, sample_rate)
                  for token, freq in enumerate(TOKEN_FREQS) if token != 0}
-        ambient_tones = {token: _make_tone(freq, sample_rate, volume=0.12)
+        # struck, bell-like notes for the intermittent chorus - not looped
+        ambient_tones = {token: _make_tone(freq, sample_rate, duration=1.4, volume=0.2, decay=True)
                           for token, freq in enumerate(TOKEN_FREQS) if token != 0}
         hover_channel = pygame.mixer.Channel(0)
         ambient_channels = {token: pygame.mixer.Channel(token) for token in range(1, 6)}
@@ -1188,16 +1194,26 @@ def init_sound():
         return None, None, None, None, None, None
 
 
-def _make_tone(freq, sample_rate, duration=0.6, volume=0.25):
-    """A short sine-wave tone with a fade in/out envelope, looped by the
-    caller - the fades also soften the seam where the loop repeats."""
+def _make_tone(freq, sample_rate, duration=0.6, volume=0.25, decay=False):
+    """A short sine-wave tone. By default it has a symmetric fade in/out
+    envelope and is meant to be looped (the fades soften the loop seam).
+    With decay=True it instead gets a quick attack and a long fall-off to
+    silence - a struck, bell-like note played once rather than looped,
+    used for the intermittent chorus (see AmbientChorus)."""
     n = int(sample_rate * duration)
     ts = np.linspace(0, duration, n, endpoint=False)
     wave = np.sin(2 * np.pi * freq * ts)
-    fade = min(n // 20, 400)
-    envelope = np.ones(n)
-    envelope[:fade] = np.linspace(0, 1, fade)
-    envelope[-fade:] = np.linspace(1, 0, fade)
+    if decay:
+        attack = max(1, n // 40)
+        envelope = np.concatenate([
+            np.linspace(0, 1, attack),
+            np.linspace(1, 0, n - attack) ** 1.6,   # a smooth, ringing fall-off
+        ])
+    else:
+        fade = min(n // 20, 400)
+        envelope = np.ones(n)
+        envelope[:fade] = np.linspace(0, 1, fade)
+        envelope[-fade:] = np.linspace(1, 0, fade)
     wave = (wave * envelope * volume * 32767).astype(np.int16)
     stereo = np.column_stack([wave, wave])
     return pygame.sndarray.make_sound(np.ascontiguousarray(stereo))
@@ -1278,30 +1294,49 @@ def update_listening(channel, tones, world, mouse_pos, pan_x, muted, listening_t
     return target
 
 
-def update_ambient(ambient_channels, ambient_tones, world, muted, ambient_enabled, birth_eggs=None):
-    """The population's own 'chorus': every signal (token) currently
-    used by at least one living, *hatched* creature plays continuously,
-    all at once, each on its own channel - not just whichever one
-    creature the mouse happens to be over. Creatures still pending in
-    birth_eggs don't contribute; they haven't "appeared" yet. On by
-    default; turning it off (independent of the master mute) falls back
-    to hearing only the hover sound."""
-    if not ambient_channels:
-        return
-    if muted or not ambient_enabled:
-        for channel in ambient_channels.values():
-            channel.stop()
-        return
-    active_tokens = {
-        c.token for c in world.creatures
-        if c.alive and c.token != 0 and not (birth_eggs is not None and birth_eggs.is_pending(c.id))
-    }
-    for token, channel in ambient_channels.items():
-        if token in active_tokens:
-            if not channel.get_busy():
-                channel.play(ambient_tones[token], loops=-1)
-        else:
-            channel.stop()
+AMBIENT_CYCLE = 4.2   # seconds for one full round of the chorus arpeggio
+
+
+class AmbientChorus:
+    """The population's own 'chorus' of communication signals. It used to
+    play every token in use continuously and all at once - a sustained
+    drone. Instead the chorus now advances one beat at a time: the cycle
+    is divided into as many evenly-spaced beats as there are tokens, and
+    on each beat at most a single colour's note is struck (the next one
+    in round-robin order), so the notes arpeggiate one after another
+    instead of piling up. The token frequencies are a pentatonic scale,
+    so spread out in time like this they ring as gentle, shifting harmony
+    - a wind chime, not a chord. A beat whose colour isn't currently in
+    use simply passes in silence.
+
+    Only living, *hatched* creatures contribute (ones still pending in
+    birth_eggs haven't "appeared" yet). On by default; the G toggle and
+    the master mute each silence it, independent of the hover sound."""
+
+    def __init__(self):
+        self._last_beat = None   # index of the last beat we acted on
+
+    def update(self, channels, tones, world, muted, enabled, t, birth_eggs=None):
+        if not channels:
+            return
+        if muted or not enabled:
+            for channel in channels.values():
+                channel.stop()
+            self._last_beat = None
+            return
+        active = {
+            c.token for c in world.creatures
+            if c.alive and c.token != 0 and not (birth_eggs is not None and birth_eggs.is_pending(c.id))
+        }
+        n = len(channels)
+        beat = int(t / (AMBIENT_CYCLE / n))
+        if beat == self._last_beat:
+            return   # still within the same beat - nothing new to strike
+        self._last_beat = beat
+        token = (beat % n) + 1   # tokens are numbered 1..n, one per beat
+        channel = channels.get(token)
+        if token in active and channel is not None and not channel.get_busy():
+            channel.play(tones[token], loops=0)
 
 
 def world_to_stage(pos):
@@ -1947,6 +1982,7 @@ def main():
     needs = NeedsState()
     horror = HorrorState()
     sentience = SentienceState()
+    ambient = AmbientChorus()
     hatch_flash = 0.0
     t = 0.0
     day_phase = 0.1  # start in early-morning light
@@ -2026,6 +2062,7 @@ def main():
                     needs = NeedsState()
                     horror = HorrorState()
                     sentience = SentienceState()
+                    ambient = AmbientChorus()
                     hatch_flash = 0.0
                     if sound_channel is not None:
                         sound_channel.stop()
@@ -2086,7 +2123,7 @@ def main():
             sentience.update(world, horror, needs_low, birth_eggs, t, dt, paused)
             listening_token = update_listening(sound_channel, tones, world, pygame.mouse.get_pos(),
                                                 pan_x, sound_muted, listening_token, zoom, birth_eggs)
-            update_ambient(ambient_channels, ambient_tones, world, sound_muted, ambient_enabled, birth_eggs)
+            ambient.update(ambient_channels, ambient_tones, world, sound_muted, ambient_enabled, t, birth_eggs)
             current_cry = update_cry(cry_channel, cry_sounds, sentience.cry, sound_muted, current_cry)
         else:
             if listening_token is not None:
@@ -2094,7 +2131,7 @@ def main():
                     sound_channel.stop()
                 listening_token = None
             current_cry = update_cry(cry_channel, cry_sounds, None, sound_muted, current_cry)
-            update_ambient(ambient_channels, ambient_tones, world, True, ambient_enabled, birth_eggs)
+            ambient.update(ambient_channels, ambient_tones, world, True, ambient_enabled, t, birth_eggs)
 
         _, _, day_amount, _ = celestial_state(day_phase)
         shadow_dx, shadow_len = light_direction(day_phase)
