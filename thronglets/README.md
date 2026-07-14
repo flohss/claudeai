@@ -390,11 +390,16 @@ open (the HUD counts the clicks); nothing in the world moves or steps
 until it hatches, so there's no risk of a predator finding it first.
 Once hatched, `LEFT`/`RIGHT` pans the view (or click and drag with the
 mouse), the scroll wheel zooms in/out, `SPACE` pauses, `UP`/`DOWN` change
-speed, `R` resets back to a fresh egg, `ESC` quits. Since it only ever
-starts from a single creature, the population can't grow on its own
-(reproduction needs two) - it's a solitary companion to watch and listen
-to, not a repeat of the language-evolution demo from the other three
-renderers.
+speed, `R` resets back to a fresh egg, `ESC` quits.
+
+The population can grow from there (reproduction, including a lone
+creature budding on its own once its energy is high enough), and every
+creature born this way gets the same treatment as the very first one: it
+starts life as an egg sitting at its real, moving position, fully alive
+and simulated the whole time, but it doesn't render, sound, or otherwise
+reveal itself as a creature until you find it and click it open too. The
+HUD shows how many new eggs are waiting whenever there are any. One that
+dies before being hatched just quietly disappears - no leftover egg.
 
 Standing still doesn't mean frozen: each creature blinks on its own
 schedule and wanders a couple of pixels in place between simulation

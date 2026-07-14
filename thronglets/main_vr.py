@@ -30,6 +30,13 @@ The world starts with exactly one creature, not hatched yet - it sits on
 screen as an egg. Left-click it a few times to crack it open; nothing
 else in the world moves or steps until it hatches.
 
+Every creature born afterward, through reproduction, gets the same
+treatment: it starts life as an egg at its real (moving) position - it's
+fully alive and simulated the whole time, but doesn't render, sound, or
+otherwise reveal itself until you go find it and click it open too
+(BirthEggs). One that dies before being hatched just quietly disappears,
+no leftover egg.
+
 Once hatched, a small needs panel appears top-left: pizza (hunger), a
 glass of water (thirst), soap (cleanliness), and a toy (joy). Each need
 drains slowly on its own; click an item to top its need back up to full.
@@ -87,7 +94,7 @@ distance as you zoom - things get uniformly bigger or smaller, the
 perspective itself never distorts.
 
 Controls:
-  LEFT CLICK     crack the egg / feed an item from the needs panel
+  LEFT CLICK     crack an egg / feed an item from the needs panel
   CLICK + DRAG   pan the view with the mouse
   LEFT / RIGHT   pan the view with the keyboard
   SCROLL         zoom in / out
@@ -498,6 +505,54 @@ class EggState:
         self.pulse = max(0.0, self.pulse - dt * 4.0)
 
 
+class BirthEggs:
+    """Every creature born through reproduction (not the very first,
+    initial-hatch one) starts life as an egg at its real, moving
+    position - it's fully alive and simulated underneath (still eating,
+    moving, able to reproduce or be eaten), but doesn't render, sound,
+    or otherwise reveal itself as a creature to the player until enough
+    clicks land on it, mirroring the very first hatch. One that dies
+    before being hatched is simply dropped, no egg left behind."""
+
+    def __init__(self):
+        self.pending = {}   # creature id -> clicks so far
+        self.known_ids = set()
+
+    def seed_known(self, world):
+        """Call once, right when the very first egg hatches, so that
+        already-hatched starting creature is never treated as a new
+        birth egg itself."""
+        self.known_ids = {c.id for c in world.creatures}
+
+    def sync(self, world):
+        """Call once per frame after stepping the world - any creature
+        id not seen before is a new birth, becoming a pending egg."""
+        current_ids = {c.id for c in world.creatures if c.alive}
+        for cid in current_ids - self.known_ids:
+            self.pending[cid] = 0
+        for cid in list(self.pending):
+            if cid not in current_ids:
+                del self.pending[cid]
+        self.known_ids = current_ids
+
+    def is_pending(self, creature_id):
+        return creature_id in self.pending
+
+    def try_click(self, mx, my, world, pan_x, zoom=1.0):
+        """Returns True if the click landed on a pending birth egg
+        (whether or not that particular click was the one that hatched
+        it) - lets the caller know not to treat the click as a miss."""
+        for c in world.creatures:
+            if c.alive and c.id in self.pending:
+                x, z = world_to_stage(c.pos)
+                if egg_contains(mx, my, x - pan_x, z, zoom):
+                    self.pending[c.id] += 1
+                    if self.pending[c.id] >= EGG_CLICKS_NEEDED:
+                        del self.pending[c.id]
+                    return True
+        return False
+
+
 class NeedsState:
     """A small Tamagotchi-style care loop layered on top of the real
     creature: each need drains slowly and is topped up by clicking the
@@ -659,12 +714,14 @@ def _make_tone(freq, sample_rate, duration=0.6, volume=0.25):
     return pygame.sndarray.make_sound(np.ascontiguousarray(stereo))
 
 
-def update_listening(channel, tones, world, mouse_pos, pan_x, muted, listening_token, zoom=1.0):
+def update_listening(channel, tones, world, mouse_pos, pan_x, muted, listening_token, zoom=1.0,
+                      birth_eggs=None):
     """Plays a sustained tone for whichever living creature's *screen*
     position is closest to the mouse, within LISTEN_RADIUS_PX - the
     pseudo-3D counterpart of main.py's proximity-listening sound. Returns
     the token now playing (or None) so the caller can track it across
-    frames without re-querying the mixer every time."""
+    frames without re-querying the mixer every time. A creature still
+    pending in birth_eggs hasn't "appeared" yet, so it's skipped."""
     if channel is None:
         return None
     target = None
@@ -672,6 +729,8 @@ def update_listening(channel, tones, world, mouse_pos, pan_x, muted, listening_t
         best_dist = LISTEN_RADIUS_PX
         for c in world.creatures:
             if not c.alive or c.token == 0:
+                continue
+            if birth_eggs is not None and birth_eggs.is_pending(c.id):
                 continue
             x, z = world_to_stage(c.pos)
             sx, sy, _ = project(x - pan_x, z, zoom)
@@ -687,19 +746,24 @@ def update_listening(channel, tones, world, mouse_pos, pan_x, muted, listening_t
     return target
 
 
-def update_ambient(ambient_channels, ambient_tones, world, muted, ambient_enabled):
+def update_ambient(ambient_channels, ambient_tones, world, muted, ambient_enabled, birth_eggs=None):
     """The population's own 'chorus': every signal (token) currently
-    used by at least one living creature plays continuously, all at
-    once, each on its own channel - not just whichever one creature the
-    mouse happens to be over. On by default; turning it off (independent
-    of the master mute) falls back to hearing only the hover sound."""
+    used by at least one living, *hatched* creature plays continuously,
+    all at once, each on its own channel - not just whichever one
+    creature the mouse happens to be over. Creatures still pending in
+    birth_eggs don't contribute; they haven't "appeared" yet. On by
+    default; turning it off (independent of the master mute) falls back
+    to hearing only the hover sound."""
     if not ambient_channels:
         return
     if muted or not ambient_enabled:
         for channel in ambient_channels.values():
             channel.stop()
         return
-    active_tokens = {c.token for c in world.creatures if c.alive and c.token != 0}
+    active_tokens = {
+        c.token for c in world.creatures
+        if c.alive and c.token != 0 and not (birth_eggs is not None and birth_eggs.is_pending(c.id))
+    }
     for token, channel in ambient_channels.items():
         if token in active_tokens:
             if not channel.get_busy():
@@ -1054,6 +1118,15 @@ _EGG_SPECKLE_RNG = [
 ]
 
 
+def draw_birth_egg(screen, x, z, cracks, t, creature_id, ctx=DEFAULT_CTX):
+    """A BirthEggs egg at a live, moving creature position - same look
+    as the main starting egg, just with a per-creature wobble phase so a
+    field of them doesn't all jiggle in lockstep."""
+    phase = _creature_seed(creature_id) * 2 * math.pi
+    wobble = math.sin(t * 14.0 + phase) * (2 + cracks * 1.5)
+    draw_egg(screen, x, z, cracks, wobble, pulse=0.0, ctx=ctx)
+
+
 def _tree_and_rock_entities(landscape):
     entities = []
     for x, z in landscape.trees:
@@ -1063,13 +1136,16 @@ def _tree_and_rock_entities(landscape):
     return entities
 
 
-def _draw_entity(screen, kind, x, z, extra, creature_id, day_amount, distressed, t, ctx):
+def _draw_entity(screen, kind, x, z, extra, creature_id, day_amount, distressed, t, ctx, birth_eggs=None):
     if kind == "tree":
         draw_tree(screen, x, z, day_amount, ctx)
     elif kind == "rock":
         draw_rock(screen, x, z, day_amount, extra, ctx)
     elif kind == "creature":
-        draw_critter(screen, x, z, extra, distressed, creature_id, t, ctx)
+        if birth_eggs is not None and birth_eggs.is_pending(creature_id):
+            draw_birth_egg(screen, x, z, birth_eggs.pending[creature_id], t, creature_id, ctx)
+        else:
+            draw_critter(screen, x, z, extra, distressed, creature_id, t, ctx)
     else:
         draw_predator(screen, x, z, ctx)
 
@@ -1082,13 +1158,15 @@ def draw_decor(screen, pan_x, day_amount, landscape, ctx=DEFAULT_CTX):
         _draw_entity(screen, kind, x - pan_x, z, extra, None, day_amount, False, 0.0, ctx)
 
 
-def draw_scene(screen, world, pan_x, day_amount, landscape, distressed=False, t=0.0, ctx=DEFAULT_CTX):
+def draw_scene(screen, world, pan_x, day_amount, landscape, distressed=False, t=0.0, ctx=DEFAULT_CTX,
+               birth_eggs=None):
     """Depth-sorts and draws everything that has real height - trees,
     rocks, creatures, predators - together in one painter's-algorithm
     pass (farthest first), so nearer things correctly occlude farther
     ones: a creature can stand in front of a tree, or vanish behind a
     boulder, instead of scenery and population being drawn as two
-    unrelated layers that clash regardless of actual depth."""
+    unrelated layers that clash regardless of actual depth. A creature
+    still pending in birth_eggs renders as an egg instead of itself."""
     entities = _tree_and_rock_entities(landscape)
     for c in world.creatures:
         if c.alive:
@@ -1103,7 +1181,7 @@ def draw_scene(screen, world, pan_x, day_amount, landscape, distressed=False, t=
         x, z = world_to_stage((fx, fy))
         draw_food(screen, x - pan_x, z, ctx.zoom)
     for z, kind, x, extra, creature_id in entities:
-        _draw_entity(screen, kind, x - pan_x, z, extra, creature_id, day_amount, distressed, t, ctx)
+        _draw_entity(screen, kind, x - pan_x, z, extra, creature_id, day_amount, distressed, t, ctx, birth_eggs)
 
 
 def draw_meter(screen, x, y, w, h, level, color):
@@ -1121,10 +1199,13 @@ def sensor_label(enabled, available):
 
 
 def draw_status(screen, font, world, paused, speed, sensors, threshold, alert_flash,
-                 hatched, egg_cracks, sound_muted=False, zoom=1.0, ambient_enabled=True):
+                 hatched, egg_cracks, sound_muted=False, zoom=1.0, ambient_enabled=True, pending_eggs=0):
     if hatched:
         status = "PAUSED" if paused else f"x{speed}"
         top_line = f"pop {world.population()}   {status}   zoom {zoom:.1f}x"
+        if pending_eggs > 0:
+            s = "s" if pending_eggs > 1 else ""
+            top_line += f"   {pending_eggs} new egg{s} to hatch"
     else:
         top_line = f"Left-click the egg to crack it open ({egg_cracks}/{EGG_CLICKS_NEEDED})"
     lines = [
@@ -1185,6 +1266,7 @@ def main():
     threshold = DEFAULT_ALERT_THRESHOLD
     alert = AlertState()
     egg = EggState()
+    birth_eggs = BirthEggs()
     needs = NeedsState()
     hatch_flash = 0.0
     t = 0.0
@@ -1216,11 +1298,16 @@ def main():
                     # barely moved - treat it as a click, not a drag
                     if egg.register_click(drag_start[0], drag_start[1], zoom):
                         hatch_flash = 0.4
+                        birth_eggs.seed_known(world)
                     elif egg.hatched:
+                        hit_button = False
                         for i, kind in enumerate(NEED_ITEMS):
                             if need_button_rect(i).collidepoint(drag_start):
                                 needs.feed(kind, world)
+                                hit_button = True
                                 break
+                        if not hit_button:
+                            birth_eggs.try_click(drag_start[0], drag_start[1], world, pan_x, zoom)
                 dragging_view = False
                 drag_start = None
             elif event.type == pygame.KEYDOWN:
@@ -1237,6 +1324,7 @@ def main():
                     landscape = generate_landscape()  # a new game gets a new landscape
                     alert = AlertState()
                     egg = EggState()
+                    birth_eggs = BirthEggs()
                     needs = NeedsState()
                     hatch_flash = 0.0
                     if sound_channel is not None:
@@ -1276,9 +1364,13 @@ def main():
         if egg.hatched and not paused:
             tick_accumulator += dt
             tick_interval = 1.0 / speed
+            stepped = False
             while tick_accumulator >= tick_interval:
                 world.step()
+                stepped = True
                 tick_accumulator -= tick_interval
+            if stepped:
+                birth_eggs.sync(world)
         else:
             tick_accumulator = 0.0
 
@@ -1287,14 +1379,14 @@ def main():
             if not paused:
                 needs.update(dt)
             listening_token = update_listening(sound_channel, tones, world, pygame.mouse.get_pos(),
-                                                pan_x, sound_muted, listening_token, zoom)
-            update_ambient(ambient_channels, ambient_tones, world, sound_muted, ambient_enabled)
+                                                pan_x, sound_muted, listening_token, zoom, birth_eggs)
+            update_ambient(ambient_channels, ambient_tones, world, sound_muted, ambient_enabled, birth_eggs)
         else:
             if listening_token is not None:
                 if sound_channel is not None:
                     sound_channel.stop()
                 listening_token = None
-            update_ambient(ambient_channels, ambient_tones, world, True, ambient_enabled)
+            update_ambient(ambient_channels, ambient_tones, world, True, ambient_enabled, birth_eggs)
 
         _, _, day_amount, _ = celestial_state(day_phase)
         shadow_dx, shadow_len = light_direction(day_phase)
@@ -1302,14 +1394,14 @@ def main():
         draw_background(screen, day_phase, pan_x, zoom, landscape)
         if egg.hatched:
             draw_scene(screen, world, pan_x, day_amount, landscape,
-                       distressed=needs.lowest() < NEED_LOW_THRESHOLD, t=t, ctx=ctx)
+                       distressed=needs.lowest() < NEED_LOW_THRESHOLD, t=t, ctx=ctx, birth_eggs=birth_eggs)
         else:
             draw_decor(screen, pan_x, day_amount, landscape, ctx)
             wobble = math.sin(t * 14.0) * (2 + egg.cracks * 1.5)
             draw_egg(screen, EGG_STAGE_X - pan_x, EGG_STAGE_Z, egg.cracks, wobble, egg.pulse, ctx)
         draw_night_overlay(screen, day_amount)
         draw_status(screen, font, world, paused, speed, sensors, threshold, alert.flash,
-                    egg.hatched, egg.cracks, sound_muted, zoom, ambient_enabled)
+                    egg.hatched, egg.cracks, sound_muted, zoom, ambient_enabled, len(birth_eggs.pending))
         if egg.hatched:
             draw_needs_panel(screen, needs)
         if hatch_flash > 0:
