@@ -429,7 +429,10 @@ rather than standing barely taller than one, rocks read as boulders
 instead of pebbles, and a river winds across the field toward the
 camera - a muddy shore, a darker deep-water band, a lighter shallow
 center, and a couple of softly drifting sparkle lines, rather than a
-single flat-colored ribbon. Trees and rocks are depth-sorted together with the creatures and
+single flat-colored ribbon. It doesn't just fade out into flat ground at
+the horizon either: a small rocky ridge sits right at its source, with a
+cascade spilling out of a notch in the rock and into the river's first
+bend. Trees and rocks are depth-sorted together with the creatures and
 predators, so a creature correctly stands in front of a nearby tree or
 disappears behind a farther one instead of scenery and population
 overlapping like two unrelated layers, and they pan with the view along
