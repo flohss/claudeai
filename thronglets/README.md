@@ -367,7 +367,6 @@ not just that the window doesn't crash.
 
 ```bash
 python main_vr.py
-python main_vr.py --population 150   # start with a bigger world
 ```
 
 A separate, standalone pygame window with a classic "pseudo-3D driving
@@ -385,8 +384,16 @@ output, nothing here targets or was tested with any VR hardware. It's a
 Unlike a static demo, this runs a real `simulation.py` `World` - the
 creatures here are the genuine evolving population, and the colored ring
 around one is its actual current signal, same meaning as every other
-renderer. `LEFT`/`RIGHT` pans the view, `SPACE` pauses, `UP`/`DOWN` change
-speed, `R` resets, `ESC` quits.
+renderer. It starts with exactly **one** creature, not hatched yet - it
+sits on screen as a speckled egg. Left-click it a few times to crack it
+open (the HUD counts the clicks); nothing in the world moves or steps
+until it hatches, so there's no risk of a predator finding it first.
+Once hatched, `LEFT`/`RIGHT` pans the view, `SPACE` pauses, `UP`/`DOWN`
+change speed, `R` resets back to a fresh egg, `ESC` quits. Since it only
+ever starts from a single creature, the population can't grow on its own
+(reproduction needs two) - it's a solitary companion to watch and listen
+to, not a repeat of the language-evolution demo from the other three
+renderers.
 
 **Optional sensors** (loosely inspired by the show's idea of a
 camera/microphone giving the Thronglets an outside signal to react to):

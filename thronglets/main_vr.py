@@ -26,23 +26,27 @@ optional, and this environment has neither piece of hardware to test
 against, so treat the default threshold as a starting point to recalibrate
 with [ and ] once you're on a real machine.
 
+The world starts with exactly one creature, not hatched yet - it sits on
+screen as an egg. Left-click it a few times to crack it open; nothing
+else in the world moves or steps until it hatches.
+
 The creature design is an original, simplified, geometric interpretation
 of the look (round yellow body, two hair-tufts, big eyes, blue lower
 half) - not a reproduction of the show's or the licensed game's actual
 pixel art.
 
 Controls:
+  LEFT CLICK     crack the egg (before it hatches)
   LEFT / RIGHT   pan the view
   SPACE          pause / resume
   UP / DOWN      simulation speed
-  R              reset to a fresh world
+  R              reset to a fresh egg
   A              toggle the microphone sensor
   C              toggle the camera sensor
   [ / ]          lower / raise the alert sensitivity threshold
   ESC            quit
 """
 
-import argparse
 import math
 import sys
 import threading
@@ -87,10 +91,27 @@ TOKEN_COLORS = [
     (70, 225, 210),
 ]
 
-DEFAULT_INIT_POP = 100
 ALERT_DURATION = 2.5    # seconds the phantom predator sighting lasts
 ALERT_COOLDOWN = 4.0    # seconds before another alert can trigger
 DEFAULT_ALERT_THRESHOLD = 0.5
+
+EGG_CLICKS_NEEDED = 6
+EGG_STAGE_X = 0.0
+EGG_STAGE_Z = 0.88
+EGG_COLOR = (240, 232, 205)
+EGG_SPECKLE = (200, 180, 140)
+EGG_CRACK_COLOR = (95, 78, 58)
+# Fixed crack polylines (relative to the egg's half-width/half-height),
+# revealed one at a time as clicks land - not randomized per frame, so the
+# cracks accumulate in place instead of jittering around.
+EGG_CRACK_LINES = [
+    [(-0.10, -0.42), (0.04, -0.12), (-0.06, 0.18), (0.14, 0.44)],
+    [(0.30, -0.32), (0.14, -0.02), (0.34, 0.24)],
+    [(-0.32, -0.18), (-0.16, 0.05), (-0.36, 0.30)],
+    [(0.02, -0.46), (-0.10, -0.20)],
+    [(0.26, 0.08), (0.40, -0.08)],
+    [(-0.20, 0.36), (-0.36, 0.14)],
+]
 
 
 def lerp_color(c1, c2, t):
@@ -207,6 +228,31 @@ class SensorHub:
     def stop(self):
         self._stop_mic()
         self._stop_camera()
+
+
+class EggState:
+    """The world always starts with a single unhatched creature. Nothing
+    steps until enough clicks land on the egg - register_click() returns
+    True the instant it hatches, so the caller can react (start ticking,
+    flash the screen) exactly once."""
+
+    def __init__(self):
+        self.cracks = 0
+        self.hatched = False
+        self.pulse = 0.0
+
+    def register_click(self, mx, my):
+        if self.hatched or not egg_contains(mx, my, EGG_STAGE_X, EGG_STAGE_Z):
+            return False
+        self.cracks += 1
+        self.pulse = 1.0
+        if self.cracks >= EGG_CLICKS_NEEDED:
+            self.hatched = True
+            return True
+        return False
+
+    def update(self, dt):
+        self.pulse = max(0.0, self.pulse - dt * 4.0)
 
 
 class AlertState:
@@ -361,6 +407,59 @@ def draw_food(screen, x, z):
     pygame.draw.circle(screen, FOOD_COLOR, (int(sx), int(sy)), r)
 
 
+def egg_rect(x, z, pulse=0.0):
+    sx, sy, scale = project(x, z)
+    egg_w = 30 * scale * (1.0 + pulse * 0.15)
+    egg_h = 40 * scale * (1.0 + pulse * 0.15)
+    rect = pygame.Rect(0, 0, egg_w, egg_h)
+    rect.center = (sx, sy)
+    return rect
+
+
+def egg_contains(mx, my, x, z):
+    rect = egg_rect(x, z)
+    if rect.width < 2:
+        return False
+    dx = (mx - rect.centerx) / (rect.width / 2 + 6)
+    dy = (my - rect.centery) / (rect.height / 2 + 6)
+    return dx * dx + dy * dy <= 1.0
+
+
+def draw_egg(screen, x, z, cracks, wobble, pulse):
+    rect = egg_rect(x, z, pulse)
+    if rect.width < 2:
+        return
+
+    shadow_w, shadow_h = rect.width * 1.3, rect.height * 0.35
+    pygame.draw.ellipse(screen, SHADOW_COLOR,
+                         (rect.centerx - shadow_w / 2, rect.bottom - shadow_h * 0.6, shadow_w, shadow_h))
+
+    wobbled = rect.copy()
+    wobbled.centerx += wobble
+    pygame.draw.ellipse(screen, EGG_COLOR, wobbled)
+
+    speckle_rng = _EGG_SPECKLE_RNG
+    for ox, oy in speckle_rng:
+        cx = wobbled.centerx + ox * wobbled.width
+        cy = wobbled.centery + oy * wobbled.height
+        r = max(1, int(wobbled.width * 0.05))
+        pygame.draw.circle(screen, EGG_SPECKLE, (int(cx), int(cy)), r)
+
+    crack_w = max(1, int(wobbled.width * 0.06))
+    for line in EGG_CRACK_LINES[:cracks]:
+        points = [(wobbled.centerx + ox * wobbled.width, wobbled.centery + oy * wobbled.height)
+                  for ox, oy in line]
+        if len(points) >= 2:
+            pygame.draw.lines(screen, EGG_CRACK_COLOR, False, points, crack_w)
+
+
+# Fixed speckle offsets (relative to egg half-size) - same reasoning as
+# EGG_CRACK_LINES, a stable decoration rather than per-frame noise.
+_EGG_SPECKLE_RNG = [
+    (-0.22, -0.28), (0.18, -0.22), (0.28, 0.05), (-0.28, 0.12), (0.05, 0.32), (-0.05, -0.05),
+]
+
+
 def draw_population(screen, world, pan_x):
     entities = []
     for c in world.creatures:
@@ -396,10 +495,15 @@ def sensor_label(enabled, available):
     return "ON" if enabled else "off"
 
 
-def draw_status(screen, font, world, paused, speed, sensors, threshold, alert_flash):
-    status = "PAUSED" if paused else f"x{speed}"
+def draw_status(screen, font, world, paused, speed, sensors, threshold, alert_flash,
+                 hatched, egg_cracks):
+    if hatched:
+        status = "PAUSED" if paused else f"x{speed}"
+        top_line = f"pop {world.population()}   {status}"
+    else:
+        top_line = f"Left-click the egg to crack it open ({egg_cracks}/{EGG_CLICKS_NEEDED})"
     lines = [
-        f"pop {world.population()}   {status}",
+        top_line,
         f"[A] mic: {sensor_label(sensors.mic_enabled, sensors.mic_available)}   "
         f"[C] camera: {sensor_label(sensors.camera_enabled, sensors.camera_available)}   "
         f"threshold: {threshold:.2f} ([ / ])",
@@ -415,7 +519,7 @@ def draw_status(screen, font, world, paused, speed, sensors, threshold, alert_fl
                         True, (255, 255, 255))
     screen.blit(hint, (10, SCREEN_H - 26))
 
-    if world.population() == 0:
+    if hatched and world.population() == 0:
         msg = font.render("Extinct - press R to start a new world.", True, (255, 90, 90))
         screen.blit(msg, (SCREEN_W / 2 - msg.get_width() / 2, SCREEN_H / 2))
 
@@ -427,19 +531,21 @@ def draw_status(screen, font, world, paused, speed, sensors, threshold, alert_fl
         screen.blit(msg, (SCREEN_W / 2 - msg.get_width() / 2, 46))
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Thronglets - pseudo-3D view with optional mic/camera sensors")
-    parser.add_argument("--population", type=int, default=DEFAULT_INIT_POP,
-                         help="starting population for the world")
-    args = parser.parse_args()
+def new_egg_world():
+    """The world always starts this way: a single, not-yet-hatched
+    creature. It doesn't step until the egg cracks open, so nothing else
+    in the world (predators included) can do anything to it first."""
+    return World(init_pop=1, predator_count=6)
 
+
+def main():
     pygame.init()
     pygame.display.set_caption("Thronglets - pseudo-3D view")
     screen = pygame.display.set_mode((SCREEN_W, SCREEN_H))
     clock = pygame.time.Clock()
     font = pygame.font.SysFont("consolas", 16)
 
-    world = World(init_pop=args.population, predator_count=6)
+    world = new_egg_world()
     sensors = SensorHub()
 
     pan_x = 0.0
@@ -448,10 +554,14 @@ def main():
     tick_accumulator = 0.0
     threshold = DEFAULT_ALERT_THRESHOLD
     alert = AlertState()
+    egg = EggState()
+    hatch_flash = 0.0
+    t = 0.0
     running = True
 
     while running:
         dt = min(clock.tick(60) / 1000.0, 0.25)
+        t += dt
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
@@ -465,8 +575,10 @@ def main():
                 elif event.key == pygame.K_DOWN:
                     speed = max(1, speed - (1 if speed <= 10 else 10))
                 elif event.key == pygame.K_r:
-                    world = World(init_pop=args.population, predator_count=6)
+                    world = new_egg_world()
                     alert = AlertState()
+                    egg = EggState()
+                    hatch_flash = 0.0
                 elif event.key == pygame.K_a:
                     sensors.toggle_mic()
                 elif event.key == pygame.K_c:
@@ -475,6 +587,9 @@ def main():
                     threshold = max(0.05, threshold - 0.05)
                 elif event.key == pygame.K_RIGHTBRACKET:
                     threshold = min(1.0, threshold + 0.05)
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                if egg.register_click(event.pos[0], event.pos[1]):
+                    hatch_flash = 0.4
 
         keys = pygame.key.get_pressed()
         if keys[pygame.K_LEFT]:
@@ -482,7 +597,10 @@ def main():
         if keys[pygame.K_RIGHT]:
             pan_x += 0.8 * dt
 
-        if not paused:
+        egg.update(dt)
+        hatch_flash = max(0.0, hatch_flash - dt)
+
+        if egg.hatched and not paused:
             tick_accumulator += dt
             tick_interval = 1.0 / speed
             while tick_accumulator >= tick_interval:
@@ -491,11 +609,21 @@ def main():
         else:
             tick_accumulator = 0.0
 
-        alert.update(world, sensors, threshold, dt)
+        if egg.hatched:
+            alert.update(world, sensors, threshold, dt)
 
         draw_background(screen)
-        draw_population(screen, world, pan_x)
-        draw_status(screen, font, world, paused, speed, sensors, threshold, alert.flash)
+        if egg.hatched:
+            draw_population(screen, world, pan_x)
+        else:
+            wobble = math.sin(t * 14.0) * (2 + egg.cracks * 1.5)
+            draw_egg(screen, EGG_STAGE_X - pan_x, EGG_STAGE_Z, egg.cracks, wobble, egg.pulse)
+        draw_status(screen, font, world, paused, speed, sensors, threshold, alert.flash,
+                    egg.hatched, egg.cracks)
+        if hatch_flash > 0:
+            overlay = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
+            overlay.fill((255, 255, 255, int(200 * min(1.0, hatch_flash / 0.4))))
+            screen.blit(overlay, (0, 0))
 
         pygame.display.flip()
 
