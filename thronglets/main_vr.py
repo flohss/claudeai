@@ -69,8 +69,7 @@ reproduces the exact same landscape again - not used yet, but there for
 a future save/load feature to restore a saved game's terrain rather
 than generating a new one over it.
 
-Lighting is faked, not real 3D: a highlight blob leans toward wherever
-the sun or moon currently is, and cast shadows stretch and swing around
+Lighting is faked, not real 3D: cast shadows stretch and swing around
 over the course of the day (short and centered at zenith, long and
 leaning near sunrise/sunset) via light_direction(day_phase). The ground
 is also scattered with small grass-tuft marks instead of being a single
@@ -782,19 +781,6 @@ def draw_ground_shadow(screen, sx, top_y, w, h, shadow_dx=0.0, shadow_len=1.0):
     pygame.draw.ellipse(screen, SHADOW_COLOR, (sx + offset - stretched_w / 2, top_y, stretched_w, h))
 
 
-def draw_highlight(screen, cx, cy, r, base_color, shadow_dx=0.0):
-    """A small lightened blob offset toward the light source - a cheap
-    fake-volumetric trick (no real per-pixel gradient) that gives flat
-    circular shapes some sense of roundness/lighting."""
-    if r < 3:
-        return
-    light_dx = -shadow_dx
-    hl_color = lerp_color(base_color, (255, 255, 255), 0.45)
-    hx = cx + light_dx * r * 0.35
-    hy = cy - r * 0.35
-    pygame.draw.circle(screen, hl_color, (int(hx), int(hy)), max(1, int(r * 0.38)))
-
-
 def draw_tree(screen, x, z, day_amount, ctx=DEFAULT_CTX):
     sx, sy, scale = project(x, z, ctx.zoom)
     # A tree towers over a creature the way a real tree towers over a
@@ -816,7 +802,6 @@ def draw_tree(screen, x, z, day_amount, ctx=DEFAULT_CTX):
         pygame.draw.circle(screen, leaves_color,
                             (int(sx + ox * leaf_r), int(canopy_y + oy * leaf_r)),
                             max(3, int(leaf_r * rr)))
-    draw_highlight(screen, sx, canopy_y, leaf_r, leaves_color, ctx.shadow_dx)
 
 
 def draw_rock(screen, x, z, day_amount, size=1.0, ctx=DEFAULT_CTX):
@@ -839,7 +824,6 @@ def draw_rock(screen, x, z, day_amount, size=1.0, ctx=DEFAULT_CTX):
         (sx + r, sy - r * 0.1), (sx + r * 0.6, sy + r * 0.4),
     ]
     pygame.draw.polygon(screen, shade, lit_face)
-    draw_highlight(screen, sx, sy - r * 0.35, r, color, ctx.shadow_dx)
 
 
 def draw_river(screen, river_offset, pan_x, day_amount, zoom=1.0):
@@ -933,7 +917,6 @@ def draw_critter(screen, x, z, token, distressed=False, creature_id=0, t=0.0, ct
     if token != 0:
         pygame.draw.circle(screen, TOKEN_COLORS[token], body_center,
                             int(body_r * 1.12), width=max(1, int(body_r * 0.12)))
-    draw_highlight(screen, body_center[0], body_center[1], body_r, BODY_COLOR, ctx.shadow_dx)
 
     eye_r = max(1, int(body_r * 0.26))
     eye_y = sy - body_r * 0.58
@@ -964,7 +947,6 @@ def draw_predator(screen, x, z, ctx=DEFAULT_CTX):
         return
     draw_ground_shadow(screen, sx, sy + r * 0.5, r * 1.8, r * 0.45, ctx.shadow_dx, ctx.shadow_len)
     pygame.draw.circle(screen, PREDATOR_COLOR, (int(sx), int(sy - r * 0.4)), r)
-    draw_highlight(screen, sx, sy - r * 0.4, r, PREDATOR_COLOR, ctx.shadow_dx)
     eye_r = max(1, int(r * 0.22))
     for dx in (-0.35, 0.35):
         ex, ey = sx + dx * r, sy - r * 0.55
@@ -1008,8 +990,6 @@ def draw_egg(screen, x, z, cracks, wobble, pulse, ctx=DEFAULT_CTX):
     wobbled = rect.copy()
     wobbled.centerx += wobble
     pygame.draw.ellipse(screen, EGG_COLOR, wobbled)
-    draw_highlight(screen, wobbled.centerx, wobbled.centery - wobbled.height * 0.15,
-                    wobbled.width * 0.5, EGG_COLOR, ctx.shadow_dx)
 
     speckle_rng = _EGG_SPECKLE_RNG
     for ox, oy in speckle_rng:

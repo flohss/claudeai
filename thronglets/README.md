@@ -426,13 +426,11 @@ future save/load feature can restore a saved game's exact terrain
 instead of randomizing over it.
 
 Lighting is faked rather than simulated in real 3D, but tracks the sun
-and moon anyway: creatures, trees, and rocks get a small highlight blob
-leaning toward wherever the light currently is, and their shadows
-stretch and swing around over the course of the day - short and centered
-under everything at solar/lunar noon, long and cast to one side near
-sunrise and sunset. The ground itself is scattered with small grass-tuft
-marks instead of being one flat color band, for a bit of texture instead
-of a perfectly uniform field.
+and moon anyway: shadows stretch and swing around over the course of the
+day - short and centered under everything at solar/lunar noon, long and
+cast to one side near sunrise and sunset. The ground itself is scattered
+with small grass-tuft marks instead of being one flat color band, for a
+bit of texture instead of a perfectly uniform field.
 
 Scrolling zooms in and out on that landscape, Minecraft-style: it
 magnifies the whole scene around a fixed point on the horizon instead of
