@@ -46,11 +46,16 @@ Each one blinks on its own schedule and wanders a couple of
 pixels in place even when the simulation isn't moving it, so a standing
 creature still reads as alive rather than a frozen sprite.
 
-Hovering the mouse over a creature plays a sustained tone for its
-evolved signal, same idea as the proximity-listening sound in main.py/
-main_web.py, but judged by *screen* distance instead of world distance,
-since depth already changes how big and how far apart things look here.
-Press M to mute it.
+By default, the whole population sounds at once: every evolved signal
+(token) currently used by a living creature plays continuously, all
+together - a running chorus of the group's communication rather than
+silence until you go looking for it. Press G to turn that off and hear
+only individual creatures instead. Hovering the mouse over a creature
+always plays a sustained tone for its evolved signal too - same idea as
+the proximity-listening sound in main.py/main_web.py, but judged by
+*screen* distance instead of world distance, since depth already
+changes how big and how far apart things look here - independently of
+the chorus toggle. Press M to mute all of it.
 
 The landscape is scaled the way a real one would be: trees tower several
 times a creature's height, rocks are boulders rather than pebbles, and a
@@ -88,7 +93,8 @@ Controls:
   SCROLL         zoom in / out
   SPACE          pause / resume
   UP / DOWN      simulation speed
-  M              mute/unmute the hover-listening sound
+  G              toggle the population chorus (on by default)
+  M              mute/unmute all sound
   R              reset to a fresh egg
   A              toggle the microphone sensor
   C              toggle the camera sensor
@@ -127,7 +133,9 @@ ZOOM_MIN = 0.6
 ZOOM_MAX = 3.5
 ZOOM_STEP = 0.1
 
-DAY_CYCLE_SECONDS = 60.0  # a full day+night loop, real time
+# A full in-game day lasts 24 real minutes - one in-game hour per real
+# minute, same ratio the show's clock-obsessed episode would approve of.
+DAY_CYCLE_SECONDS = 24 * 60.0
 
 # Day/night is one continuous blend, not a hard swap: every "landscape"
 # color below has a day and a night version, plus a warm twilight accent
@@ -611,17 +619,29 @@ class AlertState:
 
 
 def init_sound():
-    """Best-effort mixer setup - returns ({token: Sound}, Channel), or
-    (None, None) if there's no audio device at all. Never crashes the
-    game over something this optional (same pattern as SensorHub)."""
+    """Best-effort mixer setup - returns (tones, hover_channel,
+    ambient_tones, ambient_channels), or (None, None, None, None) if
+    there's no audio device at all. Never crashes the game over
+    something this optional (same pattern as SensorHub).
+
+    Two independent things share the mixer: hover_channel plays one
+    tone for whichever single creature the mouse is over (Channel 0),
+    while ambient_channels (Channels 1-5, one per token) can each play
+    at the same time, quieter, for the population-chorus sound - so
+    both can sound together without one cutting the other off."""
     try:
         pygame.mixer.init(frequency=22050, size=-16, channels=2)
+        pygame.mixer.set_num_channels(max(8, pygame.mixer.get_num_channels()))
         sample_rate = pygame.mixer.get_init()[0]
         tones = {token: _make_tone(freq, sample_rate)
                  for token, freq in enumerate(TOKEN_FREQS) if token != 0}
-        return tones, pygame.mixer.Channel(0)
+        ambient_tones = {token: _make_tone(freq, sample_rate, volume=0.12)
+                          for token, freq in enumerate(TOKEN_FREQS) if token != 0}
+        hover_channel = pygame.mixer.Channel(0)
+        ambient_channels = {token: pygame.mixer.Channel(token) for token in range(1, 6)}
+        return tones, hover_channel, ambient_tones, ambient_channels
     except pygame.error:
-        return None, None
+        return None, None, None, None
 
 
 def _make_tone(freq, sample_rate, duration=0.6, volume=0.25):
@@ -665,6 +685,27 @@ def update_listening(channel, tones, world, mouse_pos, pan_x, muted, listening_t
         else:
             channel.play(tones[target], loops=-1)
     return target
+
+
+def update_ambient(ambient_channels, ambient_tones, world, muted, ambient_enabled):
+    """The population's own 'chorus': every signal (token) currently
+    used by at least one living creature plays continuously, all at
+    once, each on its own channel - not just whichever one creature the
+    mouse happens to be over. On by default; turning it off (independent
+    of the master mute) falls back to hearing only the hover sound."""
+    if not ambient_channels:
+        return
+    if muted or not ambient_enabled:
+        for channel in ambient_channels.values():
+            channel.stop()
+        return
+    active_tokens = {c.token for c in world.creatures if c.alive and c.token != 0}
+    for token, channel in ambient_channels.items():
+        if token in active_tokens:
+            if not channel.get_busy():
+                channel.play(ambient_tones[token], loops=-1)
+        else:
+            channel.stop()
 
 
 def world_to_stage(pos):
@@ -1080,7 +1121,7 @@ def sensor_label(enabled, available):
 
 
 def draw_status(screen, font, world, paused, speed, sensors, threshold, alert_flash,
-                 hatched, egg_cracks, sound_muted=False, zoom=1.0):
+                 hatched, egg_cracks, sound_muted=False, zoom=1.0, ambient_enabled=True):
     if hatched:
         status = "PAUSED" if paused else f"x{speed}"
         top_line = f"pop {world.population()}   {status}   zoom {zoom:.1f}x"
@@ -1091,6 +1132,7 @@ def draw_status(screen, font, world, paused, speed, sensors, threshold, alert_fl
         f"[A] mic: {sensor_label(sensors.mic_enabled, sensors.mic_available)}   "
         f"[C] camera: {sensor_label(sensors.camera_enabled, sensors.camera_available)}   "
         f"threshold: {threshold:.2f} ([ / ])",
+        f"[G] population chorus: {'on' if ambient_enabled else 'off'}   "
         f"[M] hover-listen sound: {'muted' if sound_muted else 'on'}",
     ]
     for i, text in enumerate(lines):
@@ -1101,7 +1143,7 @@ def draw_status(screen, font, world, paused, speed, sensors, threshold, alert_fl
     draw_meter(screen, 160, meter_y, 140, 10, sensors.motion_level, (255, 180, 120))
 
     hint = font.render(
-        "LEFT/RIGHT pan   SCROLL zoom   SPACE pause   UP/DOWN speed   M mute sound   R reset   ESC quit",
+        "LEFT/RIGHT pan   SCROLL zoom   SPACE pause   UP/DOWN speed   G chorus   M mute sound   R reset   ESC quit",
         True, (255, 255, 255))
     screen.blit(hint, (10, SCREEN_H - 26))
 
@@ -1134,7 +1176,7 @@ def main():
     world = new_egg_world()
     landscape = generate_landscape()  # random, different every new game
     sensors = SensorHub()
-    tones, sound_channel = init_sound()
+    tones, sound_channel, ambient_tones, ambient_channels = init_sound()
 
     pan_x = 0.0
     paused = False
@@ -1150,6 +1192,7 @@ def main():
     running = True
     sound_muted = False
     listening_token = None
+    ambient_enabled = True  # the population's chorus is on by default
     zoom = 1.0
 
     dragging_view = False
@@ -1198,6 +1241,9 @@ def main():
                     hatch_flash = 0.0
                     if sound_channel is not None:
                         sound_channel.stop()
+                    if ambient_channels:
+                        for channel in ambient_channels.values():
+                            channel.stop()
                     listening_token = None
                 elif event.key == pygame.K_a:
                     sensors.toggle_mic()
@@ -1209,6 +1255,8 @@ def main():
                     threshold = min(1.0, threshold + 0.05)
                 elif event.key == pygame.K_m:
                     sound_muted = not sound_muted
+                elif event.key == pygame.K_g:
+                    ambient_enabled = not ambient_enabled
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 dragging_view = True
                 drag_start = event.pos
@@ -1240,10 +1288,13 @@ def main():
                 needs.update(dt)
             listening_token = update_listening(sound_channel, tones, world, pygame.mouse.get_pos(),
                                                 pan_x, sound_muted, listening_token, zoom)
-        elif listening_token is not None:
-            if sound_channel is not None:
-                sound_channel.stop()
-            listening_token = None
+            update_ambient(ambient_channels, ambient_tones, world, sound_muted, ambient_enabled)
+        else:
+            if listening_token is not None:
+                if sound_channel is not None:
+                    sound_channel.stop()
+                listening_token = None
+            update_ambient(ambient_channels, ambient_tones, world, True, ambient_enabled)
 
         _, _, day_amount, _ = celestial_state(day_phase)
         shadow_dx, shadow_len = light_direction(day_phase)
@@ -1258,7 +1309,7 @@ def main():
             draw_egg(screen, EGG_STAGE_X - pan_x, EGG_STAGE_Z, egg.cracks, wobble, egg.pulse, ctx)
         draw_night_overlay(screen, day_amount)
         draw_status(screen, font, world, paused, speed, sensors, threshold, alert.flash,
-                    egg.hatched, egg.cracks, sound_muted, zoom)
+                    egg.hatched, egg.cracks, sound_muted, zoom, ambient_enabled)
         if egg.hatched:
             draw_needs_panel(screen, needs)
         if hatch_flash > 0:
@@ -1271,6 +1322,9 @@ def main():
     sensors.stop()
     if sound_channel is not None:
         sound_channel.stop()
+    if ambient_channels:
+        for channel in ambient_channels.values():
+            channel.stop()
     pygame.quit()
     sys.exit()
 

@@ -401,11 +401,16 @@ schedule and wanders a couple of pixels in place between simulation
 steps, purely cosmetic idle motion meant to make it read as alive rather
 than a static sprite sitting on the grass.
 
-Hovering the mouse over a creature plays a sustained tone for its
-evolved signal - the same proximity-listening idea as `main.py`/
-`main_web.py`, adapted for a 3D view: "closest to the cursor" is judged
-by *screen* position rather than world position, since depth already
-changes how big and how far apart things look. Press `M` to mute it.
+By default the whole population sounds at once: every evolved signal
+(token) currently used by a living creature plays continuously and
+together, a running chorus rather than silence until you go hunting for
+it. Press `G` to turn that off and hear only individual creatures.
+Hovering the mouse over a creature always plays a sustained tone for its
+evolved signal too, independently of the chorus toggle - the same
+proximity-listening idea as `main.py`/`main_web.py`, adapted for a 3D
+view: "closest to the cursor" is judged by *screen* position rather than
+world position, since depth already changes how big and how far apart
+things look. Press `M` to mute everything.
 
 The background is a bit more filled in now too, and scaled the way a
 real landscape would be: trees tower several times a creature's height
@@ -439,7 +444,8 @@ to every other distance as you zoom - nothing gets distorted, it's
 purely "closer/farther," with proportions preserved the whole way.
 
 The sky runs its own day/night cycle the whole time (a full loop every
-60 real seconds, running even before the egg hatches) - the sun and moon
+24 real minutes - one in-game hour per real minute - running even before
+the egg hatches) - the sun and moon
 arc across the sky on opposite halves of the loop, never both up at once,
 with a warm sunrise/sunset tint at each crossing. Sky, hills, ground, grid,
 and trees all blend smoothly between their day and night colors, stars
