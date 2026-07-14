@@ -387,7 +387,7 @@ around one is its actual current signal, same meaning as every other
 renderer. It starts with exactly **one** creature, not hatched yet - it
 sits on screen as a speckled egg. Left-click it a few times to crack it
 open (the HUD counts the clicks); nothing in the world moves or steps
-until it hatches, so there's no risk of a predator finding it first.
+until it hatches.
 Once hatched, `LEFT`/`RIGHT` pans the view (or click and drag with the
 mouse), the scroll wheel zooms in/out, `SPACE` pauses, `UP`/`DOWN` change
 speed, `R` resets back to a fresh egg, `ESC` quits.
@@ -439,7 +439,7 @@ green foothill band without overlapping it, so the water emerges from
 beneath the hills and threads down through the forest toward the plain -
 and the trees make room for its bed, none ever stands in the water.
 Trees and rocks are depth-sorted together with the
-creatures and predators, so a creature correctly stands in front of a
+creatures, so a creature correctly stands in front of a
 nearby tree or disappears behind a farther one instead of scenery and
 population overlapping like two unrelated layers, and they pan with the
 view along with everything else.
@@ -478,10 +478,12 @@ doesn't change how anything behaves, just how it looks.
 **Optional sensors** (loosely inspired by the show's idea of a
 camera/microphone giving the Thronglets an outside signal to react to):
 press `A` to turn on the microphone, `C` for the webcam. When either
-picks up something loud or something moving, it adds a transient
-predator - like a real sighting - and lets the population's own
-already-evolved alarm response do the rest; it never touches genomes or
-state directly. **Both are off by default** - nothing is captured unless
+picks up something loud or something moving, a red alert flashes across
+the screen - purely visual, cooldown-gated so a sustained noise doesn't
+strobe. This version of the game has **no predators at all** (the world
+is a safe one - the population grows or starves, it never gets hunted),
+so unlike the other renderers the alert deliberately leaves the
+simulation untouched. **Both are off by default** - nothing is captured unless
 you explicitly press the key, and the HUD always shows `mic: ON/off` and
 `camera: ON/off` so it's never listening silently. `[`/`]` lower/raise how
 loud or how much motion it takes to trigger - there's no way to calibrate

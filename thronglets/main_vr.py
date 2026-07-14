@@ -11,11 +11,10 @@ regular monitor.
 
 Unlike the first version of this file, the population here is the real
 thing: a genuine simulation.py World, stepped every frame, with creatures
-that actually evolved their own colors and genuinely react to danger. The
-sensors don't touch the genome or the evolutionary mechanics at all - they
-just occasionally add a transient predator (like a real predator sighting)
-when the room gets loud or something moves in front of the camera, and let
-the population's already-evolved alarm response do the rest.
+that actually evolved their own colors. There are no predators in this
+version - the world is a safe one - so the sensors don't touch the
+simulation at all: a loud room or something moving in front of the camera
+just flashes a visible alert on screen, nothing more.
 
 Both sensors are OFF by default - nothing is captured unless you press A
 (microphone) or C (camera) yourself, and the HUD always shows their
@@ -89,9 +88,9 @@ sits at the horizon line itself, glued under the green foothill band
 without overlapping it, so the water emerges from beneath the hills and
 threads down through the forest toward the plain - and the trees make
 room for its bed (generate_landscape() never places one in the water).
-Trees and rocks are depth-sorted together with the creatures and
-predators (same painter's-algorithm pass draw_scene() uses for
-everything else), so a creature correctly stands in front of a nearby
+Trees and rocks are depth-sorted together with the creatures (same
+painter's-algorithm pass draw_scene() uses for everything else), so a
+creature correctly stands in front of a nearby
 tree or vanishes behind a farther one instead of scenery and population
 clashing as two unrelated layers - and, like the population, they pan
 with the view.
@@ -288,7 +287,7 @@ TOKEN_FREQS = [0, 261.63, 293.66, 329.63, 392.00, 440.00]
 # has to be judged the same way the eye judges it: on screen.
 LISTEN_RADIUS_PX = 70
 
-ALERT_DURATION = 2.5    # seconds the phantom predator sighting lasts
+ALERT_DURATION = 2.5    # seconds a sensor alert stays active
 ALERT_COOLDOWN = 4.0    # seconds before another alert can trigger
 DEFAULT_ALERT_THRESHOLD = 0.5
 
@@ -802,10 +801,11 @@ def draw_needs_panel(screen, needs):
 
 
 class AlertState:
-    """Turns a sensor's alert_level() into a transient predator sighting:
-    reused via World.add_random_predator()/remove_predator() rather than
-    touching genomes or danger-state directly, so the population's
-    already-evolved alarm response does all the actual reacting."""
+    """Turns a sensor's alert_level() into an on-screen alert flash. This
+    version of the game has no predators, so unlike earlier revisions the
+    alert deliberately leaves the World untouched - it's a purely visual
+    "something happened in the room" signal, still cooldown-gated so a
+    sustained noise doesn't strobe the screen."""
 
     def __init__(self):
         self.active_timer = 0.0
@@ -817,10 +817,7 @@ class AlertState:
         self.flash = max(0.0, self.flash - dt)
         if self.active_timer > 0:
             self.active_timer -= dt
-            if self.active_timer <= 0:
-                world.remove_predator()
         elif sensors.alert_level() > threshold and self.cooldown_timer <= 0:
-            world.add_random_predator()
             self.active_timer = ALERT_DURATION
             self.cooldown_timer = ALERT_COOLDOWN
             self.flash = 0.6
@@ -1429,11 +1426,12 @@ def draw_status(screen, font, world, paused, speed, sensors, threshold, alert_fl
 
 def new_egg_world():
     """The world always starts this way: a single, not-yet-hatched
-    creature. It doesn't step until the egg cracks open, so nothing else
-    in the world (predators included) can do anything to it first. It
-    also can't reproduce on its own once hatched, until a second
-    creature joins it (see install_solo_reproduction_guard)."""
-    world = World(init_pop=1, predator_count=6)
+    creature, and no predators at all - this version of the game is a
+    safe world where the population only ever grows or starves, it never
+    gets hunted. The world doesn't step until the egg cracks open, and
+    the lone creature can't reproduce on its own once hatched, until a
+    second creature joins it (see install_solo_reproduction_guard)."""
+    world = World(init_pop=1, predator_count=0)
     install_solo_reproduction_guard(world)
     return world
 
