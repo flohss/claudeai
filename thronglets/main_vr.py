@@ -84,11 +84,11 @@ the camera, plus scattered boulders. Trees tower several times a
 creature's height and rocks are boulders rather than pebbles. A river
 winds across the field toward the camera - a muddy shore fringe, a darker
 deep-water band, and a lighter shallow center with a couple of gently
-drifting sparkle lines, instead of one flat-colored ribbon - and it
-doesn't just fade out at the horizon: it spills out of a notch (a
-mountain pass) in the mountain range itself, with a cascade tumbling down
-into the river's first bend (draw_river_source), so the water reads as
-coming from real rock at the true back of the landscape.
+drifting sparkle lines, instead of one flat-colored ribbon. Its source
+sits right where the forest ends, touching the forest band without
+overlapping it, so the water reads as coming from just beyond the trees
+instead of vanishing into empty ground or reaching back into the
+mountains.
 Trees and rocks are depth-sorted together with the creatures and
 predators (same painter's-algorithm pass draw_scene() uses for
 everything else), so a creature correctly stands in front of a nearby
@@ -213,15 +213,16 @@ RIVER_BANK_NIGHT = (32, 28, 20)
 RIVER_SPARKLE_DAY = (215, 235, 240)
 RIVER_SPARKLE_NIGHT = (75, 92, 108)
 
-FOAM_COLOR_DAY = (235, 246, 250)
-FOAM_COLOR_NIGHT = (110, 128, 145)
 # A winding band cutting across the field, described as (x, z, half-width)
 # waypoints in stage coordinates, widening as it comes toward the camera.
 # A per-game river_offset (see generate_landscape()) shifts every x here
 # sideways, so the river doesn't sit in the exact same place every game.
+# Its source (first waypoint) sits just past FOREST_Z_RANGE's nearest edge
+# (0.28) - touching the forest band without overlapping it, instead of
+# reaching back into the mountains.
 RIVER_PATH = [
-    (0.5, 0.04, 0.02), (0.6, 0.18, 0.03), (0.7, 0.32, 0.045),
-    (0.64, 0.48, 0.06), (0.78, 0.63, 0.08), (0.92, 0.8, 0.11),
+    (0.5, 0.30, 0.02), (0.6, 0.40, 0.03), (0.7, 0.50, 0.045),
+    (0.64, 0.62, 0.06), (0.78, 0.73, 0.08), (0.92, 0.85, 0.11),
     (1.08, 1.0, 0.15),
 ]
 
@@ -961,9 +962,7 @@ def draw_background(screen, day_phase, pan_x=0.0, zoom=1.0, landscape=None, t=0.
 
     # The far layer is the true back of the landscape: a jagged mountain
     # range spanning the whole horizon, not gentle rolling hills - taller,
-    # sharper peaks than the near layer, with one forced low notch (a
-    # mountain pass) exactly above the river's source, so the cascade in
-    # draw_river_source() has somewhere to spill through.
+    # sharper peaks than the near layer.
     hill_y = HORIZON_Y - int(SCREEN_H * 0.05)
     ridge_n = 12
     ridge = []
@@ -972,10 +971,6 @@ def draw_background(screen, day_phase, pan_x=0.0, zoom=1.0, landscape=None, t=0.
         amp1 = 55 * math.sin(i * 0.9 + landscape.hill_far_phase)
         amp2 = 28 * math.sin(i * 2.3 + landscape.hill_far_phase * 1.7)
         ridge.append((rx, hill_y - 45 - amp1 - amp2))
-    src_x, src_z, _ = RIVER_PATH[0]
-    notch_x, _, _ = project(src_x + landscape.river_offset - pan_x, src_z, zoom)
-    ridge.append((notch_x, hill_y - 15))
-    ridge.sort(key=lambda p: p[0])
     far_hills = [(0, HORIZON_Y)] + ridge + [(SCREEN_W, HORIZON_Y)]
     pygame.draw.polygon(screen, hill_far, far_hills)
 
@@ -1004,7 +999,6 @@ def draw_background(screen, day_phase, pan_x=0.0, zoom=1.0, landscape=None, t=0.
         pygame.draw.line(screen, grid_color, (sx0, sy0), (sx1, sy1), 1)
 
     draw_grass_tufts(screen, landscape, pan_x, day_amount, zoom)
-    draw_river_source(screen, landscape.river_offset, pan_x, day_amount, zoom, t)
     draw_river(screen, landscape.river_offset, pan_x, day_amount, zoom, t)
 
 
@@ -1067,29 +1061,6 @@ def draw_rock(screen, x, z, day_amount, size=1.0, ctx=DEFAULT_CTX):
         (sx + r, sy - r * 0.1), (sx + r * 0.6, sy + r * 0.4),
     ]
     pygame.draw.polygon(screen, shade, lit_face)
-
-
-def draw_river_source(screen, river_offset, pan_x, day_amount, zoom=1.0, t=0.0):
-    """The cascade spilling out of the mountain pass (the forced notch
-    in draw_background()'s far-hills ridge) down into the river's first
-    bend - so the water reads as coming from real rock at the true back
-    of the landscape, instead of the river just fading out at the
-    horizon. Uses the same hill_y/notch-depth numbers as that ridge so
-    the two always line up."""
-    foam = lerp_color(FOAM_COLOR_NIGHT, FOAM_COLOR_DAY, day_amount)
-
-    src_x, src_z, _ = RIVER_PATH[0]
-    sx, base_y, _ = project(src_x + river_offset - pan_x, src_z, zoom)
-    hill_y = HORIZON_Y - int(SCREEN_H * 0.05)
-    notch_y = hill_y - 15
-
-    # the cascade: a pale streak falling from the mountain pass into the
-    # river's first waypoint, with a little drifting foam burst where it lands
-    pygame.draw.line(screen, foam, (sx, notch_y), (sx, base_y + 2), 4)
-    for i in range(5):
-        fx = sx + math.sin(t * 3.2 + i * 1.6) * 5
-        fy = base_y + 2 + i * 2
-        pygame.draw.circle(screen, foam, (int(fx), int(fy)), 2)
 
 
 def draw_river(screen, river_offset, pan_x, day_amount, zoom=1.0, t=0.0):
