@@ -388,12 +388,17 @@ renderer. It starts with exactly **one** creature, not hatched yet - it
 sits on screen as a speckled egg. Left-click it a few times to crack it
 open (the HUD counts the clicks); nothing in the world moves or steps
 until it hatches, so there's no risk of a predator finding it first.
-Once hatched, `LEFT`/`RIGHT` pans the view, `SPACE` pauses, `UP`/`DOWN`
-change speed, `R` resets back to a fresh egg, `ESC` quits. Since it only
-ever starts from a single creature, the population can't grow on its own
-(reproduction needs two) - it's a solitary companion to watch and listen
-to, not a repeat of the language-evolution demo from the other three
-renderers.
+Once hatched, `LEFT`/`RIGHT` pans the view (or click and drag with the
+mouse), `SPACE` pauses, `UP`/`DOWN` change speed, `R` resets back to a
+fresh egg, `ESC` quits. Since it only ever starts from a single creature,
+the population can't grow on its own (reproduction needs two) - it's a
+solitary companion to watch and listen to, not a repeat of the
+language-evolution demo from the other three renderers.
+
+Standing still doesn't mean frozen: each creature blinks on its own
+schedule and wanders a couple of pixels in place between simulation
+steps, purely cosmetic idle motion meant to make it read as alive rather
+than a static sprite sitting on the grass.
 
 The sky runs its own day/night cycle the whole time (a full loop every
 60 real seconds, running even before the egg hatches) - the sun and moon

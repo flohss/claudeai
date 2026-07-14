@@ -42,11 +42,14 @@ penalty than that.
 The creature design is an original, simplified, geometric interpretation
 of the look (round yellow body, two hair-tufts, big eyes, blue lower
 half) - not a reproduction of the show's or the licensed game's actual
-pixel art.
+pixel art. Each one blinks on its own schedule and wanders a couple of
+pixels in place even when the simulation isn't moving it, so a standing
+creature still reads as alive rather than a frozen sprite.
 
 Controls:
   LEFT CLICK     crack the egg / feed an item from the needs panel
-  LEFT / RIGHT   pan the view
+  CLICK + DRAG   pan the view with the mouse
+  LEFT / RIGHT   pan the view with the keyboard
   SPACE          pause / resume
   UP / DOWN      simulation speed
   R              reset to a fresh egg
@@ -68,6 +71,15 @@ from simulation import HEIGHT, MAX_ENERGY, WIDTH, World
 
 SCREEN_W, SCREEN_H = 1000, 700
 HORIZON_Y = int(SCREEN_H * 0.42)
+
+# Dragging the mouse across the full window width pans by roughly 1.6
+# stage units (a bit more than half the visible field of view).
+PAN_DRAG_SENSITIVITY = 1.6 / SCREEN_W
+# A mouse-up is treated as a click (egg / needs panel) rather than a pan
+# if the total travel while the button was held stayed under this, in
+# pixels - lets a light click and a deliberate drag coexist on the same
+# button.
+PAN_DRAG_CLICK_THRESHOLD = 6
 
 DAY_CYCLE_SECONDS = 60.0  # a full day+night loop, real time
 
@@ -570,11 +582,45 @@ def draw_night_overlay(screen, day_amount):
     screen.blit(overlay, (0, 0))
 
 
-def draw_critter(screen, x, z, token, distressed=False):
+def _creature_seed(creature_id):
+    """A stable pseudo-random value in [0, 1) per creature id, used to
+    desync blinking/bobbing between creatures instead of having the whole
+    population blink and bounce in unison."""
+    return (int(creature_id) * 2654435761) % 1000 / 1000.0
+
+
+def idle_offset(creature_id, t):
+    """A few screen pixels of wandering motion so a creature standing
+    still still reads as alive rather than a frozen sprite."""
+    seed = _creature_seed(creature_id)
+    ox = math.sin(t * 1.6 + seed * 6.28318) * 1.6
+    oy = math.sin(t * 2.3 + seed * 6.28318 + 1.7) * 1.1
+    return ox, oy
+
+
+def eye_openness(creature_id, t):
+    """1.0 = fully open, near 0 = mid-blink. Each creature blinks on its
+    own cycle (roughly every 2.6-5s), briefly, like a real tic."""
+    seed = _creature_seed(creature_id)
+    cycle = 2.6 + seed * 2.4
+    phase = (t + seed * 11.0) % cycle
+    half = 0.06
+    if phase < half:
+        return max(0.05, 1.0 - phase / half)
+    if phase < half * 2:
+        return max(0.05, (phase - half) / half)
+    return 1.0
+
+
+def draw_critter(screen, x, z, token, distressed=False, creature_id=0, t=0.0):
     sx, sy, scale = project(x, z)
     body_r = int(24 * scale)
     if body_r < 2:
         return
+
+    ox, oy = idle_offset(creature_id, t)
+    sx += ox * scale
+    sy += oy * scale
 
     shadow_w, shadow_h = body_r * 1.7, body_r * 0.5
     pygame.draw.ellipse(screen, SHADOW_COLOR,
@@ -597,11 +643,15 @@ def draw_critter(screen, x, z, token, distressed=False):
 
     eye_r = max(1, int(body_r * 0.26))
     eye_y = sy - body_r * 0.58
+    openness = eye_openness(creature_id, t)
     for dx in (-0.34, 0.34):
         ex = sx + dx * body_r
-        pygame.draw.circle(screen, EYE_WHITE, (int(ex), int(eye_y)), eye_r)
-        pygame.draw.circle(screen, EYE_PUPIL, (int(ex), int(eye_y + eye_r * 0.2)),
-                            max(1, int(eye_r * 0.45)))
+        eye_h = max(1, int(eye_r * 2 * openness))
+        pygame.draw.ellipse(screen, EYE_WHITE,
+                             (ex - eye_r, eye_y - eye_h / 2, eye_r * 2, eye_h))
+        if openness > 0.35:
+            pygame.draw.circle(screen, EYE_PUPIL, (int(ex), int(eye_y + eye_r * 0.2)),
+                                max(1, int(eye_r * 0.45)))
 
     mouth_w, mouth_h = max(1, int(body_r * 0.22)), max(1, int(body_r * 0.16))
     if distressed:
@@ -686,23 +736,23 @@ _EGG_SPECKLE_RNG = [
 ]
 
 
-def draw_population(screen, world, pan_x, distressed=False):
+def draw_population(screen, world, pan_x, distressed=False, t=0.0):
     entities = []
     for c in world.creatures:
         if c.alive:
             x, z = world_to_stage(c.pos)
-            entities.append((z, "creature", x, c.token))
+            entities.append((z, "creature", x, c.token, c.id))
     for p in world.predators:
         x, z = world_to_stage(p.pos)
-        entities.append((z, "predator", x, None))
+        entities.append((z, "predator", x, None, None))
     entities.sort(key=lambda e: e[0])
 
     for fx, fy in world.food:
         x, z = world_to_stage((fx, fy))
         draw_food(screen, x - pan_x, z)
-    for z, kind, x, token in entities:
+    for z, kind, x, token, creature_id in entities:
         if kind == "creature":
-            draw_critter(screen, x - pan_x, z, token, distressed)
+            draw_critter(screen, x - pan_x, z, token, distressed, creature_id, t)
         else:
             draw_predator(screen, x - pan_x, z)
 
@@ -787,12 +837,32 @@ def main():
     day_phase = 0.1  # start in early-morning light
     running = True
 
+    dragging_view = False
+    drag_start = None
+    drag_traveled = 0.0
+
     while running:
         dt = min(clock.tick(60) / 1000.0, 0.25)
         t += dt
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+            elif event.type == pygame.MOUSEMOTION:
+                if dragging_view:
+                    pan_x -= event.rel[0] * PAN_DRAG_SENSITIVITY
+                    drag_traveled += abs(event.rel[0])
+            elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+                if dragging_view and drag_start is not None and drag_traveled < PAN_DRAG_CLICK_THRESHOLD:
+                    # barely moved - treat it as a click, not a drag
+                    if egg.register_click(drag_start[0], drag_start[1]):
+                        hatch_flash = 0.4
+                    elif egg.hatched:
+                        for i, kind in enumerate(NEED_ITEMS):
+                            if need_button_rect(i).collidepoint(drag_start):
+                                needs.feed(kind, world)
+                                break
+                dragging_view = False
+                drag_start = None
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     running = False
@@ -817,13 +887,9 @@ def main():
                 elif event.key == pygame.K_RIGHTBRACKET:
                     threshold = min(1.0, threshold + 0.05)
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                if egg.register_click(event.pos[0], event.pos[1]):
-                    hatch_flash = 0.4
-                elif egg.hatched:
-                    for i, kind in enumerate(NEED_ITEMS):
-                        if need_button_rect(i).collidepoint(event.pos):
-                            needs.feed(kind, world)
-                            break
+                dragging_view = True
+                drag_start = event.pos
+                drag_traveled = 0.0
 
         keys = pygame.key.get_pressed()
         if keys[pygame.K_LEFT]:
@@ -852,7 +918,7 @@ def main():
 
         draw_background(screen, day_phase)
         if egg.hatched:
-            draw_population(screen, world, pan_x, distressed=needs.lowest() < NEED_LOW_THRESHOLD)
+            draw_population(screen, world, pan_x, distressed=needs.lowest() < NEED_LOW_THRESHOLD, t=t)
         else:
             wobble = math.sin(t * 14.0) * (2 + egg.cracks * 1.5)
             draw_egg(screen, EGG_STAGE_X - pan_x, EGG_STAGE_Z, egg.cracks, wobble, egg.pulse)
