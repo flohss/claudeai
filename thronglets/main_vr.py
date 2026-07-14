@@ -144,13 +144,23 @@ forward, so every distance keeps the same size ratio to every other
 distance as you zoom - things get uniformly bigger or smaller, the
 perspective itself never distorts.
 
+Press V to flip the whole thing to a flat, top-down 2D view of the same
+world, in the spirit of main.py: the field seen from straight above, with
+food as green dots and each creature a body dot wearing its token-colour
+ring (same evolved-signal meaning as always) plus a faint outer halo in
+its current emotion's colour, since there's no face to read from overhead.
+Everything you can do in the 3D view - hatch eggs, right-click a creature
+for its action menu - works the same in 2D; only the camera changed.
+Press V again to flip back.
+
 Controls:
   LEFT CLICK     crack an egg open (start egg or a birth egg in the field)
   RIGHT CLICK    open the action menu - on a creature (feed / wash / play
                  / set on fire / stab) or on bare ground (add an egg)
   CLICK + DRAG   pan the view with the mouse
   LEFT / RIGHT   pan the view with the keyboard
-  SCROLL         zoom in / out
+  SCROLL         zoom in / out (3D view)
+  V              switch between the 3D view and a flat top-down 2D view
   SPACE          pause / resume
   UP / DOWN      simulation speed
   G              toggle the population chorus (on by default)
@@ -175,6 +185,25 @@ from simulation import BUD_ENERGY, HEIGHT, MAX_ENERGY, WIDTH, World
 
 SCREEN_W, SCREEN_H = 1000, 700
 HORIZON_Y = int(SCREEN_H * 0.42)
+
+# The flat top-down 2D view (toggled with V): the World's field is
+# WIDTH x HEIGHT world units, mapped straight onto the whole screen -
+# a plain orthographic overhead view, in the spirit of main.py.
+TOP2D_SCALE_X = SCREEN_W / WIDTH
+TOP2D_SCALE_Y = SCREEN_H / HEIGHT
+CREATURE_HIT_RADIUS_2D = 14   # screen px: how close a click must be to a body
+EGG_HIT_RADIUS_2D = 16
+
+
+def world_to_screen_2d(pos):
+    """World coordinates (0..WIDTH, 0..HEIGHT) -> screen pixels, for the
+    top-down view."""
+    return int(pos[0] * TOP2D_SCALE_X), int(pos[1] * TOP2D_SCALE_Y)
+
+
+def screen2d_contains(mx, my, world_pos, radius_px):
+    sx, sy = world_to_screen_2d(world_pos)
+    return (mx - sx) ** 2 + (my - sy) ** 2 <= radius_px * radius_px
 
 # Dragging the mouse across the full window width pans by roughly 1.6
 # stage units (a bit more than half the visible field of view).
@@ -382,6 +411,14 @@ GRIEF_DURATION = 6.0      # seconds a death keeps grieving the survivors near it
 PANIC_RUN_SPEED = 34.0    # a burning creature bolting, world units / second
 FEAR_FLEE_SPEED = 20.0    # fleeing a nearby horror, world units / second
 TEAR_COLOR = (150, 205, 245)
+# A halo colour per emotion, used to show feelings in the top-down view
+# where there's no face to read (calm gets none).
+EMOTION_HALO = {
+    "pain": (240, 60, 40),
+    "fear": (255, 170, 40),
+    "sad": (90, 150, 230),
+    "joy": (90, 220, 120),
+}
 
 # Bundles the three "how should this frame be projected/lit" values that
 # almost every draw_* function needs together, instead of three separate
@@ -619,17 +656,29 @@ class EggState:
         self.hatched = False
         self.pulse = 0.0
 
-    def register_click(self, mx, my, zoom=1.0, pan_x=0.0):
-        # Hit-test where the egg is actually drawn - the view may have
-        # been panned before the first hatch, and the egg pans with it.
-        if self.hatched or not egg_contains(mx, my, EGG_STAGE_X - pan_x, EGG_STAGE_Z, zoom):
-            return False
+    def _crack(self):
         self.cracks += 1
         self.pulse = 1.0
         if self.cracks >= EGG_CLICKS_NEEDED:
             self.hatched = True
             return True
         return False
+
+    def register_click(self, mx, my, zoom=1.0, pan_x=0.0):
+        # Hit-test where the egg is actually drawn - the view may have
+        # been panned before the first hatch, and the egg pans with it.
+        if self.hatched or not egg_contains(mx, my, EGG_STAGE_X - pan_x, EGG_STAGE_Z, zoom):
+            return False
+        return self._crack()
+
+    def register_click_2d(self, mx, my, world):
+        # Top-down view: the starting egg is drawn at the lone creature's
+        # world position, hit-tested as a flat circle there.
+        if self.hatched or not world.creatures:
+            return False
+        if not screen2d_contains(mx, my, world.creatures[0].pos, EGG_HIT_RADIUS_2D):
+            return False
+        return self._crack()
 
     def update(self, dt):
         self.pulse = max(0.0, self.pulse - dt * 4.0)
@@ -681,6 +730,12 @@ class BirthEggs:
         self.known_ids.add(creature_id)
         world.set_dormant(creature_id, True)
 
+    def _register_hatch_click(self, creature_id, world):
+        self.pending[creature_id] += 1
+        if self.pending[creature_id] >= EGG_CLICKS_NEEDED:
+            del self.pending[creature_id]
+            world.set_dormant(creature_id, False)
+
     def try_click(self, mx, my, world, pan_x, zoom=1.0):
         """Returns True if the click landed on a pending birth egg
         (whether or not that particular click was the one that hatched
@@ -690,10 +745,17 @@ class BirthEggs:
             if c.alive and c.id in self.pending:
                 x, z = world_to_stage(c.pos)
                 if egg_contains(mx, my, x - pan_x, z, zoom):
-                    self.pending[c.id] += 1
-                    if self.pending[c.id] >= EGG_CLICKS_NEEDED:
-                        del self.pending[c.id]
-                        world.set_dormant(c.id, False)
+                    self._register_hatch_click(c.id, world)
+                    return True
+        return False
+
+    def try_click_2d(self, mx, my, world):
+        """The top-down-view counterpart of try_click(): hit-tests a
+        pending egg as a flat circle at its world position."""
+        for c in world.creatures:
+            if c.alive and c.id in self.pending:
+                if screen2d_contains(mx, my, c.pos, EGG_HIT_RADIUS_2D):
+                    self._register_hatch_click(c.id, world)
                     return True
         return False
 
@@ -768,6 +830,24 @@ def find_creature_at(mx, my, world, pan_x, zoom=1.0, birth_eggs=None, t=0.0):
         r = body_r * 1.3
         if (mx - cx) ** 2 + (my - cy) ** 2 <= r * r and z > best_z:
             best, best_z = c, z
+    return best
+
+
+def find_creature_at_2d(mx, my, world, birth_eggs=None):
+    """The top-down-view counterpart of find_creature_at(): the living,
+    non-pending creature whose flat overhead position is under the click
+    (nearest one wins), or None."""
+    best = None
+    best_d = CREATURE_HIT_RADIUS_2D ** 2
+    for c in world.creatures:
+        if not c.alive:
+            continue
+        if birth_eggs is not None and birth_eggs.is_pending(c.id):
+            continue
+        sx, sy = world_to_screen_2d(c.pos)
+        d = (mx - sx) ** 2 + (my - sy) ** 2
+        if d <= best_d:
+            best, best_d = c, d
     return best
 
 
@@ -1833,6 +1913,83 @@ def draw_scene(screen, world, pan_x, day_amount, landscape, distressed=False, t=
                      horror, emotion)
 
 
+def draw_background_2d(screen, day_amount):
+    """The flat overhead field: a single ground fill with a faint grid,
+    day/night blended - deliberately plain, like main.py's playfield."""
+    ground = lerp_color(GROUND_NEAR_NIGHT, GROUND_NEAR_DAY, day_amount)
+    screen.fill(ground)
+    grid = lerp_color(GRID_COLOR_NIGHT, GRID_COLOR_DAY, day_amount)
+    for gx in range(0, int(WIDTH) + 1, 20):
+        x = int(gx * TOP2D_SCALE_X)
+        pygame.draw.line(screen, grid, (x, 0), (x, SCREEN_H), 1)
+    for gy in range(0, int(HEIGHT) + 1, 20):
+        y = int(gy * TOP2D_SCALE_Y)
+        pygame.draw.line(screen, grid, (0, y), (SCREEN_W, y), 1)
+
+
+def draw_critter_2d(screen, cpos, token, emotion=None, burning=False, agonizing=False, t=0.0, creature_id=0):
+    """One creature seen from directly above: a body dot with its evolved
+    token ring (same colours/meaning as every other view), plus a faint
+    outer halo in its current emotion's colour so feelings still read
+    without a face. Burning/agonising get the same fire/shudder cues."""
+    sx, sy = world_to_screen_2d(cpos)
+    if agonizing:
+        sx += int(math.sin(t * 40.0 + creature_id) * 3)
+        sy += int(math.sin(t * 34.0 + creature_id * 2) * 3)
+    halo = EMOTION_HALO.get(emotion)
+    if halo is not None:
+        pygame.draw.circle(screen, halo, (sx, sy), 13, width=2)
+    pygame.draw.circle(screen, BODY_COLOR, (sx, sy), 6)
+    if token != 0:
+        pygame.draw.circle(screen, TOKEN_COLORS[token], (sx, sy), 9, width=2)
+    if burning:
+        for k in (-1, 0, 1):
+            fx = sx + k * 4
+            fh = 10 + int(math.sin(t * 13.0 + k * 5.0) * 4)
+            pygame.draw.polygon(screen, FLAME_COLORS[0], [(fx - 3, sy), (fx + 3, sy), (fx, sy - fh)])
+            pygame.draw.polygon(screen, FLAME_COLORS[1], [(fx - 2, sy), (fx + 2, sy), (fx, sy - fh * 0.6)])
+
+
+def draw_scene_2d(screen, world, day_amount, t=0.0, birth_eggs=None, horror=None, sentience=None):
+    """The whole top-down view: flat field, food, ground marks, then every
+    creature from above (pending ones as little eggs), mirroring the
+    pseudo-3D draw_scene() but orthographic. Same World, same tokens, same
+    emotions - just seen from the sky."""
+    draw_background_2d(screen, day_amount)
+
+    for fx, fy in world.food:
+        sx, sy = world_to_screen_2d((fx, fy))
+        pygame.draw.circle(screen, FOOD_COLOR, (sx, sy), 3)
+
+    if horror is not None:
+        for x, z, kind, left in horror.decals:
+            # decals are stored in stage coords; recover the world pos
+            wx = (x + 1.3) / 2.6 * WIDTH
+            wy = z * HEIGHT
+            sx, sy = world_to_screen_2d((wx, wy))
+            alpha = int(200 * max(0.0, min(1.0, left / DECAL_DURATION)))
+            color = BLOOD_COLOR if kind == "blood" else SCORCH_COLOR
+            surf = pygame.Surface((16, 16), pygame.SRCALPHA)
+            pygame.draw.circle(surf, (*color, alpha), (8, 8), 8)
+            screen.blit(surf, (sx - 8, sy - 8))
+
+    emotions = sentience.emotions if sentience is not None else {}
+    for c in world.creatures:
+        if not c.alive:
+            continue
+        if birth_eggs is not None and birth_eggs.is_pending(c.id):
+            sx, sy = world_to_screen_2d(c.pos)
+            rect = pygame.Rect(0, 0, 14, 18)
+            rect.center = (sx, sy)
+            pygame.draw.ellipse(screen, EGG_COLOR, rect)
+            pygame.draw.ellipse(screen, EGG_CRACK_COLOR, rect, width=1)
+            continue
+        draw_critter_2d(screen, c.pos, c.token, emotions.get(c.id),
+                        burning=horror is not None and horror.is_burning(c.id),
+                        agonizing=horror is not None and horror.is_agonizing(c.id),
+                        t=t, creature_id=c.id)
+
+
 def draw_meter(screen, x, y, w, h, level, color):
     pygame.draw.rect(screen, (40, 40, 40), (x, y, w, h))
     fill_w = int(w * max(0.0, min(1.0, level)))
@@ -1848,10 +2005,12 @@ def sensor_label(enabled, available):
 
 
 def draw_status(screen, font, world, paused, speed, sensors, threshold, alert_flash,
-                 hatched, egg_cracks, sound_muted=False, zoom=1.0, ambient_enabled=True, pending_eggs=0):
+                 hatched, egg_cracks, sound_muted=False, zoom=1.0, ambient_enabled=True, pending_eggs=0,
+                 top_down=False):
     if hatched:
         status = "PAUSED" if paused else f"x{speed}"
-        top_line = f"pop {world.population()}   {status}   zoom {zoom:.1f}x"
+        view = "top-down 2D" if top_down else f"3D (zoom {zoom:.1f}x)"
+        top_line = f"pop {world.population()}   {status}   [V] view: {view}"
         if pending_eggs > 0:
             s = "s" if pending_eggs > 1 else ""
             top_line += f"   {pending_eggs} new egg{s} to hatch"
@@ -1878,7 +2037,7 @@ def draw_status(screen, font, world, paused, speed, sensors, threshold, alert_fl
         screen.blit(tip, (10, meter_y + 16))
 
     hint = font.render(
-        "LEFT drag pan   RIGHT-click menu   SCROLL zoom   SPACE pause   UP/DOWN speed   "
+        "V view   RIGHT-click menu   LEFT drag pan   SCROLL zoom   SPACE pause   UP/DOWN speed   "
         "G chorus   M mute   R reset   ESC quit",
         True, (255, 255, 255))
     screen.blit(hint, (10, SCREEN_H - 26))
@@ -1941,6 +2100,7 @@ def main():
     current_cry = None
     ambient_enabled = True  # the population's chorus is on by default
     zoom = 1.0
+    top_down = False  # V toggles the flat overhead 2D view
 
     dragging_view = False
     drag_start = None
@@ -1954,7 +2114,8 @@ def main():
                 running = False
             elif event.type == pygame.MOUSEMOTION:
                 if dragging_view:
-                    pan_x -= event.rel[0] * PAN_DRAG_SENSITIVITY
+                    if not top_down:   # the overhead view shows the whole field; nothing to pan
+                        pan_x -= event.rel[0] * PAN_DRAG_SENSITIVITY
                     drag_traveled += abs(event.rel[0])
             elif event.type == pygame.MOUSEWHEEL:
                 zoom = max(ZOOM_MIN, min(ZOOM_MAX, zoom + event.y * ZOOM_STEP))
@@ -1962,11 +2123,19 @@ def main():
                 if dragging_view and drag_start is not None and drag_traveled < PAN_DRAG_CLICK_THRESHOLD:
                     # barely moved - treat it as a click, not a drag: crack
                     # the starting egg, or a birth egg out in the field
-                    if egg.register_click(drag_start[0], drag_start[1], zoom, pan_x):
+                    # (hit-tested for whichever view is showing)
+                    if top_down:
+                        hatched_now = egg.register_click_2d(drag_start[0], drag_start[1], world)
+                    else:
+                        hatched_now = egg.register_click(drag_start[0], drag_start[1], zoom, pan_x)
+                    if hatched_now:
                         hatch_flash = 0.4
                         birth_eggs.seed_known(world)
                     elif egg.hatched:
-                        birth_eggs.try_click(drag_start[0], drag_start[1], world, pan_x, zoom)
+                        if top_down:
+                            birth_eggs.try_click_2d(drag_start[0], drag_start[1], world)
+                        else:
+                            birth_eggs.try_click(drag_start[0], drag_start[1], world, pan_x, zoom)
                 dragging_view = False
                 drag_start = None
             elif event.type == pygame.KEYDOWN:
@@ -2011,6 +2180,9 @@ def main():
                     sound_muted = not sound_muted
                 elif event.key == pygame.K_g:
                     ambient_enabled = not ambient_enabled
+                elif event.key == pygame.K_v:
+                    top_down = not top_down   # switch 3D <-> flat overhead
+                    menu.close()              # menu positions are view-specific
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 if menu.is_open():
                     # a left-click while the menu is up picks a row (or
@@ -2024,7 +2196,10 @@ def main():
                 # right-click: a creature's action menu, or "add an egg"
                 # on bare ground - only once the world is running
                 if egg.hatched:
-                    target = find_creature_at(event.pos[0], event.pos[1], world, pan_x, zoom, birth_eggs, t)
+                    if top_down:
+                        target = find_creature_at_2d(event.pos[0], event.pos[1], world, birth_eggs)
+                    else:
+                        target = find_creature_at(event.pos[0], event.pos[1], world, pan_x, zoom, birth_eggs, t)
                     if target is not None:
                         menu.open(event.pos, creature_menu_items(target, world, needs, horror))
                     else:
@@ -2076,18 +2251,36 @@ def main():
         _, _, day_amount, _ = celestial_state(day_phase)
         shadow_dx, shadow_len = light_direction(day_phase)
         ctx = RenderCtx(zoom=zoom, shadow_dx=shadow_dx, shadow_len=shadow_len)
-        draw_background(screen, day_phase, pan_x, zoom, landscape, t)
-        if egg.hatched:
-            draw_scene(screen, world, pan_x, day_amount, landscape,
-                       distressed=needs.lowest() < NEED_LOW_THRESHOLD, t=t, ctx=ctx, birth_eggs=birth_eggs,
-                       horror=horror, sentience=sentience)
+        if top_down:
+            if egg.hatched:
+                draw_scene_2d(screen, world, day_amount, t=t, birth_eggs=birth_eggs,
+                              horror=horror, sentience=sentience)
+            else:
+                draw_background_2d(screen, day_amount)
+                # the lone starting egg, seen from above at its world spot
+                sx, sy = world_to_screen_2d(world.creatures[0].pos)
+                wob = int(math.sin(t * 14.0) * (2 + egg.cracks * 1.5))
+                rect = pygame.Rect(0, 0, 18, 24)
+                rect.center = (sx + wob, sy)
+                pygame.draw.ellipse(screen, EGG_COLOR, rect)
+                for line in EGG_CRACK_LINES[:egg.cracks]:
+                    pts = [(rect.centerx + ox * rect.width, rect.centery + oy * rect.height) for ox, oy in line]
+                    if len(pts) >= 2:
+                        pygame.draw.lines(screen, EGG_CRACK_COLOR, False, pts, 2)
         else:
-            draw_decor(screen, pan_x, day_amount, landscape, ctx)
-            wobble = math.sin(t * 14.0) * (2 + egg.cracks * 1.5)
-            draw_egg(screen, EGG_STAGE_X - pan_x, EGG_STAGE_Z, egg.cracks, wobble, egg.pulse, ctx)
+            draw_background(screen, day_phase, pan_x, zoom, landscape, t)
+            if egg.hatched:
+                draw_scene(screen, world, pan_x, day_amount, landscape,
+                           distressed=needs.lowest() < NEED_LOW_THRESHOLD, t=t, ctx=ctx, birth_eggs=birth_eggs,
+                           horror=horror, sentience=sentience)
+            else:
+                draw_decor(screen, pan_x, day_amount, landscape, ctx)
+                wobble = math.sin(t * 14.0) * (2 + egg.cracks * 1.5)
+                draw_egg(screen, EGG_STAGE_X - pan_x, EGG_STAGE_Z, egg.cracks, wobble, egg.pulse, ctx)
         draw_night_overlay(screen, day_amount)
         draw_status(screen, font, world, paused, speed, sensors, threshold, alert.flash,
-                    egg.hatched, egg.cracks, sound_muted, zoom, ambient_enabled, len(birth_eggs.pending))
+                    egg.hatched, egg.cracks, sound_muted, zoom, ambient_enabled, len(birth_eggs.pending),
+                    top_down=top_down)
         menu.draw(screen, font)
         if hatch_flash > 0:
             overlay = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)

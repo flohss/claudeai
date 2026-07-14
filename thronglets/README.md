@@ -394,6 +394,14 @@ change speed, `R` resets back to a fresh egg, `ESC` quits. Everything
 you *do* to the creatures is driven from a **right-click context menu**
 (there's no on-screen panel of buttons).
 
+Press **`V`** to flip the whole thing to a **flat top-down 2D view** of
+the same world, in the spirit of `main.py`: the field seen from straight
+above, food as green dots, each creature a body dot wearing its
+token-colour ring (same evolved-signal meaning as always) plus a faint
+outer halo in its current emotion's colour (there's no face to read from
+overhead). Hatching eggs and the right-click action menu work exactly the
+same in 2D - only the camera changed. `V` again flips back to 3D.
+
 **Right-click a creature** and a small text menu opens on it with its
 care actions - **Feed**, **Wash**, **Play** - each labelled with that
 need's current level. Each need drains slowly on its own; picking its
