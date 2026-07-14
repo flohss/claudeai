@@ -75,14 +75,20 @@ the proximity-listening sound in main.py/main_web.py, but judged by
 changes how big and how far apart things look here - independently of
 the chorus toggle. Press M to mute all of it.
 
-The landscape is scaled the way a real one would be: trees tower several
-times a creature's height, rocks are boulders rather than pebbles, and a
-river winds across the field toward the camera - a muddy shore fringe,
-a darker deep-water band, and a lighter shallow center with a couple of
-gently drifting sparkle lines, instead of one flat-colored ribbon. The
-river doesn't just fade out at the horizon either: a small rocky ridge
-sits right at its source, with a cascade spilling out of a notch in the
-rock into the river's first bend (draw_river_source).
+The landscape is scaled the way a real one would be, and reads coherently
+back to front: a jagged rocky mountain range spans the entire horizon (the
+true back of the world, not an isolated outcrop), a dense forest sits at
+middle distance in front of it, and the open plain - where the population
+actually lives - has just a handful of trees standing on their own near
+the camera, plus scattered boulders. Trees tower several times a
+creature's height and rocks are boulders rather than pebbles. A river
+winds across the field toward the camera - a muddy shore fringe, a darker
+deep-water band, and a lighter shallow center with a couple of gently
+drifting sparkle lines, instead of one flat-colored ribbon - and it
+doesn't just fade out at the horizon: it spills out of a notch (a
+mountain pass) in the mountain range itself, with a cascade tumbling down
+into the river's first bend (draw_river_source), so the water reads as
+coming from real rock at the true back of the landscape.
 Trees and rocks are depth-sorted together with the creatures and
 predators (same painter's-algorithm pass draw_scene() uses for
 everything else), so a creature correctly stands in front of a nearby
@@ -171,9 +177,12 @@ SKY_HORIZON_NIGHT = (24, 28, 52)
 SKY_TOP_TWILIGHT = (70, 45, 80)
 SKY_HORIZON_TWILIGHT = (240, 145, 110)
 
-HILL_FAR_DAY = (100, 140, 120)
+# The far layer is a proper rocky mountain range - the true back of the
+# horizon - with the near layer as green foothills in front of it,
+# before the forest band and then the plain (see draw_background()).
+HILL_FAR_DAY = (118, 112, 108)
 HILL_NEAR_DAY = (80, 125, 95)
-HILL_FAR_NIGHT = (28, 38, 42)
+HILL_FAR_NIGHT = (24, 24, 28)
 HILL_NEAR_NIGHT = (20, 30, 36)
 
 GROUND_FAR_DAY = (95, 165, 100)
@@ -204,14 +213,6 @@ RIVER_BANK_NIGHT = (32, 28, 20)
 RIVER_SPARKLE_DAY = (215, 235, 240)
 RIVER_SPARKLE_NIGHT = (75, 92, 108)
 
-# A rocky ridge sitting right at the river's source, anchored to the
-# horizon like the far/near hills (not shrunk down by depth scale the
-# way a normal prop would be) - so the water reads as cascading out of
-# real rock instead of the river just fading into flat ground.
-MOUNTAIN_COLOR_DAY = (120, 113, 108)
-MOUNTAIN_COLOR_NIGHT = (28, 28, 32)
-MOUNTAIN_SHADE_DAY = (85, 79, 76)
-MOUNTAIN_SHADE_NIGHT = (16, 16, 20)
 FOAM_COLOR_DAY = (235, 246, 250)
 FOAM_COLOR_NIGHT = (110, 128, 145)
 # A winding band cutting across the field, described as (x, z, half-width)
@@ -321,24 +322,33 @@ NEED_BUTTON_GAP = 56
 RenderCtx = namedtuple("RenderCtx", ["zoom", "shadow_dx", "shadow_len"])
 DEFAULT_CTX = RenderCtx(zoom=1.0, shadow_dx=0.0, shadow_len=1.0)
 
-TREE_COUNT_RANGE = (7, 12)
+# A coherent back-to-front reading: mountains (the far hill ridge, see
+# draw_background) -> a dense forest band at middle distance -> the open
+# plain with just a few trees standing on their own, near the camera.
+FOREST_COUNT_RANGE = (18, 28)
+FOREST_Z_RANGE = (0.10, 0.28)
+TREE_COUNT_RANGE = (3, 6)
+TREE_Z_RANGE = (0.35, 0.9)
 ROCK_COUNT_RANGE = (4, 8)
 
 # Everything about a game's terrain that should be different from one
 # new game to the next, but reproducible if a specific seed is supplied
 # (e.g. by a future save/load feature restoring a saved game's terrain).
 Landscape = namedtuple("Landscape", [
-    "seed", "trees", "rocks", "grass", "hill_far_phase", "hill_near_phase", "river_offset",
+    "seed", "forest", "trees", "rocks", "grass", "hill_far_phase", "hill_near_phase", "river_offset",
 ])
 
 
 def generate_landscape(seed=None):
-    """Builds one random landscape - tree/rock/grass placement, plus a
-    little hill-silhouette and river variation - from a seed. Leave seed
-    as None for a fresh, different layout (what every new game gets);
-    pass a specific seed to reproduce that exact layout again later."""
+    """Builds one random landscape - forest/tree/rock/grass placement,
+    plus a little hill-silhouette and river variation - from a seed.
+    Leave seed as None for a fresh, different layout (what every new
+    game gets); pass a specific seed to reproduce that exact layout
+    again later."""
     rng = random.Random(seed)
-    trees = [(rng.uniform(-1.3, 1.3), rng.uniform(0.04, 0.9))
+    forest = [(rng.uniform(-1.3, 1.3), rng.uniform(*FOREST_Z_RANGE))
+              for _ in range(rng.randint(*FOREST_COUNT_RANGE))]
+    trees = [(rng.uniform(-1.3, 1.3), rng.uniform(*TREE_Z_RANGE))
               for _ in range(rng.randint(*TREE_COUNT_RANGE))]
     rocks = [(rng.uniform(-1.3, 1.3), rng.uniform(0.04, 0.85), rng.uniform(0.6, 1.6))
              for _ in range(rng.randint(*ROCK_COUNT_RANGE))]
@@ -346,6 +356,7 @@ def generate_landscape(seed=None):
              for _ in range(GRASS_TUFT_COUNT)]
     return Landscape(
         seed=seed,
+        forest=forest,
         trees=trees,
         rocks=rocks,
         grass=grass,
@@ -948,11 +959,24 @@ def draw_background(screen, day_phase, pan_x=0.0, zoom=1.0, landscape=None, t=0.
     hill_far = lerp_color(hill_far, TWILIGHT_WARM, twilight_amount * 0.25)
     hill_near = lerp_color(hill_near, TWILIGHT_WARM, twilight_amount * 0.3)
 
+    # The far layer is the true back of the landscape: a jagged mountain
+    # range spanning the whole horizon, not gentle rolling hills - taller,
+    # sharper peaks than the near layer, with one forced low notch (a
+    # mountain pass) exactly above the river's source, so the cascade in
+    # draw_river_source() has somewhere to spill through.
     hill_y = HORIZON_Y - int(SCREEN_H * 0.05)
-    far_hills = [(0, HORIZON_Y)]
-    for i in range(9):
-        far_hills.append((SCREEN_W * i / 8, hill_y - 18 * math.sin(i * 1.3 + landscape.hill_far_phase)))
-    far_hills.append((SCREEN_W, HORIZON_Y))
+    ridge_n = 12
+    ridge = []
+    for i in range(ridge_n + 1):
+        rx = SCREEN_W * i / ridge_n
+        amp1 = 55 * math.sin(i * 0.9 + landscape.hill_far_phase)
+        amp2 = 28 * math.sin(i * 2.3 + landscape.hill_far_phase * 1.7)
+        ridge.append((rx, hill_y - 45 - amp1 - amp2))
+    src_x, src_z, _ = RIVER_PATH[0]
+    notch_x, _, _ = project(src_x + landscape.river_offset - pan_x, src_z, zoom)
+    ridge.append((notch_x, hill_y - 15))
+    ridge.sort(key=lambda p: p[0])
+    far_hills = [(0, HORIZON_Y)] + ridge + [(SCREEN_W, HORIZON_Y)]
     pygame.draw.polygon(screen, hill_far, far_hills)
 
     near_hill_y = HORIZON_Y - int(SCREEN_H * 0.02)
@@ -1046,37 +1070,22 @@ def draw_rock(screen, x, z, day_amount, size=1.0, ctx=DEFAULT_CTX):
 
 
 def draw_river_source(screen, river_offset, pan_x, day_amount, zoom=1.0, t=0.0):
-    """A small rocky ridge sits right where the river begins, with a
-    cascade spilling out of a notch in it - so the water reads as
-    coming from real rock instead of the river just fading out at the
-    horizon. Anchored to the river's actual source point, but drawn at
-    hill-like scale (fixed screen-space offsets, not shrunk down the
-    way a small prop this far away normally would be) - the same
-    simplification the far/near hills already use."""
-    mountain = lerp_color(MOUNTAIN_COLOR_NIGHT, MOUNTAIN_COLOR_DAY, day_amount)
-    shade = lerp_color(MOUNTAIN_SHADE_NIGHT, MOUNTAIN_SHADE_DAY, day_amount)
+    """The cascade spilling out of the mountain pass (the forced notch
+    in draw_background()'s far-hills ridge) down into the river's first
+    bend - so the water reads as coming from real rock at the true back
+    of the landscape, instead of the river just fading out at the
+    horizon. Uses the same hill_y/notch-depth numbers as that ridge so
+    the two always line up."""
     foam = lerp_color(FOAM_COLOR_NIGHT, FOAM_COLOR_DAY, day_amount)
 
     src_x, src_z, _ = RIVER_PATH[0]
     sx, base_y, _ = project(src_x + river_offset - pan_x, src_z, zoom)
+    hill_y = HORIZON_Y - int(SCREEN_H * 0.05)
+    notch_y = hill_y - 15
 
-    # a jagged ridge, widest and lowest at the edges, with a dip (a
-    # mountain pass) right above the river's actual source
-    ridge = [
-        (-210, 12), (-190, 8), (-150, -60), (-100, -22), (-60, -85), (-25, -40),
-        (0, -28),  # the notch the water spills through
-        (25, -42), (55, -95), (95, -30), (140, -68), (190, 5), (210, 12),
-    ]
-    pygame.draw.polygon(screen, mountain, [(sx + ox, base_y + oy) for ox, oy in ridge])
-
-    # one shaded flank, on the tallest peak, for a little volume
-    shade_points = [(25, -42), (55, -95), (95, -30), (70, 8), (25, 8)]
-    pygame.draw.polygon(screen, shade, [(sx + ox, base_y + oy) for ox, oy in shade_points])
-
-    # the cascade: a pale streak falling straight from the notch into
-    # the river's first waypoint, with a little drifting foam burst
-    # where it lands
-    pygame.draw.line(screen, foam, (sx, base_y - 28), (sx, base_y + 2), 4)
+    # the cascade: a pale streak falling from the mountain pass into the
+    # river's first waypoint, with a little drifting foam burst where it lands
+    pygame.draw.line(screen, foam, (sx, notch_y), (sx, base_y + 2), 4)
     for i in range(5):
         fx = sx + math.sin(t * 3.2 + i * 1.6) * 5
         fy = base_y + 2 + i * 2
@@ -1302,7 +1311,7 @@ def draw_birth_egg(screen, x, z, cracks, t, creature_id, ctx=DEFAULT_CTX):
 
 def _tree_and_rock_entities(landscape):
     entities = []
-    for x, z in landscape.trees:
+    for x, z in landscape.forest + landscape.trees:
         entities.append((z, "tree", x, None, None))
     for x, z, size in landscape.rocks:
         entities.append((z, "rock", x, size, None))

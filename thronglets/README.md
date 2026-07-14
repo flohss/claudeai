@@ -423,20 +423,26 @@ view: "closest to the cursor" is judged by *screen* position rather than
 world position, since depth already changes how big and how far apart
 things look. Press `M` to mute everything.
 
-The background is a bit more filled in now too, and scaled the way a
-real landscape would be: trees tower several times a creature's height
-rather than standing barely taller than one, rocks read as boulders
-instead of pebbles, and a river winds across the field toward the
-camera - a muddy shore, a darker deep-water band, a lighter shallow
-center, and a couple of softly drifting sparkle lines, rather than a
-single flat-colored ribbon. It doesn't just fade out into flat ground at
-the horizon either: a small rocky ridge sits right at its source, with a
-cascade spilling out of a notch in the rock and into the river's first
-bend. Trees and rocks are depth-sorted together with the creatures and
-predators, so a creature correctly stands in front of a nearby tree or
-disappears behind a farther one instead of scenery and population
-overlapping like two unrelated layers, and they pan with the view along
-with everything else.
+The background is a bit more filled in now too, and reads coherently
+back to front the way a real landscape would: a jagged rocky mountain
+range spans the *entire* horizon as the true back of the world (not an
+isolated outcrop), a dense forest sits at middle distance in front of
+it, and the open plain where the population actually lives has just a
+handful of trees standing on their own near the camera, plus scattered
+boulders. Trees tower several times a creature's height rather than
+standing barely taller than one, and rocks read as boulders instead of
+pebbles. A river winds across the field toward the camera - a muddy
+shore, a darker deep-water band, a lighter shallow center, and a couple
+of softly drifting sparkle lines, rather than a single flat-colored
+ribbon. It doesn't just fade out into flat ground at the horizon either:
+it spills out of a notch (a mountain pass) in the mountain range itself,
+with a cascade tumbling down into the river's first bend, so the water
+reads as coming from real rock at the true back of the landscape instead
+of just stopping. Trees and rocks are depth-sorted together with the
+creatures and predators, so a creature correctly stands in front of a
+nearby tree or disappears behind a farther one instead of scenery and
+population overlapping like two unrelated layers, and they pan with the
+view along with everything else.
 
 Every new game gets its own landscape - a fresh launch, or pressing `R`,
 regenerates the tree/rock/grass placement, the hill silhouette, and
