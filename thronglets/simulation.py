@@ -310,6 +310,23 @@ class World:
         if self.predators:
             self.predators.pop()
 
+    def add_creature(self, x, y, genome=None):
+        """Spawns one new, unrelated creature (parents=(), gen=0) at a
+        given position - same registration path as the initial
+        population, just one at a time and later. Returns the new
+        Creature, or None if MAX_POPULATION is already reached."""
+        if len(self.creatures) >= MAX_POPULATION:
+            return None
+        genome = genome if genome is not None else Genome.random(self.rng)
+        pos = np.clip(np.array([x, y]), [0, 0], [WIDTH, HEIGHT])
+        creature = Creature(pos, INIT_ENERGY, genome)
+        self._register_birth(creature, (), 0)
+        self.creatures.append(creature)
+        return creature
+
+    def add_random_creature(self):
+        return self.add_creature(*self.rng.uniform([0, 0], [WIDTH, HEIGHT]))
+
     def vocabulary(self):
         """Per-state (dominant token, agreement fraction) across the living population."""
         return {state: (pairs[0] if pairs else (0, 0.0))

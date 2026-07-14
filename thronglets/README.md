@@ -392,14 +392,20 @@ Once hatched, `LEFT`/`RIGHT` pans the view (or click and drag with the
 mouse), the scroll wheel zooms in/out, `SPACE` pauses, `UP`/`DOWN` change
 speed, `R` resets back to a fresh egg, `ESC` quits.
 
-The population can grow from there (reproduction, including a lone
-creature budding on its own once its energy is high enough), and every
-creature born this way gets the same treatment as the very first one: it
-starts life as an egg sitting at its real, moving position, fully alive
-and simulated the whole time, but it doesn't render, sound, or otherwise
-reveal itself as a creature until you find it and click it open too. The
-HUD shows how many new eggs are waiting whenever there are any. One that
-dies before being hatched just quietly disappears - no leftover egg.
+The lone starting creature is deliberately unable to reproduce on its
+own, no matter how much energy it has - the population can only grow
+past one by using the needs panel's fifth button (an egg icon) to add a
+second creature yourself. Once there are two or more, reproduction
+(pairing and budding both) becomes fully automatic exactly like the
+other renderers, no further clicking required. Every creature born this
+way, whether it arrived through that button or through ordinary
+reproduction afterward, gets the same treatment as the very first one:
+it starts life as an egg sitting at its real, moving position, fully
+alive and simulated the whole time, but it doesn't render, sound, or
+otherwise reveal itself as a creature until you find it and click it
+open too. The HUD shows how many new eggs are waiting whenever there are
+any. One that dies before being hatched just quietly disappears - no
+leftover egg.
 
 Standing still doesn't mean frozen: each creature blinks on its own
 schedule and wanders a couple of pixels in place between simulation
@@ -488,16 +494,20 @@ webcam.) On Linux, `sounddevice` also needs the system PortAudio library
 fails and the mic just reports unavailable, same as any other missing
 piece.
 
-Once hatched, a small needs panel appears top-left with four clickable
+Once hatched, a small needs panel appears top-left with five clickable
 icons: a pizza (hunger), a glass of water (thirst), a bar of soap
-(cleanliness), and a toy (joy). Each need slowly drains on its own -
-about two minutes from full to empty if left alone - and clicking its
-icon tops it back up to full. Feeding the pizza also restores some of
-the creature's *real* `simulation.py` energy, same field the other
-renderers read from; the other three icons are local to this window and
-don't touch the simulation. Neglect all four for long enough and the
+(cleanliness), a toy (joy), and an egg. Each need slowly drains on its
+own - about two minutes from full to empty if left alone - and clicking
+its icon tops it back up to full. Feeding the pizza also restores some
+of the creature's *real* `simulation.py` energy, same field the other
+renderers read from; the other two need icons are local to this window
+and don't touch the simulation. Neglect all four for long enough and the
 creature's expression turns visibly worried - there's no harsher penalty
-than that, it's just something to look after while you watch it.
+than that, it's just something to look after while you watch it. The
+fifth icon isn't a decaying need at all - it's a button: click it any
+time to add a brand-new creature to the world as another egg to go
+track down and hatch, which is also the *only* way past a
+single-creature population (see above).
 
 ## Where to take it next
 

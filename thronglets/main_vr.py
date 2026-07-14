@@ -46,6 +46,17 @@ part of the shared simulation model. Neglect all four for long enough and
 the creature's expression turns visibly worried; there's no harsher
 penalty than that.
 
+A fifth button sits right after the four needs: an egg icon. Click it to
+add a brand-new creature to the world, near wherever the current
+population already is - like any other birth, it starts life as a
+pending egg you have to go find and click open. This matters because the
+solo starting creature is deliberately unable to reproduce on its own,
+no matter how much energy it has (install_solo_reproduction_guard);
+reproduction (pairing and budding both) only ever becomes automatic once
+a second creature exists, whether that second one came from this button
+or arrived some other way. There's no limit on how many times you can
+use it.
+
 The creature design is an original, simplified, geometric interpretation
 of the look (round yellow body, big eyes, blue lower half) - not a
 reproduction of the show's or the licensed game's actual pixel art.
@@ -97,7 +108,7 @@ distance as you zoom - things get uniformly bigger or smaller, the
 perspective itself never distorts.
 
 Controls:
-  LEFT CLICK     crack an egg / feed an item from the needs panel
+  LEFT CLICK     crack an egg / use the needs panel (feed, or add a new egg)
   CLICK + DRAG   pan the view with the mouse
   LEFT / RIGHT   pan the view with the keyboard
   SCROLL         zoom in / out
@@ -121,7 +132,7 @@ from collections import namedtuple
 import numpy as np
 import pygame
 
-from simulation import HEIGHT, MAX_ENERGY, WIDTH, World
+from simulation import BUD_ENERGY, HEIGHT, MAX_ENERGY, WIDTH, World
 
 SCREEN_W, SCREEN_H = 1000, 700
 HORIZON_Y = int(SCREEN_H * 0.42)
@@ -545,6 +556,14 @@ class BirthEggs:
     def is_pending(self, creature_id):
         return creature_id in self.pending
 
+    def add_manual(self, creature_id):
+        """Immediately marks a creature (just created via the needs
+        panel's egg button) as a pending egg, bypassing sync()'s normal
+        diff-based detection - and records its id as already-known so a
+        later sync() doesn't reset its click count back to 0."""
+        self.pending[creature_id] = 0
+        self.known_ids.add(creature_id)
+
     def try_click(self, mx, my, world, pan_x, zoom=1.0):
         """Returns True if the click landed on a pending birth egg
         (whether or not that particular click was the one that hatched
@@ -558,6 +577,48 @@ class BirthEggs:
                         del self.pending[c.id]
                     return True
         return False
+
+
+def install_solo_reproduction_guard(world):
+    """The lone starting creature shouldn't be able to reproduce (bud)
+    on its own - only once a second one exists (via the panel's egg
+    button, or normal pairing after that) does reproduction become
+    automatic. Wraps this specific World instance's private
+    _reproduce() to skip it entirely while fewer than two creatures are
+    alive; pairing already needs two to do anything, so this only ever
+    blocks solo budding, and reproduction resumes exactly as normal the
+    moment a second creature exists. A per-instance monkeypatch, not a
+    change to simulation.py, so main.py/main_tui.py/main_web.py are
+    unaffected. (An earlier version tried clamping energy right before
+    each step instead, but step() calls _eat() - which can top energy
+    back up - before _reproduce(), so that could still let a solo bud
+    slip through within the same step.)"""
+    original_reproduce = world._reproduce
+
+    def guarded_reproduce():
+        if len([c for c in world.creatures if c.alive]) < 2:
+            return
+        original_reproduce()
+
+    world._reproduce = guarded_reproduce
+
+
+def spawn_egg_near_population(world, birth_eggs):
+    """Adds one new creature near the existing population's center (or
+    the middle of the field if there's none left) - what the needs
+    panel's egg button does. Registered immediately as a pending
+    BirthEggs egg, exactly like a creature born through reproduction:
+    still just an egg to the player until it's found and hatched."""
+    alive = [c for c in world.creatures if c.alive]
+    if alive:
+        ax = sum(c.pos[0] for c in alive) / len(alive)
+        ay = sum(c.pos[1] for c in alive) / len(alive)
+    else:
+        ax, ay = WIDTH / 2, HEIGHT / 2
+    creature = world.add_creature(ax + random.uniform(-15, 15), ay + random.uniform(-15, 15))
+    if creature is not None:
+        birth_eggs.add_manual(creature.id)
+    return creature
 
 
 class NeedsState:
@@ -635,12 +696,32 @@ def draw_icon_toy(screen, rect):
     pygame.draw.arc(screen, (255, 220, 230), (cx - r, cy - r, r * 2, r * 2), 0.3, 2.6, 2)
 
 
+def draw_icon_egg(screen, rect):
+    cx, cy = rect.center
+    w, h = rect.width * 0.52, rect.height * 0.66
+    egg = pygame.Rect(0, 0, w, h)
+    egg.center = (cx, cy)
+    pygame.draw.ellipse(screen, EGG_COLOR, egg)
+    pygame.draw.ellipse(screen, (180, 165, 130), egg, width=1)
+    for ox, oy in ((-0.16, -0.12), (0.14, 0.06), (-0.05, 0.24)):
+        pygame.draw.circle(screen, EGG_SPECKLE, (int(cx + ox * w), int(cy + oy * h)), max(1, int(w * 0.08)))
+
+
 NEED_ICON_DRAWERS = {
     "hunger": draw_icon_pizza,
     "thirst": draw_icon_water,
     "clean": draw_icon_soap,
     "joy": draw_icon_toy,
 }
+
+# The panel's 5th slot: not a decaying need, a one-shot action button
+# that adds a brand-new creature to the world - as a birth egg the
+# player still has to go find and hatch, same as any other newborn.
+ADD_EGG_SLOT = len(NEED_ITEMS)
+
+
+def add_egg_button_rect():
+    return need_button_rect(ADD_EGG_SLOT)
 
 
 def draw_needs_panel(screen, needs):
@@ -653,6 +734,11 @@ def draw_needs_panel(screen, needs):
         NEED_ICON_DRAWERS[kind](screen, bg_rect)
         draw_meter(screen, rect.x, rect.bottom + 4, NEED_BUTTON_SIZE, 6,
                    needs.levels[kind], NEED_COLORS[kind])
+
+    egg_rect_ui = add_egg_button_rect()
+    pygame.draw.rect(screen, (28, 32, 28), egg_rect_ui, border_radius=8)
+    pygame.draw.rect(screen, (95, 100, 90), egg_rect_ui, width=1, border_radius=8)
+    draw_icon_egg(screen, egg_rect_ui)
 
 
 class AlertState:
@@ -1277,8 +1363,12 @@ def draw_status(screen, font, world, paused, speed, sensors, threshold, alert_fl
 def new_egg_world():
     """The world always starts this way: a single, not-yet-hatched
     creature. It doesn't step until the egg cracks open, so nothing else
-    in the world (predators included) can do anything to it first."""
-    return World(init_pop=1, predator_count=6)
+    in the world (predators included) can do anything to it first. It
+    also can't reproduce on its own once hatched, until a second
+    creature joins it (see install_solo_reproduction_guard)."""
+    world = World(init_pop=1, predator_count=6)
+    install_solo_reproduction_guard(world)
+    return world
 
 
 def main():
@@ -1340,6 +1430,9 @@ def main():
                                 needs.feed(kind, world)
                                 hit_button = True
                                 break
+                        if not hit_button and add_egg_button_rect().collidepoint(drag_start):
+                            spawn_egg_near_population(world, birth_eggs)
+                            hit_button = True
                         if not hit_button:
                             birth_eggs.try_click(drag_start[0], drag_start[1], world, pan_x, zoom)
                 dragging_view = False
