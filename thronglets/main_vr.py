@@ -39,7 +39,7 @@ no leftover egg.
 Once hatched, everything you do to the creatures is driven from a
 right-click context menu (there is no on-screen panel of buttons). Right-
 click a creature and a small text menu opens on it with its care actions
-- Feed (pizza), Give water, Wash, Play - each labelled with that need's
+- Feed, Wash, Play - each labelled with that need's
 current level. Each need drains slowly on its own; picking its row tops
 it back up to full. Feeding also tops up that specific creature's *real*
 simulation.py energy - the other three are cosmetic, local to this
@@ -145,8 +145,8 @@ perspective itself never distorts.
 
 Controls:
   LEFT CLICK     crack an egg open (start egg or a birth egg in the field)
-  RIGHT CLICK    open the action menu - on a creature (feed / water / wash
-                 / play / set on fire / stab) or on bare ground (add an egg)
+  RIGHT CLICK    open the action menu - on a creature (feed / wash / play
+                 / set on fire / stab) or on bare ground (add an egg)
   CLICK + DRAG   pan the view with the mouse
   LEFT / RIGHT   pan the view with the keyboard
   SCROLL         zoom in / out
@@ -340,13 +340,11 @@ EGG_CRACK_LINES = [
 ]
 
 # The care needs - a little care-taking loop on top of the real
-# simulation, offered through the right-click menu: feeding the pizza
-# also tops up the creature's actual simulation.py energy, but
-# thirst/cleanliness/joy are purely cosmetic local state, tracked here
-# rather than in simulation.py since they only make sense for this
-# file's single-companion mode.
-NEED_ITEMS = ("hunger", "thirst", "clean", "joy")
-NEED_LABELS = {"hunger": "pizza", "thirst": "water", "clean": "soap", "joy": "toy"}
+# simulation, offered through the right-click menu: feeding also tops up
+# the creature's actual simulation.py energy, but cleanliness/joy are
+# purely cosmetic local state, tracked here rather than in simulation.py
+# since they only make sense for this file's single-companion mode.
+NEED_ITEMS = ("hunger", "clean", "joy")
 NEED_DECAY_PER_SECOND = 1.0 / 120.0  # empties in 2 minutes if never fed
 NEED_LOW_THRESHOLD = 0.2
 FEED_ENERGY_BOOST = 40.0
@@ -984,8 +982,7 @@ class NeedsState:
 
 
 # What each need is called in the right-click menu, as an action verb.
-NEED_MENU_LABELS = {"hunger": "Feed (pizza)", "thirst": "Give water",
-                    "clean": "Wash", "joy": "Play"}
+NEED_MENU_LABELS = {"hunger": "Feed", "clean": "Wash", "joy": "Play"}
 
 CONTEXT_MENU_W = 200
 CONTEXT_MENU_ROW_H = 26

@@ -395,11 +395,11 @@ you *do* to the creatures is driven from a **right-click context menu**
 (there's no on-screen panel of buttons).
 
 **Right-click a creature** and a small text menu opens on it with its
-care actions - **Feed** (pizza), **Give water**, **Wash**, **Play** -
-each labelled with that need's current level. Each need drains slowly on
-its own; picking its row tops it back up. Feeding also tops up that
-specific creature's *real* energy; the other three are cosmetic. Neglect
-the needs long enough and the creature's face turns visibly sad.
+care actions - **Feed**, **Wash**, **Play** - each labelled with that
+need's current level. Each need drains slowly on its own; picking its
+row tops it back up. Feeding also tops up that specific creature's *real*
+energy; the other two are cosmetic. Neglect the needs long enough and
+the creature's face turns visibly sad.
 
 **Right-click bare ground** instead and the only action offered is **Add
 an egg**, which adds a new creature near the current population. The lone
@@ -546,14 +546,14 @@ piece.
 
 Once hatched, everything you do to the creatures is driven from a
 **right-click context menu** rather than an always-visible panel.
-Right-clicking a creature opens a small text menu on it with four care
-actions - Feed (pizza), Give water, Wash, Play - each labelled with that
-need's current level. Each need slowly drains on its own (about two
-minutes from full to empty if left alone) and picking its row tops it
-back up. Feeding also restores some of that specific creature's *real*
-`simulation.py` energy, the same field the other renderers read from;
-the other three are local to this window and don't touch the simulation.
-Neglect the needs long enough and the creature's face turns visibly sad.
+Right-clicking a creature opens a small text menu on it with three care
+actions - Feed, Wash, Play - each labelled with that need's current
+level. Each need slowly drains on its own (about two minutes from full
+to empty if left alone) and picking its row tops it back up. Feeding
+also restores some of that specific creature's *real* `simulation.py`
+energy, the same field the other renderers read from; the other two are
+local to this window and don't touch the simulation. Neglect the needs
+long enough and the creature's face turns visibly sad.
 Right-clicking bare ground instead offers a single action, Add an egg,
 which adds a brand-new creature as another egg to go track down and
 hatch - also the *only* way past a single-creature population (see
