@@ -55,7 +55,12 @@ Press M to mute it.
 The landscape is scaled the way a real one would be: trees tower several
 times a creature's height, rocks are boulders rather than pebbles, and a
 river winds across the field toward the camera - all fixed background
-decoration, no gameplay effect, just proportioned properly.
+decoration, no gameplay effect, just proportioned properly. Trees and
+rocks are depth-sorted together with the creatures and predators (same
+painter's-algorithm pass draw_scene() uses for everything else), so a
+creature correctly stands in front of a nearby tree or vanishes behind a
+farther one instead of scenery and population clashing as two unrelated
+layers - and, like the population, they pan with the view.
 
 The scroll wheel zooms, Minecraft-style: it magnifies the ground-plane
 scene around a fixed point on the horizon rather than moving the camera
@@ -689,12 +694,6 @@ def draw_background(screen, day_phase, zoom=1.0):
 
     draw_river(screen, day_amount, zoom)
 
-    for x, z, size in ROCK_POSITIONS:
-        draw_rock(screen, x, z, day_amount, size, zoom)
-
-    for x, z in TREE_POSITIONS:
-        draw_tree(screen, x, z, day_amount, zoom)
-
 
 def draw_tree(screen, x, z, day_amount, zoom=1.0):
     sx, sy, scale = project(x, z, zoom)
@@ -910,8 +909,42 @@ _EGG_SPECKLE_RNG = [
 ]
 
 
-def draw_population(screen, world, pan_x, distressed=False, t=0.0, zoom=1.0):
+def _tree_and_rock_entities():
     entities = []
+    for x, z in TREE_POSITIONS:
+        entities.append((z, "tree", x, None, None))
+    for x, z, size in ROCK_POSITIONS:
+        entities.append((z, "rock", x, size, None))
+    return entities
+
+
+def _draw_entity(screen, kind, x, z, extra, creature_id, day_amount, distressed, t, zoom):
+    if kind == "tree":
+        draw_tree(screen, x, z, day_amount, zoom)
+    elif kind == "rock":
+        draw_rock(screen, x, z, day_amount, extra, zoom)
+    elif kind == "creature":
+        draw_critter(screen, x, z, extra, distressed, creature_id, t, zoom)
+    else:
+        draw_predator(screen, x, z, zoom)
+
+
+def draw_decor(screen, pan_x, day_amount, zoom=1.0):
+    """Depth-sorted trees + rocks only, panning with the view like
+    everything else - used before the egg hatches, when there's no
+    population yet to sort them against."""
+    for z, kind, x, extra, _ in sorted(_tree_and_rock_entities(), key=lambda e: e[0]):
+        _draw_entity(screen, kind, x - pan_x, z, extra, None, day_amount, False, 0.0, zoom)
+
+
+def draw_scene(screen, world, pan_x, day_amount, distressed=False, t=0.0, zoom=1.0):
+    """Depth-sorts and draws everything that has real height - trees,
+    rocks, creatures, predators - together in one painter's-algorithm
+    pass (farthest first), so nearer things correctly occlude farther
+    ones: a creature can stand in front of a tree, or vanish behind a
+    boulder, instead of scenery and population being drawn as two
+    unrelated layers that clash regardless of actual depth."""
+    entities = _tree_and_rock_entities()
     for c in world.creatures:
         if c.alive:
             x, z = world_to_stage(c.pos)
@@ -924,11 +957,8 @@ def draw_population(screen, world, pan_x, distressed=False, t=0.0, zoom=1.0):
     for fx, fy in world.food:
         x, z = world_to_stage((fx, fy))
         draw_food(screen, x - pan_x, z, zoom)
-    for z, kind, x, token, creature_id in entities:
-        if kind == "creature":
-            draw_critter(screen, x - pan_x, z, token, distressed, creature_id, t, zoom)
-        else:
-            draw_predator(screen, x - pan_x, z, zoom)
+    for z, kind, x, extra, creature_id in entities:
+        _draw_entity(screen, kind, x - pan_x, z, extra, creature_id, day_amount, distressed, t, zoom)
 
 
 def draw_meter(screen, x, y, w, h, level, color):
@@ -1109,13 +1139,15 @@ def main():
                 sound_channel.stop()
             listening_token = None
 
+        _, _, day_amount, _ = celestial_state(day_phase)
         draw_background(screen, day_phase, zoom)
         if egg.hatched:
-            draw_population(screen, world, pan_x, distressed=needs.lowest() < NEED_LOW_THRESHOLD, t=t, zoom=zoom)
+            draw_scene(screen, world, pan_x, day_amount,
+                       distressed=needs.lowest() < NEED_LOW_THRESHOLD, t=t, zoom=zoom)
         else:
+            draw_decor(screen, pan_x, day_amount, zoom)
             wobble = math.sin(t * 14.0) * (2 + egg.cracks * 1.5)
             draw_egg(screen, EGG_STAGE_X - pan_x, EGG_STAGE_Z, egg.cracks, wobble, egg.pulse, zoom)
-        _, _, day_amount, _ = celestial_state(day_phase)
         draw_night_overlay(screen, day_amount)
         draw_status(screen, font, world, paused, speed, sensors, threshold, alert.flash,
                     egg.hatched, egg.cracks, sound_muted, zoom)

@@ -412,7 +412,11 @@ real landscape would be: trees tower several times a creature's height
 rather than standing barely taller than one, rocks read as boulders
 instead of pebbles, and a river winds across the field toward the
 camera - all fixed decoration, no gameplay effect, just sized to
-actually look like a landscape a small creature stands in.
+actually look like a landscape a small creature stands in. Trees and
+rocks are depth-sorted together with the creatures and predators, so a
+creature correctly stands in front of a nearby tree or disappears behind
+a farther one instead of scenery and population overlapping like two
+unrelated layers, and they pan with the view along with everything else.
 
 Scrolling zooms in and out on that landscape, Minecraft-style: it
 magnifies the whole scene around a fixed point on the horizon instead of
