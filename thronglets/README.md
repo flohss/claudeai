@@ -426,8 +426,8 @@ things look. Press `M` to mute everything.
 The background is a bit more filled in now too, and reads coherently
 back to front the way a real landscape would: a jagged rocky mountain
 range spans the *entire* horizon as the true back of the world (not an
-isolated outcrop), a dense forest sits at middle distance in front of
-it, and the open plain where the population actually lives has just a
+isolated outcrop), a dense forest runs edge to edge at middle distance
+in front of it, and the open plain where the population actually lives has just a
 handful of trees standing on their own near the camera, plus scattered
 boulders. Trees tower several times a creature's height rather than
 standing barely taller than one, and rocks read as boulders instead of

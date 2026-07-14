@@ -77,8 +77,8 @@ the chorus toggle. Press M to mute all of it.
 
 The landscape is scaled the way a real one would be, and reads coherently
 back to front: a jagged rocky mountain range spans the entire horizon (the
-true back of the world, not an isolated outcrop), a dense forest sits at
-middle distance in front of it, and the open plain - where the population
+true back of the world, not an isolated outcrop), a dense forest runs edge
+to edge at middle distance in front of it, and the open plain - where the population
 actually lives - has just a handful of trees standing on their own near
 the camera, plus scattered boulders. Trees tower several times a
 creature's height and rocks are boulders rather than pebbles. A river
@@ -340,9 +340,15 @@ DEFAULT_CTX = RenderCtx(zoom=1.0, shadow_dx=0.0, shadow_len=1.0)
 # A coherent back-to-front reading: mountains (the far hill ridge, see
 # draw_background) -> a dense forest band at middle distance -> the open
 # plain with just a few trees standing on their own, near the camera.
-FOREST_COUNT_RANGE = (18, 28)
+# The forest's lateral range is much wider than the plain trees' because
+# perspective converges toward the center with depth: at forest depths,
+# +/-1.3 only covers the middle of the screen, leaving bare gaps on both
+# sides. +/-4.5 keeps the band filled edge to edge (and through pans).
+FOREST_COUNT_RANGE = (70, 90)
+FOREST_X_RANGE = (-4.5, 4.5)
 FOREST_Z_RANGE = (0.10, 0.28)
 TREE_COUNT_RANGE = (3, 6)
+TREE_X_RANGE = (-1.3, 1.3)
 TREE_Z_RANGE = (0.35, 0.9)
 ROCK_COUNT_RANGE = (4, 8)
 
@@ -366,17 +372,17 @@ def generate_landscape(seed=None):
     # forest, and a tree standing in the water would read as a mistake.
     river_offset = rng.uniform(-0.25, 0.25)
 
-    def scatter_trees(count, z_range):
+    def scatter_trees(count, x_range, z_range):
         pts = []
         while len(pts) < count:
-            x, z = rng.uniform(-1.3, 1.3), rng.uniform(*z_range)
+            x, z = rng.uniform(*x_range), rng.uniform(*z_range)
             lane_x, half_w = river_lane_at(z)
             if abs(x - (lane_x + river_offset)) > half_w + 0.06:
                 pts.append((x, z))
         return pts
 
-    forest = scatter_trees(rng.randint(*FOREST_COUNT_RANGE), FOREST_Z_RANGE)
-    trees = scatter_trees(rng.randint(*TREE_COUNT_RANGE), TREE_Z_RANGE)
+    forest = scatter_trees(rng.randint(*FOREST_COUNT_RANGE), FOREST_X_RANGE, FOREST_Z_RANGE)
+    trees = scatter_trees(rng.randint(*TREE_COUNT_RANGE), TREE_X_RANGE, TREE_Z_RANGE)
     rocks = [(rng.uniform(-1.3, 1.3), rng.uniform(0.04, 0.85), rng.uniform(0.6, 1.6))
              for _ in range(rng.randint(*ROCK_COUNT_RANGE))]
     grass = [(rng.uniform(-1.3, 1.3), rng.uniform(0.03, 0.99), rng.uniform(-1.0, 1.0))
