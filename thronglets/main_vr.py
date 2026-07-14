@@ -30,11 +30,12 @@ screen as an egg. Left-click it a few times to crack it open; nothing
 else in the world moves or steps until it hatches.
 
 Every creature born afterward, through reproduction, gets the same
-treatment: it starts life as an egg at its real (moving) position - it's
-fully alive and simulated the whole time, but doesn't render, sound, or
-otherwise reveal itself until you go find it and click it open too
-(BirthEggs). One that dies before being hatched just quietly disappears,
-no leftover egg.
+treatment: it starts life as an egg at its birth position and stays
+completely inert - frozen, so it doesn't move, eat, reproduce, age or
+even count toward the population - until you go find it and click it
+open too (BirthEggs, backed by the World's dormant set). Only when it
+hatches does it wake up and start living. An unhatched egg just sits
+there, patiently, for as long as you leave it.
 
 Once hatched, everything you do to the creatures is driven from a
 right-click context menu (there is no on-screen panel of buttons). Right-
@@ -636,12 +637,13 @@ class EggState:
 
 class BirthEggs:
     """Every creature born through reproduction (not the very first,
-    initial-hatch one) starts life as an egg at its real, moving
-    position - it's fully alive and simulated underneath (still eating,
-    moving, able to reproduce or be eaten), but doesn't render, sound,
-    or otherwise reveal itself as a creature to the player until enough
-    clicks land on it, mirroring the very first hatch. One that dies
-    before being hatched is simply dropped, no egg left behind."""
+    initial-hatch one) starts life as an egg at its birth position. While
+    it's still an egg it is kept completely inert - frozen via the
+    World's dormant set, so it doesn't move, eat, reproduce, age or count
+    toward the population - and it doesn't render, sound, or otherwise
+    reveal itself as a creature until enough clicks land on it, mirroring
+    the very first hatch. Only when the player cracks it open does it wake
+    up and start living."""
 
     def __init__(self):
         self.pending = {}   # creature id -> clicks so far
@@ -655,30 +657,35 @@ class BirthEggs:
 
     def sync(self, world):
         """Call once per frame after stepping the world - any creature
-        id not seen before is a new birth, becoming a pending egg."""
+        id not seen before is a new birth: it becomes a pending egg and
+        is frozen (dormant) until hatched."""
         current_ids = {c.id for c in world.creatures if c.alive}
         for cid in current_ids - self.known_ids:
             self.pending[cid] = 0
+            world.set_dormant(cid, True)
         for cid in list(self.pending):
             if cid not in current_ids:
                 del self.pending[cid]
+                world.set_dormant(cid, False)
         self.known_ids = current_ids
 
     def is_pending(self, creature_id):
         return creature_id in self.pending
 
-    def add_manual(self, creature_id):
-        """Immediately marks a creature (just created via the needs
-        'Add an egg' menu action) as a pending egg, bypassing sync()'s normal
+    def add_manual(self, world, creature_id):
+        """Immediately marks a creature (just created via the 'Add an
+        egg' menu action) as a pending, frozen egg, bypassing sync()'s
         diff-based detection - and records its id as already-known so a
         later sync() doesn't reset its click count back to 0."""
         self.pending[creature_id] = 0
         self.known_ids.add(creature_id)
+        world.set_dormant(creature_id, True)
 
     def try_click(self, mx, my, world, pan_x, zoom=1.0):
         """Returns True if the click landed on a pending birth egg
         (whether or not that particular click was the one that hatched
-        it) - lets the caller know not to treat the click as a miss."""
+        it) - lets the caller know not to treat the click as a miss. The
+        click that completes the hatch wakes the creature up."""
         for c in world.creatures:
             if c.alive and c.id in self.pending:
                 x, z = world_to_stage(c.pos)
@@ -686,6 +693,7 @@ class BirthEggs:
                     self.pending[c.id] += 1
                     if self.pending[c.id] >= EGG_CLICKS_NEEDED:
                         del self.pending[c.id]
+                        world.set_dormant(c.id, False)
                     return True
         return False
 
@@ -707,7 +715,9 @@ def install_solo_reproduction_guard(world):
     original_reproduce = world._reproduce
 
     def guarded_reproduce():
-        if len([c for c in world.creatures if c.alive]) < 2:
+        # count only awake creatures - an unhatched egg sitting nearby
+        # is inert and shouldn't count as the needed second creature
+        if len(world._alive()) < 2:
             return
         original_reproduce()
 
@@ -720,15 +730,15 @@ def spawn_egg_near_population(world, birth_eggs):
     'Add an egg' menu action does. Registered immediately as a pending
     BirthEggs egg, exactly like a creature born through reproduction:
     still just an egg to the player until it's found and hatched."""
-    alive = [c for c in world.creatures if c.alive]
-    if alive:
-        ax = sum(c.pos[0] for c in alive) / len(alive)
-        ay = sum(c.pos[1] for c in alive) / len(alive)
+    awake = world._alive()   # awake creatures, so eggs don't skew placement
+    if awake:
+        ax = sum(c.pos[0] for c in awake) / len(awake)
+        ay = sum(c.pos[1] for c in awake) / len(awake)
     else:
         ax, ay = WIDTH / 2, HEIGHT / 2
     creature = world.add_creature(ax + random.uniform(-15, 15), ay + random.uniform(-15, 15))
     if creature is not None:
-        birth_eggs.add_manual(creature.id)
+        birth_eggs.add_manual(world, creature.id)
     return creature
 
 

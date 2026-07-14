@@ -408,11 +408,11 @@ matter how much energy it has - the population can only grow past one
 this way. Once there are two or more, reproduction (pairing and budding
 both) becomes fully automatic exactly like the other renderers. Every
 creature born - through the menu or through ordinary reproduction -
-starts life as an egg at its real, moving position, fully alive and
-simulated the whole time, but doesn't render, sound, or otherwise reveal
-itself until you find it and click it open. The HUD shows how many new
-eggs are waiting. One that dies before being hatched just quietly
-disappears - no leftover egg.
+starts life as an egg at its birth position and stays **completely
+inert** - frozen, so it doesn't move, eat, reproduce, age or even count
+toward the population - until you find it and click it open. Only
+hatching wakes it up. The HUD shows how many eggs are waiting; an
+unhatched one just sits there for as long as you leave it.
 
 The same creature menu's last two rows are the episode's dark side,
 included on purpose: **Set on fire** and **Stab** (marked out in red).

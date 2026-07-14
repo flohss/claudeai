@@ -244,6 +244,13 @@ class World:
         self.manual_predators = manual_predators
         self.births = 0
         self.deaths = 0
+        # Optional, opt-in: ids of creatures that exist but are treated as
+        # not-yet-active - excluded from _alive(), so they take no part in
+        # sensing, movement, eating, reproduction, aging or the population
+        # count until woken. main_vr.py uses this to keep an unhatched
+        # birth egg completely inert; it stays empty (no effect) everywhere
+        # else.
+        self.dormant_ids = set()
         self._cache = {"alive": []}
         self.vocab_history = {state: deque() for state in (IDLE, FOOD, MATE, DANGER, DISTRESS)}
         self.trait_history = {trait: deque() for trait in range(N_TRAITS)}
@@ -378,7 +385,19 @@ class World:
         return len(self._alive())
 
     def _alive(self):
+        if self.dormant_ids:
+            return [c for c in self.creatures if c.alive and c.id not in self.dormant_ids]
         return [c for c in self.creatures if c.alive]
+
+    def set_dormant(self, creature_id, dormant=True):
+        """Freeze (or wake) one creature. A dormant creature still exists
+        and is still 'alive', but is left out of _alive(), so the whole
+        step() pipeline - sensing, moving, eating, reproducing, aging -
+        skips it entirely. Used for unhatched birth eggs."""
+        if dormant:
+            self.dormant_ids.add(creature_id)
+        else:
+            self.dormant_ids.discard(creature_id)
 
     def _register_birth(self, creature, parent_ids, gen):
         creature.id = self._next_id
@@ -661,7 +680,9 @@ class World:
 
     def _age_and_cull(self):
         for c in self.creatures:
-            if not c.alive:
+            # dormant creatures (e.g. unhatched birth eggs) are fully
+            # frozen: they don't age, starve, or get culled while waiting
+            if not c.alive or c.id in self.dormant_ids:
                 continue
             c.age += 1
             if c.energy <= 0 or c.age > MAX_AGE:
