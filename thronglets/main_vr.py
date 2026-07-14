@@ -66,12 +66,15 @@ the chorus toggle. Press M to mute all of it.
 
 The landscape is scaled the way a real one would be: trees tower several
 times a creature's height, rocks are boulders rather than pebbles, and a
-river winds across the field toward the camera. Trees and rocks are
-depth-sorted together with the creatures and predators (same
-painter's-algorithm pass draw_scene() uses for everything else), so a
-creature correctly stands in front of a nearby tree or vanishes behind a
-farther one instead of scenery and population clashing as two unrelated
-layers - and, like the population, they pan with the view.
+river winds across the field toward the camera - a muddy shore fringe,
+a darker deep-water band, and a lighter shallow center with a couple of
+gently drifting sparkle lines, instead of one flat-colored ribbon.
+Trees and rocks are depth-sorted together with the creatures and
+predators (same painter's-algorithm pass draw_scene() uses for
+everything else), so a creature correctly stands in front of a nearby
+tree or vanishes behind a farther one instead of scenery and population
+clashing as two unrelated layers - and, like the population, they pan
+with the view.
 
 Every new game (a fresh launch, or pressing R) gets its own random
 landscape via generate_landscape(): different tree/rock/grass
@@ -178,10 +181,14 @@ ROCK_COLOR_NIGHT = (55, 55, 60)
 ROCK_SHADE_DAY = (105, 100, 96)
 ROCK_SHADE_NIGHT = (35, 35, 40)
 
-RIVER_COLOR_DAY = (80, 150, 195)
-RIVER_COLOR_NIGHT = (18, 32, 58)
-RIVER_HIGHLIGHT_DAY = (175, 215, 230)
-RIVER_HIGHLIGHT_NIGHT = (45, 65, 92)
+RIVER_COLOR_DAY = (55, 115, 165)        # deep water along the banks
+RIVER_COLOR_NIGHT = (14, 26, 48)
+RIVER_HIGHLIGHT_DAY = (130, 195, 215)   # lighter shallow band down the center
+RIVER_HIGHLIGHT_NIGHT = (32, 52, 74)
+RIVER_BANK_DAY = (150, 128, 88)         # wet shoreline fringe
+RIVER_BANK_NIGHT = (32, 28, 20)
+RIVER_SPARKLE_DAY = (215, 235, 240)
+RIVER_SPARKLE_NIGHT = (75, 92, 108)
 # A winding band cutting across the field, described as (x, z, half-width)
 # waypoints in stage coordinates, widening as it comes toward the camera.
 # A per-game river_offset (see generate_landscape()) shifts every x here
@@ -802,7 +809,7 @@ def project(x, z, zoom=1.0):
     return screen_x, screen_y, scale
 
 
-def draw_background(screen, day_phase, pan_x=0.0, zoom=1.0, landscape=None):
+def draw_background(screen, day_phase, pan_x=0.0, zoom=1.0, landscape=None, t=0.0):
     if landscape is None:
         landscape = _DEFAULT_LANDSCAPE
     sun_height, moon_height, day_amount, twilight_amount = celestial_state(day_phase)
@@ -873,7 +880,7 @@ def draw_background(screen, day_phase, pan_x=0.0, zoom=1.0, landscape=None):
         pygame.draw.line(screen, grid_color, (sx0, sy0), (sx1, sy1), 1)
 
     draw_grass_tufts(screen, landscape, pan_x, day_amount, zoom)
-    draw_river(screen, landscape.river_offset, pan_x, day_amount, zoom)
+    draw_river(screen, landscape.river_offset, pan_x, day_amount, zoom, t)
 
 
 def draw_ground_shadow(screen, sx, top_y, w, h, shadow_dx=0.0, shadow_len=1.0):
@@ -937,20 +944,41 @@ def draw_rock(screen, x, z, day_amount, size=1.0, ctx=DEFAULT_CTX):
     pygame.draw.polygon(screen, shade, lit_face)
 
 
-def draw_river(screen, river_offset, pan_x, day_amount, zoom=1.0):
-    water = lerp_color(RIVER_COLOR_NIGHT, RIVER_COLOR_DAY, day_amount)
-    highlight = lerp_color(RIVER_HIGHLIGHT_NIGHT, RIVER_HIGHLIGHT_DAY, day_amount)
-    left_bank, right_bank, mid = [], [], []
+def draw_river(screen, river_offset, pan_x, day_amount, zoom=1.0, t=0.0):
+    """Three nested bands (muddy shore, deep water, a lighter shallow
+    center) instead of one flat-colored ribbon, plus a couple of gently
+    drifting sparkle lines instead of one static highlight - still cheap
+    flat shapes, no per-pixel gradient, but reads as water rather than a
+    solid-colored road."""
+    deep = lerp_color(RIVER_COLOR_NIGHT, RIVER_COLOR_DAY, day_amount)
+    shallow = lerp_color(RIVER_HIGHLIGHT_NIGHT, RIVER_HIGHLIGHT_DAY, day_amount)
+    bank = lerp_color(RIVER_BANK_NIGHT, RIVER_BANK_DAY, day_amount)
+    sparkle = lerp_color(RIVER_SPARKLE_NIGHT, RIVER_SPARKLE_DAY, day_amount)
+
+    outer_left, outer_right = [], []
+    left_bank, right_bank = [], []
+    inner_left, inner_right = [], []
+    mid = []
     for x, z, half_width in RIVER_PATH:
         x = x + river_offset - pan_x
-        lx, ly, _ = project(x - half_width, z, zoom)
-        rx, ry, _ = project(x + half_width, z, zoom)
-        mx, my, _ = project(x, z, zoom)
-        left_bank.append((lx, ly))
-        right_bank.append((rx, ry))
-        mid.append((mx, my))
-    pygame.draw.polygon(screen, water, left_bank + right_bank[::-1])
-    pygame.draw.lines(screen, highlight, False, mid, 2)
+        outer_left.append(project(x - half_width * 1.3, z, zoom)[:2])
+        outer_right.append(project(x + half_width * 1.3, z, zoom)[:2])
+        left_bank.append(project(x - half_width, z, zoom)[:2])
+        right_bank.append(project(x + half_width, z, zoom)[:2])
+        inner_left.append(project(x - half_width * 0.5, z, zoom)[:2])
+        inner_right.append(project(x + half_width * 0.5, z, zoom)[:2])
+        mid.append(project(x, z, zoom)[:2])
+
+    pygame.draw.polygon(screen, bank, outer_left + outer_right[::-1])
+    pygame.draw.polygon(screen, deep, left_bank + right_bank[::-1])
+    pygame.draw.polygon(screen, shallow, inner_left + inner_right[::-1])
+
+    # a couple of soft, slowly drifting sparkle lines rather than one
+    # rigid highlight - suggests moving water without a real animation
+    for phase in (0.0, 2.4):
+        points = [(mx + math.sin(t * 0.8 + i * 0.9 + phase) * 3, my)
+                   for i, (mx, my) in enumerate(mid)]
+        pygame.draw.lines(screen, sparkle, False, points, 2)
 
 
 def draw_grass_tufts(screen, landscape, pan_x, day_amount, zoom=1.0):
@@ -1397,7 +1425,7 @@ def main():
         _, _, day_amount, _ = celestial_state(day_phase)
         shadow_dx, shadow_len = light_direction(day_phase)
         ctx = RenderCtx(zoom=zoom, shadow_dx=shadow_dx, shadow_len=shadow_len)
-        draw_background(screen, day_phase, pan_x, zoom, landscape)
+        draw_background(screen, day_phase, pan_x, zoom, landscape, t)
         if egg.hatched:
             draw_scene(screen, world, pan_x, day_amount, landscape,
                        distressed=needs.lowest() < NEED_LOW_THRESHOLD, t=t, ctx=ctx, birth_eggs=birth_eggs)

@@ -421,7 +421,9 @@ The background is a bit more filled in now too, and scaled the way a
 real landscape would be: trees tower several times a creature's height
 rather than standing barely taller than one, rocks read as boulders
 instead of pebbles, and a river winds across the field toward the
-camera. Trees and rocks are depth-sorted together with the creatures and
+camera - a muddy shore, a darker deep-water band, a lighter shallow
+center, and a couple of softly drifting sparkle lines, rather than a
+single flat-colored ribbon. Trees and rocks are depth-sorted together with the creatures and
 predators, so a creature correctly stands in front of a nearby tree or
 disappears behind a farther one instead of scenery and population
 overlapping like two unrelated layers, and they pan with the view along
