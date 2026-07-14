@@ -48,6 +48,7 @@ Controls:
 """
 
 import math
+import random
 import sys
 import threading
 
@@ -59,16 +60,52 @@ from simulation import HEIGHT, WIDTH, World
 SCREEN_W, SCREEN_H = 1000, 700
 HORIZON_Y = int(SCREEN_H * 0.42)
 
-SKY_TOP = (40, 70, 130)
-SKY_HORIZON = (178, 212, 235)
+DAY_CYCLE_SECONDS = 60.0  # a full day+night loop, real time
+
+# Day/night is one continuous blend, not a hard swap: every "landscape"
+# color below has a day and a night version, plus a warm twilight accent
+# that peaks for a moment at each sunrise/sunset (see celestial_state()).
+SKY_TOP_DAY = (40, 70, 130)
+SKY_HORIZON_DAY = (178, 212, 235)
+SKY_TOP_NIGHT = (8, 10, 28)
+SKY_HORIZON_NIGHT = (24, 28, 52)
+SKY_TOP_TWILIGHT = (70, 45, 80)
+SKY_HORIZON_TWILIGHT = (240, 145, 110)
+
+HILL_FAR_DAY = (100, 140, 120)
+HILL_NEAR_DAY = (80, 125, 95)
+HILL_FAR_NIGHT = (28, 38, 42)
+HILL_NEAR_NIGHT = (20, 30, 36)
+
+GROUND_FAR_DAY = (95, 165, 100)
+GROUND_NEAR_DAY = (55, 130, 65)
+GROUND_FAR_NIGHT = (30, 48, 52)
+GROUND_NEAR_NIGHT = (16, 28, 34)
+
+TWILIGHT_WARM = (210, 140, 80)  # a low-weight tint blended into ground/hills at sunrise/sunset
+
+GRID_COLOR_DAY = (70, 150, 80)
+GRID_COLOR_NIGHT = (35, 55, 60)
+TREE_TRUNK_DAY = (90, 65, 45)
+TREE_LEAVES_DAY = (55, 115, 60)
+TREE_TRUNK_NIGHT = (40, 32, 28)
+TREE_LEAVES_NIGHT = (25, 45, 32)
+
 SUN_COLOR = (255, 236, 180)
-HILL_FAR = (100, 140, 120)
-HILL_NEAR = (80, 125, 95)
-GROUND_FAR = (95, 165, 100)
-GROUND_NEAR = (55, 130, 65)
-GRID_COLOR = (70, 150, 80)
-TREE_TRUNK = (90, 65, 45)
-TREE_LEAVES = (55, 115, 60)
+SUN_COLOR_HORIZON = (255, 140, 80)
+MOON_COLOR = (222, 226, 235)
+MOON_CRATER_COLOR = (195, 200, 212)
+STAR_COLOR = (255, 255, 255)
+NIGHT_OVERLAY_COLOR = (20, 25, 65)
+
+# A fixed, seeded star field - generated once at import, not per frame, so
+# the stars hold still instead of jittering; they fade in/out by blending
+# toward the current sky color rather than needing per-pixel alpha.
+_star_rng = random.Random(7)
+STAR_POSITIONS = [
+    (_star_rng.uniform(0.02, 0.98), _star_rng.uniform(0.02, 0.9), _star_rng.choice((1, 1, 1, 2)))
+    for _ in range(70)
+]
 
 BODY_COLOR = (245, 210, 70)
 HAIR_COLOR = (225, 90, 60)
@@ -117,6 +154,21 @@ EGG_CRACK_LINES = [
 def lerp_color(c1, c2, t):
     t = max(0.0, min(1.0, t))
     return tuple(int(c1[i] + (c2[i] - c1[i]) * t) for i in range(3))
+
+
+def celestial_state(day_phase):
+    """day_phase 0..1 is one full day+night loop. The sun is up for the
+    first half, the moon for the second - they're exact mirror images of
+    each other, so precisely one is ever above the horizon. day_amount is
+    a smooth 0 (deep night) .. 1 (high noon) blend for landscape colors;
+    twilight_amount peaks for a moment at both the sunrise and sunset
+    crossing, for a warm accent independent of the day/night blend."""
+    theta = day_phase * 2 * math.pi
+    sun_height = math.sin(theta)
+    moon_height = -sun_height
+    day_amount = (sun_height + 1) / 2
+    twilight_amount = max(0.0, 1.0 - abs(sun_height) / 0.35)
+    return sun_height, moon_height, day_amount, twilight_amount
 
 
 class SensorHub:
@@ -301,52 +353,96 @@ def project(x, z):
     return screen_x, screen_y, scale
 
 
-def draw_background(screen):
+def draw_background(screen, day_phase):
+    sun_height, moon_height, day_amount, twilight_amount = celestial_state(day_phase)
+
+    sky_top = lerp_color(SKY_TOP_NIGHT, SKY_TOP_DAY, day_amount)
+    sky_top = lerp_color(sky_top, SKY_TOP_TWILIGHT, twilight_amount * 0.5)
+    sky_horizon = lerp_color(SKY_HORIZON_NIGHT, SKY_HORIZON_DAY, day_amount)
+    sky_horizon = lerp_color(sky_horizon, SKY_HORIZON_TWILIGHT, twilight_amount)
     for y in range(HORIZON_Y):
-        color = lerp_color(SKY_TOP, SKY_HORIZON, y / HORIZON_Y)
+        color = lerp_color(sky_top, sky_horizon, y / HORIZON_Y)
         pygame.draw.line(screen, color, (0, y), (SCREEN_W, y))
 
-    sun_pos = (int(SCREEN_W * 0.78), int(HORIZON_Y * 0.32))
-    for r, color in ((54, lerp_color(SUN_COLOR, SKY_HORIZON, 0.55)), (38, SUN_COLOR)):
-        pygame.draw.circle(screen, color, sun_pos, r)
+    for frac_x, frac_y, size in STAR_POSITIONS:
+        local_sky = lerp_color(sky_top, sky_horizon, frac_y)
+        star_color = lerp_color(STAR_COLOR, local_sky, day_amount)
+        pygame.draw.circle(screen, star_color,
+                            (int(SCREEN_W * frac_x), int(HORIZON_Y * frac_y)), size)
+
+    if sun_height > 0:
+        arc_t = day_phase / 0.5
+        sun_pos = (int(SCREEN_W * (0.08 + 0.84 * arc_t)), int(HORIZON_Y * (1.0 - sun_height * 0.85)))
+        near_horizon = 1.0 - sun_height
+        core = lerp_color(SUN_COLOR, SUN_COLOR_HORIZON, near_horizon * 0.8)
+        for r, color in ((54, lerp_color(core, sky_horizon, 0.5)), (38, core)):
+            pygame.draw.circle(screen, color, sun_pos, r)
+    if moon_height > 0:
+        arc_t = (day_phase - 0.5) / 0.5
+        moon_pos = (int(SCREEN_W * (0.08 + 0.84 * arc_t)), int(HORIZON_Y * (1.0 - moon_height * 0.85)))
+        pygame.draw.circle(screen, lerp_color(MOON_COLOR, sky_horizon, 0.5), moon_pos, 30)
+        pygame.draw.circle(screen, MOON_COLOR, moon_pos, 26)
+        for ox, oy, r in ((-8, -6, 5), (7, 3, 4), (-2, 10, 3)):
+            pygame.draw.circle(screen, MOON_CRATER_COLOR, (moon_pos[0] + ox, moon_pos[1] + oy), r)
+
+    hill_far = lerp_color(HILL_FAR_NIGHT, HILL_FAR_DAY, day_amount)
+    hill_near = lerp_color(HILL_NEAR_NIGHT, HILL_NEAR_DAY, day_amount)
+    hill_far = lerp_color(hill_far, TWILIGHT_WARM, twilight_amount * 0.25)
+    hill_near = lerp_color(hill_near, TWILIGHT_WARM, twilight_amount * 0.3)
 
     hill_y = HORIZON_Y - int(SCREEN_H * 0.05)
     far_hills = [(0, HORIZON_Y)]
     for i in range(9):
         far_hills.append((SCREEN_W * i / 8, hill_y - 18 * math.sin(i * 1.3 + 0.5)))
     far_hills.append((SCREEN_W, HORIZON_Y))
-    pygame.draw.polygon(screen, HILL_FAR, far_hills)
+    pygame.draw.polygon(screen, hill_far, far_hills)
 
     near_hill_y = HORIZON_Y - int(SCREEN_H * 0.02)
     near_hills = [(0, HORIZON_Y)]
     for i in range(7):
         near_hills.append((SCREEN_W * i / 6, near_hill_y - 12 * math.sin(i * 2.1 + 2.0)))
     near_hills.append((SCREEN_W, HORIZON_Y))
-    pygame.draw.polygon(screen, HILL_NEAR, near_hills)
+    pygame.draw.polygon(screen, hill_near, near_hills)
 
+    ground_far = lerp_color(GROUND_FAR_NIGHT, GROUND_FAR_DAY, day_amount)
+    ground_near = lerp_color(GROUND_NEAR_NIGHT, GROUND_NEAR_DAY, day_amount)
+    ground_far = lerp_color(ground_far, TWILIGHT_WARM, twilight_amount * 0.2)
+    ground_near = lerp_color(ground_near, TWILIGHT_WARM, twilight_amount * 0.2)
     for y in range(HORIZON_Y, SCREEN_H):
         t = (y - HORIZON_Y) / (SCREEN_H - HORIZON_Y)
-        pygame.draw.line(screen, lerp_color(GROUND_FAR, GROUND_NEAR, t), (0, y), (SCREEN_W, y))
+        pygame.draw.line(screen, lerp_color(ground_far, ground_near, t), (0, y), (SCREEN_W, y))
 
+    grid_color = lerp_color(GRID_COLOR_NIGHT, GRID_COLOR_DAY, day_amount)
     for i in range(1, 9):
         _, sy, _ = project(0, i / 9)
-        pygame.draw.line(screen, GRID_COLOR, (0, sy), (SCREEN_W, sy), 1)
+        pygame.draw.line(screen, grid_color, (0, sy), (SCREEN_W, sy), 1)
     for x in (-1.2, -0.8, -0.4, 0.0, 0.4, 0.8, 1.2):
         sx0, sy0, _ = project(x, 0.0)
         sx1, sy1, _ = project(x, 1.0)
-        pygame.draw.line(screen, GRID_COLOR, (sx0, sy0), (sx1, sy1), 1)
+        pygame.draw.line(screen, grid_color, (sx0, sy0), (sx1, sy1), 1)
 
     for x, z in ((-1.1, 0.28), (1.15, 0.22), (-0.75, 0.55), (0.95, 0.62)):
-        draw_tree(screen, x, z)
+        draw_tree(screen, x, z, day_amount)
 
 
-def draw_tree(screen, x, z):
+def draw_tree(screen, x, z, day_amount):
     sx, sy, scale = project(x, z)
     trunk_h = int(30 * scale)
     trunk_w = max(2, int(6 * scale))
-    pygame.draw.rect(screen, TREE_TRUNK, (sx - trunk_w / 2, sy - trunk_h, trunk_w, trunk_h))
+    trunk_color = lerp_color(TREE_TRUNK_NIGHT, TREE_TRUNK_DAY, day_amount)
+    leaves_color = lerp_color(TREE_LEAVES_NIGHT, TREE_LEAVES_DAY, day_amount)
+    pygame.draw.rect(screen, trunk_color, (sx - trunk_w / 2, sy - trunk_h, trunk_w, trunk_h))
     leaf_r = max(3, int(22 * scale))
-    pygame.draw.circle(screen, TREE_LEAVES, (int(sx), int(sy - trunk_h - leaf_r * 0.6)), leaf_r)
+    pygame.draw.circle(screen, leaves_color, (int(sx), int(sy - trunk_h - leaf_r * 0.6)), leaf_r)
+
+
+def draw_night_overlay(screen, day_amount):
+    night_amount = 1.0 - day_amount
+    if night_amount <= 0.01:
+        return
+    overlay = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
+    overlay.fill((*NIGHT_OVERLAY_COLOR, int(95 * night_amount)))
+    screen.blit(overlay, (0, 0))
 
 
 def draw_critter(screen, x, z, token):
@@ -557,6 +653,7 @@ def main():
     egg = EggState()
     hatch_flash = 0.0
     t = 0.0
+    day_phase = 0.1  # start in early-morning light
     running = True
 
     while running:
@@ -599,6 +696,8 @@ def main():
 
         egg.update(dt)
         hatch_flash = max(0.0, hatch_flash - dt)
+        if not paused:
+            day_phase = (day_phase + dt / DAY_CYCLE_SECONDS) % 1.0
 
         if egg.hatched and not paused:
             tick_accumulator += dt
@@ -612,12 +711,14 @@ def main():
         if egg.hatched:
             alert.update(world, sensors, threshold, dt)
 
-        draw_background(screen)
+        draw_background(screen, day_phase)
         if egg.hatched:
             draw_population(screen, world, pan_x)
         else:
             wobble = math.sin(t * 14.0) * (2 + egg.cracks * 1.5)
             draw_egg(screen, EGG_STAGE_X - pan_x, EGG_STAGE_Z, egg.cracks, wobble, egg.pulse)
+        _, _, day_amount, _ = celestial_state(day_phase)
+        draw_night_overlay(screen, day_amount)
         draw_status(screen, font, world, paused, speed, sensors, threshold, alert.flash,
                     egg.hatched, egg.cracks)
         if hatch_flash > 0:

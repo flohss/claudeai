@@ -395,6 +395,15 @@ ever starts from a single creature, the population can't grow on its own
 to, not a repeat of the language-evolution demo from the other three
 renderers.
 
+The sky runs its own day/night cycle the whole time (a full loop every
+60 real seconds, running even before the egg hatches) - the sun and moon
+arc across the sky on opposite halves of the loop, never both up at once,
+with a warm sunrise/sunset tint at each crossing. Sky, hills, ground, grid,
+and trees all blend smoothly between their day and night colors, stars
+fade in once the sun is down, and a soft blue wash settles over the whole
+scene (population included) as it gets dark. It's purely atmospheric -
+doesn't change how anything behaves, just how it looks.
+
 **Optional sensors** (loosely inspired by the show's idea of a
 camera/microphone giving the Thronglets an outside signal to react to):
 press `A` to turn on the microphone, `C` for the webcam. When either
