@@ -434,10 +434,11 @@ standing barely taller than one, and rocks read as boulders instead of
 pebbles. A river winds across the field toward the camera - a muddy
 shore, a darker deep-water band, a lighter shallow center, and a couple
 of softly drifting sparkle lines, rather than a single flat-colored
-ribbon. Its source sits right where the forest ends, touching the
-forest band without overlapping it, so the water reads as coming from
-just past the trees instead of fading into empty ground. Trees and
-rocks are depth-sorted together with the
+ribbon. Its source sits at the horizon line itself, glued under the
+green foothill band without overlapping it, so the water emerges from
+beneath the hills and threads down through the forest toward the plain -
+and the trees make room for its bed, none ever stands in the water.
+Trees and rocks are depth-sorted together with the
 creatures and predators, so a creature correctly stands in front of a
 nearby tree or disappears behind a farther one instead of scenery and
 population overlapping like two unrelated layers, and they pan with the

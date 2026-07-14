@@ -85,10 +85,10 @@ creature's height and rocks are boulders rather than pebbles. A river
 winds across the field toward the camera - a muddy shore fringe, a darker
 deep-water band, and a lighter shallow center with a couple of gently
 drifting sparkle lines, instead of one flat-colored ribbon. Its source
-sits right where the forest ends, touching the forest band without
-overlapping it, so the water reads as coming from just beyond the trees
-instead of vanishing into empty ground or reaching back into the
-mountains.
+sits at the horizon line itself, glued under the green foothill band
+without overlapping it, so the water emerges from beneath the hills and
+threads down through the forest toward the plain - and the trees make
+room for its bed (generate_landscape() never places one in the water).
 Trees and rocks are depth-sorted together with the creatures and
 predators (same painter's-algorithm pass draw_scene() uses for
 everything else), so a creature correctly stands in front of a nearby
@@ -217,14 +217,28 @@ RIVER_SPARKLE_NIGHT = (75, 92, 108)
 # waypoints in stage coordinates, widening as it comes toward the camera.
 # A per-game river_offset (see generate_landscape()) shifts every x here
 # sideways, so the river doesn't sit in the exact same place every game.
-# Its source (first waypoint) sits just past FOREST_Z_RANGE's nearest edge
-# (0.28) - touching the forest band without overlapping it, instead of
-# reaching back into the mountains.
+# Its source (first waypoint) sits at z=0 - the horizon line itself - so
+# the water emerges from directly under the green foothill band and then
+# threads down through the forest toward the plain. The trees make room
+# for it (see generate_landscape()), it never runs over one.
 RIVER_PATH = [
-    (0.5, 0.30, 0.02), (0.6, 0.40, 0.03), (0.7, 0.50, 0.045),
-    (0.64, 0.62, 0.06), (0.78, 0.73, 0.08), (0.92, 0.85, 0.11),
+    (0.5, 0.0, 0.015), (0.6, 0.18, 0.03), (0.7, 0.32, 0.045),
+    (0.64, 0.48, 0.06), (0.78, 0.63, 0.08), (0.92, 0.8, 0.11),
     (1.08, 1.0, 0.15),
 ]
+
+
+def river_lane_at(z):
+    """The river's centerline x and half-width at a given depth,
+    interpolated between RIVER_PATH waypoints (clamped at both ends).
+    Before river_offset - callers shift the x themselves."""
+    if z <= RIVER_PATH[0][1]:
+        return RIVER_PATH[0][0], RIVER_PATH[0][2]
+    for (x0, z0, w0), (x1, z1, w1) in zip(RIVER_PATH, RIVER_PATH[1:]):
+        if z <= z1:
+            f = (z - z0) / (z1 - z0)
+            return x0 + (x1 - x0) * f, w0 + (w1 - w0) * f
+    return RIVER_PATH[-1][0], RIVER_PATH[-1][2]
 
 GRASS_TUFT_COLOR_DAY = (35, 95, 40)
 GRASS_TUFT_COLOR_NIGHT = (10, 22, 18)
@@ -347,10 +361,22 @@ def generate_landscape(seed=None):
     game gets); pass a specific seed to reproduce that exact layout
     again later."""
     rng = random.Random(seed)
-    forest = [(rng.uniform(-1.3, 1.3), rng.uniform(*FOREST_Z_RANGE))
-              for _ in range(rng.randint(*FOREST_COUNT_RANGE))]
-    trees = [(rng.uniform(-1.3, 1.3), rng.uniform(*TREE_Z_RANGE))
-              for _ in range(rng.randint(*TREE_COUNT_RANGE))]
+    # The river's sideways shift is drawn first so tree placement can
+    # avoid its bed: the river runs down through the middle of the
+    # forest, and a tree standing in the water would read as a mistake.
+    river_offset = rng.uniform(-0.25, 0.25)
+
+    def scatter_trees(count, z_range):
+        pts = []
+        while len(pts) < count:
+            x, z = rng.uniform(-1.3, 1.3), rng.uniform(*z_range)
+            lane_x, half_w = river_lane_at(z)
+            if abs(x - (lane_x + river_offset)) > half_w + 0.06:
+                pts.append((x, z))
+        return pts
+
+    forest = scatter_trees(rng.randint(*FOREST_COUNT_RANGE), FOREST_Z_RANGE)
+    trees = scatter_trees(rng.randint(*TREE_COUNT_RANGE), TREE_Z_RANGE)
     rocks = [(rng.uniform(-1.3, 1.3), rng.uniform(0.04, 0.85), rng.uniform(0.6, 1.6))
              for _ in range(rng.randint(*ROCK_COUNT_RANGE))]
     grass = [(rng.uniform(-1.3, 1.3), rng.uniform(0.03, 0.99), rng.uniform(-1.0, 1.0))
@@ -363,7 +389,7 @@ def generate_landscape(seed=None):
         grass=grass,
         hill_far_phase=rng.uniform(0.0, 2 * math.pi),
         hill_near_phase=rng.uniform(0.0, 2 * math.pi),
-        river_offset=rng.uniform(-0.25, 0.25),
+        river_offset=river_offset,
     )
 
 
