@@ -54,13 +54,27 @@ Press M to mute it.
 
 The landscape is scaled the way a real one would be: trees tower several
 times a creature's height, rocks are boulders rather than pebbles, and a
-river winds across the field toward the camera - all fixed background
-decoration, no gameplay effect, just proportioned properly. Trees and
-rocks are depth-sorted together with the creatures and predators (same
+river winds across the field toward the camera. Trees and rocks are
+depth-sorted together with the creatures and predators (same
 painter's-algorithm pass draw_scene() uses for everything else), so a
 creature correctly stands in front of a nearby tree or vanishes behind a
 farther one instead of scenery and population clashing as two unrelated
 layers - and, like the population, they pan with the view.
+
+Every new game (a fresh launch, or pressing R) gets its own random
+landscape via generate_landscape(): different tree/rock/grass
+placement, hill silhouette, and river position each time, built from a
+random seed. Passing that function a specific seed instead of None
+reproduces the exact same landscape again - not used yet, but there for
+a future save/load feature to restore a saved game's terrain rather
+than generating a new one over it.
+
+Lighting is faked, not real 3D: a highlight blob leans toward wherever
+the sun or moon currently is, and cast shadows stretch and swing around
+over the course of the day (short and centered at zenith, long and
+leaning near sunrise/sunset) via light_direction(day_phase). The ground
+is also scattered with small grass-tuft marks instead of being a single
+flat color band, for texture.
 
 The scroll wheel zooms, Minecraft-style: it magnifies the ground-plane
 scene around a fixed point on the horizon rather than moving the camera
@@ -87,6 +101,7 @@ import math
 import random
 import sys
 import threading
+from collections import namedtuple
 
 import numpy as np
 import pygame
@@ -144,22 +159,10 @@ TREE_LEAVES_DAY = (55, 115, 60)
 TREE_TRUNK_NIGHT = (40, 32, 28)
 TREE_LEAVES_NIGHT = (25, 45, 32)
 
-# (x, z) in stage coordinates - a wider, denser treeline than a single
-# row, some close, some near the horizon, for more depth.
-TREE_POSITIONS = [
-    (-1.1, 0.28), (1.15, 0.22), (-0.75, 0.55), (0.95, 0.62),
-    (-1.25, 0.78), (0.2, 0.12), (-0.35, 0.85), (1.3, 0.85), (-1.0, 0.08),
-]
-
 ROCK_COLOR_DAY = (150, 145, 140)
 ROCK_COLOR_NIGHT = (55, 55, 60)
 ROCK_SHADE_DAY = (105, 100, 96)
 ROCK_SHADE_NIGHT = (35, 35, 40)
-# (x, z, size multiplier)
-ROCK_POSITIONS = [
-    (-1.05, 0.18, 1.0), (0.32, 0.14, 0.7), (-0.5, 0.4, 1.2),
-    (0.72, 0.35, 0.8), (-0.15, 0.68, 1.4),
-]
 
 RIVER_COLOR_DAY = (80, 150, 195)
 RIVER_COLOR_NIGHT = (18, 32, 58)
@@ -167,11 +170,17 @@ RIVER_HIGHLIGHT_DAY = (175, 215, 230)
 RIVER_HIGHLIGHT_NIGHT = (45, 65, 92)
 # A winding band cutting across the field, described as (x, z, half-width)
 # waypoints in stage coordinates, widening as it comes toward the camera.
+# A per-game river_offset (see generate_landscape()) shifts every x here
+# sideways, so the river doesn't sit in the exact same place every game.
 RIVER_PATH = [
     (0.5, 0.04, 0.02), (0.6, 0.18, 0.03), (0.7, 0.32, 0.045),
     (0.64, 0.48, 0.06), (0.78, 0.63, 0.08), (0.92, 0.8, 0.11),
     (1.08, 1.0, 0.15),
 ]
+
+GRASS_TUFT_COLOR_DAY = (35, 95, 40)
+GRASS_TUFT_COLOR_NIGHT = (10, 22, 18)
+GRASS_TUFT_COUNT = 220
 
 SUN_COLOR = (255, 236, 180)
 SUN_COLOR_HORIZON = (255, 140, 80)
@@ -260,6 +269,51 @@ NEED_PANEL_Y = 90
 NEED_BUTTON_SIZE = 44
 NEED_BUTTON_GAP = 56
 
+# Bundles the three "how should this frame be projected/lit" values that
+# almost every draw_* function needs together, instead of three separate
+# parameters spreading through every signature.
+RenderCtx = namedtuple("RenderCtx", ["zoom", "shadow_dx", "shadow_len"])
+DEFAULT_CTX = RenderCtx(zoom=1.0, shadow_dx=0.0, shadow_len=1.0)
+
+TREE_COUNT_RANGE = (7, 12)
+ROCK_COUNT_RANGE = (4, 8)
+
+# Everything about a game's terrain that should be different from one
+# new game to the next, but reproducible if a specific seed is supplied
+# (e.g. by a future save/load feature restoring a saved game's terrain).
+Landscape = namedtuple("Landscape", [
+    "seed", "trees", "rocks", "grass", "hill_far_phase", "hill_near_phase", "river_offset",
+])
+
+
+def generate_landscape(seed=None):
+    """Builds one random landscape - tree/rock/grass placement, plus a
+    little hill-silhouette and river variation - from a seed. Leave seed
+    as None for a fresh, different layout (what every new game gets);
+    pass a specific seed to reproduce that exact layout again later."""
+    rng = random.Random(seed)
+    trees = [(rng.uniform(-1.3, 1.3), rng.uniform(0.04, 0.9))
+              for _ in range(rng.randint(*TREE_COUNT_RANGE))]
+    rocks = [(rng.uniform(-1.3, 1.3), rng.uniform(0.04, 0.85), rng.uniform(0.6, 1.6))
+             for _ in range(rng.randint(*ROCK_COUNT_RANGE))]
+    grass = [(rng.uniform(-1.3, 1.3), rng.uniform(0.03, 0.99), rng.uniform(-1.0, 1.0))
+             for _ in range(GRASS_TUFT_COUNT)]
+    return Landscape(
+        seed=seed,
+        trees=trees,
+        rocks=rocks,
+        grass=grass,
+        hill_far_phase=rng.uniform(0.0, 2 * math.pi),
+        hill_near_phase=rng.uniform(0.0, 2 * math.pi),
+        river_offset=rng.uniform(-0.25, 0.25),
+    )
+
+
+# A fixed fallback landscape (deterministic seed) for callers that don't
+# have a live game's landscape handy - keeps draw_background() always
+# renderable rather than requiring a landscape argument everywhere.
+_DEFAULT_LANDSCAPE = generate_landscape(seed=0)
+
 
 def lerp_color(c1, c2, t):
     t = max(0.0, min(1.0, t))
@@ -279,6 +333,26 @@ def celestial_state(day_phase):
     day_amount = (sun_height + 1) / 2
     twilight_amount = max(0.0, 1.0 - abs(sun_height) / 0.35)
     return sun_height, moon_height, day_amount, twilight_amount
+
+
+def light_direction(day_phase):
+    """Fakes directional lighting from the sun/moon's actual position,
+    without real 3D geometry: shadow_dx is which way shadows point (-1
+    fully left .. +1 fully right), shadow_len is how stretched they are
+    (>1 = longer - near sunrise/sunset or dim moonlight - down to a
+    shorter minimum near noon, when the light source is overhead)."""
+    sun_height, moon_height, _, _ = celestial_state(day_phase)
+    if sun_height > 0.001:
+        arc_t = day_phase / 0.5
+        light_height = sun_height
+    elif moon_height > 0.001:
+        arc_t = (day_phase - 0.5) / 0.5
+        light_height = moon_height
+    else:
+        arc_t, light_height = 0.5, 0.5
+    shadow_dx = max(-1.0, min(1.0, (0.5 - arc_t) * 2.0))
+    shadow_len = max(0.7, min(2.6, 1.0 + (1.0 - max(0.05, light_height)) * 1.6))
+    return shadow_dx, shadow_len
 
 
 class SensorHub:
@@ -624,7 +698,9 @@ def project(x, z, zoom=1.0):
     return screen_x, screen_y, scale
 
 
-def draw_background(screen, day_phase, zoom=1.0):
+def draw_background(screen, day_phase, pan_x=0.0, zoom=1.0, landscape=None):
+    if landscape is None:
+        landscape = _DEFAULT_LANDSCAPE
     sun_height, moon_height, day_amount, twilight_amount = celestial_state(day_phase)
 
     sky_top = lerp_color(SKY_TOP_NIGHT, SKY_TOP_DAY, day_amount)
@@ -664,14 +740,14 @@ def draw_background(screen, day_phase, zoom=1.0):
     hill_y = HORIZON_Y - int(SCREEN_H * 0.05)
     far_hills = [(0, HORIZON_Y)]
     for i in range(9):
-        far_hills.append((SCREEN_W * i / 8, hill_y - 18 * math.sin(i * 1.3 + 0.5)))
+        far_hills.append((SCREEN_W * i / 8, hill_y - 18 * math.sin(i * 1.3 + landscape.hill_far_phase)))
     far_hills.append((SCREEN_W, HORIZON_Y))
     pygame.draw.polygon(screen, hill_far, far_hills)
 
     near_hill_y = HORIZON_Y - int(SCREEN_H * 0.02)
     near_hills = [(0, HORIZON_Y)]
     for i in range(7):
-        near_hills.append((SCREEN_W * i / 6, near_hill_y - 12 * math.sin(i * 2.1 + 2.0)))
+        near_hills.append((SCREEN_W * i / 6, near_hill_y - 12 * math.sin(i * 2.1 + landscape.hill_near_phase)))
     near_hills.append((SCREEN_W, HORIZON_Y))
     pygame.draw.polygon(screen, hill_near, near_hills)
 
@@ -685,26 +761,54 @@ def draw_background(screen, day_phase, zoom=1.0):
 
     grid_color = lerp_color(GRID_COLOR_NIGHT, GRID_COLOR_DAY, day_amount)
     for i in range(1, 9):
-        _, sy, _ = project(0, i / 9, zoom)
+        _, sy, _ = project(-pan_x, i / 9, zoom)
         pygame.draw.line(screen, grid_color, (0, sy), (SCREEN_W, sy), 1)
     for x in (-1.2, -0.8, -0.4, 0.0, 0.4, 0.8, 1.2):
-        sx0, sy0, _ = project(x, 0.0, zoom)
-        sx1, sy1, _ = project(x, 1.0, zoom)
+        sx0, sy0, _ = project(x - pan_x, 0.0, zoom)
+        sx1, sy1, _ = project(x - pan_x, 1.0, zoom)
         pygame.draw.line(screen, grid_color, (sx0, sy0), (sx1, sy1), 1)
 
-    draw_river(screen, day_amount, zoom)
+    draw_grass_tufts(screen, landscape, pan_x, day_amount, zoom)
+    draw_river(screen, landscape.river_offset, pan_x, day_amount, zoom)
 
 
-def draw_tree(screen, x, z, day_amount, zoom=1.0):
-    sx, sy, scale = project(x, z, zoom)
+def draw_ground_shadow(screen, sx, top_y, w, h, shadow_dx=0.0, shadow_len=1.0):
+    """A cast shadow that stretches and leans away from the light source
+    instead of always sitting as a fixed puddle directly underneath -
+    shadow_dx/shadow_len come from light_direction(). At the defaults
+    (dx=0, len=1) this is pixel-identical to a plain centered ellipse."""
+    stretched_w = w * shadow_len
+    offset = shadow_dx * w * 0.5 * (shadow_len - 1.0)
+    pygame.draw.ellipse(screen, SHADOW_COLOR, (sx + offset - stretched_w / 2, top_y, stretched_w, h))
+
+
+def draw_highlight(screen, cx, cy, r, base_color, shadow_dx=0.0):
+    """A small lightened blob offset toward the light source - a cheap
+    fake-volumetric trick (no real per-pixel gradient) that gives flat
+    circular shapes some sense of roundness/lighting."""
+    if r < 3:
+        return
+    light_dx = -shadow_dx
+    hl_color = lerp_color(base_color, (255, 255, 255), 0.45)
+    hx = cx + light_dx * r * 0.35
+    hy = cy - r * 0.35
+    pygame.draw.circle(screen, hl_color, (int(hx), int(hy)), max(1, int(r * 0.38)))
+
+
+def draw_tree(screen, x, z, day_amount, ctx=DEFAULT_CTX):
+    sx, sy, scale = project(x, z, ctx.zoom)
     # A tree towers over a creature the way a real tree towers over a
     # small child - roughly 4-5x its standing height, not a shrub.
     trunk_h = int(130 * scale)
     trunk_w = max(4, int(16 * scale))
+    leaf_r = max(6, int(48 * scale))
+
+    shadow_w, shadow_h = leaf_r * 2.0, leaf_r * 0.5
+    draw_ground_shadow(screen, sx, sy - shadow_h * 0.4, shadow_w, shadow_h, ctx.shadow_dx, ctx.shadow_len)
+
     trunk_color = lerp_color(TREE_TRUNK_NIGHT, TREE_TRUNK_DAY, day_amount)
     leaves_color = lerp_color(TREE_LEAVES_NIGHT, TREE_LEAVES_DAY, day_amount)
     pygame.draw.rect(screen, trunk_color, (sx - trunk_w / 2, sy - trunk_h, trunk_w, trunk_h))
-    leaf_r = max(6, int(48 * scale))
     canopy_y = sy - trunk_h - leaf_r * 0.5
     # Three overlapping lobes instead of one circle - a fuller, less
     # perfectly-round canopy without needing real foliage art.
@@ -712,10 +816,11 @@ def draw_tree(screen, x, z, day_amount, zoom=1.0):
         pygame.draw.circle(screen, leaves_color,
                             (int(sx + ox * leaf_r), int(canopy_y + oy * leaf_r)),
                             max(3, int(leaf_r * rr)))
+    draw_highlight(screen, sx, canopy_y, leaf_r, leaves_color, ctx.shadow_dx)
 
 
-def draw_rock(screen, x, z, day_amount, size=1.0, zoom=1.0):
-    sx, sy, scale = project(x, z, zoom)
+def draw_rock(screen, x, z, day_amount, size=1.0, ctx=DEFAULT_CTX):
+    sx, sy, scale = project(x, z, ctx.zoom)
     # Boulders, not pebbles - roughly creature-sized to well over head
     # height depending on the size multiplier.
     r = max(3, int(30 * scale * size))
@@ -723,7 +828,7 @@ def draw_rock(screen, x, z, day_amount, size=1.0, zoom=1.0):
         return
     color = lerp_color(ROCK_COLOR_NIGHT, ROCK_COLOR_DAY, day_amount)
     shade = lerp_color(ROCK_SHADE_NIGHT, ROCK_SHADE_DAY, day_amount)
-    pygame.draw.ellipse(screen, SHADOW_COLOR, (sx - r * 0.9, sy + r * 0.4, r * 1.8, r * 0.4))
+    draw_ground_shadow(screen, sx, sy + r * 0.4, r * 1.8, r * 0.4, ctx.shadow_dx, ctx.shadow_len)
     body = [
         (sx - r, sy + r * 0.3), (sx - r * 0.5, sy - r * 0.6), (sx + r * 0.3, sy - r * 0.8),
         (sx + r, sy - r * 0.1), (sx + r * 0.6, sy + r * 0.4),
@@ -734,13 +839,15 @@ def draw_rock(screen, x, z, day_amount, size=1.0, zoom=1.0):
         (sx + r, sy - r * 0.1), (sx + r * 0.6, sy + r * 0.4),
     ]
     pygame.draw.polygon(screen, shade, lit_face)
+    draw_highlight(screen, sx, sy - r * 0.35, r, color, ctx.shadow_dx)
 
 
-def draw_river(screen, day_amount, zoom=1.0):
+def draw_river(screen, river_offset, pan_x, day_amount, zoom=1.0):
     water = lerp_color(RIVER_COLOR_NIGHT, RIVER_COLOR_DAY, day_amount)
     highlight = lerp_color(RIVER_HIGHLIGHT_NIGHT, RIVER_HIGHLIGHT_DAY, day_amount)
     left_bank, right_bank, mid = [], [], []
     for x, z, half_width in RIVER_PATH:
+        x = x + river_offset - pan_x
         lx, ly, _ = project(x - half_width, z, zoom)
         rx, ry, _ = project(x + half_width, z, zoom)
         mx, my, _ = project(x, z, zoom)
@@ -749,6 +856,20 @@ def draw_river(screen, day_amount, zoom=1.0):
         mid.append((mx, my))
     pygame.draw.polygon(screen, water, left_bank + right_bank[::-1])
     pygame.draw.lines(screen, highlight, False, mid, 2)
+
+
+def draw_grass_tufts(screen, landscape, pan_x, day_amount, zoom=1.0):
+    """Small ground-texture marks scattered across the field so the grass
+    reads as textured, mottled ground instead of a single flat color
+    band - purely cosmetic, drawn on the ground plane like the grid."""
+    base = lerp_color(GRASS_TUFT_COLOR_NIGHT, GRASS_TUFT_COLOR_DAY, day_amount)
+    for x, z, shade in landscape.grass:
+        sx, sy, scale = project(x - pan_x, z, zoom)
+        r = max(1, int(3 * scale))
+        if r < 1 or not (-r <= sx <= SCREEN_W + r) or not (HORIZON_Y - r <= sy <= SCREEN_H + r):
+            continue
+        color = lerp_color(base, (0, 0, 0) if shade < 0 else (255, 255, 255), abs(shade) * 0.35)
+        pygame.draw.line(screen, color, (sx, sy), (sx, sy - r * 1.6), max(1, int(scale * 1.5)))
 
 
 def draw_night_overlay(screen, day_amount):
@@ -790,8 +911,8 @@ def eye_openness(creature_id, t):
     return 1.0
 
 
-def draw_critter(screen, x, z, token, distressed=False, creature_id=0, t=0.0, zoom=1.0):
-    sx, sy, scale = project(x, z, zoom)
+def draw_critter(screen, x, z, token, distressed=False, creature_id=0, t=0.0, ctx=DEFAULT_CTX):
+    sx, sy, scale = project(x, z, ctx.zoom)
     body_r = int(24 * scale)
     if body_r < 2:
         return
@@ -801,8 +922,7 @@ def draw_critter(screen, x, z, token, distressed=False, creature_id=0, t=0.0, zo
     sy += oy * scale
 
     shadow_w, shadow_h = body_r * 1.7, body_r * 0.5
-    pygame.draw.ellipse(screen, SHADOW_COLOR,
-                         (sx - shadow_w / 2, sy + body_r * 0.55, shadow_w, shadow_h))
+    draw_ground_shadow(screen, sx, sy + body_r * 0.55, shadow_w, shadow_h, ctx.shadow_dx, ctx.shadow_len)
 
     pants_w, pants_h = body_r * 1.5, body_r * 0.95
     pygame.draw.ellipse(screen, PANTS_COLOR,
@@ -813,6 +933,7 @@ def draw_critter(screen, x, z, token, distressed=False, creature_id=0, t=0.0, zo
     if token != 0:
         pygame.draw.circle(screen, TOKEN_COLORS[token], body_center,
                             int(body_r * 1.12), width=max(1, int(body_r * 0.12)))
+    draw_highlight(screen, body_center[0], body_center[1], body_r, BODY_COLOR, ctx.shadow_dx)
 
     eye_r = max(1, int(body_r * 0.26))
     eye_y = sy - body_r * 0.58
@@ -836,13 +957,14 @@ def draw_critter(screen, x, z, token, distressed=False, creature_id=0, t=0.0, zo
                              (sx - mouth_w / 2, sy - body_r * 0.22, mouth_w, mouth_h))
 
 
-def draw_predator(screen, x, z, zoom=1.0):
-    sx, sy, scale = project(x, z, zoom)
+def draw_predator(screen, x, z, ctx=DEFAULT_CTX):
+    sx, sy, scale = project(x, z, ctx.zoom)
     r = int(20 * scale)
     if r < 2:
         return
-    pygame.draw.ellipse(screen, SHADOW_COLOR, (sx - r * 0.9, sy + r * 0.5, r * 1.8, r * 0.45))
+    draw_ground_shadow(screen, sx, sy + r * 0.5, r * 1.8, r * 0.45, ctx.shadow_dx, ctx.shadow_len)
     pygame.draw.circle(screen, PREDATOR_COLOR, (int(sx), int(sy - r * 0.4)), r)
+    draw_highlight(screen, sx, sy - r * 0.4, r, PREDATOR_COLOR, ctx.shadow_dx)
     eye_r = max(1, int(r * 0.22))
     for dx in (-0.35, 0.35):
         ex, ey = sx + dx * r, sy - r * 0.55
@@ -874,18 +996,20 @@ def egg_contains(mx, my, x, z, zoom=1.0):
     return dx * dx + dy * dy <= 1.0
 
 
-def draw_egg(screen, x, z, cracks, wobble, pulse, zoom=1.0):
-    rect = egg_rect(x, z, pulse, zoom)
+def draw_egg(screen, x, z, cracks, wobble, pulse, ctx=DEFAULT_CTX):
+    rect = egg_rect(x, z, pulse, ctx.zoom)
     if rect.width < 2:
         return
 
     shadow_w, shadow_h = rect.width * 1.3, rect.height * 0.35
-    pygame.draw.ellipse(screen, SHADOW_COLOR,
-                         (rect.centerx - shadow_w / 2, rect.bottom - shadow_h * 0.6, shadow_w, shadow_h))
+    draw_ground_shadow(screen, rect.centerx, rect.bottom - shadow_h * 0.6, shadow_w, shadow_h,
+                        ctx.shadow_dx, ctx.shadow_len)
 
     wobbled = rect.copy()
     wobbled.centerx += wobble
     pygame.draw.ellipse(screen, EGG_COLOR, wobbled)
+    draw_highlight(screen, wobbled.centerx, wobbled.centery - wobbled.height * 0.15,
+                    wobbled.width * 0.5, EGG_COLOR, ctx.shadow_dx)
 
     speckle_rng = _EGG_SPECKLE_RNG
     for ox, oy in speckle_rng:
@@ -909,42 +1033,42 @@ _EGG_SPECKLE_RNG = [
 ]
 
 
-def _tree_and_rock_entities():
+def _tree_and_rock_entities(landscape):
     entities = []
-    for x, z in TREE_POSITIONS:
+    for x, z in landscape.trees:
         entities.append((z, "tree", x, None, None))
-    for x, z, size in ROCK_POSITIONS:
+    for x, z, size in landscape.rocks:
         entities.append((z, "rock", x, size, None))
     return entities
 
 
-def _draw_entity(screen, kind, x, z, extra, creature_id, day_amount, distressed, t, zoom):
+def _draw_entity(screen, kind, x, z, extra, creature_id, day_amount, distressed, t, ctx):
     if kind == "tree":
-        draw_tree(screen, x, z, day_amount, zoom)
+        draw_tree(screen, x, z, day_amount, ctx)
     elif kind == "rock":
-        draw_rock(screen, x, z, day_amount, extra, zoom)
+        draw_rock(screen, x, z, day_amount, extra, ctx)
     elif kind == "creature":
-        draw_critter(screen, x, z, extra, distressed, creature_id, t, zoom)
+        draw_critter(screen, x, z, extra, distressed, creature_id, t, ctx)
     else:
-        draw_predator(screen, x, z, zoom)
+        draw_predator(screen, x, z, ctx)
 
 
-def draw_decor(screen, pan_x, day_amount, zoom=1.0):
+def draw_decor(screen, pan_x, day_amount, landscape, ctx=DEFAULT_CTX):
     """Depth-sorted trees + rocks only, panning with the view like
     everything else - used before the egg hatches, when there's no
     population yet to sort them against."""
-    for z, kind, x, extra, _ in sorted(_tree_and_rock_entities(), key=lambda e: e[0]):
-        _draw_entity(screen, kind, x - pan_x, z, extra, None, day_amount, False, 0.0, zoom)
+    for z, kind, x, extra, _ in sorted(_tree_and_rock_entities(landscape), key=lambda e: e[0]):
+        _draw_entity(screen, kind, x - pan_x, z, extra, None, day_amount, False, 0.0, ctx)
 
 
-def draw_scene(screen, world, pan_x, day_amount, distressed=False, t=0.0, zoom=1.0):
+def draw_scene(screen, world, pan_x, day_amount, landscape, distressed=False, t=0.0, ctx=DEFAULT_CTX):
     """Depth-sorts and draws everything that has real height - trees,
     rocks, creatures, predators - together in one painter's-algorithm
     pass (farthest first), so nearer things correctly occlude farther
     ones: a creature can stand in front of a tree, or vanish behind a
     boulder, instead of scenery and population being drawn as two
     unrelated layers that clash regardless of actual depth."""
-    entities = _tree_and_rock_entities()
+    entities = _tree_and_rock_entities(landscape)
     for c in world.creatures:
         if c.alive:
             x, z = world_to_stage(c.pos)
@@ -956,9 +1080,9 @@ def draw_scene(screen, world, pan_x, day_amount, distressed=False, t=0.0, zoom=1
 
     for fx, fy in world.food:
         x, z = world_to_stage((fx, fy))
-        draw_food(screen, x - pan_x, z, zoom)
+        draw_food(screen, x - pan_x, z, ctx.zoom)
     for z, kind, x, extra, creature_id in entities:
-        _draw_entity(screen, kind, x - pan_x, z, extra, creature_id, day_amount, distressed, t, zoom)
+        _draw_entity(screen, kind, x - pan_x, z, extra, creature_id, day_amount, distressed, t, ctx)
 
 
 def draw_meter(screen, x, y, w, h, level, color):
@@ -1028,6 +1152,7 @@ def main():
     font = pygame.font.SysFont("consolas", 16)
 
     world = new_egg_world()
+    landscape = generate_landscape()  # random, different every new game
     sensors = SensorHub()
     tones, sound_channel = init_sound()
 
@@ -1086,6 +1211,7 @@ def main():
                     speed = max(1, speed - (1 if speed <= 10 else 10))
                 elif event.key == pygame.K_r:
                     world = new_egg_world()
+                    landscape = generate_landscape()  # a new game gets a new landscape
                     alert = AlertState()
                     egg = EggState()
                     needs = NeedsState()
@@ -1140,14 +1266,16 @@ def main():
             listening_token = None
 
         _, _, day_amount, _ = celestial_state(day_phase)
-        draw_background(screen, day_phase, zoom)
+        shadow_dx, shadow_len = light_direction(day_phase)
+        ctx = RenderCtx(zoom=zoom, shadow_dx=shadow_dx, shadow_len=shadow_len)
+        draw_background(screen, day_phase, pan_x, zoom, landscape)
         if egg.hatched:
-            draw_scene(screen, world, pan_x, day_amount,
-                       distressed=needs.lowest() < NEED_LOW_THRESHOLD, t=t, zoom=zoom)
+            draw_scene(screen, world, pan_x, day_amount, landscape,
+                       distressed=needs.lowest() < NEED_LOW_THRESHOLD, t=t, ctx=ctx)
         else:
-            draw_decor(screen, pan_x, day_amount, zoom)
+            draw_decor(screen, pan_x, day_amount, landscape, ctx)
             wobble = math.sin(t * 14.0) * (2 + egg.cracks * 1.5)
-            draw_egg(screen, EGG_STAGE_X - pan_x, EGG_STAGE_Z, egg.cracks, wobble, egg.pulse, zoom)
+            draw_egg(screen, EGG_STAGE_X - pan_x, EGG_STAGE_Z, egg.cracks, wobble, egg.pulse, ctx)
         draw_night_overlay(screen, day_amount)
         draw_status(screen, font, world, paused, speed, sensors, threshold, alert.flash,
                     egg.hatched, egg.cracks, sound_muted, zoom)

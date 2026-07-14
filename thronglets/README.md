@@ -411,12 +411,28 @@ The background is a bit more filled in now too, and scaled the way a
 real landscape would be: trees tower several times a creature's height
 rather than standing barely taller than one, rocks read as boulders
 instead of pebbles, and a river winds across the field toward the
-camera - all fixed decoration, no gameplay effect, just sized to
-actually look like a landscape a small creature stands in. Trees and
-rocks are depth-sorted together with the creatures and predators, so a
-creature correctly stands in front of a nearby tree or disappears behind
-a farther one instead of scenery and population overlapping like two
-unrelated layers, and they pan with the view along with everything else.
+camera. Trees and rocks are depth-sorted together with the creatures and
+predators, so a creature correctly stands in front of a nearby tree or
+disappears behind a farther one instead of scenery and population
+overlapping like two unrelated layers, and they pan with the view along
+with everything else.
+
+Every new game gets its own landscape - a fresh launch, or pressing `R`,
+regenerates the tree/rock/grass placement, the hill silhouette, and
+where the river sits, all drawn from a random seed. That's deliberate:
+`generate_landscape()` takes an optional seed, so a *specific* layout
+can be reproduced later - not wired up to anything yet, but there so a
+future save/load feature can restore a saved game's exact terrain
+instead of randomizing over it.
+
+Lighting is faked rather than simulated in real 3D, but tracks the sun
+and moon anyway: creatures, trees, and rocks get a small highlight blob
+leaning toward wherever the light currently is, and their shadows
+stretch and swing around over the course of the day - short and centered
+under everything at solar/lunar noon, long and cast to one side near
+sunrise and sunset. The ground itself is scattered with small grass-tuft
+marks instead of being one flat color band, for a bit of texture instead
+of a perfectly uniform field.
 
 Scrolling zooms in and out on that landscape, Minecraft-style: it
 magnifies the whole scene around a fixed point on the horizon instead of
