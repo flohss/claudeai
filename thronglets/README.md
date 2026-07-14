@@ -363,11 +363,11 @@ This runs several thousand ticks and asserts the population survives and
 vocabulary agreement increases — i.e. that a language is actually emerging,
 not just that the window doesn't crash.
 
-## Bonus: a pseudo-3D visual demo (`main_vr.py`)
+## Bonus: a pseudo-3D view with optional mic/camera "sensors" (`main_vr.py`)
 
 ```bash
 python main_vr.py
-python main_vr.py --creatures 80   # more or fewer wanderers
+python main_vr.py --population 150   # start with a bigger world
 ```
 
 A separate, standalone pygame window with a classic "pseudo-3D driving
@@ -376,14 +376,45 @@ horizon line as they get farther away) instead of the top-down view the
 other three renderers use. It reproduces the creatures' *look* - round
 yellow body, two red hair-tufts, big eyes, blue lower half, all drawn as
 simple original shapes, not a copy of the show's or the licensed game's
-actual pixel art - wandering over a basic sky/sun/hills/grass landscape.
+actual pixel art - over a basic sky/sun/hills/grass landscape.
 
 This is **not** real VR: no headset, no stereoscopic or WebXR/OpenXR
 output, nothing here targets or was tested with any VR hardware. It's a
-2D screen trick that reads as roughly 3D. It's also independent of
-`simulation.py` - the creatures here don't have genomes, don't signal,
-don't evolve anything; they just wander for atmosphere. `LEFT`/`RIGHT`
-pans the camera, `R` scatters a fresh set, `ESC` quits.
+2D screen trick that reads as roughly 3D.
+
+Unlike a static demo, this runs a real `simulation.py` `World` - the
+creatures here are the genuine evolving population, and the colored ring
+around one is its actual current signal, same meaning as every other
+renderer. `LEFT`/`RIGHT` pans the view, `SPACE` pauses, `UP`/`DOWN` change
+speed, `R` resets, `ESC` quits.
+
+**Optional sensors** (loosely inspired by the show's idea of a
+camera/microphone giving the Thronglets an outside signal to react to):
+press `A` to turn on the microphone, `C` for the webcam. When either
+picks up something loud or something moving, it adds a transient
+predator - like a real sighting - and lets the population's own
+already-evolved alarm response do the rest; it never touches genomes or
+state directly. **Both are off by default** - nothing is captured unless
+you explicitly press the key, and the HUD always shows `mic: ON/off` and
+`camera: ON/off` so it's never listening silently. `[`/`]` lower/raise how
+loud or how much motion it takes to trigger - there's no way to calibrate
+this from a container with no microphone or camera, so treat the default
+as a starting point and tune it once you're on a real machine. If the
+required library isn't installed, or there's no hardware, or permission
+is denied, that sensor just reports `unavailable` - the game never
+crashes over something this optional.
+
+The sensors need two extra packages the core game doesn't:
+
+```bash
+pip install -r requirements-vr.txt
+```
+
+(`sounddevice` for the microphone, `opencv-python-headless` for the
+webcam.) On Linux, `sounddevice` also needs the system PortAudio library
+(e.g. `apt install portaudio19-dev`) - without it, the import itself
+fails and the mic just reports unavailable, same as any other missing
+piece.
 
 ## Where to take it next
 

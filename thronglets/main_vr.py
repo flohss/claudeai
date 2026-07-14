@@ -1,14 +1,30 @@
-"""A pseudo-3D visual demo of the Thronglets' look - round, big-eyed
-creatures with red hair-tufts and blue overalls, wandering over a simple
-perspective landscape (sky, sun, hills, grass fading to a horizon).
+"""A pseudo-3D view of the real Thronglets simulation, with an optional
+external "sensor" (microphone and/or webcam) that can startle the
+population - loosely inspired by the show's idea of a camera/microphone
+giving the Thronglets an outside signal to react to.
 
 This is NOT true VR: no headset, no stereoscopic/OpenXR/WebXR output,
 nothing this environment could test even if it existed. It's the classic
 "pseudo-3D driving game" trick - a ground plane projected onto a normal 2D
 screen so things shrink and converge toward a horizon line - viewed on a
-regular monitor. It's also a standalone demo, independent of
-simulation.py: no language evolution here, the creatures are just cosmetic
-wanderers, not an evolving population.
+regular monitor.
+
+Unlike the first version of this file, the population here is the real
+thing: a genuine simulation.py World, stepped every frame, with creatures
+that actually evolved their own colors and genuinely react to danger. The
+sensors don't touch the genome or the evolutionary mechanics at all - they
+just occasionally add a transient predator (like a real predator sighting)
+when the room gets loud or something moves in front of the camera, and let
+the population's already-evolved alarm response do the rest.
+
+Both sensors are OFF by default - nothing is captured unless you press A
+(microphone) or C (camera) yourself, and the HUD always shows their
+current state so it's never listening without a visible indicator. Either
+one failing to open (library not installed, no hardware, no permission)
+just leaves it unavailable - the game never crashes over something this
+optional, and this environment has neither piece of hardware to test
+against, so treat the default threshold as a starting point to recalibrate
+with [ and ] once you're on a real machine.
 
 The creature design is an original, simplified, geometric interpretation
 of the look (round yellow body, two hair-tufts, big eyes, blue lower
@@ -16,17 +32,25 @@ half) - not a reproduction of the show's or the licensed game's actual
 pixel art.
 
 Controls:
-  LEFT / RIGHT   pan the camera
-  R              scatter a fresh set of creatures
+  LEFT / RIGHT   pan the view
+  SPACE          pause / resume
+  UP / DOWN      simulation speed
+  R              reset to a fresh world
+  A              toggle the microphone sensor
+  C              toggle the camera sensor
+  [ / ]          lower / raise the alert sensitivity threshold
   ESC            quit
 """
 
 import argparse
 import math
-import random
 import sys
+import threading
 
+import numpy as np
 import pygame
+
+from simulation import HEIGHT, WIDTH, World
 
 SCREEN_W, SCREEN_H = 1000, 700
 HORIZON_Y = int(SCREEN_H * 0.42)
@@ -49,8 +73,24 @@ EYE_PUPIL = (35, 30, 30)
 MOUTH_COLOR = (100, 65, 45)
 PANTS_COLOR = (70, 165, 210)
 SHADOW_COLOR = (25, 60, 30)
+FOOD_COLOR = (110, 220, 90)
+PREDATOR_COLOR = (215, 40, 40)
 
-DEFAULT_N_CREATURES = 45
+# Same 6-color palette as the other renderers, so a creature's ring here
+# means the same thing it does in main.py/main_tui.py/main_web.py.
+TOKEN_COLORS = [
+    (120, 120, 120),
+    (235, 70, 70),
+    (70, 140, 235),
+    (245, 200, 60),
+    (200, 90, 230),
+    (70, 225, 210),
+]
+
+DEFAULT_INIT_POP = 100
+ALERT_DURATION = 2.5    # seconds the phantom predator sighting lasts
+ALERT_COOLDOWN = 4.0    # seconds before another alert can trigger
+DEFAULT_ALERT_THRESHOLD = 0.5
 
 
 def lerp_color(c1, c2, t):
@@ -58,29 +98,149 @@ def lerp_color(c1, c2, t):
     return tuple(int(c1[i] + (c2[i] - c1[i]) * t) for i in range(3))
 
 
-def shift_color(color, delta):
-    return tuple(max(0, min(255, c + delta)) for c in color)
+class SensorHub:
+    """Best-effort microphone/camera capture. Every failure mode - missing
+    library, missing system dependency (e.g. no PortAudio), no hardware,
+    permission denied - is caught and just leaves that sensor permanently
+    unavailable. Nothing is captured unless the corresponding *_enabled
+    flag is explicitly turned on by the user."""
+
+    def __init__(self):
+        self.mic_enabled = False
+        self.camera_enabled = False
+        self.mic_available = None  # None = not yet attempted
+        self.camera_available = None
+        self.mic_level = 0.0       # smoothed 0..1
+        self.motion_level = 0.0    # smoothed 0..1
+        self._lock = threading.Lock()
+        self._mic_stream = None
+        self._camera_thread = None
+        self._camera_stop = threading.Event()
+
+    def toggle_mic(self):
+        self._stop_mic() if self.mic_enabled else self._start_mic()
+
+    def toggle_camera(self):
+        self._stop_camera() if self.camera_enabled else self._start_camera()
+
+    def _start_mic(self):
+        try:
+            import sounddevice as sd
+        except Exception:
+            self.mic_available = False
+            return
+
+        def callback(indata, frames, time_info, status):
+            rms = float(np.sqrt(np.mean(np.asarray(indata, dtype=np.float64) ** 2)))
+            level = min(1.0, rms * 12.0)
+            with self._lock:
+                self.mic_level = self.mic_level * 0.7 + level * 0.3
+
+        try:
+            stream = sd.InputStream(channels=1, samplerate=16000, blocksize=1024, callback=callback)
+            stream.start()
+        except Exception:
+            self.mic_available = False
+            return
+        self._mic_stream = stream
+        self.mic_available = True
+        self.mic_enabled = True
+
+    def _stop_mic(self):
+        self.mic_enabled = False
+        with self._lock:
+            self.mic_level = 0.0
+        if self._mic_stream is not None:
+            try:
+                self._mic_stream.stop()
+                self._mic_stream.close()
+            except Exception:
+                pass
+            self._mic_stream = None
+
+    def _start_camera(self):
+        try:
+            import cv2
+        except Exception:
+            self.camera_available = False
+            return
+        cap = cv2.VideoCapture(0)
+        if not cap.isOpened():
+            self.camera_available = False
+            cap.release()
+            return
+        self.camera_available = True
+        self.camera_enabled = True
+        self._camera_stop.clear()
+        self._camera_thread = threading.Thread(target=self._camera_loop, args=(cv2, cap), daemon=True)
+        self._camera_thread.start()
+
+    def _camera_loop(self, cv2, cap):
+        prev_gray = None
+        while not self._camera_stop.is_set():
+            ok, frame = cap.read()
+            if not ok:
+                break
+            small = cv2.resize(frame, (160, 90))
+            gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+            if prev_gray is not None:
+                diff = cv2.absdiff(gray, prev_gray)
+                level = min(1.0, float(diff.mean()) / 20.0)
+                with self._lock:
+                    self.motion_level = self.motion_level * 0.7 + level * 0.3
+            prev_gray = gray
+        cap.release()
+
+    def _stop_camera(self):
+        self.camera_enabled = False
+        self._camera_stop.set()
+        if self._camera_thread is not None:
+            self._camera_thread.join(timeout=1.0)
+            self._camera_thread = None
+        with self._lock:
+            self.motion_level = 0.0
+
+    def alert_level(self):
+        with self._lock:
+            return max(self.mic_level, self.motion_level)
+
+    def stop(self):
+        self._stop_mic()
+        self._stop_camera()
 
 
-class Critter:
-    """A purely decorative wanderer - position and a little idle motion,
-    no genome, no signaling, no relation to simulation.py's World."""
+class AlertState:
+    """Turns a sensor's alert_level() into a transient predator sighting:
+    reused via World.add_random_predator()/remove_predator() rather than
+    touching genomes or danger-state directly, so the population's
+    already-evolved alarm response does all the actual reacting."""
 
-    def __init__(self, rng):
-        self.rng = rng
-        self.x = rng.uniform(-1.3, 1.3)
-        self.z = rng.uniform(0.03, 1.0)
-        self.phase = rng.uniform(0, math.tau)
-        self.drift_speed = rng.uniform(0.15, 0.35)
-        self.approach_speed = rng.uniform(0.01, 0.05)
-        self.tint = rng.randint(-14, 14)
+    def __init__(self):
+        self.active_timer = 0.0
+        self.cooldown_timer = 0.0
+        self.flash = 0.0
 
-    def update(self, dt, t):
-        self.x += math.sin(t * self.drift_speed + self.phase) * 0.15 * dt
-        self.z += self.approach_speed * dt
-        if self.z > 1.05:
-            self.z = 0.03
-            self.x = self.rng.uniform(-1.3, 1.3)
+    def update(self, world, sensors, threshold, dt):
+        self.cooldown_timer = max(0.0, self.cooldown_timer - dt)
+        self.flash = max(0.0, self.flash - dt)
+        if self.active_timer > 0:
+            self.active_timer -= dt
+            if self.active_timer <= 0:
+                world.remove_predator()
+        elif sensors.alert_level() > threshold and self.cooldown_timer <= 0:
+            world.add_random_predator()
+            self.active_timer = ALERT_DURATION
+            self.cooldown_timer = ALERT_COOLDOWN
+            self.flash = 0.6
+
+
+def world_to_stage(pos):
+    """Reuses the World's own 2D layout as the pseudo-3D stage: its Y axis
+    becomes depth (top of the field = far/near the horizon, bottom = close
+    to the camera), its X axis stays lateral."""
+    x_norm = (pos[0] / WIDTH) * 2.6 - 1.3
+    z = max(0.02, min(1.0, pos[1] / HEIGHT))
+    return x_norm, z
 
 
 def project(x, z):
@@ -101,37 +261,29 @@ def draw_background(screen):
         pygame.draw.line(screen, color, (0, y), (SCREEN_W, y))
 
     sun_pos = (int(SCREEN_W * 0.78), int(HORIZON_Y * 0.32))
-    for r, alpha_color in ((54, lerp_color(SUN_COLOR, SKY_HORIZON, 0.55)), (38, SUN_COLOR)):
-        pygame.draw.circle(screen, alpha_color, sun_pos, r)
+    for r, color in ((54, lerp_color(SUN_COLOR, SKY_HORIZON, 0.55)), (38, SUN_COLOR)):
+        pygame.draw.circle(screen, color, sun_pos, r)
 
     hill_y = HORIZON_Y - int(SCREEN_H * 0.05)
     far_hills = [(0, HORIZON_Y)]
     for i in range(9):
-        fx = SCREEN_W * i / 8
-        fy = hill_y - 18 * math.sin(i * 1.3 + 0.5)
-        far_hills.append((fx, fy))
+        far_hills.append((SCREEN_W * i / 8, hill_y - 18 * math.sin(i * 1.3 + 0.5)))
     far_hills.append((SCREEN_W, HORIZON_Y))
     pygame.draw.polygon(screen, HILL_FAR, far_hills)
 
     near_hill_y = HORIZON_Y - int(SCREEN_H * 0.02)
     near_hills = [(0, HORIZON_Y)]
     for i in range(7):
-        fx = SCREEN_W * i / 6
-        fy = near_hill_y - 12 * math.sin(i * 2.1 + 2.0)
-        near_hills.append((fx, fy))
+        near_hills.append((SCREEN_W * i / 6, near_hill_y - 12 * math.sin(i * 2.1 + 2.0)))
     near_hills.append((SCREEN_W, HORIZON_Y))
     pygame.draw.polygon(screen, HILL_NEAR, near_hills)
 
     for y in range(HORIZON_Y, SCREEN_H):
         t = (y - HORIZON_Y) / (SCREEN_H - HORIZON_Y)
-        color = lerp_color(GROUND_FAR, GROUND_NEAR, t)
-        pygame.draw.line(screen, color, (0, y), (SCREEN_W, y))
+        pygame.draw.line(screen, lerp_color(GROUND_FAR, GROUND_NEAR, t), (0, y), (SCREEN_W, y))
 
-    # A faint perspective grid reinforces the ground-plane illusion: rows
-    # get farther apart near the camera, columns converge on the horizon.
     for i in range(1, 9):
-        z = i / 9
-        _, sy, _ = project(0, z)
+        _, sy, _ = project(0, i / 9)
         pygame.draw.line(screen, GRID_COLOR, (0, sy), (SCREEN_W, sy), 1)
     for x in (-1.2, -0.8, -0.4, 0.0, 0.4, 0.8, 1.2):
         sx0, sy0, _ = project(x, 0.0)
@@ -151,7 +303,7 @@ def draw_tree(screen, x, z):
     pygame.draw.circle(screen, TREE_LEAVES, (int(sx), int(sy - trunk_h - leaf_r * 0.6)), leaf_r)
 
 
-def draw_critter(screen, x, z, tint=0):
+def draw_critter(screen, x, z, token):
     sx, sy, scale = project(x, z)
     body_r = int(24 * scale)
     if body_r < 2:
@@ -166,7 +318,10 @@ def draw_critter(screen, x, z, tint=0):
                          (sx - pants_w / 2, sy - body_r * 0.15, pants_w, pants_h))
 
     body_center = (sx, sy - body_r * 0.55)
-    pygame.draw.circle(screen, shift_color(BODY_COLOR, tint), body_center, body_r)
+    pygame.draw.circle(screen, BODY_COLOR, body_center, body_r)
+    if token != 0:
+        pygame.draw.circle(screen, TOKEN_COLORS[token], body_center,
+                            int(body_r * 1.12), width=max(1, int(body_r * 0.12)))
 
     tuft_r = max(2, int(body_r * 0.36))
     for dx in (-0.42, 0.42):
@@ -186,58 +341,165 @@ def draw_critter(screen, x, z, tint=0):
                          (sx - mouth_w / 2, sy - body_r * 0.22, mouth_w, mouth_h))
 
 
-def scatter(rng, n):
-    return [Critter(rng) for _ in range(n)]
+def draw_predator(screen, x, z):
+    sx, sy, scale = project(x, z)
+    r = int(20 * scale)
+    if r < 2:
+        return
+    pygame.draw.ellipse(screen, SHADOW_COLOR, (sx - r * 0.9, sy + r * 0.5, r * 1.8, r * 0.45))
+    pygame.draw.circle(screen, PREDATOR_COLOR, (int(sx), int(sy - r * 0.4)), r)
+    eye_r = max(1, int(r * 0.22))
+    for dx in (-0.35, 0.35):
+        ex, ey = sx + dx * r, sy - r * 0.55
+        pygame.draw.circle(screen, (255, 230, 120), (int(ex), int(ey)), eye_r)
+        pygame.draw.circle(screen, (20, 10, 10), (int(ex), int(ey)), max(1, int(eye_r * 0.5)))
+
+
+def draw_food(screen, x, z):
+    sx, sy, scale = project(x, z)
+    r = max(1, int(6 * scale))
+    pygame.draw.circle(screen, FOOD_COLOR, (int(sx), int(sy)), r)
+
+
+def draw_population(screen, world, pan_x):
+    entities = []
+    for c in world.creatures:
+        if c.alive:
+            x, z = world_to_stage(c.pos)
+            entities.append((z, "creature", x, c.token))
+    for p in world.predators:
+        x, z = world_to_stage(p.pos)
+        entities.append((z, "predator", x, None))
+    entities.sort(key=lambda e: e[0])
+
+    for fx, fy in world.food:
+        x, z = world_to_stage((fx, fy))
+        draw_food(screen, x - pan_x, z)
+    for z, kind, x, token in entities:
+        if kind == "creature":
+            draw_critter(screen, x - pan_x, z, token)
+        else:
+            draw_predator(screen, x - pan_x, z)
+
+
+def draw_meter(screen, x, y, w, h, level, color):
+    pygame.draw.rect(screen, (40, 40, 40), (x, y, w, h))
+    fill_w = int(w * max(0.0, min(1.0, level)))
+    if fill_w > 0:
+        pygame.draw.rect(screen, color, (x, y, fill_w, h))
+    pygame.draw.rect(screen, (200, 200, 200), (x, y, w, h), 1)
+
+
+def sensor_label(enabled, available):
+    if available is False:
+        return "unavailable"
+    return "ON" if enabled else "off"
+
+
+def draw_status(screen, font, world, paused, speed, sensors, threshold, alert_flash):
+    status = "PAUSED" if paused else f"x{speed}"
+    lines = [
+        f"pop {world.population()}   {status}",
+        f"[A] mic: {sensor_label(sensors.mic_enabled, sensors.mic_available)}   "
+        f"[C] camera: {sensor_label(sensors.camera_enabled, sensors.camera_available)}   "
+        f"threshold: {threshold:.2f} ([ / ])",
+    ]
+    for i, text in enumerate(lines):
+        screen.blit(font.render(text, True, (255, 255, 255)), (10, 10 + i * 22))
+
+    meter_y = 10 + len(lines) * 22 + 4
+    draw_meter(screen, 10, meter_y, 140, 10, sensors.mic_level, (120, 200, 255))
+    draw_meter(screen, 160, meter_y, 140, 10, sensors.motion_level, (255, 180, 120))
+
+    hint = font.render("LEFT/RIGHT pan   SPACE pause   UP/DOWN speed   R reset   ESC quit",
+                        True, (255, 255, 255))
+    screen.blit(hint, (10, SCREEN_H - 26))
+
+    if world.population() == 0:
+        msg = font.render("Extinct - press R to start a new world.", True, (255, 90, 90))
+        screen.blit(msg, (SCREEN_W / 2 - msg.get_width() / 2, SCREEN_H / 2))
+
+    if alert_flash > 0:
+        overlay = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
+        overlay.fill((255, 60, 60, int(160 * min(1.0, alert_flash / 0.6))))
+        screen.blit(overlay, (0, 0))
+        msg = font.render("EXTERNAL ALERT DETECTED", True, (255, 255, 255))
+        screen.blit(msg, (SCREEN_W / 2 - msg.get_width() / 2, 46))
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Thronglets - pseudo-3D visual demo")
-    parser.add_argument("--creatures", type=int, default=DEFAULT_N_CREATURES,
-                         help="how many creatures to scatter across the landscape")
+    parser = argparse.ArgumentParser(description="Thronglets - pseudo-3D view with optional mic/camera sensors")
+    parser.add_argument("--population", type=int, default=DEFAULT_INIT_POP,
+                         help="starting population for the world")
     args = parser.parse_args()
 
     pygame.init()
-    pygame.display.set_caption("Thronglets - pseudo-3D demo")
+    pygame.display.set_caption("Thronglets - pseudo-3D view")
     screen = pygame.display.set_mode((SCREEN_W, SCREEN_H))
     clock = pygame.time.Clock()
     font = pygame.font.SysFont("consolas", 16)
 
-    rng = random.Random()
-    critters = scatter(rng, args.creatures)
-    camera_x = 0.0
-    t = 0.0
+    world = World(init_pop=args.population, predator_count=6)
+    sensors = SensorHub()
+
+    pan_x = 0.0
+    paused = False
+    speed = 1
+    tick_accumulator = 0.0
+    threshold = DEFAULT_ALERT_THRESHOLD
+    alert = AlertState()
     running = True
 
     while running:
         dt = min(clock.tick(60) / 1000.0, 0.25)
-        t += dt
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     running = False
+                elif event.key == pygame.K_SPACE:
+                    paused = not paused
+                elif event.key == pygame.K_UP:
+                    speed = min(200, speed + (1 if speed < 10 else 10))
+                elif event.key == pygame.K_DOWN:
+                    speed = max(1, speed - (1 if speed <= 10 else 10))
                 elif event.key == pygame.K_r:
-                    critters = scatter(rng, args.creatures)
+                    world = World(init_pop=args.population, predator_count=6)
+                    alert = AlertState()
+                elif event.key == pygame.K_a:
+                    sensors.toggle_mic()
+                elif event.key == pygame.K_c:
+                    sensors.toggle_camera()
+                elif event.key == pygame.K_LEFTBRACKET:
+                    threshold = max(0.05, threshold - 0.05)
+                elif event.key == pygame.K_RIGHTBRACKET:
+                    threshold = min(1.0, threshold + 0.05)
 
         keys = pygame.key.get_pressed()
         if keys[pygame.K_LEFT]:
-            camera_x -= 0.8 * dt
+            pan_x -= 0.8 * dt
         if keys[pygame.K_RIGHT]:
-            camera_x += 0.8 * dt
+            pan_x += 0.8 * dt
 
-        for c in critters:
-            c.update(dt, t)
+        if not paused:
+            tick_accumulator += dt
+            tick_interval = 1.0 / speed
+            while tick_accumulator >= tick_interval:
+                world.step()
+                tick_accumulator -= tick_interval
+        else:
+            tick_accumulator = 0.0
+
+        alert.update(world, sensors, threshold, dt)
 
         draw_background(screen)
-        for c in sorted(critters, key=lambda c: c.z):
-            draw_critter(screen, c.x - camera_x, c.z, tint=c.tint)
-
-        hint = font.render("LEFT/RIGHT pan   R scatter   ESC quit", True, (255, 255, 255))
-        screen.blit(hint, (10, 10))
+        draw_population(screen, world, pan_x)
+        draw_status(screen, font, world, paused, speed, sensors, threshold, alert.flash)
 
         pygame.display.flip()
 
+    sensors.stop()
     pygame.quit()
     sys.exit()
 
