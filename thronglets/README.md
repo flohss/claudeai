@@ -400,6 +400,16 @@ schedule and wanders a couple of pixels in place between simulation
 steps, purely cosmetic idle motion meant to make it read as alive rather
 than a static sprite sitting on the grass.
 
+Hovering the mouse over a creature plays a sustained tone for its
+evolved signal - the same proximity-listening idea as `main.py`/
+`main_web.py`, adapted for a 3D view: "closest to the cursor" is judged
+by *screen* position rather than world position, since depth already
+changes how big and how far apart things look. Press `M` to mute it.
+
+The background is a bit more filled in now too: bigger, fuller trees
+scattered more densely, a handful of rocks, and a river winding across
+the field toward the camera - all fixed decoration, no gameplay effect.
+
 The sky runs its own day/night cycle the whole time (a full loop every
 60 real seconds, running even before the egg hatches) - the sun and moon
 arc across the sky on opposite halves of the loop, never both up at once,

@@ -46,12 +46,24 @@ Each one blinks on its own schedule and wanders a couple of
 pixels in place even when the simulation isn't moving it, so a standing
 creature still reads as alive rather than a frozen sprite.
 
+Hovering the mouse over a creature plays a sustained tone for its
+evolved signal, same idea as the proximity-listening sound in main.py/
+main_web.py, but judged by *screen* distance instead of world distance,
+since depth already changes how big and how far apart things look here.
+Press M to mute it.
+
+The landscape got a pass too: bigger, fuller trees, a scattering of
+rocks, and a river winding across the field toward the camera - all
+just background decoration, drawn once per frame from fixed positions,
+no gameplay effect.
+
 Controls:
   LEFT CLICK     crack the egg / feed an item from the needs panel
   CLICK + DRAG   pan the view with the mouse
   LEFT / RIGHT   pan the view with the keyboard
   SPACE          pause / resume
   UP / DOWN      simulation speed
+  M              mute/unmute the hover-listening sound
   R              reset to a fresh egg
   A              toggle the microphone sensor
   C              toggle the camera sensor
@@ -112,6 +124,35 @@ TREE_LEAVES_DAY = (55, 115, 60)
 TREE_TRUNK_NIGHT = (40, 32, 28)
 TREE_LEAVES_NIGHT = (25, 45, 32)
 
+# (x, z) in stage coordinates - a wider, denser treeline than a single
+# row, some close, some near the horizon, for more depth.
+TREE_POSITIONS = [
+    (-1.1, 0.28), (1.15, 0.22), (-0.75, 0.55), (0.95, 0.62),
+    (-1.25, 0.78), (0.2, 0.12), (-0.35, 0.85), (1.3, 0.85), (-1.0, 0.08),
+]
+
+ROCK_COLOR_DAY = (150, 145, 140)
+ROCK_COLOR_NIGHT = (55, 55, 60)
+ROCK_SHADE_DAY = (105, 100, 96)
+ROCK_SHADE_NIGHT = (35, 35, 40)
+# (x, z, size multiplier)
+ROCK_POSITIONS = [
+    (-1.05, 0.18, 1.0), (0.32, 0.14, 0.7), (-0.5, 0.4, 1.2),
+    (0.72, 0.35, 0.8), (-0.15, 0.68, 1.4),
+]
+
+RIVER_COLOR_DAY = (80, 150, 195)
+RIVER_COLOR_NIGHT = (18, 32, 58)
+RIVER_HIGHLIGHT_DAY = (175, 215, 230)
+RIVER_HIGHLIGHT_NIGHT = (45, 65, 92)
+# A winding band cutting across the field, described as (x, z, half-width)
+# waypoints in stage coordinates, widening as it comes toward the camera.
+RIVER_PATH = [
+    (0.5, 0.04, 0.02), (0.6, 0.18, 0.03), (0.7, 0.32, 0.045),
+    (0.64, 0.48, 0.06), (0.78, 0.63, 0.08), (0.92, 0.8, 0.11),
+    (1.08, 1.0, 0.15),
+]
+
 SUN_COLOR = (255, 236, 180)
 SUN_COLOR_HORIZON = (255, 140, 80)
 MOON_COLOR = (222, 226, 235)
@@ -147,6 +188,14 @@ TOKEN_COLORS = [
     (200, 90, 230),
     (70, 225, 210),
 ]
+
+# Same tones as main.py/main_web.py's proximity-listening sound, keyed by
+# token (index 0, the "no signal" gray, deliberately has none to play).
+TOKEN_FREQS = [0, 261.63, 293.66, 329.63, 392.00, 440.00]
+# Screen pixels, not world/stage units - depth already changes a
+# creature's apparent size and position here, so "closest to the cursor"
+# has to be judged the same way the eye judges it: on screen.
+LISTEN_RADIUS_PX = 70
 
 ALERT_DURATION = 2.5    # seconds the phantom predator sighting lasts
 ALERT_COOLDOWN = 4.0    # seconds before another alert can trigger
@@ -468,6 +517,63 @@ class AlertState:
             self.flash = 0.6
 
 
+def init_sound():
+    """Best-effort mixer setup - returns ({token: Sound}, Channel), or
+    (None, None) if there's no audio device at all. Never crashes the
+    game over something this optional (same pattern as SensorHub)."""
+    try:
+        pygame.mixer.init(frequency=22050, size=-16, channels=2)
+        sample_rate = pygame.mixer.get_init()[0]
+        tones = {token: _make_tone(freq, sample_rate)
+                 for token, freq in enumerate(TOKEN_FREQS) if token != 0}
+        return tones, pygame.mixer.Channel(0)
+    except pygame.error:
+        return None, None
+
+
+def _make_tone(freq, sample_rate, duration=0.6, volume=0.25):
+    """A short sine-wave tone with a fade in/out envelope, looped by the
+    caller - the fades also soften the seam where the loop repeats."""
+    n = int(sample_rate * duration)
+    ts = np.linspace(0, duration, n, endpoint=False)
+    wave = np.sin(2 * np.pi * freq * ts)
+    fade = min(n // 20, 400)
+    envelope = np.ones(n)
+    envelope[:fade] = np.linspace(0, 1, fade)
+    envelope[-fade:] = np.linspace(1, 0, fade)
+    wave = (wave * envelope * volume * 32767).astype(np.int16)
+    stereo = np.column_stack([wave, wave])
+    return pygame.sndarray.make_sound(np.ascontiguousarray(stereo))
+
+
+def update_listening(channel, tones, world, mouse_pos, pan_x, muted, listening_token):
+    """Plays a sustained tone for whichever living creature's *screen*
+    position is closest to the mouse, within LISTEN_RADIUS_PX - the
+    pseudo-3D counterpart of main.py's proximity-listening sound. Returns
+    the token now playing (or None) so the caller can track it across
+    frames without re-querying the mixer every time."""
+    if channel is None:
+        return None
+    target = None
+    if not muted:
+        best_dist = LISTEN_RADIUS_PX
+        for c in world.creatures:
+            if not c.alive or c.token == 0:
+                continue
+            x, z = world_to_stage(c.pos)
+            sx, sy, _ = project(x - pan_x, z)
+            dist = ((sx - mouse_pos[0]) ** 2 + (sy - mouse_pos[1]) ** 2) ** 0.5
+            if dist < best_dist:
+                best_dist = dist
+                target = c.token
+    if target != listening_token:
+        if target is None:
+            channel.stop()
+        else:
+            channel.play(tones[target], loops=-1)
+    return target
+
+
 def world_to_stage(pos):
     """Reuses the World's own 2D layout as the pseudo-3D stage: its Y axis
     becomes depth (top of the field = far/near the horizon, bottom = close
@@ -557,19 +663,65 @@ def draw_background(screen, day_phase):
         sx1, sy1, _ = project(x, 1.0)
         pygame.draw.line(screen, grid_color, (sx0, sy0), (sx1, sy1), 1)
 
-    for x, z in ((-1.1, 0.28), (1.15, 0.22), (-0.75, 0.55), (0.95, 0.62)):
+    draw_river(screen, day_amount)
+
+    for x, z, size in ROCK_POSITIONS:
+        draw_rock(screen, x, z, day_amount, size)
+
+    for x, z in TREE_POSITIONS:
         draw_tree(screen, x, z, day_amount)
 
 
 def draw_tree(screen, x, z, day_amount):
     sx, sy, scale = project(x, z)
-    trunk_h = int(30 * scale)
-    trunk_w = max(2, int(6 * scale))
+    trunk_h = int(46 * scale)
+    trunk_w = max(3, int(9 * scale))
     trunk_color = lerp_color(TREE_TRUNK_NIGHT, TREE_TRUNK_DAY, day_amount)
     leaves_color = lerp_color(TREE_LEAVES_NIGHT, TREE_LEAVES_DAY, day_amount)
     pygame.draw.rect(screen, trunk_color, (sx - trunk_w / 2, sy - trunk_h, trunk_w, trunk_h))
-    leaf_r = max(3, int(22 * scale))
-    pygame.draw.circle(screen, leaves_color, (int(sx), int(sy - trunk_h - leaf_r * 0.6)), leaf_r)
+    leaf_r = max(4, int(30 * scale))
+    canopy_y = sy - trunk_h - leaf_r * 0.5
+    # Three overlapping lobes instead of one circle - a fuller, less
+    # perfectly-round canopy without needing real foliage art.
+    for ox, oy, rr in ((0.0, 0.0, 1.0), (-0.55, 0.35, 0.72), (0.55, 0.3, 0.72)):
+        pygame.draw.circle(screen, leaves_color,
+                            (int(sx + ox * leaf_r), int(canopy_y + oy * leaf_r)),
+                            max(3, int(leaf_r * rr)))
+
+
+def draw_rock(screen, x, z, day_amount, size=1.0):
+    sx, sy, scale = project(x, z)
+    r = max(2, int(14 * scale * size))
+    if r < 2:
+        return
+    color = lerp_color(ROCK_COLOR_NIGHT, ROCK_COLOR_DAY, day_amount)
+    shade = lerp_color(ROCK_SHADE_NIGHT, ROCK_SHADE_DAY, day_amount)
+    pygame.draw.ellipse(screen, SHADOW_COLOR, (sx - r * 0.9, sy + r * 0.4, r * 1.8, r * 0.4))
+    body = [
+        (sx - r, sy + r * 0.3), (sx - r * 0.5, sy - r * 0.6), (sx + r * 0.3, sy - r * 0.8),
+        (sx + r, sy - r * 0.1), (sx + r * 0.6, sy + r * 0.4),
+    ]
+    pygame.draw.polygon(screen, color, body)
+    lit_face = [
+        (sx - r * 0.2, sy - r * 0.15), (sx + r * 0.3, sy - r * 0.8),
+        (sx + r, sy - r * 0.1), (sx + r * 0.6, sy + r * 0.4),
+    ]
+    pygame.draw.polygon(screen, shade, lit_face)
+
+
+def draw_river(screen, day_amount):
+    water = lerp_color(RIVER_COLOR_NIGHT, RIVER_COLOR_DAY, day_amount)
+    highlight = lerp_color(RIVER_HIGHLIGHT_NIGHT, RIVER_HIGHLIGHT_DAY, day_amount)
+    left_bank, right_bank, mid = [], [], []
+    for x, z, half_width in RIVER_PATH:
+        lx, ly, _ = project(x - half_width, z)
+        rx, ry, _ = project(x + half_width, z)
+        mx, my, _ = project(x, z)
+        left_bank.append((lx, ly))
+        right_bank.append((rx, ry))
+        mid.append((mx, my))
+    pygame.draw.polygon(screen, water, left_bank + right_bank[::-1])
+    pygame.draw.lines(screen, highlight, False, mid, 2)
 
 
 def draw_night_overlay(screen, day_amount):
@@ -766,7 +918,7 @@ def sensor_label(enabled, available):
 
 
 def draw_status(screen, font, world, paused, speed, sensors, threshold, alert_flash,
-                 hatched, egg_cracks):
+                 hatched, egg_cracks, sound_muted=False):
     if hatched:
         status = "PAUSED" if paused else f"x{speed}"
         top_line = f"pop {world.population()}   {status}"
@@ -777,6 +929,7 @@ def draw_status(screen, font, world, paused, speed, sensors, threshold, alert_fl
         f"[A] mic: {sensor_label(sensors.mic_enabled, sensors.mic_available)}   "
         f"[C] camera: {sensor_label(sensors.camera_enabled, sensors.camera_available)}   "
         f"threshold: {threshold:.2f} ([ / ])",
+        f"[M] hover-listen sound: {'muted' if sound_muted else 'on'}",
     ]
     for i, text in enumerate(lines):
         screen.blit(font.render(text, True, (255, 255, 255)), (10, 10 + i * 22))
@@ -785,7 +938,7 @@ def draw_status(screen, font, world, paused, speed, sensors, threshold, alert_fl
     draw_meter(screen, 10, meter_y, 140, 10, sensors.mic_level, (120, 200, 255))
     draw_meter(screen, 160, meter_y, 140, 10, sensors.motion_level, (255, 180, 120))
 
-    hint = font.render("LEFT/RIGHT pan   SPACE pause   UP/DOWN speed   R reset   ESC quit",
+    hint = font.render("LEFT/RIGHT pan   SPACE pause   UP/DOWN speed   M mute sound   R reset   ESC quit",
                         True, (255, 255, 255))
     screen.blit(hint, (10, SCREEN_H - 26))
 
@@ -817,6 +970,7 @@ def main():
 
     world = new_egg_world()
     sensors = SensorHub()
+    tones, sound_channel = init_sound()
 
     pan_x = 0.0
     paused = False
@@ -830,6 +984,8 @@ def main():
     t = 0.0
     day_phase = 0.1  # start in early-morning light
     running = True
+    sound_muted = False
+    listening_token = None
 
     dragging_view = False
     drag_start = None
@@ -872,6 +1028,9 @@ def main():
                     egg = EggState()
                     needs = NeedsState()
                     hatch_flash = 0.0
+                    if sound_channel is not None:
+                        sound_channel.stop()
+                    listening_token = None
                 elif event.key == pygame.K_a:
                     sensors.toggle_mic()
                 elif event.key == pygame.K_c:
@@ -880,6 +1039,8 @@ def main():
                     threshold = max(0.05, threshold - 0.05)
                 elif event.key == pygame.K_RIGHTBRACKET:
                     threshold = min(1.0, threshold + 0.05)
+                elif event.key == pygame.K_m:
+                    sound_muted = not sound_muted
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 dragging_view = True
                 drag_start = event.pos
@@ -909,6 +1070,12 @@ def main():
             alert.update(world, sensors, threshold, dt)
             if not paused:
                 needs.update(dt)
+            listening_token = update_listening(sound_channel, tones, world, pygame.mouse.get_pos(),
+                                                pan_x, sound_muted, listening_token)
+        elif listening_token is not None:
+            if sound_channel is not None:
+                sound_channel.stop()
+            listening_token = None
 
         draw_background(screen, day_phase)
         if egg.hatched:
@@ -919,7 +1086,7 @@ def main():
         _, _, day_amount, _ = celestial_state(day_phase)
         draw_night_overlay(screen, day_amount)
         draw_status(screen, font, world, paused, speed, sensors, threshold, alert.flash,
-                    egg.hatched, egg.cracks)
+                    egg.hatched, egg.cracks, sound_muted)
         if egg.hatched:
             draw_needs_panel(screen, needs)
         if hatch_flash > 0:
@@ -930,6 +1097,8 @@ def main():
         pygame.display.flip()
 
     sensors.stop()
+    if sound_channel is not None:
+        sound_channel.stop()
     pygame.quit()
     sys.exit()
 
