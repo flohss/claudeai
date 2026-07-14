@@ -388,33 +388,38 @@ renderer. It starts with exactly **one** creature, not hatched yet - it
 sits on screen as a speckled egg. Left-click it a few times to crack it
 open (the HUD counts the clicks); nothing in the world moves or steps
 until it hatches.
-Once hatched, `LEFT`/`RIGHT` pans the view (or click and drag with the
-mouse), the scroll wheel zooms in/out, `SPACE` pauses, `UP`/`DOWN` change
-speed, `R` resets back to a fresh egg, `ESC` quits.
+Once hatched, `LEFT`/`RIGHT` pans the view (or left-click and drag with
+the mouse), the scroll wheel zooms in/out, `SPACE` pauses, `UP`/`DOWN`
+change speed, `R` resets back to a fresh egg, `ESC` quits. Everything
+you *do* to the creatures is driven from a **right-click context menu**
+(there's no on-screen panel of buttons).
 
-The lone starting creature is deliberately unable to reproduce on its
-own, no matter how much energy it has - the population can only grow
-past one by using the needs panel's fifth button (an egg icon) to add a
-second creature yourself. Once there are two or more, reproduction
-(pairing and budding both) becomes fully automatic exactly like the
-other renderers, no further clicking required. Every creature born this
-way, whether it arrived through that button or through ordinary
-reproduction afterward, gets the same treatment as the very first one:
-it starts life as an egg sitting at its real, moving position, fully
-alive and simulated the whole time, but it doesn't render, sound, or
-otherwise reveal itself as a creature until you find it and click it
-open too. The HUD shows how many new eggs are waiting whenever there are
-any. One that dies before being hatched just quietly disappears - no
-leftover egg.
+**Right-click a creature** and a small text menu opens on it with its
+care actions - **Feed** (pizza), **Give water**, **Wash**, **Play** -
+each labelled with that need's current level. Each need drains slowly on
+its own; picking its row tops it back up. Feeding also tops up that
+specific creature's *real* energy; the other three are cosmetic. Neglect
+the needs long enough and the creature's face turns visibly sad.
 
-The panel's last two buttons are the episode's dark side, included on
-purpose: a **flame** and a **knife**. Clicking one arms it (red border
-on the button, a warning line in the HUD; click it again to put it
-away). Neither is a clean kill: with the knife armed, clicking a
-creature makes it **agonize** - it collapses and writhes where it
-stands, screaming - and only then dies, leaving a blood mark that fades
-from the grass. With fire armed, clicking a creature sets it alight - it
-**screams and bolts in panic**, burning, for a second or two before it
+**Right-click bare ground** instead and the only action offered is **Add
+an egg**, which adds a new creature near the current population. The lone
+starting creature is deliberately unable to reproduce on its own, no
+matter how much energy it has - the population can only grow past one
+this way. Once there are two or more, reproduction (pairing and budding
+both) becomes fully automatic exactly like the other renderers. Every
+creature born - through the menu or through ordinary reproduction -
+starts life as an egg at its real, moving position, fully alive and
+simulated the whole time, but doesn't render, sound, or otherwise reveal
+itself until you find it and click it open. The HUD shows how many new
+eggs are waiting. One that dies before being hatched just quietly
+disappears - no leftover egg.
+
+The same creature menu's last two rows are the episode's dark side,
+included on purpose: **Set on fire** and **Stab** (marked out in red).
+Neither is a clean kill: stabbing makes the creature **agonize** - it
+collapses and writhes where it stands, screaming - and only then dies,
+leaving a blood mark that fades from the grass. Setting it on fire makes
+it **scream and bolt in panic**, burning, for a second or two before it
 dies where it stops, leaving a scorch mark. Both finish through the same
 code path as a natural death, so the family tree and death count stay
 honest about what you did. Creatures still waiting inside their birth
@@ -539,20 +544,20 @@ webcam.) On Linux, `sounddevice` also needs the system PortAudio library
 fails and the mic just reports unavailable, same as any other missing
 piece.
 
-Once hatched, a small needs panel appears top-left with five clickable
-icons: a pizza (hunger), a glass of water (thirst), a bar of soap
-(cleanliness), a toy (joy), and an egg. Each need slowly drains on its
-own - about two minutes from full to empty if left alone - and clicking
-its icon tops it back up to full. Feeding the pizza also restores some
-of the creature's *real* `simulation.py` energy, same field the other
-renderers read from; the other two need icons are local to this window
-and don't touch the simulation. Neglect all four for long enough and the
-creature's expression turns visibly worried - there's no harsher penalty
-than that, it's just something to look after while you watch it. The
-fifth icon isn't a decaying need at all - it's a button: click it any
-time to add a brand-new creature to the world as another egg to go
-track down and hatch, which is also the *only* way past a
-single-creature population (see above).
+Once hatched, everything you do to the creatures is driven from a
+**right-click context menu** rather than an always-visible panel.
+Right-clicking a creature opens a small text menu on it with four care
+actions - Feed (pizza), Give water, Wash, Play - each labelled with that
+need's current level. Each need slowly drains on its own (about two
+minutes from full to empty if left alone) and picking its row tops it
+back up. Feeding also restores some of that specific creature's *real*
+`simulation.py` energy, the same field the other renderers read from;
+the other three are local to this window and don't touch the simulation.
+Neglect the needs long enough and the creature's face turns visibly sad.
+Right-clicking bare ground instead offers a single action, Add an egg,
+which adds a brand-new creature as another egg to go track down and
+hatch - also the *only* way past a single-creature population (see
+above).
 
 ## Where to take it next
 

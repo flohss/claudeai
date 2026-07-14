@@ -36,38 +36,35 @@ otherwise reveal itself until you go find it and click it open too
 (BirthEggs). One that dies before being hatched just quietly disappears,
 no leftover egg.
 
-Once hatched, a small needs panel appears top-left: pizza (hunger), a
-glass of water (thirst), soap (cleanliness), and a toy (joy). Each need
-drains slowly on its own; click an item to top its need back up to full.
-Feeding the pizza also tops up the creature's *real* simulation.py energy
-- the rest are cosmetic, local to this file's single-companion mode, not
-part of the shared simulation model. Neglect all four for long enough and
-the creature's expression turns visibly worried; there's no harsher
-penalty than that.
+Once hatched, everything you do to the creatures is driven from a
+right-click context menu (there is no on-screen panel of buttons). Right-
+click a creature and a small text menu opens on it with its care actions
+- Feed (pizza), Give water, Wash, Play - each labelled with that need's
+current level. Each need drains slowly on its own; picking its row tops
+it back up to full. Feeding also tops up that specific creature's *real*
+simulation.py energy - the other three are cosmetic, local to this
+file's single-companion mode, not part of the shared simulation model.
+Neglect the needs long enough and the creature's face turns visibly sad.
 
-A fifth button sits right after the four needs: an egg icon. Click it to
-add a brand-new creature to the world, near wherever the current
-population already is - like any other birth, it starts life as a
-pending egg you have to go find and click open. This matters because the
-solo starting creature is deliberately unable to reproduce on its own,
-no matter how much energy it has (install_solo_reproduction_guard);
-reproduction (pairing and budding both) only ever becomes automatic once
-a second creature exists, whether that second one came from this button
-or arrived some other way. There's no limit on how many times you can
-use it.
+The same creature menu's last two rows are the episode's dark side,
+included on purpose: "Set on fire" and "Stab" (marked out in red).
+Neither is a clean kill. Stabbing makes the creature agonize - it
+collapses and writhes where it stands, screaming - and only then dies,
+leaving a blood mark that fades from the grass. Setting it on fire makes
+it scream and bolt in panic, burning, for a second or two before it
+dies, leaving a scorch mark. Both finish through World.kill_creature(),
+the same path as a natural death, so the family tree and the death count
+stay honest about what you did. Creatures still waiting inside their
+birth egg can't be right-clicked - only ones you've already hatched.
 
-The panel's last two buttons are the episode's dark side, included on
-purpose: a flame and a knife. Clicking one arms it - its border turns
-red and the HUD says so - and clicking it again puts it away. Neither
-is a clean kill. With the knife armed, clicking a creature makes it
-agonize - it collapses and writhes where it stands, screaming - and
-only then dies, leaving a blood mark that fades from the grass. With
-fire armed, clicking a creature sets it alight: it screams and bolts in
-panic, burning, for a second or two before it dies, leaving a scorch
-mark. Both finish through World.kill_creature(), the same path as a
-natural death, so the family tree and the death count stay honest about
-what you did. Creatures still waiting inside their birth egg can't be
-targeted - only ones you've already hatched.
+Right-clicking bare ground instead offers a single action, "Add an egg",
+which adds a brand-new creature near the current population - like any
+other birth, it starts life as a pending egg you have to go find and
+click open. This matters because the solo starting creature is
+deliberately unable to reproduce on its own, no matter how much energy
+it has (install_solo_reproduction_guard); reproduction (pairing and
+budding both) only ever becomes automatic once a second creature exists,
+whether that second one came from this action or arrived some other way.
 
 These creatures are meant to read as sentient beings, not dots, so they
 FEEL what happens - to themselves and to each other (see
@@ -147,8 +144,9 @@ distance as you zoom - things get uniformly bigger or smaller, the
 perspective itself never distorts.
 
 Controls:
-  LEFT CLICK     crack an egg / use the needs panel (feed, add an egg,
-                 or arm the fire/knife and click a creature to use it)
+  LEFT CLICK     crack an egg open (start egg or a birth egg in the field)
+  RIGHT CLICK    open the action menu - on a creature (feed / water / wash
+                 / play / set on fire / stab) or on bare ground (add an egg)
   CLICK + DRAG   pan the view with the mouse
   LEFT / RIGHT   pan the view with the keyboard
   SCROLL         zoom in / out
@@ -180,7 +178,7 @@ HORIZON_Y = int(SCREEN_H * 0.42)
 # Dragging the mouse across the full window width pans by roughly 1.6
 # stage units (a bit more than half the visible field of view).
 PAN_DRAG_SENSITIVITY = 1.6 / SCREEN_W
-# A mouse-up is treated as a click (egg / needs panel) rather than a pan
+# A mouse-up is treated as a click (hatching an egg) rather than a pan
 # if the total travel while the button was held stayed under this, in
 # pixels - lets a light click and a deliberate drag coexist on the same
 # button.
@@ -341,29 +339,20 @@ EGG_CRACK_LINES = [
     [(-0.20, 0.36), (-0.36, 0.14)],
 ]
 
-# The needs panel - a little care-taking loop on top of the real
-# simulation: feeding the pizza also tops up the creature's actual
-# simulation.py energy, but thirst/cleanliness/joy are purely cosmetic
-# local state, tracked here rather than in simulation.py since they only
-# make sense for this file's single-companion mode.
+# The care needs - a little care-taking loop on top of the real
+# simulation, offered through the right-click menu: feeding the pizza
+# also tops up the creature's actual simulation.py energy, but
+# thirst/cleanliness/joy are purely cosmetic local state, tracked here
+# rather than in simulation.py since they only make sense for this
+# file's single-companion mode.
 NEED_ITEMS = ("hunger", "thirst", "clean", "joy")
 NEED_LABELS = {"hunger": "pizza", "thirst": "water", "clean": "soap", "joy": "toy"}
-NEED_COLORS = {
-    "hunger": (235, 140, 60),
-    "thirst": (90, 170, 230),
-    "clean": (210, 225, 200),
-    "joy": (230, 120, 170),
-}
 NEED_DECAY_PER_SECOND = 1.0 / 120.0  # empties in 2 minutes if never fed
 NEED_LOW_THRESHOLD = 0.2
 FEED_ENERGY_BOOST = 40.0
-NEED_PANEL_X = 10
-NEED_PANEL_Y = 90
-NEED_BUTTON_SIZE = 44
-NEED_BUTTON_GAP = 56
 
-# The episode's dark side, faithfully included: the panel's last two
-# slots are weapons, not care. Fire burns a creature alive for
+# The episode's dark side, faithfully included: two of the right-click
+# menu's rows are weapons, not care. Fire burns a creature alive for
 # BURN_DURATION seconds - it screams and bolts in panic the whole time -
 # before it dies; the knife doesn't kill on the spot either, the
 # creature agonizes for AGONY_DURATION, writhing where it stands, and
@@ -375,7 +364,6 @@ DECAL_DURATION = 1.0
 FLAME_COLORS = ((255, 110, 25), (255, 185, 55), (255, 240, 150))
 BLOOD_COLOR = (150, 20, 20)
 SCORCH_COLOR = (45, 38, 32)
-ARMED_BORDER_COLOR = (230, 50, 40)
 
 # Sentience: every hatched creature feels something, computed each frame
 # from its situation, and shows it on its face, in how it moves, and in
@@ -683,7 +671,7 @@ class BirthEggs:
 
     def add_manual(self, creature_id):
         """Immediately marks a creature (just created via the needs
-        panel's egg button) as a pending egg, bypassing sync()'s normal
+        'Add an egg' menu action) as a pending egg, bypassing sync()'s normal
         diff-based detection - and records its id as already-known so a
         later sync() doesn't reset its click count back to 0."""
         self.pending[creature_id] = 0
@@ -706,8 +694,8 @@ class BirthEggs:
 
 def install_solo_reproduction_guard(world):
     """The lone starting creature shouldn't be able to reproduce (bud)
-    on its own - only once a second one exists (via the panel's egg
-    button, or normal pairing after that) does reproduction become
+    on its own - only once a second one exists (via the 'Add an egg'
+    menu action, or normal pairing after that) does reproduction become
     automatic. Wraps this specific World instance's private
     _reproduce() to skip it entirely while fewer than two creatures are
     alive; pairing already needs two to do anything, so this only ever
@@ -731,7 +719,7 @@ def install_solo_reproduction_guard(world):
 def spawn_egg_near_population(world, birth_eggs):
     """Adds one new creature near the existing population's center (or
     the middle of the field if there's none left) - what the needs
-    panel's egg button does. Registered immediately as a pending
+    'Add an egg' menu action does. Registered immediately as a pending
     BirthEggs egg, exactly like a creature born through reproduction:
     still just an egg to the player until it's found and hatched."""
     alive = [c for c in world.creatures if c.alive]
@@ -776,25 +764,19 @@ def find_creature_at(mx, my, world, pan_x, zoom=1.0, birth_eggs=None, t=0.0):
 
 
 class HorrorState:
-    """The game's Black Mirror dark side: the fire and knife buttons.
-    Clicking one arms it (clicking again, or the other one, puts it
-    away); with a weapon armed, clicking a creature applies it. Neither
-    is a clean, instant death: the knife makes the creature agonize for
-    AGONY_DURATION - writhing where it stands - before it dies, and fire
-    sets it alight for BURN_DURATION while it screams and runs, before
-    it dies. Both finish through World.kill_creature(), the same path as
-    a natural death, so the family tree and stats stay honest about what
-    the player did. A creature already in pain can't be hurt a second
-    way at once."""
+    """The game's Black Mirror dark side, driven from the right-click
+    menu: "Set on fire" and "Stab". Neither is a clean, instant death:
+    the knife makes the creature agonize for AGONY_DURATION - writhing
+    where it stands - before it dies, and fire sets it alight for
+    BURN_DURATION while it screams and runs, before it dies. Both finish
+    through World.kill_creature(), the same path as a natural death, so
+    the family tree and stats stay honest about what the player did. A
+    creature already in pain can't be hurt a second way at once."""
 
     def __init__(self):
-        self.armed = None       # None, "fire" or "knife"
         self.burning = {}       # creature id -> seconds left before it dies
         self.agonizing = {}     # creature id -> seconds left before it dies
         self.decals = []        # [x_stage, z, kind, seconds left]; kind: "blood"/"scorch"
-
-    def toggle(self, tool):
-        self.armed = None if self.armed == tool else tool
 
     def is_burning(self, creature_id):
         return creature_id in self.burning
@@ -970,7 +952,7 @@ class SentienceState:
 class NeedsState:
     """A small Tamagotchi-style care loop layered on top of the real
     creature: each need drains slowly and is topped up by clicking the
-    matching item in the needs panel. Only hunger reaches back into the
+    matching row of the right-click menu. Only hunger reaches back into the
     real simulation (it tops up the creature's actual energy) - the rest
     are cosmetic, specific to this file's single-companion mode."""
 
@@ -986,153 +968,114 @@ class NeedsState:
     def lowest(self):
         return min(self.levels.values())
 
-    def feed(self, kind, world):
+    def feed(self, kind, world, creature=None):
+        """Refills one care meter. Hunger also tops up real energy - the
+        specific creature the menu was opened on when one is given,
+        otherwise the whole population (the old panel-wide behaviour)."""
         if kind not in self.levels:
             return
         self.levels[kind] = 1.0
         self.pulses[kind] = 1.0
         if kind == "hunger":
-            for c in world.creatures:
-                if c.alive:
+            targets = [creature] if creature is not None else list(world.creatures)
+            for c in targets:
+                if c is not None and c.alive:
                     c.energy = min(MAX_ENERGY, c.energy + FEED_ENERGY_BOOST)
 
 
-def need_button_rect(index):
-    return pygame.Rect(NEED_PANEL_X + index * NEED_BUTTON_GAP, NEED_PANEL_Y,
-                        NEED_BUTTON_SIZE, NEED_BUTTON_SIZE)
+# What each need is called in the right-click menu, as an action verb.
+NEED_MENU_LABELS = {"hunger": "Feed (pizza)", "thirst": "Give water",
+                    "clean": "Wash", "joy": "Play"}
+
+CONTEXT_MENU_W = 200
+CONTEXT_MENU_ROW_H = 26
+MENU_BG = (24, 26, 24)
+MENU_BORDER = (112, 118, 104)
+MENU_HOVER = (52, 58, 50)
+MENU_TEXT = (235, 238, 230)
+MENU_DANGER = (240, 120, 100)   # the fire/knife rows, marked out in red
+MENU_HEADER = (150, 156, 142)
 
 
-def draw_icon_pizza(screen, rect):
-    cx, cy = rect.center
-    r = rect.width * 0.42
-    points = [(cx, cy - r), (cx - r * 0.87, cy + r * 0.5), (cx + r * 0.87, cy + r * 0.5)]
-    pygame.draw.polygon(screen, (235, 195, 110), points)
-    pygame.draw.polygon(screen, (200, 80, 60), points, width=2)
-    for fx, fy in ((-0.15, 0.15), (0.2, 0.0), (0.0, -0.3)):
-        pygame.draw.circle(screen, (190, 60, 50), (int(cx + fx * r), int(cy + fy * r)), max(1, int(r * 0.14)))
+def creature_menu_items(creature, world, needs, horror):
+    """The rows shown when you right-click a creature: the four care
+    actions (each labelled with that need's current level) and the two
+    cruel ones. Every row is a (label, is_danger, callback) tuple that
+    acts on this specific creature."""
+    items = [(f"-- creature #{creature.id} --", None, None)]
+    for kind in NEED_ITEMS:
+        pct = int(round(needs.levels[kind] * 100))
+        items.append((f"{NEED_MENU_LABELS[kind]}  ({pct}%)", False,
+                      lambda k=kind: needs.feed(k, world, creature)))
+    items.append(("Set on fire", True, lambda: horror.ignite(creature)))
+    items.append(("Stab", True, lambda: horror.stab(creature, world)))
+    return items
 
 
-def draw_icon_water(screen, rect):
-    cx, cy = rect.center
-    w, h = rect.width * 0.5, rect.height * 0.6
-    glass = [(cx - w / 2, cy - h / 2), (cx + w / 2, cy - h / 2),
-             (cx + w * 0.4, cy + h / 2), (cx - w * 0.4, cy + h / 2)]
-    water = [(cx - w * 0.45, cy - h * 0.05), (cx + w * 0.45, cy - h * 0.05),
-             (cx + w * 0.38, cy + h / 2), (cx - w * 0.38, cy + h / 2)]
-    pygame.draw.polygon(screen, (230, 245, 250), glass)
-    pygame.draw.polygon(screen, (100, 175, 230), water)
-    pygame.draw.polygon(screen, (150, 165, 165), glass, width=2)
+def ground_menu_items(world, birth_eggs):
+    """Right-clicking bare ground offers only to add a new egg - it
+    spawns near the existing population, as a birth egg you still have to
+    find and hatch."""
+    return [("Add an egg", False, lambda: spawn_egg_near_population(world, birth_eggs))]
 
 
-def draw_icon_soap(screen, rect):
-    cx, cy = rect.center
-    w, h = rect.width * 0.62, rect.height * 0.4
-    bar = pygame.Rect(0, 0, w, h)
-    bar.center = (cx, cy)
-    pygame.draw.ellipse(screen, (225, 235, 205), bar)
-    pygame.draw.ellipse(screen, (175, 190, 155), bar, width=2)
-    for ox, oy, r in ((-w * 0.2, -h * 1.5, 3), (w * 0.12, -h * 2.0, 4), (w * 0.3, -h * 1.2, 2)):
-        pygame.draw.circle(screen, (255, 255, 255), (int(cx + ox), int(cy + oy)), r, width=1)
+class ContextMenu:
+    """The right-click text menu that replaced the old always-visible
+    side panel of icon buttons. Right-click a creature to act on it
+    (feed/water/wash/play, or set it on fire / stab it); right-click
+    bare ground to add a new egg. A left-click runs the row under the
+    cursor and closes; a left-click anywhere else just closes."""
 
+    def __init__(self):
+        self.pos = None       # top-left screen anchor, or None when closed
+        self.items = []       # (label, is_danger|None, callback|None) rows
 
-def draw_icon_toy(screen, rect):
-    cx, cy = rect.center
-    r = int(rect.width * 0.38)
-    pygame.draw.circle(screen, (235, 90, 140), (cx, cy), r)
-    pygame.draw.arc(screen, (255, 220, 230), (cx - r, cy - r, r * 2, r * 2), 0.3, 2.6, 2)
+    def open(self, pos, items):
+        # keep the whole menu on-screen wherever it was summoned
+        h = len(items) * CONTEXT_MENU_ROW_H
+        x = max(0, min(pos[0], SCREEN_W - CONTEXT_MENU_W))
+        y = max(0, min(pos[1], SCREEN_H - h))
+        self.pos = (x, y)
+        self.items = items
 
+    def close(self):
+        self.pos = None
+        self.items = []
 
-def draw_icon_egg(screen, rect):
-    cx, cy = rect.center
-    w, h = rect.width * 0.52, rect.height * 0.66
-    egg = pygame.Rect(0, 0, w, h)
-    egg.center = (cx, cy)
-    pygame.draw.ellipse(screen, EGG_COLOR, egg)
-    pygame.draw.ellipse(screen, (180, 165, 130), egg, width=1)
-    for ox, oy in ((-0.16, -0.12), (0.14, 0.06), (-0.05, 0.24)):
-        pygame.draw.circle(screen, EGG_SPECKLE, (int(cx + ox * w), int(cy + oy * h)), max(1, int(w * 0.08)))
+    def is_open(self):
+        return self.pos is not None
 
+    def _row_rect(self, i):
+        return pygame.Rect(self.pos[0], self.pos[1] + i * CONTEXT_MENU_ROW_H,
+                           CONTEXT_MENU_W, CONTEXT_MENU_ROW_H)
 
-def draw_icon_fire(screen, rect):
-    cx, cy = rect.center
-    w, h = rect.width * 0.5, rect.height * 0.62
-    base_y = cy + h * 0.5
-    # three nested flame tongues, hot core last
-    for color, f in zip(FLAME_COLORS, (1.0, 0.68, 0.4)):
-        fw, fh = w * f, h * f
-        pygame.draw.polygon(screen, color, [
-            (cx - fw * 0.5, base_y), (cx + fw * 0.5, base_y),
-            (cx + fw * 0.18, base_y - fh * 0.62), (cx, base_y - fh),
-            (cx - fw * 0.22, base_y - fh * 0.55),
-        ])
+    def click(self, mx, my):
+        """Handle a left-click while open: run the row under the cursor
+        (if it's an actionable one) and close either way. Returns True if
+        a row's action actually fired."""
+        fired = False
+        for i, (label, danger, cb) in enumerate(self.items):
+            if cb is not None and self._row_rect(i).collidepoint(mx, my):
+                cb()
+                fired = True
+                break
+        self.close()
+        return fired
 
-
-def draw_icon_knife(screen, rect):
-    cx, cy = rect.center
-    L = rect.width * 0.36
-    # blade (light gray, angled) + brown handle
-    pygame.draw.polygon(screen, (205, 210, 218), [
-        (cx - L, cy + L * 0.75), (cx + L * 0.15, cy - L * 0.4),
-        (cx + L * 0.45, cy - L * 0.1), (cx - L * 0.65, cy + L),
-    ])
-    pygame.draw.line(screen, (120, 75, 40),
-                     (cx + L * 0.3, cy - L * 0.25), (cx + L * 0.85, cy - L * 0.8),
-                     max(3, int(rect.width * 0.12)))
-
-
-NEED_ICON_DRAWERS = {
-    "hunger": draw_icon_pizza,
-    "thirst": draw_icon_water,
-    "clean": draw_icon_soap,
-    "joy": draw_icon_toy,
-}
-
-# The panel's 5th slot: not a decaying need, a one-shot action button
-# that adds a brand-new creature to the world - as a birth egg the
-# player still has to go find and hatch, same as any other newborn.
-ADD_EGG_SLOT = len(NEED_ITEMS)
-
-# Slots 6 and 7: the weapons. Clicking one arms it (click again to put
-# it away); with a weapon armed, clicking a creature applies it.
-FIRE_SLOT = ADD_EGG_SLOT + 1
-KNIFE_SLOT = ADD_EGG_SLOT + 2
-
-
-def add_egg_button_rect():
-    return need_button_rect(ADD_EGG_SLOT)
-
-
-def fire_button_rect():
-    return need_button_rect(FIRE_SLOT)
-
-
-def knife_button_rect():
-    return need_button_rect(KNIFE_SLOT)
-
-
-def draw_needs_panel(screen, needs, armed_tool=None):
-    for i, kind in enumerate(NEED_ITEMS):
-        rect = need_button_rect(i)
-        pulse = needs.pulses[kind]
-        bg_rect = rect.inflate(int(pulse * 6), int(pulse * 6))
-        pygame.draw.rect(screen, (28, 32, 28), bg_rect, border_radius=8)
-        pygame.draw.rect(screen, (95, 100, 90), bg_rect, width=1, border_radius=8)
-        NEED_ICON_DRAWERS[kind](screen, bg_rect)
-        draw_meter(screen, rect.x, rect.bottom + 4, NEED_BUTTON_SIZE, 6,
-                   needs.levels[kind], NEED_COLORS[kind])
-
-    egg_rect_ui = add_egg_button_rect()
-    pygame.draw.rect(screen, (28, 32, 28), egg_rect_ui, border_radius=8)
-    pygame.draw.rect(screen, (95, 100, 90), egg_rect_ui, width=1, border_radius=8)
-    draw_icon_egg(screen, egg_rect_ui)
-
-    for tool, rect, icon in (("fire", fire_button_rect(), draw_icon_fire),
-                             ("knife", knife_button_rect(), draw_icon_knife)):
-        pygame.draw.rect(screen, (28, 32, 28), rect, border_radius=8)
-        border = ARMED_BORDER_COLOR if armed_tool == tool else (95, 100, 90)
-        width = 2 if armed_tool == tool else 1
-        pygame.draw.rect(screen, border, rect, width=width, border_radius=8)
-        icon(screen, rect)
+    def draw(self, screen, font):
+        if not self.is_open():
+            return
+        mouse = pygame.mouse.get_pos()
+        panel = pygame.Rect(self.pos[0], self.pos[1], CONTEXT_MENU_W,
+                            len(self.items) * CONTEXT_MENU_ROW_H)
+        pygame.draw.rect(screen, MENU_BG, panel, border_radius=6)
+        pygame.draw.rect(screen, MENU_BORDER, panel, width=1, border_radius=6)
+        for i, (label, danger, cb) in enumerate(self.items):
+            row = self._row_rect(i)
+            if cb is not None and row.collidepoint(mouse):
+                pygame.draw.rect(screen, MENU_HOVER, row)
+            color = MENU_HEADER if cb is None else (MENU_DANGER if danger else MENU_TEXT)
+            screen.blit(font.render(label, True, color), (row.x + 10, row.y + 5))
 
 
 class AlertState:
@@ -1898,8 +1841,7 @@ def sensor_label(enabled, available):
 
 
 def draw_status(screen, font, world, paused, speed, sensors, threshold, alert_flash,
-                 hatched, egg_cracks, sound_muted=False, zoom=1.0, ambient_enabled=True, pending_eggs=0,
-                 armed_tool=None):
+                 hatched, egg_cracks, sound_muted=False, zoom=1.0, ambient_enabled=True, pending_eggs=0):
     if hatched:
         status = "PAUSED" if paused else f"x{speed}"
         top_line = f"pop {world.population()}   {status}   zoom {zoom:.1f}x"
@@ -1923,15 +1865,14 @@ def draw_status(screen, font, world, paused, speed, sensors, threshold, alert_fl
     draw_meter(screen, 10, meter_y, 140, 10, sensors.mic_level, (120, 200, 255))
     draw_meter(screen, 160, meter_y, 140, 10, sensors.motion_level, (255, 180, 120))
 
-    if hatched and armed_tool is not None:
-        action = "set it alight" if armed_tool == "fire" else "kill it"
-        warn = font.render(
-            f"{armed_tool.upper()} armed - click a creature to {action} (click the button again to put it away)",
-            True, (255, 80, 60))
-        screen.blit(warn, (10, meter_y + 16))
+    if hatched:
+        tip = font.render("Right-click a creature for actions (feed, play, fire, knife...)",
+                          True, (210, 214, 205))
+        screen.blit(tip, (10, meter_y + 16))
 
     hint = font.render(
-        "LEFT/RIGHT pan   SCROLL zoom   SPACE pause   UP/DOWN speed   G chorus   M mute sound   R reset   ESC quit",
+        "LEFT drag pan   RIGHT-click menu   SCROLL zoom   SPACE pause   UP/DOWN speed   "
+        "G chorus   M mute   R reset   ESC quit",
         True, (255, 255, 255))
     screen.blit(hint, (10, SCREEN_H - 26))
 
@@ -1983,6 +1924,7 @@ def main():
     horror = HorrorState()
     sentience = SentienceState()
     ambient = AmbientChorus()
+    menu = ContextMenu()
     hatch_flash = 0.0
     t = 0.0
     day_phase = 0.1  # start in early-morning light
@@ -2011,37 +1953,13 @@ def main():
                 zoom = max(ZOOM_MIN, min(ZOOM_MAX, zoom + event.y * ZOOM_STEP))
             elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
                 if dragging_view and drag_start is not None and drag_traveled < PAN_DRAG_CLICK_THRESHOLD:
-                    # barely moved - treat it as a click, not a drag
+                    # barely moved - treat it as a click, not a drag: crack
+                    # the starting egg, or a birth egg out in the field
                     if egg.register_click(drag_start[0], drag_start[1], zoom, pan_x):
                         hatch_flash = 0.4
                         birth_eggs.seed_known(world)
                     elif egg.hatched:
-                        hit_button = False
-                        for i, kind in enumerate(NEED_ITEMS):
-                            if need_button_rect(i).collidepoint(drag_start):
-                                needs.feed(kind, world)
-                                hit_button = True
-                                break
-                        if not hit_button and add_egg_button_rect().collidepoint(drag_start):
-                            spawn_egg_near_population(world, birth_eggs)
-                            hit_button = True
-                        if not hit_button and fire_button_rect().collidepoint(drag_start):
-                            horror.toggle("fire")
-                            hit_button = True
-                        if not hit_button and knife_button_rect().collidepoint(drag_start):
-                            horror.toggle("knife")
-                            hit_button = True
-                        if not hit_button and horror.armed is not None:
-                            target = find_creature_at(drag_start[0], drag_start[1], world,
-                                                      pan_x, zoom, birth_eggs, t)
-                            if target is not None:
-                                if horror.armed == "fire":
-                                    horror.ignite(target)
-                                else:
-                                    horror.stab(target, world)
-                                hit_button = True
-                        if not hit_button:
-                            birth_eggs.try_click(drag_start[0], drag_start[1], world, pan_x, zoom)
+                        birth_eggs.try_click(drag_start[0], drag_start[1], world, pan_x, zoom)
                 dragging_view = False
                 drag_start = None
             elif event.type == pygame.KEYDOWN:
@@ -2063,6 +1981,7 @@ def main():
                     horror = HorrorState()
                     sentience = SentienceState()
                     ambient = AmbientChorus()
+                    menu.close()
                     hatch_flash = 0.0
                     if sound_channel is not None:
                         sound_channel.stop()
@@ -2086,9 +2005,23 @@ def main():
                 elif event.key == pygame.K_g:
                     ambient_enabled = not ambient_enabled
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                dragging_view = True
-                drag_start = event.pos
-                drag_traveled = 0.0
+                if menu.is_open():
+                    # a left-click while the menu is up picks a row (or
+                    # dismisses it); it never also pans or hatches
+                    menu.click(event.pos[0], event.pos[1])
+                else:
+                    dragging_view = True
+                    drag_start = event.pos
+                    drag_traveled = 0.0
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:
+                # right-click: a creature's action menu, or "add an egg"
+                # on bare ground - only once the world is running
+                if egg.hatched:
+                    target = find_creature_at(event.pos[0], event.pos[1], world, pan_x, zoom, birth_eggs, t)
+                    if target is not None:
+                        menu.open(event.pos, creature_menu_items(target, world, needs, horror))
+                    else:
+                        menu.open(event.pos, ground_menu_items(world, birth_eggs))
 
         keys = pygame.key.get_pressed()
         if keys[pygame.K_LEFT]:
@@ -2147,10 +2080,8 @@ def main():
             draw_egg(screen, EGG_STAGE_X - pan_x, EGG_STAGE_Z, egg.cracks, wobble, egg.pulse, ctx)
         draw_night_overlay(screen, day_amount)
         draw_status(screen, font, world, paused, speed, sensors, threshold, alert.flash,
-                    egg.hatched, egg.cracks, sound_muted, zoom, ambient_enabled, len(birth_eggs.pending),
-                    armed_tool=horror.armed)
-        if egg.hatched:
-            draw_needs_panel(screen, needs, horror.armed)
+                    egg.hatched, egg.cracks, sound_muted, zoom, ambient_enabled, len(birth_eggs.pending))
+        menu.draw(screen, font)
         if hatch_flash > 0:
             overlay = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
             overlay.fill((255, 255, 255, int(200 * min(1.0, hatch_flash / 0.4))))
