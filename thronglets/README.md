@@ -404,10 +404,13 @@ same in 2D - only the camera changed. `V` again flips back to 3D.
 
 **Right-click a creature** and a small text menu opens on it with its
 care actions - **Feed**, **Wash**, **Play** - each labelled with that
-need's current level. Each need drains slowly on its own; picking its
-row tops it back up. Feeding also tops up that specific creature's *real*
-energy; the other two are cosmetic. Neglect the needs long enough and
-the creature's face turns visibly sad.
+need's current level. Wash and Play are cosmetic timers that drain
+slowly and are topped back up by picking their row. Hunger is the real
+thing: its meter mirrors real energy, so it rises whenever a creature
+eats - **the food growing on the ground feeds them** exactly as much as
+a manual Feed from the menu (both move the same energy), and the Feed
+row shows the clicked creature's own energy. Neglect the needs long
+enough and the creatures' faces turn visibly sad.
 
 **Right-click bare ground** instead and the only action offered is **Add
 an egg**, which adds a new creature near the current population. The lone
@@ -556,12 +559,14 @@ Once hatched, everything you do to the creatures is driven from a
 **right-click context menu** rather than an always-visible panel.
 Right-clicking a creature opens a small text menu on it with three care
 actions - Feed, Wash, Play - each labelled with that need's current
-level. Each need slowly drains on its own (about two minutes from full
-to empty if left alone) and picking its row tops it back up. Feeding
-also restores some of that specific creature's *real* `simulation.py`
-energy, the same field the other renderers read from; the other two are
-local to this window and don't touch the simulation. Neglect the needs
-long enough and the creature's face turns visibly sad.
+level. Wash and Play are cosmetic timers, local to this window (about
+two minutes from full to empty if ignored; picking their row refills
+them). Hunger is the real thing: its meter mirrors real `simulation.py`
+energy - the same field the other renderers read from - so it rises
+whenever a creature eats, whether that's ground food it found on its own
+or a manual Feed from the menu (both move the same energy), and the Feed
+row shows the clicked creature's own energy. Neglect the needs long
+enough and the creatures' faces turn visibly sad.
 Right-clicking bare ground instead offers a single action, Add an egg,
 which adds a brand-new creature as another egg to go track down and
 hatch - also the *only* way past a single-creature population (see

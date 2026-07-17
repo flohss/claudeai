@@ -40,12 +40,14 @@ there, patiently, for as long as you leave it.
 Once hatched, everything you do to the creatures is driven from a
 right-click context menu (there is no on-screen panel of buttons). Right-
 click a creature and a small text menu opens on it with its care actions
-- Feed, Wash, Play - each labelled with that need's
-current level. Each need drains slowly on its own; picking its row tops
-it back up to full. Feeding also tops up that specific creature's *real*
-simulation.py energy - the other three are cosmetic, local to this
-file's single-companion mode, not part of the shared simulation model.
-Neglect the needs long enough and the creature's face turns visibly sad.
+- Feed, Wash, Play - each labelled with that need's current level. Wash
+and joy are cosmetic timers that drain slowly and are topped back up by
+picking their row. Hunger is the real thing: its meter mirrors real
+simulation.py energy, so it rises whenever a creature eats - the food
+that grows on the ground feeds them exactly as much as a manual Feed
+from the menu does (both move the same energy), and the menu's Feed row
+shows the clicked creature's own energy. Neglect the needs long enough
+and the creatures' faces turn visibly sad.
 
 The same creature menu's last two rows are the episode's dark side,
 included on purpose: "Set on fire" and "Stab" (marked out in red).
@@ -1038,20 +1040,33 @@ class SentienceState:
 
 
 class NeedsState:
-    """A small Tamagotchi-style care loop layered on top of the real
-    creature: each need drains slowly and is topped up by clicking the
-    matching row of the right-click menu. Only hunger reaches back into the
-    real simulation (it tops up the creature's actual energy) - the rest
-    are cosmetic, specific to this file's single-companion mode."""
+    """A small care loop layered on top of the real creatures. Clean and
+    joy are cosmetic timers that drain slowly and are topped up by the
+    right-click menu. Hunger is different: it's not a timer at all but a
+    live mirror of the population's real average energy, so it goes UP
+    whenever creatures eat - ground food they find on their own or a
+    manual Feed from the menu both move the same real energy the whole
+    simulation runs on."""
 
     def __init__(self):
         self.levels = {kind: 1.0 for kind in NEED_ITEMS}
         self.pulses = {kind: 0.0 for kind in NEED_ITEMS}
 
-    def update(self, dt):
+    def update(self, dt, world=None):
         for kind in NEED_ITEMS:
-            self.levels[kind] = max(0.0, self.levels[kind] - NEED_DECAY_PER_SECOND * dt)
+            if kind != "hunger":
+                self.levels[kind] = max(0.0, self.levels[kind] - NEED_DECAY_PER_SECOND * dt)
             self.pulses[kind] = max(0.0, self.pulses[kind] - dt * 4.0)
+        if world is not None:
+            awake = world._alive()
+            if awake:
+                avg = sum(c.energy for c in awake) / len(awake)
+                self.levels["hunger"] = max(0.0, min(1.0, avg / MAX_ENERGY))
+            # with nobody awake (all eggs / extinct) the meter just holds
+        else:
+            # no world in sight (old callers/tests): fall back to the
+            # plain timer so the meter still does something sensible
+            self.levels["hunger"] = max(0.0, self.levels["hunger"] - NEED_DECAY_PER_SECOND * dt)
 
     def lowest(self):
         return min(self.levels.values())
@@ -1085,13 +1100,17 @@ MENU_HEADER = (150, 156, 142)
 
 
 def creature_menu_items(creature, world, needs, horror):
-    """The rows shown when you right-click a creature: the four care
-    actions (each labelled with that need's current level) and the two
-    cruel ones. Every row is a (label, is_danger, callback) tuple that
-    acts on this specific creature."""
+    """The rows shown when you right-click a creature: the care actions
+    (each labelled with that need's current level - the Feed row shows
+    THIS creature's own real energy, which ground food raises too) and
+    the two cruel ones. Every row is a (label, is_danger, callback)
+    tuple that acts on this specific creature."""
     items = [(f"-- creature #{creature.id} --", None, None)]
     for kind in NEED_ITEMS:
-        pct = int(round(needs.levels[kind] * 100))
+        if kind == "hunger":
+            pct = int(round(max(0.0, min(1.0, creature.energy / MAX_ENERGY)) * 100))
+        else:
+            pct = int(round(needs.levels[kind] * 100))
         items.append((f"{NEED_MENU_LABELS[kind]}  ({pct}%)", False,
                       lambda k=kind: needs.feed(k, world, creature)))
     items.append(("Set on fire", True, lambda: horror.ignite(creature)))
@@ -2232,7 +2251,7 @@ def main():
         if egg.hatched:
             alert.update(world, sensors, threshold, dt)
             if not paused:
-                needs.update(dt)
+                needs.update(dt, world)
                 horror.update(world, dt)
             needs_low = needs.lowest() < NEED_LOW_THRESHOLD
             sentience.update(world, horror, needs_low, birth_eggs, t, dt, paused)
