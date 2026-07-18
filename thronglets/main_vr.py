@@ -2096,6 +2096,8 @@ def draw_background(screen, day_phase, pan_x=0.0, zoom=1.0, landscape=None, t=0.
         pygame.draw.line(screen, lerp_color(ground_far, ground_near, frac), (0, y), (SCREEN_W, y))
 
     grid_color = lerp_color(GRID_COLOR_NIGHT, GRID_COLOR_DAY, day_amount)
+    # the green grid looks wrong on snow, so let it whiten with the season
+    grid_color = season_tint(grid_color, season)
     for i in range(1, 9):
         _, sy, _ = project(-pan_x, i / 9, zoom)
         pygame.draw.line(screen, grid_color, (0, sy), (SCREEN_W, sy), 1)
