@@ -699,6 +699,33 @@ Controls: `LEFT CLICK` answer a summoning creature + inspect it, `SPACE`
 pause, `LEFT`/`RIGHT` pan, `UP`/`DOWN` speed, `N` drop food, `R` reset,
 `ESC` quit.
 
+## Bonus: a *true* 3D proof-of-concept (`main_gl.py`)
+
+```
+pip install moderngl        # only needed for this renderer
+python main_gl.py
+```
+
+Every other view is 2D - even `main_vr.py` is a *pseudo*-3D trick (flat
+shapes projected onto a fake ground plane). `main_gl.py` is the real
+thing: an **OpenGL** scene with a perspective camera you can orbit, a lit
+ground mesh, three-dimensional trees and rocks, and the creatures as lit
+spheres (with little camera-facing eyes) standing on the ground. Soft
+contact shadows, a gradient sky with a sun glow, and distance fog give it
+real depth. The population is a genuine `simulation.py` World, stepped
+every frame - the spheres are real creatures at their real positions, in
+the same 6-token colours as everywhere else.
+
+It is deliberately a **proof of concept**, not a full port: no care menu,
+seasons, weather or learning UI yet - the point is to show the world can
+look good in honest 3D before building it all out. `moderngl` is the one
+extra dependency and it is only imported when you run this file, so the
+other renderers keep working with just numpy + pygame.
+
+Controls: `LEFT-drag` orbits the camera, the scroll wheel zooms, `ESC`
+quits. (On a machine without a GPU the scene still renders through Mesa's
+software rasterizer, and `python main_gl.py --headless` writes a PNG.)
+
 ## Where to take it next
 
 The simulation core (`simulation.py`) and renderer (`main.py`) are split on
