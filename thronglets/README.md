@@ -716,15 +716,32 @@ real depth. The population is a genuine `simulation.py` World, stepped
 every frame - the spheres are real creatures at their real positions, in
 the same 6-token colours as everywhere else.
 
-It is deliberately a **proof of concept**, not a full port: no care menu,
-seasons, weather or learning UI yet - the point is to show the world can
-look good in honest 3D before building it all out. `moderngl` is the one
-extra dependency and it is only imported when you run this file, so the
-other renderers keep working with just numpy + pygame.
+It now has a full **day/night cycle, seasons and weather**, driven by the
+3D lighting rather than flat tints:
 
-Controls: `LEFT-drag` orbits the camera, the scroll wheel zooms, `ESC`
+- **Day/night**: the sun - then, once it sets, the moon - travels a real
+  arc across the sky. The whole scene is lit from that moving body, the
+  sky gradient shifts from dawn orange through midday blue to a starry
+  night, and the fog takes the horizon's colour so distance always matches
+  the hour.
+- **Seasons**: spring / summer / autumn / winter recolour the canopies and
+  the ground - fresh green, deep green, autumn orange, and a snow-dusted
+  white winter over a white ground.
+- **Weather**: clear / rain / snow. Rain and snow are real 3D particles
+  falling around the camera; both overcast the sky and dim the light, and
+  snow whitens the world further.
+
+It is still deliberately a **proof of concept**: no care menu or learning
+UI yet - the point is to show the world can look good in honest 3D before
+building it all out. `moderngl` is the one extra dependency and it is only
+imported when you run this file, so the other renderers keep working with
+just numpy + pygame.
+
+Controls: `LEFT-drag` orbits the camera, the scroll wheel zooms, `S`
+cycles the season, `W` cycles the weather, `T` toggles fast time, `ESC`
 quits. (On a machine without a GPU the scene still renders through Mesa's
-software rasterizer, and `python main_gl.py --headless` writes a PNG.)
+software rasterizer; `python main_gl.py --headless --phase=0.5
+--season=autumn --weather=rain` writes a PNG of any hour/season/weather.)
 
 ## Where to take it next
 
