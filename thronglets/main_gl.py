@@ -26,14 +26,17 @@ weather**, driven by the 3D lighting instead of flat tints:
     and snow whitens the world further.
 
 The creatures also learn who you are (the opt-in Mind in simulation.py):
-the mouse cursor is your hand - click a creature to feed it (kindness it
-learns to approach), right-click to startle it (harm it learns to flee) -
-and a 2D HUD shows the flock's feeling toward you plus a panel for the
-creature you've selected. The scene has small touches of life too: the
-canopies sway, the creatures bob, birds drift overhead, the lake reflects
-the sky, and shadows lengthen with the low sun. The simulation itself is
-the real thing: it reuses simulation.World, so the spheres you see are
-real creatures at their real positions, stepped every frame.
+the mouse cursor is your hand. Left-click a creature to select it;
+right-click it for a menu of care acts (feed / wash / play) and the
+episode's dark side (stab / burn / hit with a rock). Kind acts teach it -
+and the creatures near enough to witness them - to approach; cruel ones
+teach fear, and kill. Each creature has an expressive little face (white
+eyes with pupils, a nose, a mouth) that shifts with its emotion, and a 2D
+HUD shows the flock's feeling toward you plus a panel for the selected one.
+The scene has small touches of life too: the canopies sway, the creatures
+bob, birds drift overhead, the lake reflects the sky, and shadows lengthen
+with the low sun. The simulation itself is the real thing: it reuses
+simulation.World, so the creatures you see are real, stepped every frame.
 
 Rendering goes through moderngl (OpenGL 3.3 core). On a normal machine
 pygame opens the window and moderngl draws into it; run it with:
@@ -41,7 +44,7 @@ pygame opens the window and moderngl draws into it; run it with:
     python3 main_gl.py
 
 Controls: LEFT-drag orbits the camera, scroll wheel zooms, left-CLICK a
-creature to select + feed it, right-click a creature to startle it, S
+creature to select it, right-click a creature for its care/harm menu, S
 cycles the season, W cycles the weather, T toggles fast time, and the
 day/night cycle runs on its own. Press ESC or close the window to quit.
 
@@ -80,10 +83,28 @@ LIMB_COLOR = (0.90, 0.72, 0.20)     # a slightly deeper yellow for limbs
 EYE_COLOR = (0.08, 0.08, 0.10)
 
 # Emergent learning (the opt-in Mind in simulation.py): the mouse cursor is
-# the player's hand. Left-click a creature to feed it (kindness it learns to
-# approach), right-click to startle it (harm it learns to flee).
+# the player's hand. Left-click selects; right-click opens a care/harm menu.
+# Kind acts teach a creature (and its witnesses) to approach; cruel ones to
+# flee.
 LEARN_FEED_REWARD = 1.0
-LEARN_SCARE_REWARD = -1.0
+LEARN_CARE_REWARD = 0.3
+LEARN_HARM_REWARD = -1.0
+FEED_ENERGY = 40.0
+
+# expressive face palette
+SCLERA_COLOR = (0.97, 0.97, 0.99)
+PUPIL_COLOR = (0.05, 0.05, 0.08)
+NOSE_COLOR = (0.90, 0.68, 0.16)
+MOUTH_COLOR = (0.40, 0.16, 0.14)
+
+# per-emotion face parameters: pupil vertical shift, sclera scale, and the
+# mouth's (width, height, forward) scale + vertical shift
+EMOTION_FACE = {
+    "neutral": dict(pupil_dy=0.0, sclera=1.0, mouth=(0.55, 0.18, 0.42), mouth_dy=0.0),
+    "joy":     dict(pupil_dy=0.05, sclera=1.05, mouth=(0.75, 0.40, 0.45), mouth_dy=0.02),
+    "sad":     dict(pupil_dy=-0.05, sclera=0.95, mouth=(0.42, 0.16, 0.40), mouth_dy=-0.10),
+    "fear":    dict(pupil_dy=0.0, sclera=1.30, mouth=(0.42, 0.52, 0.42), mouth_dy=-0.06),
+}
 
 
 def disposition_label(value):
@@ -96,6 +117,80 @@ def disposition_label(value):
     if value <= -0.15:
         return "fears you"
     return "is wary of you"
+
+
+# The right-click menu: three kind acts, then three from the episode's dark
+# side. (label, kind, is_danger)
+MENU_ROWS = [
+    ("Feed", "feed", False),
+    ("Wash", "wash", False),
+    ("Play", "play", False),
+    ("Stab", "knife", True),
+    ("Burn", "fire", True),
+    ("Hit with a rock", "rock", True),
+]
+MENU_W, MENU_ROW_H = 210, 28
+
+
+class ContextMenu:
+    """A tiny 2D right-click menu drawn into the HUD overlay."""
+
+    def __init__(self):
+        self.open = False
+        self.pos = (0, 0)
+        self.cid = None
+
+    def show(self, pos, cid, screen):
+        x = max(0, min(pos[0], screen[0] - MENU_W))
+        y = max(0, min(pos[1], screen[1] - MENU_ROW_H * len(MENU_ROWS)))
+        self.pos, self.cid, self.open = (x, y), cid, True
+
+    def close(self):
+        self.open = False
+        self.cid = None
+
+    def row_at(self, mx, my):
+        if not self.open:
+            return None
+        x, y = self.pos
+        if x <= mx <= x + MENU_W and y <= my <= y + MENU_ROW_H * len(MENU_ROWS):
+            return int((my - y) // MENU_ROW_H)
+        return None
+
+    def draw(self, surf, font):
+        import pygame
+        if not self.open:
+            return
+        x, y = self.pos
+        h = MENU_ROW_H * len(MENU_ROWS)
+        panel = pygame.Surface((MENU_W, h), pygame.SRCALPHA)
+        panel.fill((12, 16, 22, 225))
+        pygame.draw.rect(panel, (110, 210, 130), panel.get_rect(), 1)
+        for i, (label, _kind, danger) in enumerate(MENU_ROWS):
+            col = (235, 120, 110) if danger else (215, 235, 220)
+            panel.blit(font.render(label, True, col), (12, i * MENU_ROW_H + 6))
+            if i:
+                pygame.draw.line(panel, (60, 70, 66), (6, i * MENU_ROW_H),
+                                 (MENU_W - 6, i * MENU_ROW_H), 1)
+        surf.blit(panel, (x, y))
+
+
+def apply_action(world, renderer, cid, kind):
+    """Run a care/harm menu action on the creature with id cid."""
+    c = next((c for c in world.creatures if c.id == cid and c.alive), None)
+    if c is None:
+        return
+    if kind == "feed":
+        c.energy = min(MAX_ENERGY, c.energy + FEED_ENERGY)
+        world.deliver_experience(c, LEARN_FEED_REWARD)
+        renderer.set_emotion(cid, "joy")
+    elif kind in ("wash", "play"):
+        world.deliver_experience(c, LEARN_CARE_REWARD)
+        renderer.set_emotion(cid, "joy")
+    else:  # knife / fire / rock - the dark side: teach fear, then kill
+        world.deliver_experience(c, LEARN_HARM_REWARD)
+        renderer.set_emotion(cid, "fear", 1.2)
+        world.kill_creature(c)
 FLOWER_COLORS = ((0.96, 0.34, 0.52), (0.98, 0.82, 0.24), (0.72, 0.46, 0.95))
 FLOWER_STEM_COLOR = (0.16, 0.42, 0.12)
 FLOWER_CENTER_COLOR = (0.99, 0.86, 0.30)   # sunny disc floret at the heart
@@ -803,6 +898,11 @@ class Renderer:
         self.vao_head = self._vao(self.lit, mesh_uv_sphere(1.2, 12, 16))
         self.vao_limb = self._vao(self.lit, mesh_cylinder(0.30, 1.0, 8))
         self.vao_hand = self._vao(self.lit, mesh_uv_sphere(0.42, 7, 9))
+        # face parts: white eyeball, black pupil, nose, mouth
+        self.vao_sclera = self._vao(self.lit, mesh_uv_sphere(0.27, 8, 10))
+        self.vao_pupil = self._vao(self.lit, mesh_uv_sphere(0.15, 6, 8))
+        self.vao_nose = self._vao(self.lit, mesh_uv_sphere(0.16, 6, 8))
+        self.emotion_fx = {}   # cid -> (emotion, expire_time) for transient moods
         # a translucent glow sphere for the signal halo (position only)
         halo_v = mesh_uv_sphere(1.0, 14, 18)
         self.vao_halo = ctx.vertex_array(self.shadow, [(ctx.buffer(halo_v.tobytes()), "3f 3x4", "in_pos")])
@@ -877,6 +977,25 @@ class Renderer:
         self.water["u_zenith"].value = env["zenith"]
         self.water["u_horizon"].value = env["horizon"]
         vao.render()
+
+    # -- emotion ------------------------------------------------------------
+    def set_emotion(self, cid, emotion, duration=2.0):
+        self.emotion_fx[cid] = (emotion, self.visual_time + duration)
+
+    def emotion_of(self, c):
+        """A transient mood set by a recent action, else one derived from the
+        creature's energy and how it feels about the player."""
+        fx = self.emotion_fx.get(c.id)
+        if fx is not None and self.visual_time < fx[1]:
+            return fx[0]
+        disp = c.mind.disposition() if c.mind is not None else 0.0
+        if c.energy / MAX_ENERGY < 0.28:
+            return "sad"
+        if disp <= -0.25:
+            return "fear"
+        if disp >= 0.3:
+            return "joy"
+        return "neutral"
 
     # -- interaction helpers ------------------------------------------------
     def _camera_vp(self, camera):
@@ -1078,20 +1197,30 @@ class Renderer:
             head_y = foot + 3.4
             self._draw(self.vao_head, translate(cx, head_y, cz) @ scale(0.8, 0.8, 0.8),
                        vp, SKIN_COLOR, env)
-            # face: two small camera-facing eyes and a little mouth below them
+            # expressive, camera-facing face: white eyes with black pupils, a
+            # nose, and a mouth whose shape follows the creature's emotion
+            fp = EMOTION_FACE[self.emotion_of(c)]
             face = np.array([eye[0] - cx, 0.0, eye[2] - cz])
             if np.linalg.norm(face) > 1e-3:
                 face /= np.linalg.norm(face)
             right = np.cross(np.array([0.0, 1.0, 0.0]), face)
             for side in (-1, 1):
-                ex = cx + face[0] * 0.72 + right[0] * 0.32 * side
-                ez = cz + face[2] * 0.72 + right[2] * 0.32 * side
-                self._draw(self.vao_eye, translate(ex, head_y + 0.14, ez) @ scale(0.5, 0.5, 0.5),
-                           vp, EYE_COLOR, env)
-            mx = cx + face[0] * 0.82
-            mz = cz + face[2] * 0.82
-            self._draw(self.vao_eye, translate(mx, head_y - 0.34, mz) @ scale(0.55, 0.2, 0.42),
-                       vp, (0.35, 0.16, 0.14), env)
+                ex = cx + face[0] * 0.66 + right[0] * 0.32 * side
+                ez = cz + face[2] * 0.66 + right[2] * 0.32 * side
+                ey = head_y + 0.16
+                self._draw(self.vao_sclera, translate(ex, ey, ez) @ scale(fp["sclera"], fp["sclera"], fp["sclera"]),
+                           vp, SCLERA_COLOR, env)
+                px = ex + face[0] * 0.12
+                pz = ez + face[2] * 0.12
+                self._draw(self.vao_pupil, translate(px, ey + fp["pupil_dy"], pz), vp, PUPIL_COLOR, env)
+            # nose, just below and between the eyes
+            self._draw(self.vao_nose, translate(cx + face[0] * 0.86, head_y - 0.05, cz + face[2] * 0.86),
+                       vp, NOSE_COLOR, env)
+            # mouth
+            mw, mh, mf = fp["mouth"]
+            self._draw(self.vao_eye,
+                       translate(cx + face[0] * 0.80, head_y - 0.40 + fp["mouth_dy"], cz + face[2] * 0.80)
+                       @ scale(mw, mh, mf), vp, MOUTH_COLOR, env)
             # remember the halo for the additive pass (silent token gets none)
             if c.token != 0:
                 halos.append((cx, foot + 1.9, cz, c.token))
@@ -1188,7 +1317,7 @@ class Camera:
 TOKEN_NAMES = ["silent", "red", "blue", "yellow", "purple", "teal"]
 
 
-def build_hud(size, world, env, phase, selected_id, font, small):
+def build_hud(size, world, env, phase, selected_id, font, small, menu=None):
     """Draw the 2D HUD onto a transparent pygame Surface: the season/weather/
     clock/population line, the flock's learned feeling toward you, a panel for
     the selected creature, and a one-line controls hint."""
@@ -1224,8 +1353,10 @@ def build_hud(size, world, env, phase, selected_id, font, small):
                 d = c.mind.disposition()
                 text("feeling: %s (%+.0f%%)" % (disposition_label(d), d * 100), px + 120, py + 48, fnt=small)
 
-    text("L-drag orbit   scroll zoom   click creature: feed   right-click: startle   "
+    text("L-drag orbit   scroll zoom   click: select   right-click: care/harm menu   "
          "S season   W weather   T fast-time", 12, size[1] - 24, (206, 212, 220), small)
+    if menu is not None:
+        menu.draw(surf, small)
     return surf
 
 
@@ -1264,26 +1395,6 @@ def render_headless(path, size=(1000, 700), phase=0.5, season="summer",
 # =========================================================================
 # interactive main (needs a real display + OpenGL)
 # =========================================================================
-def _ambient_sound():
-    """A soft two-note drone looped quietly under the scene. Returns a running
-    Channel, or None if there's no audio device."""
-    import pygame
-    try:
-        pygame.mixer.init(frequency=22050, size=-16, channels=2)
-        rate = pygame.mixer.get_init()[0]
-        n = rate * 2
-        t = np.linspace(0, 2.0, n, endpoint=False)
-        wave = (0.5 * np.sin(2 * np.pi * 110 * t) + 0.3 * np.sin(2 * np.pi * 164.81 * t))
-        wave *= 0.12
-        stereo = np.column_stack([wave, wave])
-        snd = pygame.sndarray.make_sound(np.ascontiguousarray((stereo * 32767).astype(np.int16)))
-        ch = pygame.mixer.Channel(0)
-        ch.play(snd, loops=-1)
-        return ch
-    except pygame.error:
-        return None
-
-
 def main():
     import moderngl
     import pygame
@@ -1297,7 +1408,7 @@ def main():
     world = World(init_pop=8, predator_count=0, learning=True)
     font = pygame.font.SysFont("consolas", 18)
     small = pygame.font.SysFont("consolas", 14)
-    _ambient_sound()
+    menu = ContextMenu()
 
     phase = 0.35            # early morning
     season_i, weather_i = 1, 0
@@ -1323,19 +1434,25 @@ def main():
                 elif event.key == pygame.K_t:
                     fast_time = not fast_time
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                dragging, drag_moved = True, False
+                if menu.open:               # a click while the menu is up
+                    row = menu.row_at(*event.pos)
+                    if row is not None:
+                        apply_action(world, renderer, menu.cid, MENU_ROWS[row][1])
+                    menu.close()
+                else:
+                    dragging, drag_moved = True, False
             elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
-                dragging = False
-                if not drag_moved:      # a click, not an orbit drag: select + feed
+                if dragging and not drag_moved:   # a click, not an orbit drag: select
                     c = renderer.creature_at(world, cam, *event.pos)
-                    if c is not None:
-                        renderer.selected_id = c.id
-                        world.deliver_experience(c, LEARN_FEED_REWARD)
+                    renderer.selected_id = c.id if c is not None else None
+                dragging = False
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:
-                c = renderer.creature_at(world, cam, *event.pos)   # right-click: startle
+                c = renderer.creature_at(world, cam, *event.pos)  # open the care/harm menu
                 if c is not None:
                     renderer.selected_id = c.id
-                    world.deliver_experience(c, LEARN_SCARE_REWARD)
+                    menu.show(event.pos, c.id, size)
+                else:
+                    menu.close()
             elif event.type == pygame.MOUSEMOTION and dragging:
                 if abs(event.rel[0]) + abs(event.rel[1]) > 2:
                     drag_moved = True
@@ -1355,7 +1472,7 @@ def main():
 
         env = environment(phase, SEASONS[season_i], WEATHERS[weather_i])
         renderer.render(world, cam, env, dt=dt)
-        renderer.draw_overlay(build_hud(size, world, env, phase, renderer.selected_id, font, small))
+        renderer.draw_overlay(build_hud(size, world, env, phase, renderer.selected_id, font, small, menu))
         pygame.display.flip()
     pygame.quit()
 

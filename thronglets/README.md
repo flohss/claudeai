@@ -369,22 +369,24 @@ It now has a full **day/night cycle, seasons and weather**, driven by the
   snow whitens the world further.
 
 **It's interactive, and the flock learns who you are.** The mouse cursor is
-your hand (the opt-in `Mind` from `simulation.py`): **click a creature to
-select and feed it** - a kindness it, and the creatures near enough to
-witness it, learn to approach - and **right-click to startle it**, which
-teaches fear. A 2D HUD shows the season/weather/clock/population, the
-flock's overall feeling toward you (*"the flock trusts you (+45%)"*), and a
-panel for the selected creature (colour, generation, energy, and its own
-feeling). Little touches of life round it out: the canopies sway, the
-creatures bob, birds drift overhead, the lake mirrors the sky, shadows
-lengthen with the low sun, and a soft ambient drone plays.
+your hand (the opt-in `Mind` from `simulation.py`): **left-click a creature
+to select it**, and **right-click for a menu** of care acts (**Feed / Wash
+/ Play**) and the episode's dark side (**Stab / Burn / Hit with a rock**).
+Kind acts teach that creature - and the ones near enough to witness them -
+to approach; cruel ones teach fear and kill. Each creature has an
+**expressive little face** (white eyes with pupils, a nose, a mouth) that
+shifts with its emotion. A 2D HUD shows the season/weather/clock/population,
+the flock's overall feeling toward you (*"the flock trusts you (+45%)"*),
+and a panel for the selected creature. Little touches of life round it out:
+the canopies sway, the creatures bob, birds drift overhead, the lake mirrors
+the sky, and shadows lengthen with the low sun.
 
 `moderngl` is the one extra dependency and it is only imported when you run
 this file, so the other renderers keep working with just numpy + pygame.
 
 Controls: `LEFT-drag` orbits the camera, the scroll wheel zooms, **left-
-click a creature** to select + feed it, **right-click** to startle it, `S`
-cycles the season, `W` cycles the weather, `T` toggles fast time, `ESC`
+click a creature** to select it, **right-click** for its care/harm menu,
+`S` cycles the season, `W` cycles the weather, `T` toggles fast time, `ESC`
 quits. (On a machine without a GPU the scene still renders through Mesa's
 software rasterizer; `python main_gl.py --headless --phase=0.5
 --season=autumn --weather=rain` writes a PNG of any hour/season/weather.)
