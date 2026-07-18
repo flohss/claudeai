@@ -595,7 +595,10 @@ ROCK_COUNT_RANGE = (4, 8)
 # (e.g. by a future save/load feature restoring a saved game's terrain).
 Landscape = namedtuple("Landscape", [
     "seed", "forest", "trees", "rocks", "grass", "hill_far_phase", "hill_near_phase", "river_offset",
+    "produce",
 ])
+
+PRODUCE_COUNT = 22   # seasonal ground things: flowers/berries/mushrooms by season
 
 
 def generate_landscape(seed=None):
@@ -625,6 +628,15 @@ def generate_landscape(seed=None):
              for _ in range(rng.randint(*ROCK_COUNT_RANGE))]
     grass = [(rng.uniform(-1.3, 1.3), rng.uniform(0.03, 0.99), rng.uniform(-1.0, 1.0))
              for _ in range(GRASS_TUFT_COUNT)]
+    # spots for the seasonal produce (same spots all year; what grows there
+    # depends on the season). Kept out of the river bed.
+    produce = []
+    while len(produce) < PRODUCE_COUNT:
+        x, z = rng.uniform(-1.25, 1.25), rng.uniform(0.2, 0.96)
+        lane_x, half_w = river_lane_at(z)
+        if abs(x - (lane_x + river_offset)) <= half_w + 0.05:
+            continue
+        produce.append((x, z, rng.random()))
     return Landscape(
         seed=seed,
         forest=forest,
@@ -634,6 +646,7 @@ def generate_landscape(seed=None):
         hill_far_phase=rng.uniform(0.0, 2 * math.pi),
         hill_near_phase=rng.uniform(0.0, 2 * math.pi),
         river_offset=river_offset,
+        produce=produce,
     )
 
 
@@ -2108,6 +2121,7 @@ def draw_background(screen, day_phase, pan_x=0.0, zoom=1.0, landscape=None, t=0.
 
     draw_grass_tufts(screen, landscape, pan_x, day_amount, zoom, season)
     draw_river(screen, landscape.river_offset, pan_x, day_amount, zoom, t, season)
+    draw_seasonal_produce(screen, landscape, pan_x, day_amount, zoom, season)
 
 
 def draw_ground_shadow(screen, sx, top_y, w, h, shadow_dx=0.0, shadow_len=1.0):
@@ -2232,6 +2246,65 @@ def draw_grass_tufts(screen, landscape, pan_x, day_amount, zoom=1.0, season="sum
             continue
         color = lerp_color(base, (0, 0, 0) if shade < 0 else (255, 255, 255), abs(shade) * 0.35)
         pygame.draw.line(screen, color, (sx, sy), (sx, sy - r * 1.6), max(1, int(scale * 1.5)))
+
+
+def _sh(color, f):
+    return tuple(max(0, min(255, int(c * f))) for c in color)
+
+
+def _draw_mushroom(screen, sx, sy, s, v, dim):
+    w = max(2, int(11 * s))
+    h = max(3, int(15 * s))
+    stem = _sh((236, 226, 200), dim)
+    cap = _sh((198, 58, 48) if v < 0.7 else (150, 108, 66), dim)
+    spot = _sh((246, 244, 232), dim)
+    pygame.draw.rect(screen, stem, (int(sx - w * 0.16), int(sy - h * 0.55), max(1, int(w * 0.32)), int(h * 0.55)))
+    pygame.draw.ellipse(screen, cap, (int(sx - w / 2), int(sy - h), w, int(h * 0.62)))
+    if w >= 6:
+        pygame.draw.circle(screen, spot, (int(sx - w * 0.18), int(sy - h * 0.72)), max(1, int(w * 0.11)))
+        pygame.draw.circle(screen, spot, (int(sx + w * 0.16), int(sy - h * 0.62)), max(1, int(w * 0.09)))
+
+
+def _draw_flower(screen, sx, sy, s, v, dim):
+    h = max(3, int(13 * s))
+    pr = max(1, int(3.2 * s))
+    stem = _sh((70, 150, 70), dim)
+    petals = [_sh((242, 150, 190), dim), _sh((250, 240, 120), dim), _sh((190, 150, 232), dim)][int(v * 3) % 3]
+    center = _sh((250, 214, 90), dim)
+    cy = int(sy - h)
+    pygame.draw.line(screen, stem, (int(sx), int(sy)), (int(sx), cy), max(1, int(s * 1.5)))
+    for a in range(0, 360, 72):
+        rad = math.radians(a)
+        pygame.draw.circle(screen, petals, (int(sx + math.cos(rad) * pr * 1.2), int(cy + math.sin(rad) * pr * 1.2)), pr)
+    pygame.draw.circle(screen, center, (int(sx), cy), max(1, int(pr * 0.7)))
+
+
+def _draw_berries(screen, sx, sy, s, v, dim):
+    r = max(1, int(2.6 * s))
+    berry = _sh((198, 42, 52) if v < 0.6 else (96, 62, 150), dim)
+    leaf = _sh((60, 140, 60), dim)
+    pygame.draw.line(screen, leaf, (int(sx), int(sy)), (int(sx), int(sy - r * 2.4)), max(1, int(s * 1.2)))
+    for dx, dy in ((-1.1, 0.0), (1.1, 0.0), (0.0, -1.1)):
+        pygame.draw.circle(screen, berry, (int(sx + dx * r), int(sy - r - dy * r)), r)
+
+
+def draw_seasonal_produce(screen, landscape, pan_x, day_amount, zoom=1.0, season="summer"):
+    """Little seasonal things growing on the ground - flowers in spring,
+    wild berries in summer, mushrooms in autumn. Winter's snow leaves the
+    ground bare. Drawn on the ground plane, behind the creatures/trees."""
+    if season == "winter":
+        return
+    dim = 0.5 + 0.5 * day_amount
+    for x, z, v in landscape.produce:
+        sx, sy, scale = project(x - pan_x, z, zoom)
+        if scale < 0.18 or not (-20 <= sx <= SCREEN_W + 20) or not (HORIZON_Y <= sy <= SCREEN_H + 20):
+            continue
+        if season == "autumn":
+            _draw_mushroom(screen, sx, sy, scale, v, dim)
+        elif season == "spring":
+            _draw_flower(screen, sx, sy, scale, v, dim)
+        else:
+            _draw_berries(screen, sx, sy, scale, v, dim)
 
 
 def draw_night_overlay(screen, day_amount):
