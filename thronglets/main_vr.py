@@ -95,6 +95,28 @@ rises whenever anyone is in pain, a lower frightened whimper while
 others are merely afraid, and quiet otherwise (the master mute silences
 it like everything else).
 
+Beyond feeling, these creatures LEARN. On top of the evolved genome each
+one carries a small learned "mind" (simulation.Mind, active because this
+world runs with learning=True): a reward-modulated model that works out,
+from its own experience and from watching others, how to feel about YOU -
+the player's hand, which is just the cursor's position in the world. Feed
+a creature (or wash/play with it) and it learns the hand is worth
+approaching; set it on fire or stab it and it - and every creature close
+enough to witness it - learns to flee the hand. Nothing scripts this: the
+sign of the reaction is discovered from the sign of what actually
+happened (an eligibility trace ties the lesson to the hand only when the
+hand was involved). The learning is fully two-way and retroactive - a
+creature you once terrorised can be won back over with enough kindness,
+and a trusted one turns fearful the moment you betray it. It is not
+genetic, yet a newborn inherits a blend of its parents' learned feelings,
+so a family's lessons persist and compound across generations while
+selection keeps the well-adapted ones - after a long enough session the
+whole flock has visibly come to trust or dread you without any of it
+being programmed. Right-click a creature to read how it feels about you,
+and the HUD shows the flock's average disposition. All of this lives
+behind simulation.py's opt-in learning flag, so main.py / main_tui.py /
+main_web.py are untouched by it.
+
 The creature design is an original, simplified, geometric interpretation
 of the look (round yellow body, big eyes, blue lower half) - not a
 reproduction of the show's or the licensed game's actual pixel art.
@@ -420,6 +442,14 @@ NEED_ITEMS = ("hunger", "clean", "joy")
 NEED_DECAY_PER_SECOND = 1.0 / 120.0  # empties in 2 minutes if never fed
 NEED_LOW_THRESHOLD = 0.2
 FEED_ENERGY_BOOST = 40.0
+
+# How strongly each hand action teaches the creatures to feel about you (fed
+# into World.deliver_experience, so the population learns to approach a
+# nurturing player and flee a violent one). Feeding is the clearest kindness;
+# washing/playing are gentler positives; fire and the knife are the horrors.
+LEARN_FEED_REWARD = 1.0
+LEARN_CARE_REWARD = 0.3
+LEARN_HARM_REWARD = -1.0
 
 # The episode's dark side, faithfully included: two of the right-click
 # menu's rows are weapons, not care. Fire burns a creature alive for
@@ -1328,16 +1358,51 @@ def creature_menu_items(creature, world, needs, horror):
     the two cruel ones. Every row is a (label, is_danger, callback)
     tuple that acts on this specific creature."""
     items = [(f"-- creature #{creature.id} --", None, None)]
+    # a header line showing how this creature has learned to feel about you,
+    # once it carries a learned mind (learning worlds only)
+    if creature.mind is not None:
+        items.append((f"   ({disposition_label(creature.mind.disposition())})", None, None))
     for kind in NEED_ITEMS:
         if kind == "hunger":
             pct = int(round(max(0.0, min(1.0, creature.energy / MAX_ENERGY)) * 100))
         else:
             pct = int(round(needs.levels[kind] * 100))
         items.append((f"{NEED_MENU_LABELS[kind]}  ({pct}%)", False,
-                      lambda k=kind: needs.feed(k, world, creature)))
-    items.append(("Set on fire", True, lambda: horror.ignite(creature)))
-    items.append(("Stab", True, lambda: horror.stab(creature, world)))
+                      lambda k=kind: _care_for(needs, world, creature, k)))
+    items.append(("Set on fire", True, lambda: _harm(horror, "fire", creature, world)))
+    items.append(("Stab", True, lambda: _harm(horror, "knife", creature, world)))
     return items
+
+
+def _care_for(needs, world, creature, kind):
+    """A kind act: it fills the care meter (and feeds real energy for hunger)
+    and, in a learning world, teaches the creature - and nearby witnesses -
+    to trust the hand a little more."""
+    needs.feed(kind, world, creature)
+    reward = LEARN_FEED_REWARD if kind == "hunger" else LEARN_CARE_REWARD
+    world.deliver_experience(creature, reward)
+
+
+def _harm(horror, weapon, creature, world):
+    """A cruel act: only teaches the lasting lesson (fear of the hand, for the
+    victim and every witness) if the strike actually lands."""
+    landed = horror.ignite(creature) if weapon == "fire" else horror.stab(creature, world)
+    if landed:
+        world.deliver_experience(creature, LEARN_HARM_REWARD)
+    return landed
+
+
+def disposition_label(value):
+    """A short word for a -1..1 feeling toward the player, for menus/HUD."""
+    if value >= 0.5:
+        return "adores you"
+    if value >= 0.15:
+        return "trusts you"
+    if value <= -0.5:
+        return "terrified of you"
+    if value <= -0.15:
+        return "fears you"
+    return "wary of you"
 
 
 def ground_menu_items(world, birth_eggs):
@@ -1642,6 +1707,36 @@ def project(x, z, zoom=1.0):
         screen_y = HORIZON_Y + (screen_y - HORIZON_Y) * zoom
         scale *= zoom
     return screen_x, screen_y, scale
+
+
+def screen_to_world(mx, my, pan_x, zoom=1.0):
+    """The inverse of the project()/world_to_stage() chain: which world
+    position (if any) the mouse is hovering over in the 3D view. Returns an
+    (x, y) numpy point on the field, or None when the cursor is above the
+    horizon / off the ground plane. Used to place the player's 'hand' in the
+    world so the creatures can perceive and learn from it."""
+    denom = (SCREEN_H - HORIZON_Y) * zoom
+    if denom <= 0:
+        return None
+    z = (my - HORIZON_Y) / denom
+    if z < 0.02 or z > 1.0:
+        return None
+    spread = SCREEN_W * 0.55 * (0.12 + z * 0.9)
+    if spread <= 0:
+        return None
+    x_stage = (mx - SCREEN_W / 2) / (spread * zoom) + pan_x
+    world_x = (x_stage + 1.3) / 2.6 * WIDTH
+    world_y = z * HEIGHT
+    return np.array([float(np.clip(world_x, 0, WIDTH)), float(np.clip(world_y, 0, HEIGHT))])
+
+
+def screen_to_world_2d(mx, my):
+    """The flat top-down view's screen->world inverse (the counterpart of
+    world_to_screen_2d), for placing the hand in the 2D view."""
+    if not (0 <= mx <= SCREEN_W and 0 <= my <= SCREEN_H):
+        return None
+    return np.array([float(np.clip(mx / TOP2D_SCALE_X, 0, WIDTH)),
+                     float(np.clip(my / TOP2D_SCALE_Y, 0, HEIGHT))])
 
 
 def draw_background(screen, day_phase, pan_x=0.0, zoom=1.0, landscape=None, t=0.0,
@@ -2353,6 +2448,9 @@ def draw_status(screen, font, world, paused, speed, sensors, threshold, alert_fl
     ]
     if hatched:
         lines.append(f"[S] season: {season}   [W] weather: {weather}")
+        disp = world.disposition_summary()
+        if disp is not None:
+            lines.append(f"the flock {disposition_label(disp)} (learned: {disp:+.0%})")
     for i, text in enumerate(lines):
         screen.blit(font.render(text, True, (255, 255, 255)), (10, 10 + i * 22))
 
@@ -2390,7 +2488,7 @@ def new_egg_world():
     gets hunted. The world doesn't step until the egg cracks open, and
     the lone creature can't reproduce on its own once hatched, until a
     second creature joins it (see install_solo_reproduction_guard)."""
-    world = World(init_pop=1, predator_count=0)
+    world = World(init_pop=1, predator_count=0, learning=True)
     install_solo_reproduction_guard(world)
     return world
 
@@ -2550,6 +2648,16 @@ def main():
         hatch_flash = max(0.0, hatch_flash - dt)
         if not paused:
             day_phase = (day_phase + dt / DAY_CYCLE_SECONDS) % 1.0
+
+        # the player's hand: the cursor's position in the world, so the
+        # creatures can perceive it, react to it, and learn from it. Only
+        # while the world is running (and the cursor is over the ground).
+        if egg.hatched:
+            mx, my = pygame.mouse.get_pos()
+            world.hand_pos = (screen_to_world_2d(mx, my) if top_down
+                              else screen_to_world(mx, my, pan_x, zoom))
+        else:
+            world.hand_pos = None
 
         if egg.hatched and not paused:
             tick_accumulator += dt

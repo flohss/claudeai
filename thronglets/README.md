@@ -488,6 +488,35 @@ quiet otherwise (`M` mutes it along with everything else). None of this
 touches the evolutionary simulation's own logic - it's a feeling,
 expressive layer laid over the real creatures.
 
+**And they learn.** On top of the evolved genome, every creature in the
+VR world carries a small learned *mind* - a reward-modulated model that
+works out, from its own experience **and by watching the others**, how to
+feel about **you**: the player's hand, which is simply the cursor's
+position in the world.
+
+- **Feed** a creature (or wash/play with it) and it learns your hand is
+  worth **approaching**; **set it on fire or stab it** and it - plus every
+  creature close enough to **witness** it - learns to **flee** your hand.
+- Nothing is scripted: the sign of the reaction is *discovered* from the
+  sign of what actually happened. An eligibility trace ties each lesson to
+  the hand only for the moments the hand was actually near, so credit lands
+  where it belongs.
+- It is **fully two-way and retroactive** - a creature you once terrorised
+  can be **won back** with enough kindness, and a trusted one turns fearful
+  the moment you betray it.
+- It is not genetic, yet a newborn **inherits a blend of its parents'
+  learned feelings**, so a family's lessons **persist and compound across
+  generations** while selection keeps the well-adapted ones. Play long
+  enough and the whole flock has visibly come to trust or dread you -
+  fleeing your cursor, or crowding toward it - **without any of it being
+  programmed**.
+
+Right-click a creature to read how it feels about you; the HUD shows the
+flock's average disposition, so you can watch it shift over a session.
+This whole system lives behind `simulation.py`'s opt-in `learning` flag
+(on only in the VR view), so `main.py` / `main_tui.py` / `main_web.py`
+behave exactly as before.
+
 Standing still doesn't mean frozen: each creature blinks on its own
 schedule and wanders a couple of pixels in place between simulation
 steps, purely cosmetic idle motion meant to make it read as alive rather

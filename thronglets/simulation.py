@@ -95,6 +95,29 @@ VISION_ENERGY_COST = 0.00083  # extra metabolism per unit of vision above the mi
 HEARING_ENERGY_COST = 0.00033  # extra metabolism per unit of hearing above the minimum
 DANGER_VISION_RATIO = DANGER_RADIUS / SEE_RADIUS  # keeps danger-spotting proportional to vision
 
+# Lifetime + generational learning (opt-in, see World(learning=...)). On top
+# of the evolved genome, each creature carries a tiny reward-modulated "mind"
+# (see the Mind class) that learns - from its own experience AND from
+# watching others - how to feel about the player's hand: the cursor that can
+# feed it (good) or burn/stab it (very bad). It is NOT genetic - it changes
+# within a single lifetime - yet a newborn inherits a blend of its parents'
+# learned feelings, so hard-won lessons persist and compound across
+# generations while ongoing selection keeps the well-adapted ones. Nothing
+# here scripts "flee the player": the sign of the reaction is discovered from
+# the sign of experienced reward. All of it stays dormant unless
+# learning=True, so the other renderers and the headless smoke test are
+# completely unaffected.
+LEARN_FEATURES = 2            # [hand proximity, hand proximity x hunger]
+HAND_PERCEPTION = 48.0        # world units: how near the hand must be to feel it
+LEARN_RATE = 0.05             # step size for learning from one's own experience
+OBSERVE_RATE = 0.02           # weaker step for learning by watching a neighbour
+ELIG_DECAY = 0.88             # how fast the "what just happened to me" trace fades
+VALENCE_CLIP = 1.5            # bound on every learned weight (stops runaway)
+REWARD_EAT = 0.4              # mild reward for finding food while the hand is near
+HAND_MOVE_STRENGTH = 1.3      # how hard the learned feeling pulls toward/away the hand
+INHERIT_BLEND = 0.85          # fraction of the parents' learned feelings a child keeps
+INHERIT_NOISE = 0.05          # small variation so offspring aren't carbon copies
+
 
 class Genome:
     __slots__ = ("emission_logits", "response_weights", "traits")
@@ -172,8 +195,82 @@ def load_seed_genome(path):
     return Genome.from_lookup(data["state_to_token"], data["token_to_state"])
 
 
+class Mind:
+    """A creature's small, learned memory - separate from its evolved genome.
+
+    It is a reward-modulated linear model: a weight vector over a couple of
+    perceptual features (how near the player's hand is, and that scaled by
+    how hungry the creature is). Their dot product is the creature's live
+    appraisal of the hand - positive means "worth approaching" (it has been
+    fed), negative means "flee" (it has been hurt, or has watched others be
+    hurt).
+
+    Learning is online and, in the reinforcement-learning sense,
+    unsupervised: an eligibility trace remembers which features were active
+    recently, so when something good or bad actually happens the trace tells
+    the update rule what to credit or blame. Because the features only fire
+    while the hand is near, credit is assigned to the hand exactly when the
+    hand was involved - a creature that eats far from the cursor learns
+    nothing about it. Nothing scripts "fear the player"; the sign is
+    discovered from the sign of experienced reward.
+
+    A newborn inherits a blend of its parents' weights (Mind.inherit), so a
+    family's lessons carry forward and compound across generations."""
+
+    __slots__ = ("w", "elig")
+
+    def __init__(self, w=None):
+        self.w = np.zeros(LEARN_FEATURES) if w is None else np.asarray(w, dtype=float)
+        self.elig = np.zeros(LEARN_FEATURES)
+
+    @staticmethod
+    def features(hand_prox, hunger):
+        """The situation right now, as the model sees it. hand_prox is 0
+        (hand out of reach) .. 1 (right on top); hunger is 0 (full) .. 1
+        (starving). Both feature terms vanish when the hand is far, which is
+        what keeps learning hand-specific."""
+        return np.array([hand_prox, hand_prox * hunger])
+
+    def appraise(self, feat):
+        return float(np.dot(self.w, feat))
+
+    def sense(self, feat):
+        """Fold this step's situation into the decaying eligibility trace."""
+        self.elig = ELIG_DECAY * self.elig + feat
+
+    def reinforce(self, reward, rate=LEARN_RATE):
+        """Learn from an outcome, crediting the recently-active features
+        held in the eligibility trace (temporal credit assignment)."""
+        self.w += rate * reward * self.elig
+        np.clip(self.w, -VALENCE_CLIP, VALENCE_CLIP, out=self.w)
+
+    def teach(self, reward, feat, rate):
+        """A direct lesson tied to a specific situation - used when the
+        player acts on this creature (the hand is certainly right here) and
+        when it witnesses something happen to a neighbour."""
+        self.w = np.clip(self.w + rate * reward * feat, -VALENCE_CLIP, VALENCE_CLIP)
+
+    def disposition(self):
+        """The creature's context-free feeling about the hand, clamped to
+        roughly -1 (terrified) .. +1 (trusting), for display."""
+        return float(np.clip(self.w[0], -1.0, 1.0))
+
+    @staticmethod
+    def inherit(parents, rng):
+        """A child's starting mind: a blend of its parents' learned weights,
+        damped toward neutral and jittered a little, so lessons persist and
+        compound over generations without ever running away or becoming
+        impossible to un-learn if the player changes their ways."""
+        minds = [p.mind for p in parents if getattr(p, "mind", None) is not None]
+        if not minds:
+            return Mind()
+        base = np.mean([m.w for m in minds], axis=0) * INHERIT_BLEND
+        base = base + rng.normal(0, INHERIT_NOISE, LEARN_FEATURES)
+        return Mind(np.clip(base, -VALENCE_CLIP, VALENCE_CLIP))
+
+
 class Creature:
-    __slots__ = ("pos", "energy", "age", "genome", "state", "token", "alive", "id")
+    __slots__ = ("pos", "energy", "age", "genome", "state", "token", "alive", "id", "mind")
 
     def __init__(self, pos, energy, genome):
         self.pos = pos
@@ -184,6 +281,7 @@ class Creature:
         self.token = 0
         self.alive = True
         self.id = -1  # assigned by World._register_birth right after construction
+        self.mind = None  # a learned Mind, only in a World(learning=True); else None
 
 
 class Predator:
@@ -214,9 +312,14 @@ def _edge_push(pos):
 
 class World:
     def __init__(self, init_pop=70, seed=None, manual_food=False, manual_predators=False,
-                 predator_count=None, seed_genome=None, adaptive_traits=False):
+                 predator_count=None, seed_genome=None, adaptive_traits=False, learning=False):
         self.rng = np.random.default_rng(seed)
         self.adaptive_traits = adaptive_traits
+        self.learning = learning
+        # The player's hand in world coordinates (set by the renderer each
+        # frame, or None when the cursor is off the field). Only read when
+        # learning is on; creatures perceive and react to it.
+        self.hand_pos = None
         self.tick = 0
         self._next_id = 0
         self.lineage = {}
@@ -224,6 +327,7 @@ class World:
         if seed_genome is None:
             for _ in range(init_pop):
                 c = Creature(self.rng.uniform([0, 0], [WIDTH, HEIGHT]), INIT_ENERGY, Genome.random(self.rng))
+                c.mind = self._new_mind()
                 self._register_birth(c, (), 0)
                 self.creatures.append(c)
         else:
@@ -236,6 +340,7 @@ class World:
                     Genome(seed_genome.emission_logits.copy(), seed_genome.response_weights.copy(),
                            seed_genome.traits.copy()),
                 )
+                c.mind = self._new_mind()
                 self._register_birth(c, (), 0)
                 self.creatures.append(c)
         self.food = []
@@ -262,9 +367,20 @@ class World:
             for _ in range(n):
                 self.predators.append(Predator(self.rng.uniform([0, 0], [WIDTH, HEIGHT])))
 
+    def _new_mind(self, parents=None):
+        """A fresh (or inherited) Mind when learning is on, else None - the
+        single place minds are minted, so every birth path stays consistent."""
+        if not self.learning:
+            return None
+        if parents:
+            return Mind.inherit(parents, self.rng)
+        return Mind()
+
     def step(self):
         self.tick += 1
         self._sense_and_signal()
+        if self.learning:
+            self._learn_sense()
         self._move()
         self._move_predators()
         self._predator_kills()
@@ -294,6 +410,65 @@ class World:
         normalized = (avg - TRAIT_BOUNDS[:, 0]) / (TRAIT_BOUNDS[:, 1] - TRAIT_BOUNDS[:, 0])
         for trait in range(N_TRAITS):
             self.trait_history[trait].append(float(np.clip(normalized[trait], 0.0, 1.0)))
+
+    def _hand_proximity(self, pos):
+        """0 (hand out of reach or absent) .. 1 (right on top of pos)."""
+        if self.hand_pos is None:
+            return 0.0
+        dist = float(np.linalg.norm(np.asarray(pos, dtype=float) - self._hand_np))
+        return max(0.0, 1.0 - dist / HAND_PERCEPTION)
+
+    def _learn_sense(self):
+        """Once per step: let every mind fold its current situation (how near
+        the hand is, how hungry it is) into its eligibility trace, so a later
+        reward can be credited to the hand only when the hand was involved."""
+        self._hand_np = None if self.hand_pos is None else np.asarray(self.hand_pos, dtype=float)
+        for c in self._alive():
+            if c.mind is None:
+                continue
+            prox = self._hand_proximity(c.pos)
+            hunger = max(0.0, min(1.0, 1.0 - c.energy / MAX_ENERGY))
+            c.mind.sense(Mind.features(prox, hunger))
+
+    def deliver_experience(self, creature, reward, observers=True):
+        """The player just did something to this creature - fed it
+        (reward > 0) or hurt it (reward < 0). The creature learns the lesson
+        directly (the hand is certainly right on it), and, unless observers
+        is off, every creature near enough to witness it learns a weaker
+        version by watching. All of it is attached to the hand, so a
+        nurturing player becomes something to approach and a violent one
+        something to flee. A no-op unless learning is on."""
+        if not self.learning or creature is None or not creature.alive:
+            return
+        hunger = max(0.0, min(1.0, 1.0 - creature.energy / MAX_ENERGY))
+        if creature.mind is not None:
+            # the victim/beneficiary: the hand is right here (prox = 1)
+            creature.mind.teach(reward, Mind.features(1.0, hunger), LEARN_RATE * 2.0)
+        if not observers:
+            return
+        valence = 1.0 if reward > 0 else -1.0
+        victim_pos = np.asarray(creature.pos, dtype=float)
+        for other in self._alive():
+            if other is creature or other.mind is None:
+                continue
+            hand_dist = float(np.linalg.norm(np.asarray(other.pos, dtype=float) - victim_pos))
+            prox = max(0.0, 1.0 - hand_dist / HAND_PERCEPTION)
+            if prox <= 0.0:
+                continue
+            hunger_o = max(0.0, min(1.0, 1.0 - other.energy / MAX_ENERGY))
+            other.mind.teach(valence, Mind.features(prox, hunger_o), OBSERVE_RATE)
+
+    def disposition_summary(self):
+        """Population-average feeling toward the player's hand, -1 (the flock
+        fears you) .. +1 (it trusts you), or None when learning is off or
+        nobody is around - for a HUD readout of how you've come to be
+        regarded over a session."""
+        if not self.learning:
+            return None
+        dispositions = [c.mind.disposition() for c in self._alive() if c.mind is not None]
+        if not dispositions:
+            return None
+        return float(np.mean(dispositions))
 
     def add_food(self, x, y):
         if len(self.food) >= MAX_FOOD:
@@ -327,6 +502,7 @@ class World:
         genome = genome if genome is not None else Genome.random(self.rng)
         pos = np.clip(np.array([x, y]), [0, 0], [WIDTH, HEIGHT])
         creature = Creature(pos, INIT_ENERGY, genome)
+        creature.mind = self._new_mind()   # a fresh, unrelated founder starts naive
         self._register_birth(creature, (), 0)
         self.creatures.append(creature)
         return creature
@@ -530,6 +706,8 @@ class World:
         tokens = np.array([c.token for c in alive])
         hearing = c_["hearing"]
         heard = pair_d < hearing[:, None]
+        hand_np = (np.asarray(self.hand_pos, dtype=float)
+                   if self.learning and self.hand_pos is not None else None)
 
         for i, c in enumerate(alive):
             move = self.rng.normal(0, 1, 2) * WANDER_STRENGTH
@@ -548,6 +726,19 @@ class World:
                 w = c.genome.response_weights[tokens[j]]
                 d = max(pair_d[i, j], 1e-6)
                 move += _toward(c.pos, positions[j]) * (w / d) * SIGNAL_STRENGTH
+
+            # learned reaction to the player's hand: approach it if past
+            # experience says it feeds (appraisal > 0), flee if it hurts
+            # (< 0). The appraisal fades with distance on its own (the
+            # features carry hand proximity), so this only matters up close.
+            if hand_np is not None and c.mind is not None:
+                to_hand = hand_np - c.pos
+                dist = np.linalg.norm(to_hand)
+                prox = max(0.0, 1.0 - dist / HAND_PERCEPTION)
+                if prox > 0.0 and dist > 1e-6:
+                    hunger = max(0.0, min(1.0, 1.0 - c.energy / MAX_ENERGY))
+                    v = c.mind.appraise(Mind.features(prox, hunger))
+                    move += (to_hand / dist) * v * HAND_MOVE_STRENGTH
 
             move += _edge_push(c.pos)
             speed = np.linalg.norm(move)
@@ -628,6 +819,11 @@ class World:
                     continue
                 if d[i] < EAT_RADIUS:
                     c.energy = min(MAX_ENERGY, c.energy + FOOD_VALUE)
+                    # a small win: if the hand happened to be near while it
+                    # found food, it warms a little toward the hand (the
+                    # eligibility trace gates this to hand-near moments)
+                    if self.learning and c.mind is not None:
+                        c.mind.reinforce(REWARD_EAT)
                     eaten.add(int(i))
                 break
         if eaten:
@@ -656,6 +852,7 @@ class World:
                 continue
             child_genome = Genome.crossover(c.genome, partner.genome, self.rng)
             child = Creature((c.pos + partner.pos) / 2, INIT_ENERGY * 0.6, child_genome)
+            child.mind = self._new_mind([c, partner])   # inherits both parents' lessons
             gen = max(self.lineage[c.id]["gen"], self.lineage[partner.id]["gen"]) + 1
             self._register_birth(child, (c.id, partner.id), gen)
             newborns.append(child)
@@ -669,6 +866,7 @@ class World:
                 continue
             child_pos = np.clip(c.pos + self.rng.normal(0, 3, 2), [0, 0], [WIDTH, HEIGHT])
             child = Creature(child_pos, INIT_ENERGY * 0.6, c.genome.clone(self.rng))
+            child.mind = self._new_mind([c])   # inherits its lone parent's lessons
             self._register_birth(child, (c.id,), self.lineage[c.id]["gen"] + 1)
             newborns.append(child)
             c.energy -= BUD_COST
@@ -722,6 +920,7 @@ def save_world(world, path):
         "manual_food": world.manual_food,
         "manual_predators": world.manual_predators,
         "adaptive_traits": world.adaptive_traits,
+        "learning": world.learning,
         "vocab_history": {state: list(hist) for state, hist in world.vocab_history.items()},
         "trait_history": {trait: list(hist) for trait, hist in world.trait_history.items()},
         "food": [[float(x), float(y)] for x, y in world.food],
@@ -741,6 +940,7 @@ def save_world(world, path):
                 "emission_logits": c.genome.emission_logits.tolist(),
                 "response_weights": c.genome.response_weights.tolist(),
                 "traits": c.genome.traits.tolist(),
+                "mind": c.mind.w.tolist() if c.mind is not None else None,
             }
             for c in world.creatures if c.alive
         ],
@@ -760,6 +960,8 @@ def load_world(path, seed=None):
     world.manual_food = data["manual_food"]
     world.manual_predators = data["manual_predators"]
     world.adaptive_traits = data.get("adaptive_traits", False)
+    world.learning = data.get("learning", False)
+    world.hand_pos = None
     world.tick = data["tick"]
     world.births = data["births"]
     world.deaths = data["deaths"]
@@ -788,6 +990,10 @@ def load_world(path, seed=None):
         genome = Genome(np.array(cd["emission_logits"]), np.array(cd["response_weights"]), traits)
         creature = Creature(np.array(cd["pos"], dtype=float), cd["energy"], genome)
         creature.age = cd["age"]
+        if cd.get("mind") is not None:
+            creature.mind = Mind(np.array(cd["mind"], dtype=float))
+        elif world.learning:
+            creature.mind = Mind()
         if "id" in cd and cd["id"] in world.lineage:
             creature.id = cd["id"]
         else:
