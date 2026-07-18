@@ -989,14 +989,17 @@ def draw_hud(screen, font, world, paused, speed, mode, lang, expanded, trained=F
                                      deaths=world.deaths, status=status)
     screen.blit(font.render(header, True, TEXT_COLOR), (10, 8))
 
-    # how the flock has come to feel about you, right-aligned on the top row
-    # so it shows whether the HUD is collapsed or expanded
+    # how the flock has come to feel about you, on its own line, right-
+    # aligned on a row whose left side is short so it never runs into the
+    # header's speed indicator or the controls hints: the mode/settings row
+    # when the HUD is expanded, the empty second row when it's collapsed.
     disp = world.disposition_summary()
     if disp is not None:
         line = t["hud_disposition"].format(label=disposition_label(disp, lang), pct=disp)
         color = (150, 220, 140) if disp > 0.05 else (225, 110, 110) if disp < -0.05 else (200, 200, 190)
         surf = font.render(line, True, color)
-        screen.blit(surf, (SCREEN_W - surf.get_width() - 12, 8))
+        disp_y = 108 if expanded else 28
+        screen.blit(surf, (SCREEN_W - surf.get_width() - 12, disp_y))
 
     if not expanded:
         if pop == 0:
