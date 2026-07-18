@@ -4,7 +4,9 @@ The other renderers in this project are 2D: main.py and main_web.py draw
 flat. This file is different - it is real
 3D: an OpenGL scene with a perspective camera you can orbit, a lit procedural
 mountain terrain mesh, three-dimensional trees and rocks, and the creatures
-as lit spheres standing on the ground. Nothing here is a 2D blit.
+as little bodies (head, torso, arms, legs) standing on the ground - all one
+colour, each wrapped in a coloured halo that shows the signal it's emitting.
+Nothing here is a 2D blit.
 
 On top of the base scene it has a full **day/night cycle, seasons and
 weather**, driven by the 3D lighting instead of flat tints:
@@ -70,6 +72,11 @@ TOKEN_COLORS_F = [(r / 255.0, g / 255.0, b / 255.0) for r, g, b in TOKEN_COLORS]
 
 TRUNK_COLOR = (0.38, 0.26, 0.15)
 ROCK_COLOR = (0.48, 0.48, 0.53)
+# Every creature shares one body colour; the token it signals shows only as a
+# coloured halo around it (TOKEN_COLORS_F), not as its skin.
+CREATURE_COLOR = (0.94, 0.87, 0.62)
+LIMB_COLOR = (0.83, 0.75, 0.50)
+EYE_COLOR = (0.08, 0.08, 0.10)
 
 # Emergent learning (the opt-in Mind in simulation.py): the mouse cursor is
 # the player's hand. Left-click a creature to feed it (kindness it learns to
@@ -790,6 +797,13 @@ class Renderer:
         self.vao_canopy = self._vao(self.lit, mesh_uv_sphere(3.4, 12, 16))
         self.vao_creature = self._vao(self.lit, mesh_uv_sphere(2.2, 16, 24))
         self.vao_eye = self._vao(self.lit, mesh_uv_sphere(0.45, 8, 10))
+        # creature body parts (all one colour): head, torso, limbs
+        self.vao_body = self._vao(self.lit, mesh_uv_sphere(1.7, 12, 16))
+        self.vao_head = self._vao(self.lit, mesh_uv_sphere(1.2, 12, 16))
+        self.vao_limb = self._vao(self.lit, mesh_cylinder(0.30, 1.0, 8))
+        # a translucent glow sphere for the signal halo (position only)
+        halo_v = mesh_uv_sphere(1.0, 14, 18)
+        self.vao_halo = ctx.vertex_array(self.shadow, [(ctx.buffer(halo_v.tobytes()), "3f 3x4", "in_pos")])
         self.vao_flower_stem = self._vao(self.lit, mesh_cylinder(0.09, 1.05, 7))
         self.vao_flower_petals = self._vao(self.lit, mesh_flower_petals())
         self.vao_flower_center = self._vao(self.lit, mesh_uv_sphere(0.22, 6, 8))
@@ -895,10 +909,10 @@ class Renderer:
             cy = float(terrain_height(cx, cz))
             if float(terrain_water_mask(cx, cz)) > 0.5:
                 cy = WATER_LEVEL
-            centre = np.array([cx, cy + 2.1, cz])
+            centre = np.array([cx, cy + 2.6, cz])
             oc = o - centre
             b = np.dot(oc, d)
-            disc = b * b - (np.dot(oc, oc) - 2.6 * 2.6)
+            disc = b * b - (np.dot(oc, oc) - 3.2 * 3.2)
             if disc < 0:
                 continue
             t = -b - math.sqrt(disc)
@@ -1030,7 +1044,10 @@ class Renderer:
                     spot = translate(x + dx * s, y + 1.16 * s, z + dz * s) @ scale(s, s, s)
                     self._draw(self.vao_mushroom_spot, spot, vp, MUSHROOM_SPOT_COLOR, env)
 
-        # creatures: lit spheres with two camera-facing eyes, bobbing gently
+        # creatures: a little body (head, torso, arms along the sides, legs),
+        # all one colour; the signal shows only as a coloured halo (below).
+        # A gentle bob lifts the whole body.
+        halos = []
         for c in world.creatures:
             if not c.alive:
                 continue
@@ -1040,23 +1057,53 @@ class Renderer:
             # instead of sinking into the carved lake bed
             if float(terrain_water_mask(cx, cz)) > 0.5:
                 cy = WATER_LEVEL
-            bob = math.sin(self.visual_time * 2.2 + c.id * 1.7) * 0.18
-            by = cy + 2.1 + bob
-            col = TOKEN_COLORS_F[c.token % len(TOKEN_COLORS_F)]
-            self._draw(self.vao_creature, translate(cx, by, cz), vp, col, env)
+            foot = cy + math.sin(self.visual_time * 2.2 + c.id * 1.7) * 0.18
+            # legs
+            for lx in (-0.6, 0.6):
+                self._draw(self.vao_limb, translate(cx + lx, foot, cz) @ scale(1.0, 1.1, 1.0),
+                           vp, LIMB_COLOR, env)
+            # arms held along the body
+            for ax in (-1.45, 1.45):
+                self._draw(self.vao_limb, translate(cx + ax, foot + 1.2, cz) @ scale(0.9, 1.5, 0.9),
+                           vp, LIMB_COLOR, env)
+            # torso + head
+            self._draw(self.vao_body, translate(cx, foot + 2.1, cz), vp, CREATURE_COLOR, env)
+            head_y = foot + 3.9
+            self._draw(self.vao_head, translate(cx, head_y, cz), vp, CREATURE_COLOR, env)
+            # two camera-facing eyes on the head
             face = np.array([eye[0] - cx, 0.0, eye[2] - cz])
             if np.linalg.norm(face) > 1e-3:
                 face /= np.linalg.norm(face)
             right = np.cross(np.array([0.0, 1.0, 0.0]), face)
             for side in (-1, 1):
-                ex = cx + face[0] * 2.0 + right[0] * 0.8 * side
-                ez = cz + face[2] * 2.0 + right[2] * 0.8 * side
-                self._draw(self.vao_eye, translate(ex, by + 0.6, ez), vp, (0.08, 0.08, 0.10), env)
+                ex = cx + face[0] * 1.1 + right[0] * 0.5 * side
+                ez = cz + face[2] * 1.1 + right[2] * 0.5 * side
+                self._draw(self.vao_eye, translate(ex, head_y + 0.25, ez), vp, EYE_COLOR, env)
+            # remember the halo for the additive pass (silent token gets none)
+            if c.token != 0:
+                halos.append((cx, foot + 2.4, cz, c.token))
             # a bright bobbing marker over the creature the player has selected
             if c.id == self.selected_id:
-                mk = 5.6 + math.sin(self.visual_time * 4.0) * 0.4
-                self._draw(self.vao_eye, translate(cx, by + mk, cz) @ scale(1.4, 1.4, 1.4),
+                mk = 7.2 + math.sin(self.visual_time * 4.0) * 0.4
+                self._draw(self.vao_eye, translate(cx, foot + mk, cz) @ scale(1.4, 1.4, 1.4),
                            vp, (1.0, 0.95, 0.35), env)
+
+        # signal halos: a soft coloured glow around each signalling creature,
+        # drawn additively so it reads as light, not a painted shell
+        if halos:
+            ctx.enable(ctx.BLEND)
+            ctx.blend_func = ctx.SRC_ALPHA, ctx.ONE
+            ctx.depth_mask = False
+            for cx, hy, cz, token in halos:
+                r, g, bl = TOKEN_COLORS_F[token]
+                a = 0.30 + 0.10 * math.sin(self.visual_time * 3.0 + cx)
+                m = translate(cx, hy, cz) @ scale(3.4, 3.9, 3.4)
+                self.shadow["mvp"].write(_bytes(vp @ m))
+                self.shadow["u_color"].value = (r, g, bl, a)
+                self.vao_halo.render()
+            ctx.depth_mask = True
+            ctx.blend_func = ctx.SRC_ALPHA, ctx.ONE_MINUS_SRC_ALPHA
+            ctx.disable(ctx.BLEND)
 
         # a small flock of birds drifting across the sky
         self.birds[:, 0] += dt * 9.0
