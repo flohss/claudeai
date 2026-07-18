@@ -726,13 +726,15 @@ python main_gl.py
 
 Every other view is 2D - even `main_vr.py` is a *pseudo*-3D trick (flat
 shapes projected onto a fake ground plane). `main_gl.py` is the real
-thing: an **OpenGL** scene with a perspective camera you can orbit, a lit
-ground mesh, three-dimensional trees and rocks, and the creatures as lit
-spheres (with little camera-facing eyes) standing on the ground. Soft
-contact shadows, a gradient sky with a sun glow, and distance fog give it
-real depth. The population is a genuine `simulation.py` World, stepped
-every frame - the spheres are real creatures at their real positions, in
-the same 6-token colours as everywhere else.
+thing: an **OpenGL** scene with a perspective camera you can orbit, a
+**procedural mountain terrain** (rolling valley, distant massifs, and a
+lake carved right into the height field with an animated water surface),
+three-dimensional trees and rocks that sit on the slopes, and the
+creatures as lit spheres (with little camera-facing eyes) walking the
+ground. Soft contact shadows, a gradient sky with a sun glow, and distance
+fog give it real depth. The population is a genuine `simulation.py` World,
+stepped every frame - the spheres are real creatures at their real
+positions, in the same 6-token colours as everywhere else.
 
 It now has a full **day/night cycle, seasons and weather**, driven by the
 3D lighting rather than flat tints:
@@ -744,7 +746,9 @@ It now has a full **day/night cycle, seasons and weather**, driven by the
   the hour.
 - **Seasons**: spring / summer / autumn / winter recolour the canopies and
   the ground - fresh green, deep green, autumn orange, and a snow-dusted
-  white winter over a white ground.
+  white winter over a white ground. Seasonal ground life grows too:
+  **flowers bloom in spring and summer**, **red-capped mushrooms come up in
+  autumn**, and the winter ground is shaded as drifting snow.
 - **Weather**: clear / rain / snow. Rain and snow are real 3D particles
   falling around the camera; both overcast the sky and dim the light, and
   snow whitens the world further.

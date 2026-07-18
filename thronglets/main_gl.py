@@ -3,9 +3,9 @@
 Every other renderer in this project is 2D: main.py / main_tui.py /
 main_web.py draw flat, and main_vr.py is a *pseudo*-3D trick (2D shapes
 projected onto a fake ground plane). This file is different - it is real
-3D: an OpenGL scene with a perspective camera you can orbit, a lit ground
-mesh, three-dimensional trees and rocks, and the creatures as lit spheres
-standing on the ground. Nothing here is a 2D blit.
+3D: an OpenGL scene with a perspective camera you can orbit, a lit procedural
+mountain terrain mesh, three-dimensional trees and rocks, and the creatures
+as lit spheres standing on the ground. Nothing here is a 2D blit.
 
 On top of the base scene it now has a full **day/night cycle, seasons and
 weather**, exactly like main_vr - but driven by the 3D lighting instead of
@@ -18,7 +18,9 @@ flat tints:
     hour.
   * Seasons: spring / summer / autumn / winter each recolour the canopies
     and the ground - fresh green, deep green, autumn orange, and a
-    snow-dusted white winter with a white ground.
+    snow-dusted white winter with a white ground. Seasonal ground life grows
+    too: flowers bloom in spring and summer, red-capped mushrooms come up in
+    autumn, and the winter terrain is shaded as drifting snow.
   * Weather: clear / rain / snow. Rain and snow are real 3D particles
     falling around the camera; both overcast the sky and dim the light,
     and snow whitens the world further.
@@ -64,10 +66,31 @@ TOKEN_COLORS_F = [(r / 255.0, g / 255.0, b / 255.0) for r, g, b in TOKEN_COLORS]
 
 TRUNK_COLOR = (0.38, 0.26, 0.15)
 ROCK_COLOR = (0.48, 0.48, 0.53)
+FLOWER_COLORS = ((0.96, 0.34, 0.52), (0.98, 0.82, 0.24), (0.72, 0.46, 0.95))
+FLOWER_STEM_COLOR = (0.16, 0.42, 0.12)
+FLOWER_CENTER_COLOR = (0.99, 0.86, 0.30)   # sunny disc floret at the heart
+MUSHROOM_CAP_COLOR = (0.72, 0.13, 0.06)
+MUSHROOM_STEM_COLOR = (0.82, 0.74, 0.56)
+MUSHROOM_SPOT_COLOR = (0.97, 0.96, 0.92)   # the classic white cap dots
 FOG_DENSITY = 0.0030
 
-# world (200 x 140) -> a centred patch of the ground plane
+# world (200 x 140) -> a centred patch of the terrain
 WORLD_SCALE = 0.9
+
+# The terrain covers more than the visible simulation world so the horizon
+# remains mountainous while the camera orbits.  Keeping the simulation's
+# centre comparatively gentle makes it a useful playable valley.
+TERRAIN_SIZE = 600.0
+TERRAIN_CELLS = 144
+
+# A sheltered lake is carved directly into the height field, so its water
+# never looks like a flat sheet laid across hills.
+WATER_LEVEL = 0.35
+# Keep the terrain floor below the animated water surface.  Without this
+# clearance, wave vertices intermittently cross the terrain depth buffer.
+WATER_BED_LEVEL = WATER_LEVEL - 0.65
+LAKE_CENTER = (48.0, -38.0)
+LAKE_RADII = (38.0, 25.0)
 
 # --- seasons: canopy + ground colours -----------------------------------
 SEASONS = ["spring", "summer", "autumn", "winter"]
@@ -138,8 +161,12 @@ def environment(phase, season, weather):
         zen = _mix(SKY_DUSK_ZEN, SKY_DAY_ZEN, day)
         hor = _mix(SKY_DUSK_HOR, SKY_DAY_HOR, day)
     else:
-        zen = _mix(SKY_DUSK_ZEN, SKY_NIGHT_ZEN, night)
-        hor = _mix(SKY_DUSK_HOR, SKY_NIGHT_HOR, night)
+        # Keep only a short blue-hour transition.  The previous mix used the
+        # raw night value, leaving the orange sunset palette visible long
+        # after the moon had risen.
+        night_mix = min(max((night + 0.06) / 0.12, 0.0), 1.0)
+        zen = _mix(SKY_DUSK_ZEN, SKY_NIGHT_ZEN, night_mix)
+        hor = _mix(SKY_DUSK_HOR, SKY_NIGHT_HOR, night_mix)
 
     # overcast greys the sky out
     grey = (0.55, 0.57, 0.60)
@@ -172,6 +199,7 @@ def environment(phase, season, weather):
         body_dir=body_dir, body_up=body_up, body_col=body_col,
         canopy=SEASON_CANOPY[season], crown=SEASON_CROWN[season],
         ground=SEASON_GROUND[season], precip=wx["precip"],
+        season=season,
         bare=(season == "winter"),
     )
 
@@ -248,14 +276,74 @@ def _bytes(m):
 # =========================================================================
 # meshes  (interleaved position(3) + normal(3), float32)
 # =========================================================================
-def mesh_ground(size):
-    h = size / 2.0
-    n = (0.0, 1.0, 0.0)
-    quad = [
-        (-h, 0.0, -h, *n), (h, 0.0, -h, *n), (h, 0.0, h, *n),
-        (-h, 0.0, -h, *n), (h, 0.0, h, *n), (-h, 0.0, h, *n),
-    ]
-    return np.array(quad, dtype="f4")
+def terrain_water_mask(x, z):
+    """Return 0 on dry land and 1 across the lake bed."""
+    x = np.asarray(x, dtype=np.float64)
+    z = np.asarray(z, dtype=np.float64)
+    lake_x = (x - LAKE_CENTER[0]) / LAKE_RADII[0]
+    lake_z = (z - LAKE_CENTER[1]) / LAKE_RADII[1]
+    lake_distance = lake_x * lake_x + lake_z * lake_z
+    lake_mask = np.clip((1.0 - lake_distance) * 12.0, 0.0, 1.0)
+    return lake_mask
+
+
+def terrain_height(x, z):
+    """Return the procedural terrain elevation at a scene-space position.
+
+    Broad Gaussian massifs give the landscape recognisable mountain ranges;
+    layered waves add ridges and rolling ground without needing an external
+    heightmap.  The central valley stays low enough for the simulation.
+    """
+    x = np.asarray(x, dtype=np.float64)
+    z = np.asarray(z, dtype=np.float64)
+    rolling = (
+        3.5 * np.sin(x * 0.055 + z * 0.021)
+        + 2.2 * np.cos(z * 0.081 - x * 0.017)
+        + 1.1 * np.sin((x + z) * 0.19)
+    )
+    massifs = (
+        68.0 * np.exp(-(((x + 165.0) / 76.0) ** 2 + ((z + 125.0) / 62.0) ** 2))
+        + 60.0 * np.exp(-(((x - 145.0) / 70.0) ** 2 + ((z - 105.0) / 78.0) ** 2))
+        + 48.0 * np.exp(-(((x + 120.0) / 64.0) ** 2 + ((z - 155.0) / 70.0) ** 2))
+        + 42.0 * np.exp(-(((x - 20.0) / 125.0) ** 2 + ((z + 245.0) / 60.0) ** 2))
+    )
+    height = rolling + massifs
+
+    # Smoothly flatten the basin into a lake and cut a narrow, winding outlet
+    # towards the east.  The high exponent keeps a readable shoreline.
+    water_mask = terrain_water_mask(x, z)
+    return height * (1.0 - water_mask) + WATER_BED_LEVEL * water_mask
+
+
+def terrain_normal(x, z, step=0.5):
+    """Sample an upward-facing normal from the same height field."""
+    dx = (terrain_height(x + step, z) - terrain_height(x - step, z)) / (2.0 * step)
+    dz = (terrain_height(x, z + step) - terrain_height(x, z - step)) / (2.0 * step)
+    normal = np.array([-dx, 1.0, -dz], dtype=np.float64)
+    return normal / np.linalg.norm(normal)
+
+
+def mesh_terrain(size=TERRAIN_SIZE, cells=TERRAIN_CELLS):
+    """Build a triangle terrain mesh with smooth normals per grid vertex."""
+    axis = np.linspace(-size / 2.0, size / 2.0, cells + 1, dtype=np.float64)
+    xx, zz = np.meshgrid(axis, axis, indexing="ij")
+    yy = terrain_height(xx, zz)
+    spacing = axis[1] - axis[0]
+    d_height_dx, d_height_dz = np.gradient(yy, spacing, spacing)
+    normals = np.stack((-d_height_dx, np.ones_like(yy), -d_height_dz), axis=-1)
+    normals /= np.linalg.norm(normals, axis=-1, keepdims=True)
+    vertices = np.dstack((xx, yy, zz, normals)).astype("f4")
+
+    # Counter-clockwise triangles viewed from above: OpenGL can cull these
+    # safely later without changing the generated terrain.
+    a = vertices[:-1, :-1]
+    b = vertices[1:, :-1]
+    c = vertices[1:, 1:]
+    d = vertices[:-1, 1:]
+    tris = np.empty((cells, cells, 6, 6), dtype="f4")
+    tris[:, :, 0], tris[:, :, 1], tris[:, :, 2] = a, c, b
+    tris[:, :, 3], tris[:, :, 4], tris[:, :, 5] = a, d, c
+    return tris.reshape(-1, 6)
 
 
 def mesh_uv_sphere(radius=1.0, stacks=16, slices=24, jitter=0.0, seed=0):
@@ -321,6 +409,33 @@ def mesh_disc(radius=1.0, slices=28):
     return np.array(tris, dtype="f4")
 
 
+def mesh_lake(slices=72):
+    """Triangle fan for the calm lake surface."""
+    verts = []
+    cx, cz = LAKE_CENTER
+    rx, rz = LAKE_RADII
+    for i in range(slices):
+        a0 = math.tau * i / slices
+        a1 = math.tau * (i + 1) / slices
+        verts.extend(((cx, WATER_LEVEL, cz),
+                      (cx + math.cos(a0) * rx, WATER_LEVEL, cz + math.sin(a0) * rz),
+                      (cx + math.cos(a1) * rx, WATER_LEVEL, cz + math.sin(a1) * rz)))
+    return np.asarray(verts, dtype="f4")
+
+
+def mesh_flower_petals(petals=6, ring=0.46, petal_r=0.30):
+    """A ring of flattened little spheres - the petals of one flower, baked
+    into a single mesh so a whole blossom is just one draw call."""
+    base = mesh_uv_sphere(petal_r, 5, 7)
+    out = []
+    for k in range(petals):
+        a = 2 * math.pi * k / petals
+        ox, oz = math.cos(a) * ring, math.sin(a) * ring
+        for v in base:
+            out.append((v[0] + ox, v[1] * 0.45, v[2] + oz, v[3], v[4], v[5]))
+    return np.array(out, dtype="f4")
+
+
 # =========================================================================
 # shaders
 # =========================================================================
@@ -350,6 +465,7 @@ uniform vec3 u_fogcol;
 uniform vec3 u_campos;
 uniform float u_fogdensity;
 uniform int u_grid;
+uniform float u_snowcover;
 in vec3 v_world;
 in vec3 v_norm;
 out vec4 f_color;
@@ -358,10 +474,20 @@ void main() {
     float diff = max(dot(n, normalize(u_lightdir)), 0.0);
     vec3 base = u_color;
     if (u_grid == 1) {
-        vec2 c = v_world.xz / 9.0;
-        vec2 g = abs(fract(c - 0.5) - 0.5) / fwidth(c);
-        float line = 1.0 - min(min(g.x, g.y), 1.0);
-        base = mix(base, base * 0.80, line * 0.55);
+        if (u_snowcover > 0.5) {
+            // Fine powder, shallow wind drifts, and a cool tint in the
+            // hollows make the winter terrain read as accumulated snow.
+            float grain = fract(sin(dot(floor(v_world.xz * 5.0), vec2(127.1, 311.7))) * 43758.5453);
+            float drift = sin(v_world.x * 0.055) * cos(v_world.z * 0.047) * 0.5 + 0.5;
+            vec3 powder = mix(vec3(0.72, 0.80, 0.91), vec3(0.98, 0.99, 1.0), drift);
+            base = mix(powder, vec3(1.0), smoothstep(0.94, 1.0, grain) * 0.14);
+        } else {
+            // gentle tonal variation instead of a hard grid, so the ground
+            // reads as textured turf rather than wireframe
+            float grain = fract(sin(dot(floor(v_world.xz * 2.5), vec2(127.1, 311.7))) * 43758.5453);
+            float mott = sin(v_world.x * 0.11) * cos(v_world.z * 0.09) * 0.5 + 0.5;
+            base *= 0.93 + 0.10 * mix(grain, mott, 0.5);
+        }
     }
     vec3 col = base * (u_ambient + u_lightcol * diff);
     float dist = length(v_world - u_campos);
@@ -440,6 +566,52 @@ out vec4 f_color;
 void main() { f_color = u_color; }
 """
 
+WATER_VERT = """
+#version 330
+uniform mat4 mvp;
+uniform float u_time;
+in vec3 in_pos;
+out vec3 v_world;
+void main() {
+    vec3 p = in_pos;
+    p.y += sin(p.x * 0.22 + u_time * 1.8) * 0.16;
+    p.y += cos(p.z * 0.31 - u_time * 1.25) * 0.10;
+    v_world = p;
+    gl_Position = mvp * vec4(p, 1.0);
+}
+"""
+
+WATER_FRAG = """
+#version 330
+uniform vec3 u_lightdir;
+uniform vec3 u_lightcol;
+uniform vec3 u_fogcol;
+uniform vec3 u_campos;
+uniform float u_fogdensity;
+uniform float u_time;
+in vec3 v_world;
+out vec4 f_color;
+void main() {
+    vec3 n = normalize(vec3(
+        -0.035 * cos(v_world.x * 0.22 + u_time * 1.8), 1.0,
+         0.031 * sin(v_world.z * 0.31 - u_time * 1.25)));
+    vec3 view_dir = normalize(u_campos - v_world);
+    vec3 half_dir = normalize(view_dir + normalize(u_lightdir));
+    float sparkle = pow(max(dot(n, half_dir), 0.0), 58.0);
+    // Fake depth from the lake footprint: pale shallows at the bank, then a
+    // dense blue centre that reads as genuinely deep water.
+    vec2 lake_pos = (v_world.xz - vec2(48.0, -38.0)) / vec2(38.0, 25.0);
+    float depth = clamp(1.0 - length(lake_pos), 0.0, 1.0);
+    float ripple = sin(v_world.x * 0.45 + v_world.z * 0.23 + u_time * 2.2) * 0.025;
+    vec3 water = mix(vec3(0.06, 0.34, 0.42), vec3(0.008, 0.055, 0.14), depth);
+    water += ripple;
+    water += u_lightcol * (0.16 + sparkle * 1.8);
+    float dist = length(v_world - u_campos);
+    float fog = clamp(1.0 - exp(-u_fogdensity * dist), 0.0, 1.0);
+    f_color = vec4(mix(water, u_fogcol, fog), 0.90);
+}
+"""
+
 
 # =========================================================================
 # weather particles
@@ -488,18 +660,46 @@ class Precip:
 # =========================================================================
 def make_scene(seed=7):
     rng = np.random.default_rng(seed)
-    trees, rocks = [], []
-    for _ in range(46):
+    trees, rocks, flowers, mushrooms = [], [], [], []
+    # Retry positions so the scene keeps its density while reserving a dry
+    # shoreline around the procedurally carved lake and river.
+    for _ in range(320):
+        if len(trees) >= 46:
+            break
         x = (rng.random() - 0.5) * 170
         z = (rng.random() - 0.5) * 120
-        if abs(x) < 14 and abs(z) < 14:
+        if abs(x) < 14 and abs(z) < 14 or float(terrain_water_mask(x, z)) > 0.02:
             continue
         trees.append((x, z, 0.8 + rng.random() * 0.7, rng.random() * 6.28))
-    for _ in range(9):
+    for _ in range(160):
+        if len(rocks) >= 9:
+            break
         x = (rng.random() - 0.5) * 160
         z = (rng.random() - 0.5) * 110
+        if float(terrain_water_mask(x, z)) > 0.02:
+            continue
         rocks.append((x, z, 0.7 + rng.random() * 0.8, rng.random() * 6.28))
-    return trees, rocks
+
+    # Small seasonal props use their own random positions.  They are always
+    # generated, but only drawn in their matching season below.
+    for _ in range(720):
+        if len(flowers) >= 72:
+            break
+        x = (rng.random() - 0.5) * 165
+        z = (rng.random() - 0.5) * 115
+        if float(terrain_water_mask(x, z)) > 0.02:
+            continue
+        flowers.append((x, z, 1.1 + rng.random() * 0.9,
+                        int(rng.integers(len(FLOWER_COLORS)))))
+    for _ in range(420):
+        if len(mushrooms) >= 34:
+            break
+        x = (rng.random() - 0.5) * 165
+        z = (rng.random() - 0.5) * 115
+        if float(terrain_water_mask(x, z)) > 0.02:
+            continue
+        mushrooms.append((x, z, 1.2 + rng.random() * 0.9))
+    return trees, rocks, flowers, mushrooms
 
 
 def world_to_scene(pos):
@@ -528,15 +728,25 @@ class Renderer:
         self.shadow = ctx.program(vertex_shader=SHADOW_VERT, fragment_shader=SHADOW_FRAG)
         self.sky = ctx.program(vertex_shader=SKY_VERT, fragment_shader=SKY_FRAG)
         self.particle = ctx.program(vertex_shader=PARTICLE_VERT, fragment_shader=PARTICLE_FRAG)
+        self.water = ctx.program(vertex_shader=WATER_VERT, fragment_shader=WATER_FRAG)
 
-        self.trees, self.rocks = make_scene()
+        self.trees, self.rocks, self.flowers, self.mushrooms = make_scene()
         self.precip = Precip()
 
-        self.vao_ground = self._vao(self.lit, mesh_ground(600.0))
+        self.vao_ground = self._vao(self.lit, mesh_terrain())
         self.vao_trunk = self._vao(self.lit, mesh_cylinder(0.6, 4.6, 14))
         self.vao_canopy = self._vao(self.lit, mesh_uv_sphere(3.4, 12, 16))
         self.vao_creature = self._vao(self.lit, mesh_uv_sphere(2.2, 16, 24))
         self.vao_eye = self._vao(self.lit, mesh_uv_sphere(0.45, 8, 10))
+        self.vao_flower_stem = self._vao(self.lit, mesh_cylinder(0.09, 1.05, 7))
+        self.vao_flower_petals = self._vao(self.lit, mesh_flower_petals())
+        self.vao_flower_center = self._vao(self.lit, mesh_uv_sphere(0.22, 6, 8))
+        self.vao_mushroom_stem = self._vao(self.lit, mesh_cylinder(0.22, 0.95, 9))
+        self.vao_mushroom_cap = self._vao(self.lit, mesh_uv_sphere(0.82, 8, 12))
+        self.vao_mushroom_spot = self._vao(self.lit, mesh_uv_sphere(0.13, 5, 6))
+        self.vbo_lake = ctx.buffer(mesh_lake().tobytes())
+        self.vao_lake = ctx.vertex_array(self.water, [(self.vbo_lake, "3f", "in_pos")])
+        self.visual_time = 0.0
 
         disc_vbo = ctx.buffer(mesh_disc(1.0).tobytes())
         self.vao_disc = ctx.vertex_array(self.shadow, [(disc_vbo, "3f 3x4", "in_pos")])
@@ -563,16 +773,29 @@ class Renderer:
         self.lit["model"].write(_bytes(model))
         self.lit["u_color"].value = color
         self.lit["u_grid"].value = grid
+        self.lit["u_snowcover"].value = 1.0 if env["season"] == "winter" else 0.0
         vao.render()
 
     def _shadow(self, x, z, r, vp, strength):
-        m = translate(x, 0.04, z) @ scale(r, 1.0, r)
+        # Keep the contact shadow at the same sampled elevation as its owner.
+        m = translate(x, float(terrain_height(x, z)) + 0.06, z) @ scale(r, 1.0, r)
         self.shadow["mvp"].write(_bytes(vp @ m))
         self.shadow["u_color"].value = (0.05, 0.09, 0.05, strength)
         self.vao_disc.render()
 
+    def _draw_water(self, vao, vp, env, eye):
+        self.water["mvp"].write(_bytes(vp))
+        self.water["u_time"].value = self.visual_time
+        self.water["u_lightdir"].value = tuple(float(v) for v in env["light_dir"])
+        self.water["u_lightcol"].value = env["light_col"]
+        self.water["u_fogcol"].value = env["fog_col"]
+        self.water["u_fogdensity"].value = env["fog_density"]
+        self.water["u_campos"].value = tuple(float(v) for v in eye)
+        vao.render()
+
     def render(self, world, camera, env, dt=0.0):
         ctx = self.ctx
+        self.visual_time += dt
         eye, target = camera.eye_target()
         view = look_at(eye, target, (0, 1, 0))
         proj = perspective(52.0, self.size[0] / self.size[1], 1.0, 900.0)
@@ -602,8 +825,16 @@ class Renderer:
         self.vao_sky.render()
         ctx.enable(ctx.DEPTH_TEST)
 
-        # ground
+        # terrain
         self._draw(self.vao_ground, _identity(), vp, env["ground"], env, grid=1)
+
+        # Animated, translucent lake. Depth writes are disabled so the shimmer
+        # blends with the terrain while still respecting objects.
+        ctx.enable(ctx.BLEND)
+        ctx.depth_mask = False
+        self._draw_water(self.vao_lake, vp, env, eye)
+        ctx.depth_mask = True
+        ctx.disable(ctx.BLEND)
 
         # contact shadows (softer at night / under cloud)
         sh = 0.10 + 0.20 * max(env["sun_h"], 0.0)
@@ -623,7 +854,7 @@ class Renderer:
         # trees: bare trunks in winter get a small snowy crown; otherwise a
         # rounded two-tone canopy in the season's colour
         for x, z, s, yaw in self.trees:
-            base = translate(x, 0.0, z) @ rotate_y(yaw) @ scale(s, s, s)
+            base = translate(x, float(terrain_height(x, z)), z) @ rotate_y(yaw) @ scale(s, s, s)
             self._draw(self.vao_trunk, base, vp, TRUNK_COLOR, env)
             canopy = base @ translate(0.0, 5.4, 0.0)
             self._draw(self.vao_canopy, canopy, vp, env["canopy"], env)
@@ -631,16 +862,45 @@ class Renderer:
             self._draw(self.vao_canopy, crown, vp, env["crown"], env)
 
         for (x, z, s, yaw), vao in zip(self.rocks, self.vao_rocks):
-            m = translate(x, 1.0 * s, z) @ rotate_y(yaw) @ scale(s, s * 0.7, s)
+            m = (translate(x, float(terrain_height(x, z)) + 1.8 * s, z)
+                 @ rotate_y(yaw) @ scale(s, s * 0.7, s))
             self._draw(vao, m, vp, ROCK_COLOR, env)
+
+        # Seasonal ground life: flowers bloom in spring and summer, mushrooms
+        # come up in autumn; each disappears completely outside its season
+        # while the base world stays intact.
+        if env["season"] in ("spring", "summer"):
+            for x, z, s, color_i in self.flowers:
+                y = float(terrain_height(x, z))
+                self._draw(self.vao_flower_stem, translate(x, y, z) @ scale(s, s, s),
+                           vp, FLOWER_STEM_COLOR, env)
+                head = translate(x, y + 1.05 * s, z) @ scale(s, s, s)
+                self._draw(self.vao_flower_petals, head, vp, FLOWER_COLORS[color_i], env)
+                self._draw(self.vao_flower_center, head, vp, FLOWER_CENTER_COLOR, env)
+        elif env["season"] == "autumn":
+            for x, z, s in self.mushrooms:
+                y = float(terrain_height(x, z))
+                self._draw(self.vao_mushroom_stem, translate(x, y, z) @ scale(s, s, s),
+                           vp, MUSHROOM_STEM_COLOR, env)
+                cap = translate(x, y + 0.9 * s, z) @ scale(s, s * 0.5, s)
+                self._draw(self.vao_mushroom_cap, cap, vp, MUSHROOM_CAP_COLOR, env)
+                # a few white dots dusted over the top of the cap
+                for dx, dz in ((0.0, 0.0), (0.34, 0.12), (-0.28, 0.24), (0.14, -0.32)):
+                    spot = translate(x + dx * s, y + 1.16 * s, z + dz * s) @ scale(s, s, s)
+                    self._draw(self.vao_mushroom_spot, spot, vp, MUSHROOM_SPOT_COLOR, env)
 
         # creatures: lit spheres with two camera-facing eyes
         for c in world.creatures:
             if not c.alive:
                 continue
             cx, cz = world_to_scene(c.pos)
+            cy = float(terrain_height(cx, cz))
+            # a creature that wanders onto the lake rides the water surface
+            # instead of sinking into the carved lake bed
+            if float(terrain_water_mask(cx, cz)) > 0.5:
+                cy = WATER_LEVEL
             col = TOKEN_COLORS_F[c.token % len(TOKEN_COLORS_F)]
-            self._draw(self.vao_creature, translate(cx, 2.1, cz), vp, col, env)
+            self._draw(self.vao_creature, translate(cx, cy + 2.1, cz), vp, col, env)
             face = np.array([eye[0] - cx, 0.0, eye[2] - cz])
             if np.linalg.norm(face) > 1e-3:
                 face /= np.linalg.norm(face)
@@ -648,7 +908,7 @@ class Renderer:
             for side in (-1, 1):
                 ex = cx + face[0] * 2.0 + right[0] * 0.8 * side
                 ez = cz + face[2] * 2.0 + right[2] * 0.8 * side
-                self._draw(self.vao_eye, translate(ex, 2.7, ez), vp, (0.08, 0.08, 0.10), env)
+                self._draw(self.vao_eye, translate(ex, cy + 2.7, ez), vp, (0.08, 0.08, 0.10), env)
 
         # weather particles
         if env["precip"]:
@@ -678,7 +938,7 @@ class Camera:
         self.azimuth = 0.7
         self.elevation = 0.42
         self.distance = 150.0
-        self.target = np.array([0.0, 4.0, 0.0])
+        self.target = np.array([0.0, float(terrain_height(0.0, 0.0)) + 7.0, 0.0])
 
     def eye_target(self):
         ce = math.cos(self.elevation)
