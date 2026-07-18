@@ -70,12 +70,15 @@ birth egg can't be right-clicked - only ones you've already hatched.
 
 Right-clicking bare ground instead offers a single action, "Add an egg",
 which adds a brand-new creature near the current population - like any
-other birth, it starts life as a pending egg you have to go find and
-click open. This matters because the solo starting creature is
-deliberately unable to reproduce on its own, no matter how much energy
-it has (install_solo_reproduction_guard); reproduction (pairing and
-budding both) only ever becomes automatic once a second creature exists,
-whether that second one came from this action or arrived some other way.
+other birth, it starts life as a pending egg. While an egg is already
+waiting to hatch the action is shown disabled: a new egg can never appear
+on top of an unhatched one, so the third egg can't be laid until the
+first two have cracked open. This matters because the solo starting
+creature is deliberately unable to reproduce on its own, no matter how
+much energy it has (install_solo_reproduction_guard); reproduction
+(pairing and budding both) only ever becomes automatic once a second
+creature exists, whether that second one came from this action or arrived
+some other way.
 
 These creatures are meant to read as sentient beings, not dots, so they
 FEEL what happens - to themselves and to each other (see
@@ -1001,10 +1004,16 @@ def install_solo_reproduction_guard(world):
 
 def spawn_egg_near_population(world, birth_eggs):
     """Adds one new creature near the existing population's center (or
-    the middle of the field if there's none left) - what the needs
-    'Add an egg' menu action does. Registered immediately as a pending
-    BirthEggs egg, exactly like a creature born through reproduction:
-    still just an egg to the player until it's found and hatched."""
+    the middle of the field if there's none left) - what the 'Add an egg'
+    menu action does. Registered immediately as a pending BirthEggs egg,
+    exactly like a creature born through reproduction: still just an egg
+    to the player until it hatches.
+
+    Refuses (returns None) while an egg is already waiting to hatch, so a
+    new egg can never appear on top of an unhatched one - in particular
+    the third egg can't show up until the first two have cracked open."""
+    if birth_eggs is not None and birth_eggs.pending:
+        return None
     awake = world._alive()   # awake creatures, so eggs don't skew placement
     if awake:
         ax = sum(c.pos[0] for c in awake) / len(awake)
@@ -1334,7 +1343,11 @@ def creature_menu_items(creature, world, needs, horror):
 def ground_menu_items(world, birth_eggs):
     """Right-clicking bare ground offers only to add a new egg - it
     spawns near the existing population, as a birth egg you still have to
-    find and hatch."""
+    hatch. While an egg is already waiting to hatch the action is shown
+    disabled: no new egg (the third and onward) may appear until the ones
+    already laid have cracked open."""
+    if birth_eggs is not None and birth_eggs.pending:
+        return [("Add an egg (hatch the egg first)", False, None)]
     return [("Add an egg", False, lambda: spawn_egg_near_population(world, birth_eggs))]
 
 

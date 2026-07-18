@@ -437,10 +437,12 @@ row shows the clicked creature's own energy. Neglect the needs long
 enough and the creatures' faces turn visibly sad.
 
 **Right-click bare ground** instead and the only action offered is **Add
-an egg**, which adds a new creature near the current population. The lone
-starting creature is deliberately unable to reproduce on its own, no
-matter how much energy it has - the population can only grow past one
-this way. Once there are two or more, reproduction (pairing and budding
+an egg**, which adds a new creature near the current population. It's
+shown disabled while an egg is already waiting to hatch - a new egg can
+never appear on top of an unhatched one, so the third egg can't be laid
+until the first two have cracked open. The lone starting creature is
+deliberately unable to reproduce on its own, no matter how much energy it
+has - the population can only grow past one this way. Once there are two or more, reproduction (pairing and budding
 both) becomes fully automatic exactly like the other renderers. Every
 creature born - through the menu or through ordinary reproduction -
 starts life as an egg at its birth position and stays **completely
