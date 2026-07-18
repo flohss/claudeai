@@ -57,16 +57,19 @@ from the menu does (both move the same energy), and the menu's Feed row
 shows the clicked creature's own energy. Neglect the needs long enough
 and the creatures' faces turn visibly sad.
 
-The same creature menu's last two rows are the episode's dark side,
-included on purpose: "Set on fire" and "Stab" (marked out in red).
-Neither is a clean kill. Stabbing makes the creature agonize - it
-collapses and writhes where it stands, screaming - and only then dies,
-leaving a blood mark that fades from the grass. Setting it on fire makes
-it scream and bolt in panic, burning, for a second or two before it
-dies, leaving a scorch mark. Both finish through World.kill_creature(),
-the same path as a natural death, so the family tree and the death count
-stay honest about what you did. Creatures still waiting inside their
-birth egg can't be right-clicked - only ones you've already hatched.
+The same creature menu's last three rows are the episode's dark side,
+included on purpose: "Set on fire", "Stab" and "Crush with a rock"
+(marked out in red). Stabbing makes the creature agonize - it collapses
+and writhes where it stands, screaming - and only then dies, leaving a
+blood mark that fades from the grass. Setting it on fire makes it scream
+and bolt in panic, burning, for a second or two before it dies, leaving a
+scorch mark. The rock is the sudden one: it crushes the creature dead on
+the spot (like the show's accidental rock death), leaving a rock mark.
+All three finish through World.kill_creature(), the same path as a natural
+death, so the family tree and the death count stay honest about what you
+did - and every creature close enough to witness it learns to fear you
+(the others remember). Creatures still waiting inside their birth egg
+can't be right-clicked - only ones you've already hatched.
 
 Right-clicking bare ground instead offers a single action, "Add an egg",
 which adds a brand-new creature near the current population - like any
@@ -491,6 +494,7 @@ DECAL_DURATION = 1.0
 FLAME_COLORS = ((255, 110, 25), (255, 185, 55), (255, 240, 150))
 BLOOD_COLOR = (150, 20, 20)
 SCORCH_COLOR = (45, 38, 32)
+ROCK_DECAL_COLOR = (96, 96, 104)
 
 # Sentience: every hatched creature feels something, computed each frame
 # from its situation, and shows it on its face, in how it moves, and in
@@ -1175,6 +1179,18 @@ class HorrorState:
         self.burning[creature.id] = BURN_DURATION
         return True
 
+    def crush(self, creature, world):
+        """A rock drops on the creature. Unlike fire or the knife there's no
+        lingering agony - it's crushed dead on the spot, leaving a rock mark
+        where it fell (World.kill_creature, same as any death)."""
+        if not creature.alive or self.in_pain(creature.id):
+            return False
+        x, z = world_to_stage(creature.pos)
+        if world.kill_creature(creature):
+            self.decals.append([x, z, "rock", DECAL_DURATION])
+            return True
+        return False
+
     def _advance(self, world, timers, dt, decal_kind):
         """Shared countdown for burning/agonizing: tick each timer down,
         drop the ones whose creature already died some other way, and
@@ -1564,6 +1580,7 @@ def creature_menu_items(creature, world, needs, horror):
                       lambda k=kind: _care_for(needs, world, creature, k)))
     items.append(("Set on fire", True, lambda: _harm(horror, "fire", creature, world)))
     items.append(("Stab", True, lambda: _harm(horror, "knife", creature, world)))
+    items.append(("Crush with a rock", True, lambda: _harm(horror, "rock", creature, world)))
     return items
 
 
@@ -1577,8 +1594,17 @@ def _care_for(needs, world, creature, kind):
 
 
 def _harm(horror, weapon, creature, world):
-    """A cruel act: only teaches the lasting lesson (fear of the hand, for the
-    victim and every witness) if the strike actually lands."""
+    """A cruel act: teaches the lasting lesson (fear of the hand, for the
+    victim and every witness) when the strike lands. Fire and the knife
+    linger before killing, so the lesson is taught as they start; the rock
+    crushes on the spot, so its lesson is taught the instant before the
+    creature dies (deliver_experience needs it still alive to reach the
+    witnesses that will remember)."""
+    if weapon == "rock":
+        if not creature.alive or horror.in_pain(creature.id):
+            return False
+        world.deliver_experience(creature, LEARN_HARM_REWARD)
+        return horror.crush(creature, world)
     landed = horror.ignite(creature) if weapon == "fire" else horror.stab(creature, world)
     if landed:
         world.deliver_experience(creature, LEARN_HARM_REWARD)
@@ -2466,7 +2492,7 @@ def draw_decals(screen, horror, pan_x, ctx=DEFAULT_CTX):
         w = max(4, int(44 * scale))
         h = max(2, int(14 * scale))
         alpha = int(200 * max(0.0, min(1.0, left / DECAL_DURATION)))
-        color = BLOOD_COLOR if kind == "blood" else SCORCH_COLOR
+        color = {"blood": BLOOD_COLOR, "scorch": SCORCH_COLOR}.get(kind, ROCK_DECAL_COLOR)
         surf = pygame.Surface((w, h), pygame.SRCALPHA)
         pygame.draw.ellipse(surf, (*color, alpha), (0, 0, w, h))
         screen.blit(surf, (sx - w / 2, sy - h / 2))
@@ -2585,7 +2611,7 @@ def draw_scene_2d(screen, world, day_amount, t=0.0, birth_eggs=None, horror=None
             wy = z * HEIGHT
             sx, sy = world_to_screen_2d((wx, wy))
             alpha = int(200 * max(0.0, min(1.0, left / DECAL_DURATION)))
-            color = BLOOD_COLOR if kind == "blood" else SCORCH_COLOR
+            color = {"blood": BLOOD_COLOR, "scorch": SCORCH_COLOR}.get(kind, ROCK_DECAL_COLOR)
             surf = pygame.Surface((16, 16), pygame.SRCALPHA)
             pygame.draw.circle(surf, (*color, alpha), (8, 8), 8)
             screen.blit(surf, (sx - 8, sy - 8))

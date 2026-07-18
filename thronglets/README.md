@@ -459,15 +459,18 @@ at a time, so it visibly hatches the same way; you just no longer have to
 click it. (Resetting with `R` starts the count over, so the next two eggs
 are hand-hatched again.)
 
-The same creature menu's last two rows are the episode's dark side,
-included on purpose: **Set on fire** and **Stab** (marked out in red).
-Neither is a clean kill: stabbing makes the creature **agonize** - it
+The same creature menu's last three rows are the episode's dark side,
+included on purpose: **Set on fire**, **Stab** and **Crush with a rock**
+(marked out in red). Stabbing makes the creature **agonize** - it
 collapses and writhes where it stands, screaming - and only then dies,
 leaving a blood mark that fades from the grass. Setting it on fire makes
 it **scream and bolt in panic**, burning, for a second or two before it
-dies where it stops, leaving a scorch mark. Both finish through the same
-code path as a natural death, so the family tree and death count stay
-honest about what you did. Creatures still waiting inside their birth
+dies where it stops, leaving a scorch mark. The **rock** is the sudden
+one - it crushes the creature dead on the spot (the show's accidental
+rock death), leaving a rock mark. All three finish through the same code
+path as a natural death, so the family tree and death count stay honest
+about what you did - and every creature near enough to **witness** it
+learns to fear you (the others remember). Creatures still waiting inside their birth
 egg can't be targeted, only ones you've already hatched - and killing
 the population back down to one re-blocks reproduction until you add
 someone new, exactly like at the start.
