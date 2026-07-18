@@ -911,10 +911,10 @@ class Renderer:
             cy = float(terrain_height(cx, cz))
             if float(terrain_water_mask(cx, cz)) > 0.5:
                 cy = WATER_LEVEL
-            centre = np.array([cx, cy + 2.6, cz])
+            centre = np.array([cx, cy + 2.2, cz])
             oc = o - centre
             b = np.dot(oc, d)
-            disc = b * b - (np.dot(oc, oc) - 3.2 * 3.2)
+            disc = b * b - (np.dot(oc, oc) - 2.8 * 2.8)
             if disc < 0:
                 continue
             t = -b - math.sqrt(disc)
@@ -1060,36 +1060,45 @@ class Renderer:
             if float(terrain_water_mask(cx, cz)) > 0.5:
                 cy = WATER_LEVEL
             foot = cy + math.sin(self.visual_time * 2.2 + c.id * 1.7) * 0.18
-            # legs (yellow) with little feet
-            for lx in (-0.6, 0.6):
-                self._draw(self.vao_limb, translate(cx + lx, foot, cz) @ scale(1.0, 1.1, 1.0),
+            # slim legs (yellow) with little feet
+            for lx in (-0.42, 0.42):
+                self._draw(self.vao_limb, translate(cx + lx, foot, cz) @ scale(0.78, 1.0, 0.78),
                            vp, LIMB_COLOR, env)
-                self._draw(self.vao_hand, translate(cx + lx, foot, cz), vp, SKIN_COLOR, env)
-            # arms held along the body (yellow) with little hands
-            for ax in (-1.45, 1.45):
-                self._draw(self.vao_limb, translate(cx + ax, foot + 1.2, cz) @ scale(0.9, 1.5, 0.9),
+                self._draw(self.vao_hand, translate(cx + lx, foot, cz) @ scale(0.7, 0.7, 0.7),
+                           vp, SKIN_COLOR, env)
+            # slim arms along the body (yellow) with little hands
+            for ax in (-0.95, 0.95):
+                self._draw(self.vao_limb, translate(cx + ax, foot + 1.15, cz) @ scale(0.7, 1.25, 0.7),
                            vp, LIMB_COLOR, env)
-                self._draw(self.vao_hand, translate(cx + ax, foot + 1.2, cz), vp, SKIN_COLOR, env)
-            # blue-clothed torso, yellow head
-            self._draw(self.vao_body, translate(cx, foot + 2.1, cz), vp, CLOTHES_COLOR, env)
-            head_y = foot + 3.9
-            self._draw(self.vao_head, translate(cx, head_y, cz), vp, SKIN_COLOR, env)
-            # two camera-facing eyes on the head
+                self._draw(self.vao_hand, translate(cx + ax, foot + 1.15, cz) @ scale(0.75, 0.75, 0.75),
+                           vp, SKIN_COLOR, env)
+            # a slimmer, taller blue-clothed torso and a smaller yellow head
+            self._draw(self.vao_body, translate(cx, foot + 1.9, cz) @ scale(0.72, 0.95, 0.72),
+                       vp, CLOTHES_COLOR, env)
+            head_y = foot + 3.4
+            self._draw(self.vao_head, translate(cx, head_y, cz) @ scale(0.8, 0.8, 0.8),
+                       vp, SKIN_COLOR, env)
+            # face: two small camera-facing eyes and a little mouth below them
             face = np.array([eye[0] - cx, 0.0, eye[2] - cz])
             if np.linalg.norm(face) > 1e-3:
                 face /= np.linalg.norm(face)
             right = np.cross(np.array([0.0, 1.0, 0.0]), face)
             for side in (-1, 1):
-                ex = cx + face[0] * 1.1 + right[0] * 0.5 * side
-                ez = cz + face[2] * 1.1 + right[2] * 0.5 * side
-                self._draw(self.vao_eye, translate(ex, head_y + 0.25, ez), vp, EYE_COLOR, env)
+                ex = cx + face[0] * 0.72 + right[0] * 0.32 * side
+                ez = cz + face[2] * 0.72 + right[2] * 0.32 * side
+                self._draw(self.vao_eye, translate(ex, head_y + 0.14, ez) @ scale(0.5, 0.5, 0.5),
+                           vp, EYE_COLOR, env)
+            mx = cx + face[0] * 0.82
+            mz = cz + face[2] * 0.82
+            self._draw(self.vao_eye, translate(mx, head_y - 0.34, mz) @ scale(0.55, 0.2, 0.42),
+                       vp, (0.35, 0.16, 0.14), env)
             # remember the halo for the additive pass (silent token gets none)
             if c.token != 0:
-                halos.append((cx, foot + 2.4, cz, c.token))
+                halos.append((cx, foot + 1.9, cz, c.token))
             # a bright bobbing marker over the creature the player has selected
             if c.id == self.selected_id:
-                mk = 7.2 + math.sin(self.visual_time * 4.0) * 0.4
-                self._draw(self.vao_eye, translate(cx, foot + mk, cz) @ scale(1.4, 1.4, 1.4),
+                mk = 6.0 + math.sin(self.visual_time * 4.0) * 0.4
+                self._draw(self.vao_eye, translate(cx, foot + mk, cz),
                            vp, (1.0, 0.95, 0.35), env)
 
         # signal halos: a faint, misty coloured glow around each signalling
@@ -1101,7 +1110,7 @@ class Renderer:
             for cx, hy, cz, token in halos:
                 r, g, bl = TOKEN_COLORS_F[token]
                 pulse = 0.85 + 0.15 * math.sin(self.visual_time * 2.0 + cx)
-                for rad, a in ((3.6, 0.05), (4.6, 0.035)):   # inner + outer haze
+                for rad, a in ((2.7, 0.09), (3.7, 0.055)):   # inner + outer haze
                     self.shadow["mvp"].write(_bytes(vp @ (translate(cx, hy, cz)
                                              @ scale(rad, rad * 1.15, rad))))
                     self.shadow["u_color"].value = (r, g, bl, a * pulse)
