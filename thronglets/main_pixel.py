@@ -306,9 +306,8 @@ def _draw_critter(canvas, sx, sy, scale, token, distressed=False):
     legl = max(2, int(4 * scale))       # leg length
     legt = max(1, hw // 4)              # leg thickness
     footh = max(1, legt)                # yellow foot height
-    arml = max(2, int(4 * scale))       # arm length
-    armt = max(1, hw // 4)              # arm thickness
-    handw = max(1, armt)                # yellow hand length
+    armw = max(1, hw // 4)              # arm thickness (runs down the side)
+    handh = max(1, armw)                # yellow hand height at the arm's end
 
     torso_bottom = foot - legl
     torso_top = torso_bottom - th
@@ -323,12 +322,11 @@ def _draw_critter(canvas, sx, sy, scale, token, distressed=False):
     # --- torso (blue square) ---
     pygame.draw.rect(canvas, cloth, (cx - tw // 2, torso_top, tw, th))
 
-    # --- arms: blue stubs out each side, ending in bare yellow hands ---
-    arm_y = torso_top + max(0, (th - armt) // 2)
-    pygame.draw.rect(canvas, cloth, (cx - tw // 2 - (arml - handw), arm_y, arml - handw, armt))
-    pygame.draw.rect(canvas, skin, (cx - tw // 2 - arml, arm_y, handw, armt))
-    pygame.draw.rect(canvas, cloth, (cx + tw // 2, arm_y, arml - handw, armt))
-    pygame.draw.rect(canvas, skin, (cx + tw // 2 + arml - handw, arm_y, handw, armt))
+    # --- arms: blue, hanging straight down each side of the torso, ending
+    #     in bare yellow hands ---
+    for ax in (cx - tw // 2 - armw, cx + tw // 2):
+        pygame.draw.rect(canvas, cloth, (ax, torso_top, armw, th - handh))
+        pygame.draw.rect(canvas, skin, (ax, torso_top + th - handh, armw, handh))
 
     # --- head: a yellow square, framed by the token colour ---
     head = pygame.Rect(cx - hw // 2, head_top, hw, hw)
