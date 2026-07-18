@@ -25,12 +25,18 @@ weather**, driven by the 3D lighting instead of flat tints:
     falling around the camera; both overcast the sky and dim the light,
     and snow whitens the world further.
 
-The creatures also learn who you are (the opt-in Mind in simulation.py):
-the mouse cursor is your hand. Left-click a creature to select it;
-right-click it for a menu of care acts (feed / wash / play) and the
-episode's dark side (stab / burn / hit with a rock). Kind acts teach it -
-and the creatures near enough to witness them - to approach; cruel ones
-teach fear, and kill. Each creature has an expressive little face (white
+The world starts empty: you lay the first two eggs yourself by right-
+clicking the ground, and they hatch after a few seconds; every creature
+born from reproduction afterwards also arrives as an egg that hatches on
+its own.
+
+The creatures learn who you are (the opt-in Mind in simulation.py): the
+mouse cursor is your hand. Left-click a creature to select it; right-click
+it for a menu of care acts (feed / wash / play) and the episode's dark side
+(stab / burn / hit with a rock). Kind acts teach it - and the creatures
+near enough to witness them - to approach; cruel ones teach fear, and kill
+with an animation (a knife-stab shudder, a burning creature wreathed in
+flame, a rock that squashes it flat). Each creature has an expressive little face (white
 eyes with pupils, a nose, a mouth) that shifts with its emotion, and a 2D
 HUD shows the flock's feeling toward you plus a panel for the selected one.
 The scene has small touches of life too: the canopies sway, the creatures
@@ -44,9 +50,10 @@ pygame opens the window and moderngl draws into it; run it with:
     python3 main_gl.py
 
 Controls: LEFT-drag orbits the camera, scroll wheel zooms, left-CLICK a
-creature to select it, right-click a creature for its care/harm menu, S
-cycles the season, W cycles the weather, T toggles fast time, and the
-day/night cycle runs on its own. Press ESC or close the window to quit.
+creature to select it, right-click a creature for its care/harm menu,
+right-click bare ground to lay one of the first two eggs, S cycles the
+season, W cycles the weather, T toggles fast time, and the day/night cycle
+runs on its own. Press ESC or close the window to quit.
 
 Because this environment has no GPU, the scene can also be rendered
 off-screen into a PNG for verification (render_headless), which is how the
@@ -90,6 +97,17 @@ LEARN_FEED_REWARD = 1.0
 LEARN_CARE_REWARD = 0.3
 LEARN_HARM_REWARD = -1.0
 FEED_ENERGY = 40.0
+
+# eggs: the first two are laid by the player (right-click the ground), and
+# every creature born afterwards also arrives as an egg that hatches on its own
+EGG_COLOR = (0.93, 0.89, 0.74)
+EGG_SPOT_COLOR = (0.80, 0.72, 0.50)
+HATCH_TIME = 6.0          # seconds an egg takes to hatch
+MANUAL_EGGS = 2           # how many the player places by hand before it's automatic
+
+# how long a creature takes to die from each harm, with its own animation
+DYING_DUR = {"knife": 1.6, "fire": 2.0, "rock": 0.5}
+FLAME_COLORS = ((1.0, 0.55, 0.12), (1.0, 0.80, 0.25))
 
 # expressive face palette
 SCLERA_COLOR = (0.97, 0.97, 0.99)
@@ -187,10 +205,39 @@ def apply_action(world, renderer, cid, kind):
     elif kind in ("wash", "play"):
         world.deliver_experience(c, LEARN_CARE_REWARD)
         renderer.set_emotion(cid, "joy")
-    else:  # knife / fire / rock - the dark side: teach fear, then kill
+    else:  # knife / fire / rock - the dark side: teach fear, then die (animated)
         world.deliver_experience(c, LEARN_HARM_REWARD)
-        renderer.set_emotion(cid, "fear", 1.2)
-        world.kill_creature(c)
+        renderer.set_emotion(cid, "fear", DYING_DUR[kind] + 0.3)
+        renderer.start_dying(cid, kind)
+
+
+class EggState:
+    """Tracks which creatures are still unhatched eggs. A laid egg is set
+    dormant in the World (it doesn't move, eat or reproduce) and hatches -
+    waking up - after HATCH_TIME."""
+
+    def __init__(self):
+        self.eggs = {}       # cid -> seconds left before hatching
+        self.manual = 0      # how many the player has laid by hand
+
+    def lay(self, world, cid, manual):
+        world.set_dormant(cid, True)
+        self.eggs[cid] = HATCH_TIME
+        if manual:
+            self.manual += 1
+
+    def update(self, dt, world):
+        for cid in list(self.eggs):
+            self.eggs[cid] -= dt
+            if self.eggs[cid] <= 0.0:
+                world.set_dormant(cid, False)   # hatch
+                del self.eggs[cid]
+
+    def is_egg(self, cid):
+        return cid in self.eggs
+
+    def progress(self, cid):
+        return 1.0 - max(0.0, self.eggs.get(cid, 0.0)) / HATCH_TIME
 FLOWER_COLORS = ((0.96, 0.34, 0.52), (0.98, 0.82, 0.24), (0.72, 0.46, 0.95))
 FLOWER_STEM_COLOR = (0.16, 0.42, 0.12)
 FLOWER_CENTER_COLOR = (0.99, 0.86, 0.30)   # sunny disc floret at the heart
@@ -902,7 +949,9 @@ class Renderer:
         self.vao_sclera = self._vao(self.lit, mesh_uv_sphere(0.27, 8, 10))
         self.vao_pupil = self._vao(self.lit, mesh_uv_sphere(0.15, 6, 8))
         self.vao_nose = self._vao(self.lit, mesh_uv_sphere(0.16, 6, 8))
+        self.vao_egg = self._vao(self.lit, mesh_uv_sphere(1.0, 12, 14))
         self.emotion_fx = {}   # cid -> (emotion, expire_time) for transient moods
+        self.dying = {}        # cid -> [kind, elapsed, duration] mid-death animation
         # a translucent glow sphere for the signal halo (position only)
         halo_v = mesh_uv_sphere(1.0, 14, 18)
         self.vao_halo = ctx.vertex_array(self.shadow, [(ctx.buffer(halo_v.tobytes()), "3f 3x4", "in_pos")])
@@ -978,9 +1027,23 @@ class Renderer:
         self.water["u_horizon"].value = env["horizon"]
         vao.render()
 
-    # -- emotion ------------------------------------------------------------
+    # -- emotion + dying ----------------------------------------------------
     def set_emotion(self, cid, emotion, duration=2.0):
         self.emotion_fx[cid] = (emotion, self.visual_time + duration)
+
+    def start_dying(self, cid, kind):
+        self.dying[cid] = [kind, 0.0, DYING_DUR[kind]]
+
+    def _advance_dying(self, world, dt):
+        for cid in list(self.dying):
+            self.dying[cid][1] += dt
+            if self.dying[cid][1] >= self.dying[cid][2]:
+                c = next((c for c in world.creatures if c.id == cid), None)
+                if c is not None:
+                    world.kill_creature(c)
+                del self.dying[cid]
+                if self.selected_id == cid:
+                    self.selected_id = None
 
     def emotion_of(self, c):
         """A transient mood set by a recent action, else one derived from the
@@ -1019,12 +1082,13 @@ class Renderer:
         d = far - near
         return near, d / (np.linalg.norm(d) + 1e-9)
 
-    def creature_at(self, world, camera, mx, my):
-        """Return the creature whose body sphere the pixel ray hits first."""
+    def creature_at(self, world, camera, mx, my, eggs=None):
+        """Return the creature whose body sphere the pixel ray hits first.
+        Unhatched eggs and creatures mid-death are not selectable."""
         o, d = self._mouse_ray(camera, mx, my)
         best, best_t = None, 1e9
         for c in world.creatures:
-            if not c.alive:
+            if not c.alive or c.id in self.dying or (eggs is not None and eggs.is_egg(c.id)):
                 continue
             cx, cz = world_to_scene(c.pos)
             cy = float(terrain_height(cx, cz))
@@ -1066,9 +1130,10 @@ class Renderer:
         self.ctx.disable(self.ctx.BLEND)
         self.ctx.enable(self.ctx.DEPTH_TEST)
 
-    def render(self, world, camera, env, dt=0.0):
+    def render(self, world, camera, env, dt=0.0, eggs=None):
         ctx = self.ctx
         self.visual_time += dt
+        self._advance_dying(world, dt)
         eye, target = camera.eye_target()
         view = look_at(eye, target, (0, 1, 0))
         proj = perspective(52.0, self.size[0] / self.size[1], 1.0, 900.0)
@@ -1165,70 +1230,98 @@ class Renderer:
                     spot = translate(x + dx * s, y + 1.16 * s, z + dz * s) @ scale(s, s, s)
                     self._draw(self.vao_mushroom_spot, spot, vp, MUSHROOM_SPOT_COLOR, env)
 
-        # creatures: a little body (head, torso, arms along the sides, legs),
-        # all one colour; the signal shows only as a coloured halo (below).
-        # A gentle bob lifts the whole body.
+        # creatures: eggs while unhatched, otherwise a little body (head,
+        # torso, arms, legs) with a face. The signal shows as a halo (below).
         halos = []
+        flames = []   # (cx, cy, cz) burning creatures, drawn after the bodies
         for c in world.creatures:
             if not c.alive:
                 continue
             cx, cz = world_to_scene(c.pos)
             cy = float(terrain_height(cx, cz))
-            # a creature that wanders onto the lake rides the water surface
-            # instead of sinking into the carved lake bed
             if float(terrain_water_mask(cx, cz)) > 0.5:
                 cy = WATER_LEVEL
-            foot = cy + math.sin(self.visual_time * 2.2 + c.id * 1.7) * 0.18
-            # slim legs (yellow) with little feet
+
+            # --- unhatched egg: a wobbling speckled ovoid on the ground ------
+            if eggs is not None and eggs.is_egg(c.id):
+                p = eggs.progress(c.id)
+                wob = math.sin(self.visual_time * (3.0 + 6.0 * p) + c.id) * (0.05 + 0.18 * p)
+                base = translate(cx, cy + 1.15, cz) @ rotate_y(wob) @ scale(0.62, 0.82, 0.62)
+                self._draw(self.vao_egg, base, vp, EGG_COLOR, env)
+                for dx, dy, dz in ((0.3, 0.2, 0.2), (-0.25, -0.1, 0.3), (0.15, 0.5, -0.28)):
+                    self._draw(self.vao_pupil, translate(cx + dx, cy + 1.15 + dy, cz + dz) @ scale(0.9, 0.9, 0.9),
+                               vp, EGG_SPOT_COLOR, env)
+                continue
+
+            # --- dying animation: shudder (knife), squash (rock), burn (fire) -
+            dstate = self.dying.get(c.id)
+            jx = jz = 0.0
+            sq = 1.0
+            if dstate is not None:
+                kind, el, dur = dstate
+                frac = min(el / dur, 1.0)
+                if kind == "knife":
+                    jx = math.sin(self.visual_time * 46.0) * 0.35
+                    jz = math.cos(self.visual_time * 39.0) * 0.30
+                elif kind == "fire":
+                    jx = math.sin(self.visual_time * 30.0) * 0.12
+                    flames.append((cx, cy, cz))
+                elif kind == "rock":
+                    sq = max(0.12, 1.0 - frac * 0.9)
+            cxj, czj = cx + jx, cz + jz
+
+            bob = 0.0 if dstate else math.sin(self.visual_time * 2.2 + c.id * 1.7) * 0.18
+            foot = cy + bob
             for lx in (-0.42, 0.42):
-                self._draw(self.vao_limb, translate(cx + lx, foot, cz) @ scale(0.78, 1.0, 0.78),
+                self._draw(self.vao_limb, translate(cxj + lx, foot, czj) @ scale(0.78, 1.0 * sq, 0.78),
                            vp, LIMB_COLOR, env)
-                self._draw(self.vao_hand, translate(cx + lx, foot, cz) @ scale(0.7, 0.7, 0.7),
+                self._draw(self.vao_hand, translate(cxj + lx, foot, czj) @ scale(0.7, 0.7, 0.7),
                            vp, SKIN_COLOR, env)
-            # slim arms along the body (yellow) with little hands
             for ax in (-0.95, 0.95):
-                self._draw(self.vao_limb, translate(cx + ax, foot + 1.15, cz) @ scale(0.7, 1.25, 0.7),
+                self._draw(self.vao_limb, translate(cxj + ax, foot + 1.15 * sq, czj) @ scale(0.7, 1.25 * sq, 0.7),
                            vp, LIMB_COLOR, env)
-                self._draw(self.vao_hand, translate(cx + ax, foot + 1.15, cz) @ scale(0.75, 0.75, 0.75),
+                self._draw(self.vao_hand, translate(cxj + ax, foot + 1.15 * sq, czj) @ scale(0.75, 0.75, 0.75),
                            vp, SKIN_COLOR, env)
-            # a slimmer, taller blue-clothed torso and a smaller yellow head
-            self._draw(self.vao_body, translate(cx, foot + 1.9, cz) @ scale(0.72, 0.95, 0.72),
+            self._draw(self.vao_body, translate(cxj, foot + 1.9 * sq, czj) @ scale(0.72, 0.95 * sq, 0.72),
                        vp, CLOTHES_COLOR, env)
-            head_y = foot + 3.4
-            self._draw(self.vao_head, translate(cx, head_y, cz) @ scale(0.8, 0.8, 0.8),
+            head_y = foot + 3.4 * sq
+            self._draw(self.vao_head, translate(cxj, head_y, czj) @ scale(0.8, 0.8, 0.8),
                        vp, SKIN_COLOR, env)
-            # expressive, camera-facing face: white eyes with black pupils, a
-            # nose, and a mouth whose shape follows the creature's emotion
-            fp = EMOTION_FACE[self.emotion_of(c)]
-            face = np.array([eye[0] - cx, 0.0, eye[2] - cz])
+            # expressive face - forced to fear while dying
+            fp = EMOTION_FACE["fear" if dstate else self.emotion_of(c)]
+            face = np.array([eye[0] - cxj, 0.0, eye[2] - czj])
             if np.linalg.norm(face) > 1e-3:
                 face /= np.linalg.norm(face)
             right = np.cross(np.array([0.0, 1.0, 0.0]), face)
             for side in (-1, 1):
-                ex = cx + face[0] * 0.66 + right[0] * 0.32 * side
-                ez = cz + face[2] * 0.66 + right[2] * 0.32 * side
+                ex = cxj + face[0] * 0.66 + right[0] * 0.32 * side
+                ez = czj + face[2] * 0.66 + right[2] * 0.32 * side
                 ey = head_y + 0.16
                 self._draw(self.vao_sclera, translate(ex, ey, ez) @ scale(fp["sclera"], fp["sclera"], fp["sclera"]),
                            vp, SCLERA_COLOR, env)
-                px = ex + face[0] * 0.12
-                pz = ez + face[2] * 0.12
-                self._draw(self.vao_pupil, translate(px, ey + fp["pupil_dy"], pz), vp, PUPIL_COLOR, env)
-            # nose, just below and between the eyes
-            self._draw(self.vao_nose, translate(cx + face[0] * 0.86, head_y - 0.05, cz + face[2] * 0.86),
+                self._draw(self.vao_pupil, translate(ex + face[0] * 0.12, ey + fp["pupil_dy"], ez + face[2] * 0.12),
+                           vp, PUPIL_COLOR, env)
+            self._draw(self.vao_nose, translate(cxj + face[0] * 0.86, head_y - 0.05, czj + face[2] * 0.86),
                        vp, NOSE_COLOR, env)
-            # mouth
             mw, mh, mf = fp["mouth"]
             self._draw(self.vao_eye,
-                       translate(cx + face[0] * 0.80, head_y - 0.40 + fp["mouth_dy"], cz + face[2] * 0.80)
+                       translate(cxj + face[0] * 0.80, head_y - 0.40 + fp["mouth_dy"], czj + face[2] * 0.80)
                        @ scale(mw, mh, mf), vp, MOUTH_COLOR, env)
-            # remember the halo for the additive pass (silent token gets none)
-            if c.token != 0:
+            if c.token != 0 and dstate is None:
                 halos.append((cx, foot + 1.9, cz, c.token))
-            # a bright bobbing marker over the creature the player has selected
-            if c.id == self.selected_id:
+            if c.id == self.selected_id and dstate is None:
                 mk = 6.0 + math.sin(self.visual_time * 4.0) * 0.4
-                self._draw(self.vao_eye, translate(cx, foot + mk, cz),
-                           vp, (1.0, 0.95, 0.35), env)
+                self._draw(self.vao_eye, translate(cx, foot + mk, cz), vp, (1.0, 0.95, 0.35), env)
+
+        # flames over burning creatures: several flickering tongues
+        for cx, cy, cz in flames:
+            for k in range(6):
+                fh = 1.1 + 0.6 * math.sin(self.visual_time * 12.0 + k * 1.7)
+                fx = cx + math.sin(self.visual_time * 9.0 + k * 2.1) * 0.7
+                fz = cz + math.cos(self.visual_time * 8.0 + k * 1.3) * 0.7
+                col = FLAME_COLORS[k % 2]
+                self._draw(self.vao_hand, translate(fx, cy + 1.3 + k * 0.55, fz) @ scale(1.5, 2.0 * fh, 1.5),
+                           vp, col, env)
 
         # signal halos: a faint, misty coloured glow around each signalling
         # creature - two soft additive shells so it fades like fog, not a shell
@@ -1353,8 +1446,9 @@ def build_hud(size, world, env, phase, selected_id, font, small, menu=None):
                 d = c.mind.disposition()
                 text("feeling: %s (%+.0f%%)" % (disposition_label(d), d * 100), px + 120, py + 48, fnt=small)
 
-    text("L-drag orbit   scroll zoom   click: select   right-click: care/harm menu   "
-         "S season   W weather   T fast-time", 12, size[1] - 24, (206, 212, 220), small)
+    text("L-drag orbit   scroll zoom   click: select   right-click creature: care/harm   "
+         "right-click ground: lay an egg   S/W season/weather   T fast-time",
+         12, size[1] - 24, (206, 212, 220), small)
     if menu is not None:
         menu.draw(surf, small)
     return surf
@@ -1405,10 +1499,13 @@ def main():
     ctx = moderngl.create_context()
     renderer = Renderer(ctx, size)
     cam = Camera()
-    world = World(init_pop=8, predator_count=0, learning=True)
+    # the world starts empty: the player lays the first eggs by hand
+    world = World(init_pop=0, predator_count=0, learning=True)
     font = pygame.font.SysFont("consolas", 18)
     small = pygame.font.SysFont("consolas", 14)
     menu = ContextMenu()
+    eggs = EggState()
+    known_ids = set()       # every creature id we've already turned into an egg
 
     phase = 0.35            # early morning
     season_i, weather_i = 1, 0
@@ -1443,14 +1540,22 @@ def main():
                     dragging, drag_moved = True, False
             elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
                 if dragging and not drag_moved:   # a click, not an orbit drag: select
-                    c = renderer.creature_at(world, cam, *event.pos)
+                    c = renderer.creature_at(world, cam, *event.pos, eggs)
                     renderer.selected_id = c.id if c is not None else None
                 dragging = False
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:
-                c = renderer.creature_at(world, cam, *event.pos)  # open the care/harm menu
-                if c is not None:
+                c = renderer.creature_at(world, cam, *event.pos, eggs)
+                if c is not None:                 # a creature: open the care/harm menu
                     renderer.selected_id = c.id
                     menu.show(event.pos, c.id, size)
+                elif eggs.manual < MANUAL_EGGS:   # bare ground: lay one of the first eggs
+                    menu.close()
+                    hp = renderer.hand_world(cam, *event.pos)
+                    if hp is not None:
+                        nc = world.add_creature(hp[0], hp[1])
+                        if nc is not None:
+                            known_ids.add(nc.id)
+                            eggs.lay(world, nc.id, manual=True)
                 else:
                     menu.close()
             elif event.type == pygame.MOUSEMOTION and dragging:
@@ -1470,8 +1575,15 @@ def main():
             world.step()
             accum = 0.0
 
+        # every creature born from reproduction also arrives as an egg
+        for c in world.creatures:
+            if c.id not in known_ids:
+                known_ids.add(c.id)
+                eggs.lay(world, c.id, manual=False)
+        eggs.update(dt, world)
+
         env = environment(phase, SEASONS[season_i], WEATHERS[weather_i])
-        renderer.render(world, cam, env, dt=dt)
+        renderer.render(world, cam, env, dt=dt, eggs=eggs)
         renderer.draw_overlay(build_hud(size, world, env, phase, renderer.selected_id, font, small, menu))
         pygame.display.flip()
     pygame.quit()

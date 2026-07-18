@@ -368,12 +368,18 @@ It now has a full **day/night cycle, seasons and weather**, driven by the
   falling around the camera; both overcast the sky and dim the light, and
   snow whitens the world further.
 
+**It starts with eggs.** The world begins empty: you **right-click the
+ground to lay the first two eggs** yourself, and they hatch after a few
+seconds; every creature born from reproduction afterwards also arrives as
+an egg that hatches on its own.
+
 **It's interactive, and the flock learns who you are.** The mouse cursor is
 your hand (the opt-in `Mind` from `simulation.py`): **left-click a creature
 to select it**, and **right-click for a menu** of care acts (**Feed / Wash
 / Play**) and the episode's dark side (**Stab / Burn / Hit with a rock**).
 Kind acts teach that creature - and the ones near enough to witness them -
-to approach; cruel ones teach fear and kill. Each creature has an
+to approach; cruel ones teach fear and kill **with an animation** (a stab
+shudder, a creature wreathed in flame, a rock that squashes it flat). Each creature has an
 **expressive little face** (white eyes with pupils, a nose, a mouth) that
 shifts with its emotion. A 2D HUD shows the season/weather/clock/population,
 the flock's overall feeling toward you (*"the flock trusts you (+45%)"*),
@@ -385,9 +391,10 @@ the sky, and shadows lengthen with the low sun.
 this file, so the other renderers keep working with just numpy + pygame.
 
 Controls: `LEFT-drag` orbits the camera, the scroll wheel zooms, **left-
-click a creature** to select it, **right-click** for its care/harm menu,
-`S` cycles the season, `W` cycles the weather, `T` toggles fast time, `ESC`
-quits. (On a machine without a GPU the scene still renders through Mesa's
+click a creature** to select it, **right-click a creature** for its
+care/harm menu, **right-click bare ground** to lay one of the first two
+eggs, `S` cycles the season, `W` cycles the weather, `T` toggles fast time,
+`ESC` quits. (On a machine without a GPU the scene still renders through Mesa's
 software rasterizer; `python main_gl.py --headless --phase=0.5
 --season=autumn --weather=rain` writes a PNG of any hour/season/weather.)
 
