@@ -395,8 +395,12 @@ STAR_POSITIONS = [
 ]
 
 BODY_COLOR = (245, 210, 70)
+BODY_HIGHLIGHT = (255, 232, 130)   # soft top-left sheen on the round body
+BODY_OUTLINE = (196, 156, 40)      # a thin warm rim so it reads crisply
 EYE_WHITE = (250, 250, 245)
 EYE_PUPIL = (35, 30, 30)
+EYE_GLINT = (255, 255, 255)        # a little catch-light in each eye
+CHEEK_COLOR = (243, 158, 128)      # rosy cheeks when content
 MOUTH_COLOR = (100, 65, 45)
 PANTS_COLOR = (70, 165, 210)
 SHADOW_COLOR = (25, 60, 30)
@@ -2296,10 +2300,18 @@ def draw_critter(screen, x, z, token, distressed=False, creature_id=0, t=0.0, ct
                          (sx - pants_w / 2, sy - body_r * 0.15, pants_w, pants_h))
 
     body_center = (sx, sy - body_r * 0.55)
+    bcx, bcy = int(body_center[0]), int(body_center[1])
+    # a refined round body: warm rim, flat fill, soft top-left sheen
+    pygame.draw.circle(screen, BODY_OUTLINE, body_center, body_r + max(1, int(body_r * 0.06)))
     pygame.draw.circle(screen, BODY_COLOR, body_center, body_r)
+    if body_r >= 6:
+        pygame.draw.circle(screen, BODY_HIGHLIGHT,
+                            (bcx - int(body_r * 0.32), bcy - int(body_r * 0.34)),
+                            max(2, int(body_r * 0.42)))
+        pygame.draw.circle(screen, BODY_COLOR, body_center, int(body_r * 0.86))
     if token != 0:
         pygame.draw.circle(screen, TOKEN_COLORS[token], body_center,
-                            int(body_r * 1.12), width=max(1, int(body_r * 0.12)))
+                            int(body_r * 1.12), width=max(1, int(body_r * 0.1)))
 
     # When no explicit emotion is given, keep the old two-state face so
     # every existing caller (and the pre-hatch decor) is unchanged; the
@@ -2322,8 +2334,20 @@ def _draw_face(screen, sx, sy, body_r, creature_id, t, emotion):
             eye_h = max(1, int(eye_r * 2 * openness))
             pygame.draw.ellipse(screen, EYE_WHITE, (ex - eye_r, eye_y - eye_h / 2, eye_r * 2, eye_h))
             if pupil and openness > 0.35:
-                pygame.draw.circle(screen, EYE_PUPIL, (int(ex), int(eye_y + eye_r * pupil_dy)),
-                                   max(1, int(eye_r * 0.45)))
+                pcy = int(eye_y + eye_r * pupil_dy)
+                pr = max(1, int(eye_r * 0.5))
+                pygame.draw.circle(screen, EYE_PUPIL, (int(ex), pcy), pr)
+                if pr >= 2:   # a little catch-light makes the eyes read as alive
+                    pygame.draw.circle(screen, EYE_GLINT,
+                                       (int(ex - pr * 0.35), int(pcy - pr * 0.4)), max(1, pr // 3))
+
+    def draw_cheeks():
+        if body_r < 7:
+            return
+        for dx in (-0.62, 0.62):
+            pygame.draw.circle(screen, CHEEK_COLOR,
+                               (int(sx + dx * body_r), int(sy - body_r * 0.28)),
+                               max(2, int(body_r * 0.16)))
 
     def draw_squeezed_eyes():
         # eyes screwed shut: a downward arc over each socket
@@ -2354,6 +2378,7 @@ def _draw_face(screen, sx, sy, body_r, creature_id, t, emotion):
         pygame.draw.circle(screen, TEAR_COLOR, (int(sx - 0.34 * body_r), int(eye_y + eye_r * 1.2)),
                            max(1, int(eye_r * 0.4)))
     elif emotion == "joy":
+        draw_cheeks()
         # happy upcurved eyes and a big smile (bottom half of an ellipse)
         for dx in (-0.34, 0.34):
             ex = sx + dx * body_r
@@ -2363,9 +2388,12 @@ def _draw_face(screen, sx, sy, body_r, creature_id, t, emotion):
         rect = (sx - mw, sy - body_r * 0.2, mw * 2, mh * 2)
         pygame.draw.arc(screen, MOUTH_COLOR, rect, math.pi * 1.15, math.pi * 1.85, lw)
     else:  # calm
+        draw_cheeks()
         draw_eyes(eye_openness(creature_id, t))
-        mw, mh = max(1, int(body_r * 0.22)), max(1, int(body_r * 0.16))
-        pygame.draw.ellipse(screen, MOUTH_COLOR, (sx - mw / 2, sy - body_r * 0.22, mw, mh))
+        # a small, soft upward smile rather than a flat oval
+        mw, mh = max(1, int(body_r * 0.26)), max(1, int(body_r * 0.2))
+        rect = (sx - mw, sy - body_r * 0.16, mw * 2, mh * 2)
+        pygame.draw.arc(screen, MOUTH_COLOR, rect, math.pi * 1.15, math.pi * 1.85, lw)
 
 
 def draw_predator(screen, x, z, ctx=DEFAULT_CTX):
