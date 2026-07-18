@@ -57,6 +57,14 @@ from the menu does (both move the same energy), and the menu's Feed row
 shows the clicked creature's own energy. Neglect the needs long enough
 and the creatures' faces turn visibly sad.
 
+Every act of care answers with a little animation over the creature so
+you can see what you did without reading a meter (CareFx): Feed drops an
+apple that lands and bursts into a few crumbs and a green spark; Wash
+sends translucent soap bubbles rising off its head; Play fans a little
+burst of coloured stars around it. The same animation plays whether the
+care came from the right-click menu, the TAB side panel, or answering a
+summon bubble - they all route through the one CareFx.
+
 The same creature menu's last three rows are the episode's dark side,
 included on purpose: "Set on fire", "Stab" and "Crush with a rock"
 (marked out in red). Stabbing makes the creature agonize - it collapses
@@ -1525,6 +1533,97 @@ def draw_summons_2d(screen, world, care, t, birth_eggs):
         _draw_bubble(screen, sx, sy - 16 + math.sin(t * 4 + c.id) * 2.0, 6, need)
 
 
+CARE_FX_DURATION = 0.85
+
+
+def _twinkle(screen, cx, cy, r, color):
+    r = max(1, int(r))
+    pygame.draw.line(screen, color, (cx - r, cy), (cx + r, cy), max(1, r // 2))
+    pygame.draw.line(screen, color, (cx, cy - r), (cx, cy + r), max(1, r // 2))
+
+
+def _fx_feed(screen, cx, head, s, p):
+    size = max(3, int(9 * s))
+    if p < 0.55:                       # an apple drops into the mouth
+        fall = p / 0.55
+        ay = int(head - 34 * s * (1 - fall))
+        pygame.draw.circle(screen, (208, 52, 52), (int(cx), ay), size)
+        pygame.draw.line(screen, (90, 60, 40), (int(cx), ay - size),
+                         (int(cx), ay - size - max(2, int(3 * s))), max(1, int(s * 1.4)))
+        pygame.draw.circle(screen, (80, 170, 80), (int(cx + size * 0.6), ay - size), max(1, int(size * 0.4)))
+    else:                              # crumbs scatter + a rising green spark
+        q = (p - 0.55) / 0.45
+        for i in range(3):
+            ang = -0.6 + i * 0.6
+            pygame.draw.circle(screen, (200, 120, 70),
+                               (int(cx + math.cos(ang) * 20 * s * q), int(head - 10 * s * q - i * 2)),
+                               max(1, int(2 * s)))
+        _twinkle(screen, int(cx), int(head - 18 * s * q), 5 * s * (1 - q), (150, 230, 120))
+
+
+def _fx_wash(screen, cx, head, s, p):
+    for i in range(5):                 # soap bubbles rising and popping
+        ph = (p + i * 0.2) % 1.0
+        bx = int(cx + math.sin(i * 1.7 + p * 6) * 14 * s)
+        by = int(head - ph * 30 * s)
+        r = max(2, int(5 * s * (0.5 + ph)))
+        a = int(190 * (1 - ph))
+        surf = pygame.Surface((r * 2 + 2, r * 2 + 2), pygame.SRCALPHA)
+        pygame.draw.circle(surf, (200, 230, 255, a), (r + 1, r + 1), r, max(1, int(s)))
+        pygame.draw.circle(surf, (255, 255, 255, a), (r + 1 - r // 3, r + 1 - r // 3), max(1, r // 3))
+        screen.blit(surf, (bx - r, by - r))
+
+
+def _fx_play(screen, cx, head, s, p):
+    n = 5                              # little stars burst out in a fan
+    palette = [(240, 210, 80), (240, 120, 180), (150, 150, 240)]
+    for i in range(n):
+        ang = math.pi * 2 * i / n - math.pi / 2
+        d = (0.2 + p) * 22 * s
+        px = int(cx + math.cos(ang) * d)
+        py = int(head + math.sin(ang) * d - 4)
+        _twinkle(screen, px, py, max(2, int(4 * s * (1 - p * 0.4))), palette[i % 3])
+
+
+class CareFx:
+    """Short, cosmetic animations played when you look after a creature -
+    an apple for a feed, soap bubbles for a wash, a burst of stars for
+    play - anchored to the creature so they follow it, fading over
+    CARE_FX_DURATION. Purely visual; triggered from every care path."""
+
+    def __init__(self):
+        self.fx = []   # [creature_id, kind, age]
+
+    def spawn(self, creature_id, kind):
+        if kind in NEED_ITEMS:
+            self.fx.append([creature_id, kind, 0.0])
+
+    def update(self, dt):
+        for e in self.fx:
+            e[2] += dt
+        self.fx = [e for e in self.fx if e[2] < CARE_FX_DURATION]
+
+    def draw(self, screen, world, pan_x, zoom, top_down):
+        for cid, kind, age in self.fx:
+            c = next((c for c in world.creatures if c.id == cid and c.alive), None)
+            if c is None:
+                continue
+            if top_down:
+                sx, sy = world_to_screen_2d(c.pos)
+                head, s = sy - 16, 0.9
+            else:
+                x, z = world_to_stage(c.pos)
+                sx, sy, s = project(x - pan_x, z, zoom)
+                head = sy - int(24 * s) * 1.4
+            p = age / CARE_FX_DURATION
+            if kind == "hunger":
+                _fx_feed(screen, sx, head, s, p)
+            elif kind == "clean":
+                _fx_wash(screen, sx, head, s, p)
+            else:
+                _fx_play(screen, sx, head, s, p)
+
+
 class LearningWindow:
     """The meta 'programming' pop-up: click a creature and a small panel shows
     what it has learned about you - its feeling, its current need, and the
@@ -1600,7 +1699,7 @@ class CarePanel:
     def toggle(self):
         self.open = not self.open
 
-    def handle_click(self, mx, my, world, care):
+    def handle_click(self, mx, my, world, care, care_fx=None):
         """A click on one of the panel's buttons answers that need. Returns
         True if it consumed the click (so it isn't also a world click)."""
         for rect, cid, kind in self.buttons:
@@ -1608,6 +1707,8 @@ class CarePanel:
                 c = next((c for c in world.creatures if c.id == cid and c.alive), None)
                 if c is not None:
                     care.fulfill_kind(c, world, kind)
+                    if care_fx is not None:
+                        care_fx.spawn(cid, kind)
                 return True
         return False
 
@@ -1663,7 +1764,7 @@ MENU_DANGER = (240, 120, 100)   # the fire/knife rows, marked out in red
 MENU_HEADER = (150, 156, 142)
 
 
-def creature_menu_items(creature, world, needs, horror):
+def creature_menu_items(creature, world, needs, horror, care_fx=None):
     """The rows shown when you right-click a creature: the care actions
     (each labelled with that need's current level - the Feed row shows
     THIS creature's own real energy, which ground food raises too) and
@@ -1680,20 +1781,22 @@ def creature_menu_items(creature, world, needs, horror):
         else:
             pct = int(round(needs.levels[kind] * 100))
         items.append((f"{NEED_MENU_LABELS[kind]}  ({pct}%)", False,
-                      lambda k=kind: _care_for(needs, world, creature, k)))
+                      lambda k=kind: _care_for(needs, world, creature, k, care_fx)))
     items.append(("Set on fire", True, lambda: _harm(horror, "fire", creature, world)))
     items.append(("Stab", True, lambda: _harm(horror, "knife", creature, world)))
     items.append(("Crush with a rock", True, lambda: _harm(horror, "rock", creature, world)))
     return items
 
 
-def _care_for(needs, world, creature, kind):
+def _care_for(needs, world, creature, kind, care_fx=None):
     """A kind act: it fills the care meter (and feeds real energy for hunger)
     and, in a learning world, teaches the creature - and nearby witnesses -
-    to trust the hand a little more."""
+    to trust the hand a little more. Plays a little animation too."""
     needs.feed(kind, world, creature)
     reward = LEARN_FEED_REWARD if kind == "hunger" else LEARN_CARE_REWARD
     world.deliver_experience(creature, reward)
+    if care_fx is not None:
+        care_fx.spawn(creature.id, kind)
 
 
 def _harm(horror, weapon, creature, world):
@@ -2972,6 +3075,7 @@ def main():
     care = SummonCare()
     learn_win = LearningWindow()
     care_panel = CarePanel()
+    care_fx = CareFx()
     horror = HorrorState()
     sentience = SentienceState()
     ambient = AmbientChorus()
@@ -3030,6 +3134,8 @@ def main():
                         # opens the little learning window on it
                         if target is not None:
                             answered = care.fulfill(target, world)
+                            if answered:
+                                care_fx.spawn(target.id, answered)
                             learn_win.open(target, NEED_VERB.get(answered))
                 dragging_view = False
                 drag_start = None
@@ -3052,6 +3158,7 @@ def main():
                     care = SummonCare()
                     learn_win = LearningWindow()
                     care_panel = CarePanel()
+                    care_fx = CareFx()
                     horror = HorrorState()
                     sentience = SentienceState()
                     ambient = AmbientChorus()
@@ -3089,7 +3196,7 @@ def main():
                 elif event.key == pygame.K_TAB:
                     care_panel.toggle()       # side list of who needs looking after
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                if care_panel.open and care_panel.handle_click(event.pos[0], event.pos[1], world, care):
+                if care_panel.open and care_panel.handle_click(event.pos[0], event.pos[1], world, care, care_fx):
                     pass   # a click on a care-panel button is consumed there
                 elif menu.is_open():
                     # a left-click while the menu is up picks a row (or
@@ -3108,7 +3215,7 @@ def main():
                     else:
                         target = find_creature_at(event.pos[0], event.pos[1], world, pan_x, zoom, birth_eggs, t)
                     if target is not None:
-                        menu.open(event.pos, creature_menu_items(target, world, needs, horror))
+                        menu.open(event.pos, creature_menu_items(target, world, needs, horror, care_fx))
                     else:
                         menu.open(event.pos, ground_menu_items(world, birth_eggs))
 
@@ -3151,6 +3258,7 @@ def main():
             tick_accumulator = 0.0
 
         learn_win.update(dt, world)
+        care_fx.update(dt)
         if egg.hatched:
             alert.update(world, sensors, threshold, dt)
             if not paused:
@@ -3218,6 +3326,7 @@ def main():
         learn_win.draw(screen, font, world, care)
         if egg.hatched:
             care_panel.draw(screen, font, world, care)
+            care_fx.draw(screen, world, pan_x, zoom, top_down)
         menu.draw(screen, font)
         if hatch_flash > 0:
             overlay = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)

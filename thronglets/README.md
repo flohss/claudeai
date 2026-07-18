@@ -436,6 +436,14 @@ a manual Feed from the menu (both move the same energy), and the Feed
 row shows the clicked creature's own energy. Neglect the needs long
 enough and the creatures' faces turn visibly sad.
 
+Every act of care answers with a **little animation** over the creature,
+so you can see what you did at a glance: **Feed** drops an apple that
+lands and bursts into crumbs and a green spark, **Wash** sends
+translucent soap bubbles rising off its head, and **Play** fans a small
+burst of coloured stars around it. The same animation plays no matter
+where the care came from - the right-click menu, the `TAB` care list, or
+answering a summon bubble.
+
 **Right-click bare ground** instead and the only action offered is **Add
 an egg**, which adds a new creature near the current population. It's
 shown disabled while an egg is already waiting to hatch - a new egg can
