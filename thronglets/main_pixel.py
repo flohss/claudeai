@@ -289,57 +289,66 @@ def _draw_rock(canvas, sx, sy, scale, day_amount):
 
 
 def _draw_critter(canvas, sx, sy, scale, token, distressed=False):
-    """A little pixel critter facing the camera: a round yellow body with a
-    blue belly, two stubby arms, two little legs it stands on, and a small
-    yellow sprout poking out of the top of its head (the Thronglet tuft).
-    A thin ring of its evolved-signal colour rims the body."""
-    r = max(2, int(9 * scale))
-    cx = int(sx)
-    foot = int(sy)          # the feet rest on the projected ground point
-    cy = foot - r           # body centre, one radius up from the feet
-    body = PALETTE["critter_body"]
-    belly = PALETTE["critter_belly"]
+    """A little pixel critter, built entirely from squares (no curves): a
+    square yellow head (its skin), a blue square torso, and blue arms and
+    legs whose tips are bare yellow skin - the hands and the feet. A 1px
+    rim of its evolved-signal colour frames the head."""
+    skin = PALETTE["critter_body"]      # yellow: head, hands, feet
+    cloth = PALETTE["critter_belly"]    # blue: torso, arms, legs
     dark = PALETTE["critter_dark"]
     ring = TOKEN_COLORS.get(token, TOKEN_COLORS[0])
-    th = max(1, r // 5)              # limb thickness
 
-    # --- little legs (drawn first, behind the body): short blue stubs with feet ---
-    leg_len = max(2, r // 3)
-    leg_dx = max(1, r // 3)
-    for lx in (cx - leg_dx - th, cx + leg_dx):
-        pygame.draw.rect(canvas, belly, (lx, foot - 1, th, leg_len))
-        pygame.draw.rect(canvas, dark, (lx, foot + leg_len - 2, th, 2))   # a little foot
+    cx = int(sx)
+    foot = int(sy)                      # the feet rest on the projected ground point
+    hw = max(3, int(9 * scale))         # head side (square)
+    tw = max(3, int(8 * scale))         # torso width
+    th = max(2, int(5 * scale))         # torso height
+    legl = max(2, int(4 * scale))       # leg length
+    legt = max(1, hw // 4)              # leg thickness
+    footh = max(1, legt)                # yellow foot height
+    arml = max(2, int(4 * scale))       # arm length
+    armt = max(1, hw // 4)              # arm thickness
+    handw = max(1, armt)                # yellow hand length
 
-    # --- the yellow sprout poking out of the top of the head ---
-    sprout = max(2, r // 2)
-    pygame.draw.rect(canvas, body, (cx - (th - 1) // 2, cy - r - sprout, max(1, th - 1), sprout + 1))
+    torso_bottom = foot - legl
+    torso_top = torso_bottom - th
+    head_bottom = torso_top
+    head_top = head_bottom - hw
 
-    # --- body: token-colour rim, blue belly base, yellow head over the top ---
-    pygame.draw.circle(canvas, ring, (cx, cy), r + 1)   # 1px coloured halo
-    pygame.draw.circle(canvas, belly, (cx, cy), r)       # blue belly (round base)
-    pygame.draw.circle(canvas, body, (cx, cy - max(1, r // 3)), r - max(1, r // 4))
+    # --- legs: blue stubs standing on bare yellow feet ---
+    for lx in (cx - tw // 2, cx + tw // 2 - legt):
+        pygame.draw.rect(canvas, cloth, (lx, torso_bottom, legt, legl - footh))
+        pygame.draw.rect(canvas, skin, (lx, torso_bottom + legl - footh, legt, footh))
 
-    # --- stubby yellow arms poking out of each side (attached, drawn on top) ---
-    arm_len = max(2, r // 2)
-    arm_y = cy - max(0, r // 6)
-    pygame.draw.rect(canvas, body, (cx - r - arm_len + 2, arm_y, arm_len, th))
-    pygame.draw.rect(canvas, body, (cx + r - 2, arm_y, arm_len, th))
+    # --- torso (blue square) ---
+    pygame.draw.rect(canvas, cloth, (cx - tw // 2, torso_top, tw, th))
+
+    # --- arms: blue stubs out each side, ending in bare yellow hands ---
+    arm_y = torso_top + max(0, (th - armt) // 2)
+    pygame.draw.rect(canvas, cloth, (cx - tw // 2 - (arml - handw), arm_y, arml - handw, armt))
+    pygame.draw.rect(canvas, skin, (cx - tw // 2 - arml, arm_y, handw, armt))
+    pygame.draw.rect(canvas, cloth, (cx + tw // 2, arm_y, arml - handw, armt))
+    pygame.draw.rect(canvas, skin, (cx + tw // 2 + arml - handw, arm_y, handw, armt))
+
+    # --- head: a yellow square, framed by the token colour ---
+    head = pygame.Rect(cx - hw // 2, head_top, hw, hw)
+    pygame.draw.rect(canvas, ring, head.inflate(2, 2))   # 1px coloured frame
+    pygame.draw.rect(canvas, skin, head)
 
     # --- face ---
-    if r >= 3:
-        eye = max(1, r // 4)
-        ey = cy - max(1, r // 4)
-        pygame.draw.rect(canvas, dark, (cx - r // 2, ey, eye, eye))
-        pygame.draw.rect(canvas, dark, (cx + r // 2 - eye, ey, eye, eye))
-        my = cy + max(1, r // 3)
+    if hw >= 5:
+        eye = max(1, hw // 5)
+        ey = head_top + hw // 3
+        pygame.draw.rect(canvas, dark, (cx - hw // 4, ey, eye, eye))
+        pygame.draw.rect(canvas, dark, (cx + hw // 4 - eye + 1, ey, eye, eye))
+        my = head_top + (hw * 2) // 3
+        mw = max(2, hw // 3)
         if distressed:
-            canvas.set_at((cx - 1, my + 1), dark)
-            canvas.set_at((cx, my), dark)
-            canvas.set_at((cx + 1, my + 1), dark)
+            pygame.draw.rect(canvas, dark, (cx - mw // 2, my, mw, max(1, hw // 5)))  # open, worried
         else:
-            pygame.draw.line(canvas, dark, (cx - 1, my), (cx + 1, my))
+            pygame.draw.rect(canvas, dark, (cx - mw // 2, my, mw, 1))                 # a small flat mouth
     else:
-        canvas.set_at((cx, cy), dark)
+        canvas.set_at((cx, head_top + hw // 2), dark)
 
 
 def draw_entities(canvas, world, pan_x, day_amount, landscape):
