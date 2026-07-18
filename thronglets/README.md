@@ -517,6 +517,17 @@ This whole system lives behind `simulation.py`'s opt-in `learning` flag
 (on only in the VR view), so `main.py` / `main_tui.py` / `main_web.py`
 behave exactly as before.
 
+**The creatures summon you.** In the spirit of the real Thronglets game,
+you don't just reach in - a creature whose needs run low (hunger, which is
+real energy / clean / joy) raises a little **bubble over its head** and
+calls you. **Left-click it to answer** that need; the kindness teaches it
+to trust you. Clicking a creature also opens a small **learning window** -
+a meta, programming-style read-out of what it feels about you, its current
+need, and the lesson it has drawn. And **a flock that isn't feeling well
+enough won't breed**: while the population's average wellbeing sits below a
+threshold, reproduction pauses until you care for them - neglect literally
+halts new life.
+
 Standing still doesn't mean frozen: each creature blinks on its own
 schedule and wanders a couple of pixels in place between simulation
 steps, purely cosmetic idle motion meant to make it read as alive rather

@@ -210,8 +210,21 @@ Everything you can do in the 3D view - hatch eggs, right-click a creature
 for its action menu - works the same in 2D; only the camera changed.
 Press V again to flip back.
 
+Like the real Thronglets, the creatures also summon YOU: one whose needs
+run low (hunger - real energy - / clean / joy) raises a little bubble over
+its head, and clicking it answers that need (and opens a small learning
+window on it, see below). A kindness like that teaches it to trust you.
+And a flock that isn't feeling well enough won't breed: while the
+population's average wellbeing sits below a threshold, reproduction pauses
+until you look after them - neglect literally stops new life.
+
+Clicking a creature opens a small "learning" window - a meta,
+programming-style read-out of what it has come to feel about you (its
+disposition), its current need, and the lesson it has drawn ("you care
+for me -> come closer" / "you hurt us -> keep away").
+
 Controls:
-  LEFT CLICK     crack an egg open (start egg or a birth egg in the field)
+  LEFT CLICK     crack an egg open, or answer a summoning creature + inspect it
   RIGHT CLICK    open the action menu - on a creature (feed / wash / play
                  / set on fire / stab) or on bare ground (add an egg)
   CLICK + DRAG   pan the view with the mouse
@@ -444,6 +457,18 @@ NEED_ITEMS = ("hunger", "clean", "joy")
 NEED_DECAY_PER_SECOND = 1.0 / 120.0  # empties in 2 minutes if never fed
 NEED_LOW_THRESHOLD = 0.2
 FEED_ENERGY_BOOST = 40.0
+
+# The summon loop: like the real Thronglets, a creature that needs something
+# raises a bubble over its head and calls YOU - click it to answer. Needs are
+# per-creature (hunger mirrors real energy; clean/joy drain on their own). And
+# a flock whose average wellbeing falls below WELLBEING_REPRO_THRESHOLD stops
+# breeding until it's cared for again ("not feeling well enough -> no young").
+SUMMON_THRESHOLD = 0.35              # a need this low makes a creature summon
+WELLBEING_REPRO_THRESHOLD = 0.4     # below this flock wellbeing, no reproduction
+NEED_BUBBLE_COLOR = {"hunger": (120, 210, 90), "clean": (110, 200, 255), "joy": (232, 150, 220)}
+NEED_VERB = {"hunger": "fed it", "clean": "washed it", "joy": "played with it"}
+BUBBLE_BG = (244, 244, 238)
+BUBBLE_BORDER = (40, 40, 48)
 
 # How strongly each hand action teaches the creatures to feel about you (fed
 # into World.deliver_experience, so the population learns to approach a
@@ -1029,6 +1054,10 @@ def install_solo_reproduction_guard(world):
         # is inert and shouldn't count as the needed second creature
         if len(world._alive()) < 2:
             return
+        # a neglected flock doesn't breed: if the creatures aren't feeling
+        # well enough (needs unmet), no new life until you look after them
+        if not getattr(world, "care_ok", True):
+            return
         original_reproduce()
 
     world._reproduce = guarded_reproduce
@@ -1338,6 +1367,168 @@ class NeedsState:
             for c in targets:
                 if c is not None and c.alive:
                     c.energy = min(MAX_ENERGY, c.energy + FEED_ENERGY_BOOST)
+
+
+class SummonCare:
+    """Per-creature needs, so each creature can summon the player on its own.
+    Hunger mirrors that creature's real energy; clean and joy are soft timers
+    that drain until it calls for help. Answering a summons is a kindness, so
+    the creature (and those watching) learn to trust you. The flock's average
+    wellbeing also gates reproduction (see WELLBEING_REPRO_THRESHOLD)."""
+
+    def __init__(self):
+        self.levels = {}   # creature id -> {"clean": x, "joy": y}
+
+    def update(self, dt, world):
+        alive = set()
+        for c in world._alive():
+            alive.add(c.id)
+            lv = self.levels.get(c.id)
+            if lv is None:
+                self.levels[c.id] = {"clean": 1.0, "joy": 1.0}
+            else:
+                lv["clean"] = max(0.0, lv["clean"] - NEED_DECAY_PER_SECOND * dt)
+                lv["joy"] = max(0.0, lv["joy"] - NEED_DECAY_PER_SECOND * dt)
+        for cid in list(self.levels):          # forget the dead
+            if cid not in alive:
+                del self.levels[cid]
+
+    def level(self, c, kind):
+        if kind == "hunger":
+            return max(0.0, min(1.0, c.energy / MAX_ENERGY))
+        return self.levels.get(c.id, {}).get(kind, 1.0)
+
+    def need_of(self, c):
+        """The single most urgent need below the summon threshold, or None."""
+        worst, worst_v = None, SUMMON_THRESHOLD
+        for k in NEED_ITEMS:
+            v = self.level(c, k)
+            if v < worst_v:
+                worst, worst_v = k, v
+        return worst
+
+    def wellbeing(self, c):
+        return min(self.level(c, k) for k in NEED_ITEMS)
+
+    def population_wellbeing(self, world):
+        alive = world._alive()
+        if not alive:
+            return 1.0
+        return sum(self.wellbeing(c) for c in alive) / len(alive)
+
+    def fulfill(self, c, world):
+        """Answer a creature's summons; returns the need met (or None)."""
+        need = self.need_of(c)
+        if need is None:
+            return None
+        if need == "hunger":
+            c.energy = min(MAX_ENERGY, c.energy + FEED_ENERGY_BOOST)
+        else:
+            self.levels.setdefault(c.id, {"clean": 1.0, "joy": 1.0})[need] = 1.0
+        world.deliver_experience(c, LEARN_FEED_REWARD if need == "hunger" else LEARN_CARE_REWARD)
+        return need
+
+
+def _critter_head_screen(c, pan_x, zoom, t):
+    """Screen (x, y) just above a creature's head in the 3D view - where its
+    summon bubble sits. Mirrors draw_critter/find_creature_at geometry."""
+    x, z = world_to_stage(c.pos)
+    sx, sy, scale = project(x - pan_x, z, zoom)
+    ox, oy = idle_offset(c.id, t)
+    sx += ox * scale
+    sy += oy * scale
+    body_r = int(24 * scale)
+    return sx, sy - body_r * 1.7, max(4, int(body_r * 0.5))
+
+
+def _draw_bubble(screen, bx, by, size, need):
+    """A little speech bubble carrying a need's colour icon."""
+    r = size
+    rect = pygame.Rect(int(bx - r), int(by - r), r * 2, r * 2)
+    pygame.draw.rect(screen, BUBBLE_BG, rect, border_radius=max(2, r // 2))
+    pygame.draw.rect(screen, BUBBLE_BORDER, rect, width=1, border_radius=max(2, r // 2))
+    pygame.draw.polygon(screen, BUBBLE_BG,
+                        [(bx - r // 2, by + r - 1), (bx + r // 2, by + r - 1), (bx, by + r + r // 2)])
+    pygame.draw.circle(screen, NEED_BUBBLE_COLOR[need], (int(bx), int(by)), max(2, r // 2))
+
+
+def draw_summons_3d(screen, world, care, pan_x, zoom, t, birth_eggs):
+    for c in world.creatures:
+        if not c.alive or (birth_eggs is not None and birth_eggs.is_pending(c.id)):
+            continue
+        need = care.need_of(c)
+        if need is None:
+            continue
+        bx, by, size = _critter_head_screen(c, pan_x, zoom, t)
+        if size < 4:
+            continue
+        _draw_bubble(screen, bx, by + math.sin(t * 4 + c.id) * 2.0, size, need)
+
+
+def draw_summons_2d(screen, world, care, t, birth_eggs):
+    for c in world.creatures:
+        if not c.alive or (birth_eggs is not None and birth_eggs.is_pending(c.id)):
+            continue
+        need = care.need_of(c)
+        if need is None:
+            continue
+        sx, sy = world_to_screen_2d(c.pos)
+        _draw_bubble(screen, sx, sy - 16 + math.sin(t * 4 + c.id) * 2.0, 6, need)
+
+
+class LearningWindow:
+    """The meta 'programming' pop-up: click a creature and a small panel shows
+    what it has learned about you - its feeling, its current need, and the
+    lesson it has drawn - a glimpse of the learning running underneath."""
+
+    def __init__(self):
+        self.cid = None
+        self.timer = 0.0
+        self.action = None
+
+    def open(self, creature, action):
+        self.cid = creature.id
+        self.action = action
+        self.timer = 7.0
+
+    def update(self, dt, world):
+        if self.cid is None:
+            return
+        self.timer -= dt
+        if self.timer <= 0 or not any(c.id == self.cid and c.alive for c in world.creatures):
+            self.cid = None
+            self.action = None
+
+    def draw(self, screen, font, world, care):
+        if self.cid is None:
+            return
+        c = next((c for c in world.creatures if c.id == self.cid and c.alive), None)
+        if c is None:
+            return
+        disp = c.mind.disposition() if c.mind is not None else 0.0
+        need = care.need_of(c) or "content"
+        if disp > 0.15:
+            lesson = "you care for me -> come closer"
+        elif disp < -0.15:
+            lesson = "you hurt us -> keep away"
+        else:
+            lesson = "still learning who you are"
+        lines = [f"> thronglet #{self.cid}"]
+        if self.action:
+            lines.append(f"  you    : {self.action}")
+        lines += [
+            f"  feeling: {disposition_label(disp)} ({disp:+.0%})",
+            f"  need   : {need}",
+            f"  learned: {lesson}",
+        ]
+        w, h = 380, 14 + len(lines) * 20
+        x, y = 12, SCREEN_H - h - 34
+        panel = pygame.Surface((w, h), pygame.SRCALPHA)
+        panel.fill((14, 16, 18, 225))
+        pygame.draw.rect(panel, (110, 210, 130), panel.get_rect(), 2)
+        screen.blit(panel, (x, y))
+        for i, ln in enumerate(lines):
+            screen.blit(font.render(ln, True, (170, 240, 175)), (x + 12, y + 9 + i * 20))
 
 
 # What each need is called in the right-click menu, as an action verb.
@@ -2518,6 +2709,8 @@ def main():
     egg = EggState()
     birth_eggs = BirthEggs()
     needs = NeedsState()
+    care = SummonCare()
+    learn_win = LearningWindow()
     horror = HorrorState()
     sentience = SentienceState()
     ambient = AmbientChorus()
@@ -2565,9 +2758,18 @@ def main():
                         birth_eggs.seed_known(world)
                     elif egg.hatched:
                         if top_down:
-                            birth_eggs.try_click_2d(drag_start[0], drag_start[1], world)
+                            hit_egg = birth_eggs.try_click_2d(drag_start[0], drag_start[1], world)
+                            target = None if hit_egg else find_creature_at_2d(
+                                drag_start[0], drag_start[1], world, birth_eggs)
                         else:
-                            birth_eggs.try_click(drag_start[0], drag_start[1], world, pan_x, zoom)
+                            hit_egg = birth_eggs.try_click(drag_start[0], drag_start[1], world, pan_x, zoom)
+                            target = None if hit_egg else find_creature_at(
+                                drag_start[0], drag_start[1], world, pan_x, zoom, birth_eggs, t)
+                        # clicking a creature answers its summons (if any) and
+                        # opens the little learning window on it
+                        if target is not None:
+                            answered = care.fulfill(target, world)
+                            learn_win.open(target, NEED_VERB.get(answered))
                 dragging_view = False
                 drag_start = None
             elif event.type == pygame.KEYDOWN:
@@ -2586,6 +2788,8 @@ def main():
                     egg = EggState()
                     birth_eggs = BirthEggs()
                     needs = NeedsState()
+                    care = SummonCare()
+                    learn_win = LearningWindow()
                     horror = HorrorState()
                     sentience = SentienceState()
                     ambient = AmbientChorus()
@@ -2664,6 +2868,10 @@ def main():
             world.hand_pos = None
 
         if egg.hatched and not paused:
+            # per-creature needs drain, and the flock's wellbeing decides
+            # whether it may breed this frame (set before stepping)
+            care.update(dt, world)
+            world.care_ok = care.population_wellbeing(world) >= WELLBEING_REPRO_THRESHOLD
             tick_accumulator += dt
             tick_interval = 1.0 / speed
             stepped = False
@@ -2676,6 +2884,7 @@ def main():
         else:
             tick_accumulator = 0.0
 
+        learn_win.update(dt, world)
         if egg.hatched:
             alert.update(world, sensors, threshold, dt)
             if not paused:
@@ -2732,9 +2941,15 @@ def main():
                 draw_egg(screen, EGG_STAGE_X - pan_x, EGG_STAGE_Z, egg.cracks, wobble, egg.pulse, ctx)
         draw_night_overlay(screen, eff_day)
         draw_weather(screen, climate.weather, climate.season, t, climate.flash, sky=not top_down)
+        if egg.hatched:   # bubbles over creatures that are summoning you
+            if top_down:
+                draw_summons_2d(screen, world, care, t, birth_eggs)
+            else:
+                draw_summons_3d(screen, world, care, pan_x, zoom, t, birth_eggs)
         draw_status(screen, font, world, paused, speed, sensors, threshold, alert.flash,
                     egg.hatched, egg.cracks, sound_muted, zoom, ambient_enabled, len(birth_eggs.pending),
                     top_down=top_down, season=climate.season, weather=climate.weather)
+        learn_win.draw(screen, font, world, care)
         menu.draw(screen, font)
         if hatch_flash > 0:
             overlay = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
