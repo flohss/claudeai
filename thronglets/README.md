@@ -656,8 +656,20 @@ skyline, a forest band, the grassy plain, a meandering river, foreground
 trees and rocks, then the creatures and food. The population is a real
 `simulation.py` World (no predators), stepped every frame and projected
 into the same pseudo-3D ground plane, depth-sorted so nearer things cover
-farther ones. Controls: `SPACE` pause, `LEFT`/`RIGHT` pan, `UP`/`DOWN`
-speed, `N` drop food, `R` reset, `ESC` quit.
+farther ones.
+
+In the spirit of the real Thronglets game, **you don't grab a creature -
+it summons you.** A creature that needs something raises a little bubble
+over its head (food / soap / toy); **click it to answer** (feed / wash /
+play). Answering is a kindness, so it - and the ones watching - learn to
+trust you (the same learning system as the VR view). Clicking a creature
+also opens a small **learning window**: a meta "programming" panel showing
+what that creature has come to feel about you and the lesson it has drawn
+("you care for me -> come closer" / "you hurt us -> keep away").
+
+Controls: `LEFT CLICK` answer a summoning creature + inspect it, `SPACE`
+pause, `LEFT`/`RIGHT` pan, `UP`/`DOWN` speed, `N` drop food, `R` reset,
+`ESC` quit.
 
 ## Where to take it next
 

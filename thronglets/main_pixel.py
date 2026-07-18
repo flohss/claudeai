@@ -19,7 +19,14 @@ The population itself is the real thing: a genuine simulation.py World
 creatures projected into the same pseudo-3D ground plane and depth-sorted
 so nearer ones cover farther ones.
 
+Like the real Thronglets, you don't reach in and grab a creature - one that
+needs something raises a little bubble over its head (food / soap / toy) and
+summons YOU. Click it to answer, which also opens a small "learning" window
+showing what that creature has come to feel about you and the lesson it has
+drawn - the meta glimpse of the learning going on underneath.
+
 Controls:
+  LEFT CLICK   answer a summoning creature (feed / wash / play) + inspect it
   SPACE        pause / resume
   LEFT / RIGHT pan the camera
   UP / DOWN    simulation speed
@@ -37,7 +44,7 @@ import sys
 import numpy as np
 import pygame
 
-from simulation import HEIGHT, WIDTH, World
+from simulation import HEIGHT, MAX_ENERGY, WIDTH, World
 
 # --- the pixel canvas -------------------------------------------------------
 # Everything is drawn at this tiny resolution, then scaled up by PIXEL_SCALE.
@@ -91,6 +98,23 @@ TOKEN_COLORS = {
     4: (96, 196, 112),
     5: (120, 148, 232),
 }
+
+
+# --- the care loop (the Tamagotchi core: the creatures summon YOU) ----------
+# Like the real Thronglets, you don't reach in and grab a creature - a
+# creature that needs something raises a little bubble over its head, and you
+# click it to answer. Hunger mirrors real simulation energy; clean and fun are
+# soft timers that drain on their own. Answering a summons is a kindness, so it
+# teaches that creature (and the ones watching) to trust you (deliver_experience).
+NEED_KINDS = ("hunger", "clean", "fun")
+NEED_DECAY = {"clean": 1.0 / 45.0, "fun": 1.0 / 35.0}   # per second
+SUMMON_THRESHOLD = 0.35
+CARE_FEED_ENERGY = 45.0
+CARE_REWARD = 0.6
+NEED_ICON = {"hunger": (120, 210, 90), "clean": (110, 200, 255), "fun": (232, 150, 220)}
+NEED_VERB = {"hunger": "fed it", "clean": "washed it", "fun": "played with it"}
+BUBBLE_BG = (244, 244, 238)
+BUBBLE_BORDER = (40, 40, 48)
 
 
 def lerp(a, b, t):
@@ -385,11 +409,168 @@ def draw_food(canvas, world, pan_x):
             canvas.set_at((int(sx) + 1, int(sy)), (150, 230, 110))
 
 
+class CareState:
+    """Per-creature care meters. Hunger is real energy; clean and fun are
+    soft timers that drain on their own until the creature summons you."""
+
+    def __init__(self):
+        self.levels = {}   # creature id -> {"clean": x, "fun": y}
+
+    def update(self, dt, world):
+        alive = set()
+        for c in world._alive():
+            alive.add(c.id)
+            lv = self.levels.get(c.id)
+            if lv is None:
+                self.levels[c.id] = {"clean": 1.0, "fun": 1.0}
+            else:
+                for k, rate in NEED_DECAY.items():
+                    lv[k] = max(0.0, lv[k] - rate * dt)
+        for cid in list(self.levels):           # forget the dead
+            if cid not in alive:
+                del self.levels[cid]
+
+    def level(self, c, kind):
+        if kind == "hunger":
+            return max(0.0, min(1.0, c.energy / MAX_ENERGY))
+        return self.levels.get(c.id, {}).get(kind, 1.0)
+
+    def need_of(self, c):
+        """The single most urgent need below the summon threshold, or None
+        when the creature is content."""
+        worst, worst_v = None, SUMMON_THRESHOLD
+        for k in NEED_KINDS:
+            v = self.level(c, k)
+            if v < worst_v:
+                worst, worst_v = k, v
+        return worst
+
+    def fulfill(self, c, world):
+        """Answer a creature's summons. Returns the need met, or None if it
+        wasn't actually asking for anything."""
+        need = self.need_of(c)
+        if need is None:
+            return None
+        if need == "hunger":
+            c.energy = min(MAX_ENERGY, c.energy + CARE_FEED_ENERGY)
+        else:
+            self.levels.setdefault(c.id, {"clean": 1.0, "fun": 1.0})[need] = 1.0
+        world.deliver_experience(c, CARE_REWARD)   # kindness builds trust
+        return need
+
+
+def find_creature_at(cxm, cym, world, pan_x):
+    """The living creature whose sprite covers the canvas-space point
+    (cxm, cym), nearest-to-camera winning, or None."""
+    best, best_z = None, -1.0
+    for c in world.creatures:
+        if not c.alive:
+            continue
+        sx, sy, z, sc = project(c.pos, pan_x)
+        hw = max(3, int(9 * sc))
+        top = sy - (hw + max(2, int(5 * sc)) + max(2, int(4 * sc)))
+        if abs(cxm - sx) <= hw + 1 and top - 6 <= cym <= sy and z > best_z:
+            best, best_z = c, z
+    return best
+
+
+def draw_need_bubbles(canvas, world, care, pan_x, t):
+    """Layer 10 - a little bubble over any creature that is summoning you,
+    carrying the icon of what it wants (food / soap / toy)."""
+    for c in world.creatures:
+        if not c.alive:
+            continue
+        need = care.need_of(c)
+        if need is None:
+            continue
+        sx, sy, z, sc = project(c.pos, pan_x)
+        if sc < 0.4:
+            continue
+        hw = max(3, int(9 * sc))
+        top = int(sy - (hw + max(2, int(5 * sc)) + max(2, int(4 * sc))))
+        bob = int(math.sin(t * 4 + c.id) * 1.2)
+        bx, by = int(sx), top - 6 + bob
+        canvas.set_at((bx, by + 4), BUBBLE_BORDER)              # little tail
+        pygame.draw.rect(canvas, BUBBLE_BG, (bx - 3, by - 3, 7, 7))
+        pygame.draw.rect(canvas, BUBBLE_BORDER, (bx - 3, by - 3, 7, 7), 1)
+        pygame.draw.rect(canvas, NEED_ICON[need], (bx - 1, by - 1, 3, 3))
+
+
+def disposition_label(v):
+    if v >= 0.5:
+        return "adores you"
+    if v >= 0.15:
+        return "trusts you"
+    if v <= -0.5:
+        return "terrified of you"
+    if v <= -0.15:
+        return "fears you"
+    return "wary of you"
+
+
+class LearningWindow:
+    """The meta 'programming' pop-up: click a creature and a little window
+    shows what it has learned about you - its feeling, its current need, and
+    the lesson it has drawn - illustrating the learning going on underneath."""
+
+    def __init__(self):
+        self.cid = None
+        self.timer = 0.0
+        self.action = None      # what you just did to it, if anything
+
+    def open(self, creature, action):
+        self.cid = creature.id
+        self.action = action
+        self.timer = 7.0
+
+    def update(self, dt, world):
+        if self.cid is None:
+            return
+        self.timer -= dt
+        alive = any(c.id == self.cid and c.alive for c in world.creatures)
+        if self.timer <= 0 or not alive:
+            self.cid = None
+            self.action = None
+
+    def draw(self, window, font, world, care):
+        if self.cid is None:
+            return
+        c = next((c for c in world.creatures if c.id == self.cid and c.alive), None)
+        if c is None:
+            return
+        disp = c.mind.disposition() if c.mind is not None else 0.0
+        need = care.need_of(c) or "content"
+        if disp > 0.15:
+            lesson = "you care for me -> come closer"
+        elif disp < -0.15:
+            lesson = "you hurt us -> keep away"
+        else:
+            lesson = "still learning who you are"
+        lines = [f"> thronglet #{self.cid}"]
+        if self.action:
+            lines.append(f"  you    : {self.action}")
+        lines += [
+            f"  feeling: {disposition_label(disp)} ({disp:+.0%})",
+            f"  need   : {need}",
+            f"  learned: {lesson}",
+        ]
+        w, h = 380, 16 + len(lines) * 20
+        x, y = 12, WINDOW_H - h - 34
+        panel = pygame.Surface((w, h), pygame.SRCALPHA)
+        panel.fill((14, 16, 18, 225))
+        pygame.draw.rect(panel, (110, 210, 130), panel.get_rect(), 2)
+        window.blit(panel, (x, y))
+        for i, ln in enumerate(lines):
+            window.blit(font.render(ln, True, (170, 240, 175)), (x + 12, y + 10 + i * 20))
+
+
 # --- HUD (drawn on the upscaled window, so text stays readable) -------------
 def draw_hud(window, font, world, paused, speed):
     status = "PAUSED" if paused else f"x{speed}"
     line = f"pop {world.population()}   {status}"
     window.blit(font.render(line, True, PALETTE["hud_text"]), (10, 8))
+    window.blit(font.render("click a creature raising a bubble to care for it", True,
+                            PALETTE["hud_text"]), (10, 28))
     hint = font.render("SPACE pause   LEFT/RIGHT pan   UP/DOWN speed   N food   R reset   ESC quit",
                        True, PALETTE["hud_text"])
     window.blit(hint, (10, WINDOW_H - 22))
@@ -410,6 +591,8 @@ def main():
     world = new_world()
     landscape = generate_landscape()
     stars = [(random.randint(0, RENDER_W - 1), random.randint(0, HORIZON_Y - 4)) for _ in range(50)]
+    care = CareState()
+    learn_win = LearningWindow()
 
     pan_x = 0.0
     paused = False
@@ -439,6 +622,16 @@ def main():
                 elif event.key == pygame.K_r:
                     world = new_world()
                     landscape = generate_landscape()
+                    care = CareState()
+                    learn_win = LearningWindow()
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                # click a creature: answer its summons (if any) and open the
+                # little learning window on it
+                cxm, cym = event.pos[0] / PIXEL_SCALE, event.pos[1] / PIXEL_SCALE
+                c = find_creature_at(cxm, cym, world, pan_x)
+                if c is not None:
+                    need = care.fulfill(c, world)
+                    learn_win.open(c, NEED_VERB.get(need))
 
         keys = pygame.key.get_pressed()
         if keys[pygame.K_LEFT]:
@@ -448,11 +641,13 @@ def main():
 
         if not paused:
             day_phase = (day_phase + dt / DAY_CYCLE_SECONDS) % 1.0
+            care.update(dt, world)
             tick_accumulator += dt
             step_interval = 1.0 / speed
             while tick_accumulator >= step_interval:
                 world.step()
                 tick_accumulator -= step_interval
+        learn_win.update(dt, world)
 
         _, day_amount = celestial(day_phase)
 
@@ -466,10 +661,12 @@ def main():
         draw_river(canvas, landscape["river_x"], day_amount, t)
         draw_food(canvas, world, pan_x)
         draw_entities(canvas, world, pan_x, day_amount, landscape)
+        draw_need_bubbles(canvas, world, care, pan_x, t)
 
         # ---- blow the canvas up to the window with hard pixels ----
         pygame.transform.scale(canvas, (WINDOW_W, WINDOW_H), window)
         draw_hud(window, font, world, paused, speed)
+        learn_win.draw(window, font, world, care)
         pygame.display.flip()
 
     pygame.quit()
