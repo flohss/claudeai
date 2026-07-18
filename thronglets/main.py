@@ -64,12 +64,7 @@ SCREEN_W, SCREEN_H = int(WIDTH * 5), int(HEIGHT * 5) + HUD_H
 SCALE_X, SCALE_Y = 5.0, 5.0
 
 BG = (18, 22, 16)
-# The same overhead field as main_vr's 2D (top-down) view: a grass-green
-# ground with a faint lighter grid every 20 world units, so a creature
-# moves over the same background in both renderers.
-GROUND = (55, 130, 65)
-GRID_COLOR = (70, 150, 80)
-GRID_STEP = 20  # world units between grid lines (matches main_vr's 2D view)
+GROUND = (30, 38, 24)
 HUD_BG = (10, 12, 9)
 TEXT_COLOR = (220, 220, 210)
 FOOD_COLOR = (110, 220, 90)
@@ -883,13 +878,6 @@ def update_listening(channel, tones, world, mouse_pos, hud_h, muted, hovered_id)
 def draw(screen, font, world, paused, speed, mode, lang, expanded, trained=False, muted=False):
     screen.fill(BG)
     pygame.draw.rect(screen, GROUND, (0, HUD_H, SCREEN_W, SCREEN_H - HUD_H))
-    # faint grid, same as main_vr's overhead field
-    for gx in range(0, int(WIDTH) + 1, GRID_STEP):
-        x = int(gx * SCALE_X)
-        pygame.draw.line(screen, GRID_COLOR, (x, HUD_H), (x, SCREEN_H), 1)
-    for gy in range(0, int(HEIGHT) + 1, GRID_STEP):
-        y = HUD_H + int(gy * SCALE_Y)
-        pygame.draw.line(screen, GRID_COLOR, (0, y), (SCREEN_W, y), 1)
 
     for fx, fy in world.food:
         pygame.draw.circle(screen, FOOD_COLOR, (int(fx * SCALE_X), int(fy * SCALE_Y) + HUD_H), 3)

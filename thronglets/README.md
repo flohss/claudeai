@@ -121,10 +121,6 @@ as you hover (the same behaviour as the VR view). If your machine has no
 audio device the game just runs silently - it never crashes over something
 this optional.
 
-The creatures move over the same overhead field as the VR view's 2D
-(top-down) mode: a grass-green ground with a faint lighter grid every 20
-world units, so the playfield reads identically in both renderers.
-
 `N`/`P`, and left/right click, all work the same whether the world is
 running in automatic or manual mode - the mode only decides whether food
 and predators *also* keep spawning on their own. The HUD starts collapsed to
