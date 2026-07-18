@@ -318,6 +318,11 @@ HILL_FAR_DAY = (118, 112, 108)
 HILL_NEAR_DAY = (80, 125, 95)
 HILL_FAR_NIGHT = (24, 24, 28)
 HILL_NEAR_NIGHT = (20, 30, 36)
+# snow caps on the peaks, and a hazier back range behind the main one
+MOUNTAIN_SNOW_DAY = (240, 244, 252)
+MOUNTAIN_SNOW_NIGHT = (120, 128, 152)
+MOUNTAIN_SHADE_DAY = (96, 90, 88)     # the shadowed (right) face of each peak
+MOUNTAIN_SHADE_NIGHT = (18, 18, 22)
 
 GROUND_FAR_DAY = (95, 165, 100)
 GROUND_NEAR_DAY = (55, 130, 65)
@@ -2014,19 +2019,64 @@ def draw_background(screen, day_phase, pan_x=0.0, zoom=1.0, landscape=None, t=0.
     # range keeps its grey (a winter dusting reads on the near band).
     hill_near = season_tint(hill_near, season)
 
-    # The far layer is the true back of the landscape: a jagged mountain
-    # range spanning the whole horizon, not gentle rolling hills - taller,
-    # sharper peaks than the near layer.
-    hill_y = HORIZON_Y - int(SCREEN_H * 0.05)
-    ridge_n = 12
-    ridge = []
-    for i in range(ridge_n + 1):
-        rx = SCREEN_W * i / ridge_n
-        amp1 = 55 * math.sin(i * 0.9 + landscape.hill_far_phase)
-        amp2 = 28 * math.sin(i * 2.3 + landscape.hill_far_phase * 1.7)
-        ridge.append((rx, hill_y - 45 - amp1 - amp2))
-    far_hills = [(0, HORIZON_Y)] + ridge + [(SCREEN_W, HORIZON_Y)]
-    pygame.draw.polygon(screen, hill_far, far_hills)
+    # The far layer is the true back of the landscape: a jagged, snow-capped
+    # mountain range spanning the whole horizon. It's drawn in three passes -
+    # a hazy back range for depth, then a taller sharp-peaked main range with
+    # a shadowed right face on each peak, then snow caps on the summits.
+    snow = lerp_color(MOUNTAIN_SNOW_NIGHT, MOUNTAIN_SNOW_DAY, day_amount)
+    snow = lerp_color(snow, TWILIGHT_WARM, twilight_amount * 0.15)
+    shade = lerp_color(MOUNTAIN_SHADE_NIGHT, MOUNTAIN_SHADE_DAY, day_amount)
+    shade = lerp_color(shade, TWILIGHT_WARM, twilight_amount * 0.25)
+    # a hazy back range: the far grey washed toward the sky-horizon colour
+    back = lerp_color(hill_far, sky_horizon, 0.45)
+    phase = landscape.hill_far_phase
+
+    def ridge_points(n, base_lift, peak_base, peak_var, ph):
+        """A jagged silhouette: alternating valleys and pointed apexes."""
+        pts = []
+        for i in range(n * 2 + 1):
+            x = SCREEN_W * i / (n * 2)
+            if i % 2 == 1:  # a pointed summit
+                h = peak_base + peak_var * (0.5 + 0.5 * math.sin(i * 1.3 + ph)) \
+                    + 0.4 * peak_var * math.sin(i * 2.7 + ph * 1.6)
+            else:           # a valley between peaks
+                h = base_lift + 0.25 * peak_var * (0.5 + 0.5 * math.sin(i * 1.9 + ph))
+            pts.append((x, HORIZON_Y - h))
+        return pts
+
+    # 1. hazy back range, a little lower and offset
+    back_top = ridge_points(4, int(SCREEN_H * 0.06), int(SCREEN_H * 0.12),
+                            int(SCREEN_H * 0.08), phase + 1.3)
+    pygame.draw.polygon(screen, back, [(0, HORIZON_Y)] + back_top + [(SCREEN_W, HORIZON_Y)])
+
+    # 2. the main range
+    main_top = ridge_points(6, int(SCREEN_H * 0.04), int(SCREEN_H * 0.15),
+                            int(SCREEN_H * 0.11), phase)
+    pygame.draw.polygon(screen, hill_far, [(0, HORIZON_Y)] + main_top + [(SCREEN_W, HORIZON_Y)])
+
+    # 3. per-peak shadowed right face + snow cap, for each summit (odd index)
+    snowline = 0.55 if season == "winter" else 0.34   # how far down the cap reaches
+    for i in range(1, len(main_top) - 1, 2):
+        lx, ly = main_top[i - 1]
+        ax, ay = main_top[i]
+        rx, ry = main_top[i + 1]
+        # shadowed right face: apex -> right valley -> straight down a touch
+        pygame.draw.polygon(screen, shade, [(ax, ay), (rx, ry), (ax, ry)])
+        # snow cap: from the apex down both slopes to a snowline
+        cap_h = (HORIZON_Y - ay) * snowline
+        y_snow = ay + cap_h
+        tl = (y_snow - ay) / (ly - ay) if ly != ay else 0
+        tr = (y_snow - ay) / (ry - ay) if ry != ay else 0
+        left_pt = (ax + tl * (lx - ax), y_snow)
+        right_pt = (ax + tr * (rx - ax), y_snow)
+        midx = (left_pt[0] + right_pt[0]) / 2
+        # a slightly ragged lower edge (a couple of little snow tongues)
+        cap = [(ax, ay), left_pt,
+               (midx - (midx - left_pt[0]) * 0.4, y_snow - cap_h * 0.18),
+               (midx, y_snow + cap_h * 0.12),
+               (midx + (right_pt[0] - midx) * 0.4, y_snow - cap_h * 0.14),
+               right_pt]
+        pygame.draw.polygon(screen, snow, cap)
 
     near_hill_y = HORIZON_Y - int(SCREEN_H * 0.02)
     near_hills = [(0, HORIZON_Y)]
