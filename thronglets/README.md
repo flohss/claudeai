@@ -529,12 +529,14 @@ rolling cycle, instead of all droning together. The token frequencies
 are a pentatonic scale, so spread out in time like a wind chime they
 ring as shifting harmony rather than a wall of sound. Press `G` to turn
 that off and hear only individual creatures.
-Hovering the mouse over a creature always plays a sustained tone for its
-evolved signal too, independently of the chorus toggle - the same
-proximity-listening idea as `main.py`/`main_web.py`, adapted for a 3D
-view: "closest to the cursor" is judged by *screen* position rather than
-world position, since depth already changes how big and how far apart
-things look. Press `M` to mute everything.
+Moving the cursor onto a creature strikes its evolved signal **once** - a
+single short note the moment you touch it, not a tone droned for as long
+as you hover; slide onto another creature and that one sounds. It's the
+same "listen to one creature" idea as `main.py`/`main_web.py`, but
+edge-triggered and adapted for a 3D view: "closest to the cursor" is
+judged by *screen* position rather than world position, since depth
+already changes how big and how far apart things look. Press `M` to mute
+everything.
 
 The background is a bit more filled in now too, and reads coherently
 back to front the way a real landscape would: a jagged rocky mountain

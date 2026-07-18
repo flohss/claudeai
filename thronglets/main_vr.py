@@ -131,12 +131,14 @@ slow rolling cycle, rather than all droning together (see
 AmbientChorus). The token frequencies are a pentatonic scale, so spread
 out in time like a wind chime they ring as harmony instead of a wall of
 sound. Press G to turn that off and hear only individual creatures
-instead. Hovering the mouse over a creature
-always plays a sustained tone for its evolved signal too - same idea as
-the proximity-listening sound in main.py/main_web.py, but judged by
-*screen* distance instead of world distance, since depth already
-changes how big and how far apart things look here - independently of
-the chorus toggle. Press M to mute all of it.
+instead. Moving the cursor onto a creature strikes its evolved signal
+once - a single short note the moment you touch it, not a tone droned
+for as long as you hover (that was too much); slide onto another
+creature and that one sounds. It's the same "listen to one creature"
+idea as the proximity sound in main.py/main_web.py, but edge-triggered
+and judged by *screen* distance, since depth already changes how big and
+how far apart things look here - independently of the chorus toggle.
+Press M to mute all of it.
 
 The landscape is scaled the way a real one would be, and reads coherently
 back to front: a jagged rocky mountain range spans the entire horizon (the
@@ -1527,7 +1529,9 @@ def init_sound():
         pygame.mixer.init(frequency=22050, size=-16, channels=2)
         pygame.mixer.set_num_channels(max(8, pygame.mixer.get_num_channels()))
         sample_rate = pygame.mixer.get_init()[0]
-        tones = {token: _make_tone(freq, sample_rate)
+        # struck, bell-like plucks played once when the cursor moves onto a
+        # creature (no longer a sustained tone held while hovering)
+        tones = {token: _make_tone(freq, sample_rate, duration=0.5, volume=0.3, decay=True)
                  for token, freq in enumerate(TOKEN_FREQS) if token != 0}
         # struck, bell-like notes for the intermittent chorus - not looped
         ambient_tones = {token: _make_tone(freq, sample_rate, duration=1.4, volume=0.2, decay=True)
@@ -1612,17 +1616,19 @@ def update_cry(cry_channel, cry_sounds, sentience_cry, muted, current_cry):
     return target
 
 
-def update_listening(channel, tones, world, mouse_pos, pan_x, muted, listening_token, zoom=1.0,
+def update_listening(channel, tones, world, mouse_pos, pan_x, muted, hovered_id, zoom=1.0,
                       birth_eggs=None):
-    """Plays a sustained tone for whichever living creature's *screen*
-    position is closest to the mouse, within LISTEN_RADIUS_PX - the
-    pseudo-3D counterpart of main.py's proximity-listening sound. Returns
-    the token now playing (or None) so the caller can track it across
-    frames without re-querying the mixer every time. A creature still
-    pending in birth_eggs hasn't "appeared" yet, so it's skipped."""
+    """Sounds a creature's evolved signal when the cursor moves ONTO it -
+    a single struck note, once, not a sustained tone held for as long as
+    you hover (that constant drone was too much). Resting the cursor stays
+    silent; sliding onto a different creature strikes that one's note. It
+    finds the creature whose *screen* position is nearest the mouse within
+    LISTEN_RADIUS_PX and returns its id, so the caller can tell, next
+    frame, when the hovered creature has changed. Creatures still pending
+    in birth_eggs haven't 'appeared' yet, so they're skipped."""
     if channel is None:
         return None
-    target = None
+    target_id, target_token = None, 0
     if not muted:
         best_dist = LISTEN_RADIUS_PX
         for c in world.creatures:
@@ -1635,13 +1641,11 @@ def update_listening(channel, tones, world, mouse_pos, pan_x, muted, listening_t
             dist = ((sx - mouse_pos[0]) ** 2 + (sy - mouse_pos[1]) ** 2) ** 0.5
             if dist < best_dist:
                 best_dist = dist
-                target = c.token
-    if target != listening_token:
-        if target is None:
-            channel.stop()
-        else:
-            channel.play(tones[target], loops=-1)
-    return target
+                target_id, target_token = c.id, c.token
+    # strike the note only on entering a new creature - an edge, not a hold
+    if target_id is not None and target_id != hovered_id:
+        channel.play(tones[target_token])
+    return target_id
 
 
 AMBIENT_CYCLE = 4.2   # seconds for one full round of the chorus arpeggio
@@ -2472,7 +2476,7 @@ def draw_status(screen, font, world, paused, speed, sensors, threshold, alert_fl
         f"[C] camera: {sensor_label(sensors.camera_enabled, sensors.camera_available)}   "
         f"threshold: {threshold:.2f} ([ / ])",
         f"[G] population chorus: {'on' if ambient_enabled else 'off'}   "
-        f"[M] hover-listen sound: {'muted' if sound_muted else 'on'}",
+        f"[M] hover ping: {'muted' if sound_muted else 'on'}",
     ]
     if hatched:
         lines.append(f"[S] season: {season}   [W] weather: {weather}")
@@ -2552,7 +2556,7 @@ def main():
     day_phase = 0.1  # start in early-morning light
     running = True
     sound_muted = False
-    listening_token = None
+    hovered_id = None   # id of the creature the cursor is currently over
     current_cry = None
     ambient_enabled = True  # the population's chorus is on by default
     zoom = 1.0
@@ -2624,7 +2628,7 @@ def main():
                             channel.stop()
                     if cry_channel is not None:
                         cry_channel.stop()
-                    listening_token = None
+                    hovered_id = None
                     current_cry = None
                 elif event.key == pygame.K_x:
                     pixel_art = not pixel_art
@@ -2713,15 +2717,13 @@ def main():
             needs_low = needs.lowest() < NEED_LOW_THRESHOLD
             sentience.update(world, horror, needs_low, birth_eggs, t, dt, paused,
                              storm=climate.is_storm())
-            listening_token = update_listening(sound_channel, tones, world, pygame.mouse.get_pos(),
-                                                pan_x, sound_muted, listening_token, zoom, birth_eggs)
+            hovered_id = update_listening(sound_channel, tones, world, pygame.mouse.get_pos(),
+                                          pan_x, sound_muted, hovered_id, zoom, birth_eggs)
             ambient.update(ambient_channels, ambient_tones, world, sound_muted, ambient_enabled, t, birth_eggs)
             current_cry = update_cry(cry_channel, cry_sounds, sentience.cry, sound_muted, current_cry)
         else:
-            if listening_token is not None:
-                if sound_channel is not None:
-                    sound_channel.stop()
-                listening_token = None
+            if hovered_id is not None:
+                hovered_id = None
             current_cry = update_cry(cry_channel, cry_sounds, None, sound_muted, current_cry)
             ambient.update(ambient_channels, ambient_tones, world, True, ambient_enabled, t, birth_eggs)
 
