@@ -4,9 +4,9 @@ The other renderers in this project are 2D: main.py and main_web.py draw
 flat. This file is different - it is real
 3D: an OpenGL scene with a perspective camera you can orbit, a lit procedural
 mountain terrain mesh, three-dimensional trees and rocks, and the creatures
-as little bodies (head, torso, arms, legs) standing on the ground - all one
-colour, each wrapped in a coloured halo that shows the signal it's emitting.
-Nothing here is a 2D blit.
+as little yellow bodies in blue clothes (head, torso, arms, legs) standing
+on the ground, each wrapped in a faint misty coloured haze that shows the
+signal it's emitting. Nothing here is a 2D blit.
 
 On top of the base scene it has a full **day/night cycle, seasons and
 weather**, driven by the 3D lighting instead of flat tints:
@@ -72,10 +72,11 @@ TOKEN_COLORS_F = [(r / 255.0, g / 255.0, b / 255.0) for r, g, b in TOKEN_COLORS]
 
 TRUNK_COLOR = (0.38, 0.26, 0.15)
 ROCK_COLOR = (0.48, 0.48, 0.53)
-# Every creature shares one body colour; the token it signals shows only as a
-# coloured halo around it (TOKEN_COLORS_F), not as its skin.
-CREATURE_COLOR = (0.94, 0.87, 0.62)
-LIMB_COLOR = (0.83, 0.75, 0.50)
+# Every creature looks the same: a yellow body in blue clothes. The token it
+# signals shows only as a soft coloured halo (TOKEN_COLORS_F), not as its skin.
+SKIN_COLOR = (0.98, 0.82, 0.26)     # yellow head, arms, legs, hands, feet
+CLOTHES_COLOR = (0.20, 0.36, 0.74)  # blue torso
+LIMB_COLOR = (0.90, 0.72, 0.20)     # a slightly deeper yellow for limbs
 EYE_COLOR = (0.08, 0.08, 0.10)
 
 # Emergent learning (the opt-in Mind in simulation.py): the mouse cursor is
@@ -801,6 +802,7 @@ class Renderer:
         self.vao_body = self._vao(self.lit, mesh_uv_sphere(1.7, 12, 16))
         self.vao_head = self._vao(self.lit, mesh_uv_sphere(1.2, 12, 16))
         self.vao_limb = self._vao(self.lit, mesh_cylinder(0.30, 1.0, 8))
+        self.vao_hand = self._vao(self.lit, mesh_uv_sphere(0.42, 7, 9))
         # a translucent glow sphere for the signal halo (position only)
         halo_v = mesh_uv_sphere(1.0, 14, 18)
         self.vao_halo = ctx.vertex_array(self.shadow, [(ctx.buffer(halo_v.tobytes()), "3f 3x4", "in_pos")])
@@ -1058,18 +1060,20 @@ class Renderer:
             if float(terrain_water_mask(cx, cz)) > 0.5:
                 cy = WATER_LEVEL
             foot = cy + math.sin(self.visual_time * 2.2 + c.id * 1.7) * 0.18
-            # legs
+            # legs (yellow) with little feet
             for lx in (-0.6, 0.6):
                 self._draw(self.vao_limb, translate(cx + lx, foot, cz) @ scale(1.0, 1.1, 1.0),
                            vp, LIMB_COLOR, env)
-            # arms held along the body
+                self._draw(self.vao_hand, translate(cx + lx, foot, cz), vp, SKIN_COLOR, env)
+            # arms held along the body (yellow) with little hands
             for ax in (-1.45, 1.45):
                 self._draw(self.vao_limb, translate(cx + ax, foot + 1.2, cz) @ scale(0.9, 1.5, 0.9),
                            vp, LIMB_COLOR, env)
-            # torso + head
-            self._draw(self.vao_body, translate(cx, foot + 2.1, cz), vp, CREATURE_COLOR, env)
+                self._draw(self.vao_hand, translate(cx + ax, foot + 1.2, cz), vp, SKIN_COLOR, env)
+            # blue-clothed torso, yellow head
+            self._draw(self.vao_body, translate(cx, foot + 2.1, cz), vp, CLOTHES_COLOR, env)
             head_y = foot + 3.9
-            self._draw(self.vao_head, translate(cx, head_y, cz), vp, CREATURE_COLOR, env)
+            self._draw(self.vao_head, translate(cx, head_y, cz), vp, SKIN_COLOR, env)
             # two camera-facing eyes on the head
             face = np.array([eye[0] - cx, 0.0, eye[2] - cz])
             if np.linalg.norm(face) > 1e-3:
@@ -1088,19 +1092,20 @@ class Renderer:
                 self._draw(self.vao_eye, translate(cx, foot + mk, cz) @ scale(1.4, 1.4, 1.4),
                            vp, (1.0, 0.95, 0.35), env)
 
-        # signal halos: a soft coloured glow around each signalling creature,
-        # drawn additively so it reads as light, not a painted shell
+        # signal halos: a faint, misty coloured glow around each signalling
+        # creature - two soft additive shells so it fades like fog, not a shell
         if halos:
             ctx.enable(ctx.BLEND)
             ctx.blend_func = ctx.SRC_ALPHA, ctx.ONE
             ctx.depth_mask = False
             for cx, hy, cz, token in halos:
                 r, g, bl = TOKEN_COLORS_F[token]
-                a = 0.30 + 0.10 * math.sin(self.visual_time * 3.0 + cx)
-                m = translate(cx, hy, cz) @ scale(3.4, 3.9, 3.4)
-                self.shadow["mvp"].write(_bytes(vp @ m))
-                self.shadow["u_color"].value = (r, g, bl, a)
-                self.vao_halo.render()
+                pulse = 0.85 + 0.15 * math.sin(self.visual_time * 2.0 + cx)
+                for rad, a in ((3.6, 0.05), (4.6, 0.035)):   # inner + outer haze
+                    self.shadow["mvp"].write(_bytes(vp @ (translate(cx, hy, cz)
+                                             @ scale(rad, rad * 1.15, rad))))
+                    self.shadow["u_color"].value = (r, g, bl, a * pulse)
+                    self.vao_halo.render()
             ctx.depth_mask = True
             ctx.blend_func = ctx.SRC_ALPHA, ctx.ONE_MINUS_SRC_ALPHA
             ctx.disable(ctx.BLEND)

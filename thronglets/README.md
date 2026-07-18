@@ -342,9 +342,10 @@ scene with a perspective camera you can orbit, a
 lake carved right into the height field with an animated water surface),
 three-dimensional trees and rocks that sit on the slopes, and the
 creatures as **little bodies** (head, torso, arms along the sides, legs,
-camera-facing eyes) walking the ground - every creature the **same colour**,
-each wrapped in a soft **coloured halo that shows the signal it's emitting**
-(the same 6-token palette as everywhere else). Soft contact shadows, a
+camera-facing eyes) walking the ground - every creature the same: a
+**yellow body in blue clothes**, each wrapped in a **faint, misty coloured
+haze that shows the signal it's emitting** (the same 6-token palette as
+everywhere else). Soft contact shadows, a
 gradient sky with a sun glow, and distance fog give it real depth. The
 population is a genuine `simulation.py` World, stepped every frame - they are
 real creatures at their real
