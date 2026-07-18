@@ -352,7 +352,7 @@ class World:
         # Optional, opt-in: ids of creatures that exist but are treated as
         # not-yet-active - excluded from _alive(), so they take no part in
         # sensing, movement, eating, reproduction, aging or the population
-        # count until woken. main_vr.py uses this to keep an unhatched
+        # count until woken. A renderer can use this to keep an unhatched
         # birth egg completely inert; it stays empty (no effect) everywhere
         # else.
         self.dormant_ids = set()
@@ -902,7 +902,7 @@ def top3_and_other(pairs):
     """Collapse a (token, fraction) list from World.vocabulary_breakdown()
     (already sorted, most common first) down to its 3 largest entries, folding
     anything beyond that into one combined "other" fraction - a HUD display
-    helper, shared by main.py and main_tui.py so they agree on the cutoff."""
+    helper, shared by the renderers so they agree on the cutoff."""
     if len(pairs) <= 3:
         return pairs, 0.0
     return pairs[:3], sum(frac for _, frac in pairs[3:])

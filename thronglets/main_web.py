@@ -16,7 +16,7 @@ fixed internal ids (idle/food/mate/danger).
 
 No third-party dependencies beyond numpy (for simulation.py) - the server
 itself is only the standard library's http.server, so this needs nothing
-extra to install anywhere main_tui.py already runs.
+extra to install: if Python and numpy run, so does this.
 """
 
 import argparse

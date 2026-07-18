@@ -1,15 +1,13 @@
 """A *true* 3D proof-of-concept renderer for the Thronglets world.
 
-Every other renderer in this project is 2D: main.py / main_tui.py /
-main_web.py draw flat, and main_vr.py is a *pseudo*-3D trick (2D shapes
-projected onto a fake ground plane). This file is different - it is real
+The other renderers in this project are 2D: main.py and main_web.py draw
+flat. This file is different - it is real
 3D: an OpenGL scene with a perspective camera you can orbit, a lit procedural
 mountain terrain mesh, three-dimensional trees and rocks, and the creatures
 as lit spheres standing on the ground. Nothing here is a 2D blit.
 
-On top of the base scene it now has a full **day/night cycle, seasons and
-weather**, exactly like main_vr - but driven by the 3D lighting instead of
-flat tints:
+On top of the base scene it has a full **day/night cycle, seasons and
+weather**, driven by the 3D lighting instead of flat tints:
 
   * Day/night: the sun (and, once it sets, the moon) travels a real arc
     across the sky. The whole scene is lit from that moving body, the sky
@@ -53,7 +51,7 @@ import numpy as np
 from simulation import WIDTH, HEIGHT, World
 
 # The same 6-token palette as every other renderer, as 0..1 floats so a
-# creature's colour means the same thing here as it does in main_vr.py.
+# creature's colour means the same thing here as in every other renderer.
 TOKEN_COLORS = [
     (120, 120, 120),
     (235, 70, 70),

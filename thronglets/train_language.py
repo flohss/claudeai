@@ -22,8 +22,8 @@ The game, each step:
      ambiguity is penalized directly, every step, rather than hoped for.
 
 This needs PyTorch (`pip install torch`), a genuinely heavy dependency that
-is not expected to work on Termux. `main_tui.py` and `main_web.py` never
-import this module. `main.py` can, but only lazily: choosing "train a new
+is not expected to work on Termux. `main_web.py` never imports this module.
+`main.py` can, but only lazily: choosing "train a new
 one now" on its AI-language screen imports this module and calls train()
 live, with a progress callback and a cancel event so the pygame window can
 show live progress and let you stop early - if PyTorch isn't installed,

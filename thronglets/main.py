@@ -9,8 +9,8 @@ language once, at startup - not something you toggle mid-run.
 
 Optionally, the creatures can also learn who you are - a start-screen
 choice (default OFF, so a bare run stays pure natural selection, the
-game's original spirit). Turn it on and the same Mind system as the VR
-view (simulation.py, opt-in) runs here: the mouse cursor is your "hand",
+game's original spirit). Turn it on and the opt-in Mind system in
+simulation.py runs here: the mouse cursor is your "hand",
 and the two things you place are the lesson. Drop food near a creature and
 it - and the ones close enough to witness it - learn the hand is worth
 approaching; drop a predator and they learn to flee it. Over a session the
@@ -83,14 +83,14 @@ TOKEN_COLORS = [
 TOKEN_FREQS = [0, 261.63, 293.66, 329.63, 392.00, 440.00]
 LISTEN_RADIUS = 10.0  # world units - how close the mouse must be to hear a creature
 
-# Emergent learning (the same Mind system as main_vr, reused from
+# Emergent learning (the opt-in Mind system, reused from
 # simulation.py). Here the player's "hand" is the mouse cursor, and the two
 # things you place are the reward: dropping food nearby is kindness the
 # creatures learn to approach, dropping a predator is harm they learn to
 # flee - and every creature close enough to witness it learns a weaker
 # version too (World.deliver_experience handles the observers). Over a
 # session the flock comes to trust or fear you, and passes what it learned
-# to its offspring, exactly as in the VR view.
+# to its offspring.
 LEARN_FOOD_REWARD = 1.0
 LEARN_PREDATOR_REWARD = -1.0
 DISP_HISTORY_INTERVAL = 20   # ticks between disposition samples for the graph
@@ -828,8 +828,7 @@ def _make_tone(freq, sample_rate, duration=0.6, volume=0.25, decay=False):
     """A short sine-wave tone. By default it has a symmetric fade in/out
     envelope meant to be looped (the fades soften the loop seam). With
     decay=True it gets a quick attack and a long ringing fall-off to
-    silence - a struck, bell-like note played once, not held (as in the VR
-    view)."""
+    silence - a struck, bell-like note played once, not held."""
     n = int(sample_rate * duration)
     t = np.linspace(0, duration, n, endpoint=False)
     wave = np.sin(2 * np.pi * freq * t)
@@ -1179,8 +1178,8 @@ def choose_adaptive_traits(screen, font, lang):
 
 
 def choose_learning(screen, font, lang):
-    """Whether the flock learns to trust/fear the player (the VR view's Mind
-    system). Default (ENTER) is OFF, so a bare run stays pure natural
+    """Whether the flock learns to trust/fear the player (the opt-in Mind
+    system in simulation.py). Default (ENTER) is OFF, so a bare run stays pure natural
     selection - the game's original spirit - and the learned mind is an
     opt-in choice, not the imposed default."""
     t = TEXT[lang]

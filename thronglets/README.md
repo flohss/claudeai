@@ -56,14 +56,15 @@ real, if deliberately small, model of how a shared vocabulary can emerge from
 
 ## Run it
 
-There are three renderers, all sharing the same simulation core:
+There are two renderers, both sharing the same simulation core:
 
 - `main.py` — a pygame window (nicer, needs a display + pygame installed).
-- `main_tui.py` — a plain terminal renderer using only the standard library's
-  `curses` module + numpy. No GUI, no pygame, no X server.
 - `main_web.py` — a local web server (standard library only, no new
   dependency) with an HTML/canvas page you open in any browser. Works
   anywhere, including Termux.
+
+There's also `main_gl.py`, a *true 3D* proof of concept (optional `moderngl`
+dependency) — see the Bonus section below.
 
 ### Desktop (pygame)
 
@@ -144,59 +145,6 @@ flock trusts you (+76%)"* / *"…fears you"*), and a **disposition sparkline** a
 the Graph screen (`G`) that plots that feeling over time next to the
 vocabulary curves. (With learning off, neither appears - the observatory,
 unchanged.)
-
-### Termux (Android)
-
-Getting pygame's SDL2 dependencies to compile on Termux is a known pain
-(needs the X11 repo, clang, `sdl2-dev`, and a running Termux:X11 session —
-see [this issue](https://github.com/termux/termux-packages/issues/6233) if
-you want to fight that battle). It's not needed here: `main_tui.py` draws
-the whole simulation with colored characters directly in your terminal.
-
-```bash
-pkg update
-pkg install python
-pip install numpy
-git clone <this repo's URL>   # or copy the thronglets/ folder over
-cd claudeai/thronglets
-python main_tui.py
-```
-
-On launch you're asked to press `E`/`F` for English or French, `enter`
-defaulting to French. If a save from a previous run exists, you're then
-asked whether to resume it — say yes and the population, food, and
-predators come back exactly as you left them, skipping every other
-question. Otherwise: `A` (automatic) or `M` (manual), how many creatures to
-start with (1-220, `enter` to confirm or skip for the default of 100), a
-yes/no for whether physical traits evolve too (`y`/`n` in English, `o`/`n`
-in French, on by default — see
-[Adaptive traits](#adaptive-traits-on-by-default) below), then a yes/no for
-whether to start already speaking a pre-trained language (see below,
-`y`/`n` in English, `o`/`n` in French) — every screen defaults to
-French/automatic/100/with-traits/no if you just hit `enter` through all of
-them, and all choices stick for the whole run.
-
-Creatures show up as a colored `o` (colored by whatever token they're
-currently signaling, white if silent), food as green `.`, predators as a red
-`X`. Controls: `space`=pause, `n`=drop a food patch at a random spot,
-`p`=add a predator at a random spot, `r`=reset, `+`/`-`=speed, `q`=quit,
-`[`/`]`=remove/add a predator right now, `s`=save to `thronglets_save.json`,
-`g`=vocabulary-over-time graph, `t`=family tree, `c`=compare seeds,
-`d`=translator, `Shift+F`=FAQ, `h`=in-game notice (paginated so it fits any
-terminal height), `v`=show/hide the full HUD. `n` and `p` work the same in
-automatic or manual mode. The HUD starts collapsed to the tick/population
-line plus a one-line summary (each state's single strongest color), freeing
-most of the terminal for the world - `v` unfolds the full controls list,
-per-state top-3-plus-other breakdown, and legend. There's no reliable mouse
-support in a terminal, so manual mode also offers a keyboard-cursor precision
-tool: the arrow keys move it, `tab` switches between food/predator, `enter`
-places whatever's currently selected exactly there. There's no proximity
-sound here either (pygame and web have it) - a terminal has no
-dependency-free way to synthesize distinct tones per token, unlike
-`pygame.mixer` or the browser's Web Audio API.
-Works best in a wide/tall terminal — Termux's default font is fairly large,
-so consider shrinking it (pinch to zoom, or Termux's font settings) to see
-more of the world at once.
 
 ### Web (any device with a browser)
 
@@ -381,342 +329,6 @@ This runs several thousand ticks and asserts the population survives and
 vocabulary agreement increases — i.e. that a language is actually emerging,
 not just that the window doesn't crash.
 
-## Bonus: a pseudo-3D view with optional mic/camera "sensors" (`main_vr.py`)
-
-```bash
-python main_vr.py
-```
-
-A separate, standalone pygame window with a classic "pseudo-3D driving
-game" ground-plane projection (things shrink and converge toward a
-horizon line as they get farther away) instead of the top-down view the
-other three renderers use. It reproduces the creatures' *look* - round
-yellow body, big eyes, blue lower half, all drawn as simple original
-shapes, not a copy of the show's or the licensed game's actual pixel
-art - over a basic sky/sun/hills/grass landscape.
-
-This is **not** real VR: no headset, no stereoscopic or WebXR/OpenXR
-output, nothing here targets or was tested with any VR hardware. It's a
-2D screen trick that reads as roughly 3D.
-
-Unlike a static demo, this runs a real `simulation.py` `World` - the
-creatures here are the genuine evolving population, and the colored ring
-around one is its actual current signal, same meaning as every other
-renderer. It starts with exactly **one** creature, not hatched yet - it
-sits on screen as a speckled egg. Left-click it a few times to crack it
-open (the HUD counts the clicks); nothing in the world moves or steps
-until it hatches.
-Once hatched, `LEFT`/`RIGHT` pans the view (or left-click and drag with
-the mouse), the scroll wheel zooms in/out, `SPACE` pauses, `UP`/`DOWN`
-change speed, `W` forces the next weather, `S` the next season, `R` resets
-back to a fresh egg, `ESC` quits. Everything
-you *do* to the creatures is driven from a **right-click context menu**
-(there's no on-screen panel of buttons).
-
-Press **`V`** to flip the whole thing to a **flat top-down 2D view** of
-the same world, in the spirit of `main.py`: the field seen from straight
-above, food as green dots, each creature a body dot wearing its
-token-colour ring (same evolved-signal meaning as always) plus a faint
-outer halo in its current emotion's colour (there's no face to read from
-overhead). Hatching eggs and the right-click action menu work exactly the
-same in 2D - only the camera changed. `V` again flips back to 3D.
-
-The sky is alive too. The world cycles through four kinds of **weather**
-(clear -> cloudy -> rain -> storm) and four **seasons** (spring -> summer
--> autumn -> winter), both drifting on their own - the weather shifts
-every minute or two, and each full in-game day turns the season - or press
-**`W`** to force the next weather and **`S`** the next season. Neither is
-only cosmetic:
-
-- **Cloud cover dims the daylight** and hides the sun and moon, so a storm
-  noon is genuinely darker than a clear one.
-- **Rain washes the creatures** (their Wash meter climbs by itself) and
-  **waters the ground** so extra food sprouts.
-- A **storm** flashes lightning across the whole field and **frightens
-  every creature at once** - their faces turn fearful and the population
-  whimpers (real pain from fire or the knife still wins over storm-fear).
-- **Spring** is abundant, growing extra food on its own even in clear
-  weather; **autumn** rusts the foliage; **winter** is harsh - the cold
-  slowly **drains the energy** of every awake creature (dormant eggs are
-  spared), snow falls instead of rain, the river freezes over, and the
-  whole world takes on a pale, icy tint.
-
-Summer in clear weather is the neutral baseline that looks exactly like
-the scene always has.
-
-**Right-click a creature** and a small text menu opens on it with its
-care actions - **Feed**, **Wash**, **Play** - each labelled with that
-need's current level. Wash and Play are cosmetic timers that drain
-slowly and are topped back up by picking their row. Hunger is the real
-thing: its meter mirrors real energy, so it rises whenever a creature
-eats - **the food growing on the ground feeds them** exactly as much as
-a manual Feed from the menu (both move the same energy), and the Feed
-row shows the clicked creature's own energy. Neglect the needs long
-enough and the creatures' faces turn visibly sad.
-
-Every act of care answers with a **little animation** over the creature,
-so you can see what you did at a glance: **Feed** drops an apple that
-lands and bursts into crumbs and a green spark, **Wash** sends
-translucent soap bubbles rising off its head, and **Play** fans a small
-burst of coloured stars around it. The same animation plays no matter
-where the care came from - the right-click menu, the `TAB` care list, or
-answering a summon bubble.
-
-**Right-click bare ground** instead and the only action offered is **Add
-an egg**, which adds a new creature near the current population. It's
-shown disabled while an egg is already waiting to hatch - a new egg can
-never appear on top of an unhatched one, so the third egg can't be laid
-until the first two have cracked open. The lone starting creature is
-deliberately unable to reproduce on its own, no matter how much energy it
-has - the population can only grow past one this way. Once there are two or more, reproduction (pairing and budding
-both) becomes fully automatic exactly like the other renderers. Every
-creature born - through the menu or through ordinary reproduction -
-starts life as an egg at its birth position and stays **completely
-inert** - frozen, so it doesn't move, eat, reproduce, age or even count
-toward the population - until it hatches. The HUD shows how many eggs are
-waiting.
-
-Only the **first two eggs are hatched by hand**: the starting egg is
-egg #1 and the first creature born after it is egg #2 - both crack open
-one step per click and just sit there until you find them and click them
-open. **From the third egg on, every egg cracks open on its own** - it
-still goes through the exact same six-crack hatching sequence, one crack
-at a time, so it visibly hatches the same way; you just no longer have to
-click it. (Resetting with `R` starts the count over, so the next two eggs
-are hand-hatched again.)
-
-The same creature menu's last three rows are the episode's dark side,
-included on purpose: **Set on fire**, **Stab** and **Crush with a rock**
-(marked out in red). Stabbing makes the creature **agonize** - it
-collapses and writhes where it stands, screaming - and only then dies,
-leaving a blood mark that fades from the grass. Setting it on fire makes
-it **scream and bolt in panic**, burning, for a second or two before it
-dies where it stops, leaving a scorch mark. The **rock** is the sudden
-one - it crushes the creature dead on the spot (the show's accidental
-rock death), leaving a rock mark. All three finish through the same code
-path as a natural death, so the family tree and death count stay honest
-about what you did - and every creature near enough to **witness** it
-learns to fear you (the others remember). Creatures still waiting inside their birth
-egg can't be targeted, only ones you've already hatched - and killing
-the population back down to one re-blocks reproduction until you add
-someone new, exactly like at the start.
-
-These creatures are meant to read as sentient beings, not dots, so they
-**feel** what happens - to themselves and to one another. Every hatched
-creature carries an emotion, worked out each frame from its situation,
-and wears it on its face: **pain** (a screwed-shut, screaming face) when
-it is itself burning or under the knife; **fear** (wide eyes, a small
-round mouth) when it can see another creature in agony nearby - and it
-flees the sight, out of empathy; **sadness** (a downturned mouth and a
-tear) where a companion has just died, which the survivors nearby grieve
-for a while, or when its own needs are neglected; and plain **joy** (a
-smile, happy eyes) when it is safe and not alone. The whole population
-has a voice to match: a strident **scream** rises whenever anyone is in
-pain, a lower frightened **whimper** while others are merely afraid, and
-quiet otherwise (`M` mutes it along with everything else). None of this
-touches the evolutionary simulation's own logic - it's a feeling,
-expressive layer laid over the real creatures.
-
-**And they learn.** On top of the evolved genome, every creature in the
-VR world carries a small learned *mind* - a reward-modulated model that
-works out, from its own experience **and by watching the others**, how to
-feel about **you**: the player's hand, which is simply the cursor's
-position in the world.
-
-- **Feed** a creature (or wash/play with it) and it learns your hand is
-  worth **approaching**; **set it on fire or stab it** and it - plus every
-  creature close enough to **witness** it - learns to **flee** your hand.
-- Nothing is scripted: the sign of the reaction is *discovered* from the
-  sign of what actually happened. An eligibility trace ties each lesson to
-  the hand only for the moments the hand was actually near, so credit lands
-  where it belongs.
-- It is **fully two-way and retroactive** - a creature you once terrorised
-  can be **won back** with enough kindness, and a trusted one turns fearful
-  the moment you betray it.
-- It is not genetic, yet a newborn **inherits a blend of its parents'
-  learned feelings**, so a family's lessons **persist and compound across
-  generations** while selection keeps the well-adapted ones. Play long
-  enough and the whole flock has visibly come to trust or dread you -
-  fleeing your cursor, or crowding toward it - **without any of it being
-  programmed**.
-
-Right-click a creature to read how it feels about you; the HUD shows the
-flock's average disposition, so you can watch it shift over a session.
-This whole system lives behind `simulation.py`'s opt-in `learning` flag
-(on only in the VR view), so `main.py` / `main_tui.py` / `main_web.py`
-behave exactly as before.
-
-**The creatures summon you.** In the spirit of the real Thronglets game,
-you don't just reach in - a creature whose needs run low (hunger, which is
-real energy / clean / joy) raises a little **bubble over its head** and
-calls you. **Left-click it to answer** that need; the kindness teaches it
-to trust you. Clicking a creature also opens a small **learning window** -
-a meta, programming-style read-out of what it feels about you, its current
-need, and the lesson it has drawn. And **a flock that isn't feeling well
-enough won't breed**: while the population's average wellbeing sits below a
-threshold, reproduction pauses until you care for them - neglect literally
-halts new life.
-
-Press **`TAB`** to open a **care list** side panel (same look as the
-learning window): it lists every creature that currently needs looking
-after and gives you a clickable button per unmet need (Feed / Wash /
-Play), so you can answer them straight from the list instead of hunting
-each one down in the field.
-
-Standing still doesn't mean frozen: each creature blinks on its own
-schedule and wanders a couple of pixels in place between simulation
-steps, purely cosmetic idle motion meant to make it read as alive rather
-than a static sprite sitting on the grass.
-
-By default the whole population sounds as a gentle chorus of its own
-evolved signals - but struck as an **arpeggio, not a chord**: each
-colour currently in use rings its note in turn, one at a time on a slow
-rolling cycle, instead of all droning together. The token frequencies
-are a pentatonic scale, so spread out in time like a wind chime they
-ring as shifting harmony rather than a wall of sound. Press `G` to turn
-that off and hear only individual creatures.
-Moving the cursor onto a creature strikes its evolved signal **once** - a
-single short note the moment you touch it, not a tone droned for as long
-as you hover; slide onto another creature and that one sounds. It's the
-same "listen to one creature" idea as `main.py`/`main_web.py`, but
-edge-triggered and adapted for a 3D view: "closest to the cursor" is
-judged by *screen* position rather than world position, since depth
-already changes how big and how far apart things look. Press `M` to mute
-everything.
-
-The background is a bit more filled in now too, and reads coherently
-back to front the way a real landscape would: a jagged rocky mountain
-range spans the *entire* horizon as the true back of the world (not an
-isolated outcrop), a dense forest runs edge to edge at middle distance
-in front of it, and the open plain where the population actually lives has just a
-handful of trees standing on their own near the camera, plus scattered
-boulders. Trees tower several times a creature's height rather than
-standing barely taller than one, and rocks read as boulders instead of
-pebbles. A river winds across the field toward the camera - a muddy
-shore, a darker deep-water band, a lighter shallow center, and a couple
-of softly drifting sparkle lines, rather than a single flat-colored
-ribbon. Its source sits at the horizon line itself, glued under the
-green foothill band without overlapping it, so the water emerges from
-beneath the hills and threads down through the forest toward the plain -
-and the trees make room for its bed, none ever stands in the water.
-Trees and rocks are depth-sorted together with the
-creatures, so a creature correctly stands in front of a
-nearby tree or disappears behind a farther one instead of scenery and
-population overlapping like two unrelated layers, and they pan with the
-view along with everything else.
-
-Every new game gets its own landscape - a fresh launch, or pressing `R`,
-regenerates the tree/rock/grass placement, the hill silhouette, and
-where the river sits, all drawn from a random seed. That's deliberate:
-`generate_landscape()` takes an optional seed, so a *specific* layout
-can be reproduced later - not wired up to anything yet, but there so a
-future save/load feature can restore a saved game's exact terrain
-instead of randomizing over it.
-
-Lighting is faked rather than simulated in real 3D, but tracks the sun
-and moon anyway: shadows stretch and swing around over the course of the
-day - short and centered under everything at solar/lunar noon, long and
-cast to one side near sunrise and sunset. The ground itself is scattered
-with small grass-tuft marks instead of being one flat color band, for a
-bit of texture instead of a perfectly uniform field.
-
-Scrolling zooms in and out on that landscape, Minecraft-style: it
-magnifies the whole scene around a fixed point on the horizon instead of
-moving the camera forward, so every distance keeps the same size ratio
-to every other distance as you zoom - nothing gets distorted, it's
-purely "closer/farther," with proportions preserved the whole way.
-
-The sky runs its own day/night cycle the whole time (a full loop every
-24 real minutes - one in-game hour per real minute - running even before
-the egg hatches) - the sun and moon
-arc across the sky on opposite halves of the loop, never both up at once,
-with a warm sunrise/sunset tint at each crossing. Sky, hills, ground, grid,
-and trees all blend smoothly between their day and night colors, stars
-fade in once the sun is down, and a soft blue wash settles over the whole
-scene (population included) as it gets dark. It's purely atmospheric -
-doesn't change how anything behaves, just how it looks.
-
-**Optional sensors** (loosely inspired by the show's idea of a
-camera/microphone giving the Thronglets an outside signal to react to):
-press `A` to turn on the microphone, `C` for the webcam. When either
-picks up something loud or something moving, a red alert flashes across
-the screen - purely visual, cooldown-gated so a sustained noise doesn't
-strobe. This version of the game has **no predators at all** (the world
-is a safe one - the population grows or starves, it never gets hunted),
-so unlike the other renderers the alert deliberately leaves the
-simulation untouched. **Both are off by default** - nothing is captured unless
-you explicitly press the key, and the HUD always shows `mic: ON/off` and
-`camera: ON/off` so it's never listening silently. `[`/`]` lower/raise how
-loud or how much motion it takes to trigger - there's no way to calibrate
-this from a container with no microphone or camera, so treat the default
-as a starting point and tune it once you're on a real machine. If the
-required library isn't installed, or there's no hardware, or permission
-is denied, that sensor just reports `unavailable` - the game never
-crashes over something this optional.
-
-The sensors need two extra packages the core game doesn't:
-
-```bash
-pip install -r requirements-vr.txt
-```
-
-(`sounddevice` for the microphone, `opencv-python-headless` for the
-webcam.) On Linux, `sounddevice` also needs the system PortAudio library
-(e.g. `apt install portaudio19-dev`) - without it, the import itself
-fails and the mic just reports unavailable, same as any other missing
-piece.
-
-Once hatched, everything you do to the creatures is driven from a
-**right-click context menu** rather than an always-visible panel.
-Right-clicking a creature opens a small text menu on it with three care
-actions - Feed, Wash, Play - each labelled with that need's current
-level. Wash and Play are cosmetic timers, local to this window (about
-two minutes from full to empty if ignored; picking their row refills
-them). Hunger is the real thing: its meter mirrors real `simulation.py`
-energy - the same field the other renderers read from - so it rises
-whenever a creature eats, whether that's ground food it found on its own
-or a manual Feed from the menu (both move the same energy), and the Feed
-row shows the clicked creature's own energy. Neglect the needs long
-enough and the creatures' faces turn visibly sad.
-Right-clicking bare ground instead offers a single action, Add an egg,
-which adds a brand-new creature as another egg to go track down and
-hatch - also the *only* way past a single-creature population (see
-above).
-
-## Bonus: a native pixel-art view (`main_pixel.py`)
-
-```
-python main_pixel.py
-```
-
-A separate renderer that draws the same world as **real pixel art**. The
-whole scene is composed on a tiny low-resolution canvas with a small fixed
-palette and no anti-aliasing, then blown up to the window with
-nearest-neighbour scaling, so every pixel stays hard and square - genuine
-pixel art drawn on the grid, not a photo run through a pixelate filter.
-
-It's built the way a pixel artist layers a parallax backdrop, back to
-front - each layer is its own function: a banded sky, a sun/moon that
-tracks a day/night arc (stars come out at night), a snow-capped mountain
-skyline, a forest band, the grassy plain, a meandering river, foreground
-trees and rocks, then the creatures and food. The population is a real
-`simulation.py` World (no predators), stepped every frame and projected
-into the same pseudo-3D ground plane, depth-sorted so nearer things cover
-farther ones.
-
-In the spirit of the real Thronglets game, **you don't grab a creature -
-it summons you.** A creature that needs something raises a little bubble
-over its head (food / soap / toy); **click it to answer** (feed / wash /
-play). Answering is a kindness, so it - and the ones watching - learn to
-trust you (the same learning system as the VR view). Clicking a creature
-also opens a small **learning window**: a meta "programming" panel showing
-what that creature has come to feel about you and the lesson it has drawn
-("you care for me -> come closer" / "you hurt us -> keep away").
-
-Controls: `LEFT CLICK` answer a summoning creature + inspect it, `SPACE`
-pause, `LEFT`/`RIGHT` pan, `UP`/`DOWN` speed, `N` drop food, `R` reset,
-`ESC` quit.
-
 ## Bonus: a *true* 3D proof-of-concept (`main_gl.py`)
 
 ```
@@ -724,9 +336,8 @@ pip install moderngl        # only needed for this renderer
 python main_gl.py
 ```
 
-Every other view is 2D - even `main_vr.py` is a *pseudo*-3D trick (flat
-shapes projected onto a fake ground plane). `main_gl.py` is the real
-thing: an **OpenGL** scene with a perspective camera you can orbit, a
+The other renderers are 2D. `main_gl.py` is the real thing: an **OpenGL**
+scene with a perspective camera you can orbit, a
 **procedural mountain terrain** (rolling valley, distant massifs, and a
 lake carved right into the height field with an animated water surface),
 three-dimensional trees and rocks that sit on the slopes, and the
@@ -836,13 +447,12 @@ from it.
 
 `train_language.py` always finishes by writing `language_model.json` (see
 `--export`) - a tiny, PyTorch-free lookup table (which token each state
-maps to, and vice versa) baked out of the trained networks. All three
+maps to, and vice versa) baked out of the trained networks. Both
 renderers can start a population already speaking that clean vocabulary,
 with `--language`:
 
 ```bash
 python main.py            --language language_model.json
-python main_tui.py        --language language_model.json
 python main_web.py        --language language_model.json
 ```
 
@@ -933,14 +543,11 @@ sometimes resolve itself over further generations - and sometimes doesn't.
 
 This was built in a container without a display. The mechanics are verified
 via `test_smoke.py` (population survives, vocabulary converges across
-multiple random seeds); `main_tui.py`'s startup prompt, n/p quick-place keys,
-cursor movement, manual placement, and the paginated in-game notice were
-all driven end to end inside a real pseudo-terminal (read back through a
-VT100 emulator) — including on a genuinely small 24-row terminal, which is
-what caught the notice screen needing pagination in the first place (it
-silently ran off the bottom of a normal-sized terminal otherwise), and
-`main_web.py`'s start screen, n/p keys, predator count, left/right-click-to-place, and
-notice modal were all confirmed working end to end in a real headless
-browser. `main.py`'s pygame window was exercised headlessly (SDL's dummy
-driver) to confirm the new logic doesn't crash, but hasn't been eyeballed
-live — worth a quick visual check the first time you run it locally.
+multiple random seeds); `main_web.py`'s start screen, n/p keys, predator
+count, left/right-click-to-place, and notice modal were all confirmed
+working end to end in a real headless browser. `main.py`'s pygame window
+was exercised headlessly (SDL's dummy driver) to confirm the logic doesn't
+crash, but hasn't been eyeballed live — worth a quick visual check the
+first time you run it locally. `main_gl.py`'s scene is rendered off-screen
+through Mesa's software OpenGL (llvmpipe under a virtual framebuffer) to
+check the look across seasons and weather.
