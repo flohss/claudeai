@@ -445,9 +445,17 @@ both) becomes fully automatic exactly like the other renderers. Every
 creature born - through the menu or through ordinary reproduction -
 starts life as an egg at its birth position and stays **completely
 inert** - frozen, so it doesn't move, eat, reproduce, age or even count
-toward the population - until you find it and click it open. Only
-hatching wakes it up. The HUD shows how many eggs are waiting; an
-unhatched one just sits there for as long as you leave it.
+toward the population - until it hatches. The HUD shows how many eggs are
+waiting.
+
+Only the **first two eggs are hatched by hand**: the starting egg is
+egg #1 and the first creature born after it is egg #2 - both crack open
+one step per click and just sit there until you find them and click them
+open. **From the third egg on, every egg cracks open on its own** - it
+still goes through the exact same six-crack hatching sequence, one crack
+at a time, so it visibly hatches the same way; you just no longer have to
+click it. (Resetting with `R` starts the count over, so the next two eggs
+are hand-hatched again.)
 
 The same creature menu's last two rows are the episode's dark side,
 included on purpose: **Set on fire** and **Stab** (marked out in red).

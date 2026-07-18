@@ -32,10 +32,18 @@ else in the world moves or steps until it hatches.
 Every creature born afterward, through reproduction, gets the same
 treatment: it starts life as an egg at its birth position and stays
 completely inert - frozen, so it doesn't move, eat, reproduce, age or
-even count toward the population - until you go find it and click it
-open too (BirthEggs, backed by the World's dormant set). Only when it
-hatches does it wake up and start living. An unhatched egg just sits
-there, patiently, for as long as you leave it.
+even count toward the population (BirthEggs, backed by the World's
+dormant set). Only when it hatches does it wake up and start living.
+
+Only the first two eggs are hatched by hand. The starting egg is egg #1
+and the first creature born after it is egg #2 - both crack open one
+step per click, and just sit there patiently until you go find them and
+click them open. From the third egg on, every new egg cracks open on its
+own instead: it still goes through the exact same six-crack hatching
+sequence, one crack every AUTO_HATCH_SECONDS_PER_CRACK seconds, so it
+visibly hatches the same way - you just no longer have to click it (a
+click on a self-hatching egg is a harmless no-op). Resetting the world
+starts the count over, so the next two eggs are hand-hatched again.
 
 Once hatched, everything you do to the creatures is driven from a
 right-click context menu (there is no on-screen panel of buttons). Right-
@@ -376,6 +384,13 @@ ALERT_COOLDOWN = 4.0    # seconds before another alert can trigger
 DEFAULT_ALERT_THRESHOLD = 0.5
 
 EGG_CLICKS_NEEDED = 6
+# The first two eggs overall (the starting egg, then the first birth egg)
+# are hatched by hand, one crack per click. From the third egg on, a birth
+# egg cracks open on its own, gaining one crack every this-many seconds
+# until all EGG_CLICKS_NEEDED have shown - the same six-stage sequence a
+# hand-hatched egg goes through, just driven by a timer instead of clicks.
+EGGS_HATCHED_BY_HAND = 2
+AUTO_HATCH_SECONDS_PER_CRACK = 0.6
 EGG_STAGE_X = 0.0
 EGG_STAGE_Z = 0.88
 EGG_COLOR = (240, 232, 205)
@@ -846,13 +861,42 @@ class BirthEggs:
     it's still an egg it is kept completely inert - frozen via the
     World's dormant set, so it doesn't move, eat, reproduce, age or count
     toward the population - and it doesn't render, sound, or otherwise
-    reveal itself as a creature until enough clicks land on it, mirroring
-    the very first hatch. Only when the player cracks it open does it wake
-    up and start living."""
+    reveal itself as a creature until it has cracked all the way open,
+    mirroring the very first hatch.
+
+    Only the first two eggs overall are hatched by hand: the starting egg
+    (handled by EggState) is egg #1, the first birth egg is #2, and both
+    open one crack per click. From the third egg on (the second birth egg
+    and every later one) the egg cracks open by itself over a timer,
+    passing through the exact same six-crack sequence - the player no
+    longer has to click it, but it still visibly hatches crack by crack."""
 
     def __init__(self):
-        self.pending = {}   # creature id -> clicks so far
+        self.pending = {}   # creature id -> cracks so far
         self.known_ids = set()
+        self.created_count = 0   # birth eggs ever registered (egg #2, #3, ...)
+        self.auto_ids = set()    # pending eggs that hatch on their own
+        self.timers = {}         # auto egg id -> seconds toward the next crack
+
+    def _begin_pending(self, world, creature_id):
+        """Register a fresh birth egg as pending and frozen. Decides once,
+        from its overall position in the hatch order, whether it must be
+        clicked open (egg #2) or cracks open on its own (egg #3 onward)."""
+        self.created_count += 1
+        self.pending[creature_id] = 0
+        world.set_dormant(creature_id, True)
+        overall_index = 1 + self.created_count   # +1 for the starting egg
+        if overall_index > EGGS_HATCHED_BY_HAND:
+            self.auto_ids.add(creature_id)
+            self.timers[creature_id] = 0.0
+
+    def _clear(self, world, creature_id):
+        """Forget an egg's bookkeeping and wake its creature - used both
+        when it finishes hatching and when its creature dies first."""
+        self.pending.pop(creature_id, None)
+        self.auto_ids.discard(creature_id)
+        self.timers.pop(creature_id, None)
+        world.set_dormant(creature_id, False)
 
     def seed_known(self, world):
         """Call once, right when the very first egg hatches, so that
@@ -866,12 +910,10 @@ class BirthEggs:
         is frozen (dormant) until hatched."""
         current_ids = {c.id for c in world.creatures if c.alive}
         for cid in current_ids - self.known_ids:
-            self.pending[cid] = 0
-            world.set_dormant(cid, True)
+            self._begin_pending(world, cid)
         for cid in list(self.pending):
             if cid not in current_ids:
-                del self.pending[cid]
-                world.set_dormant(cid, False)
+                self._clear(world, cid)
         self.known_ids = current_ids
 
     def is_pending(self, creature_id):
@@ -881,16 +923,31 @@ class BirthEggs:
         """Immediately marks a creature (just created via the 'Add an
         egg' menu action) as a pending, frozen egg, bypassing sync()'s
         diff-based detection - and records its id as already-known so a
-        later sync() doesn't reset its click count back to 0."""
-        self.pending[creature_id] = 0
+        later sync() doesn't re-register it."""
+        self._begin_pending(world, creature_id)
         self.known_ids.add(creature_id)
-        world.set_dormant(creature_id, True)
+
+    def update(self, world, dt):
+        """Advance the self-hatching (auto) eggs: from the third egg on,
+        an egg gains one crack every AUTO_HATCH_SECONDS_PER_CRACK seconds,
+        the same crack sequence a hand-hatched egg goes through, and wakes
+        up once all EGG_CLICKS_NEEDED cracks have shown."""
+        for cid in list(self.auto_ids):
+            self.timers[cid] += dt
+            while cid in self.auto_ids and self.timers[cid] >= AUTO_HATCH_SECONDS_PER_CRACK:
+                self.timers[cid] -= AUTO_HATCH_SECONDS_PER_CRACK
+                self.pending[cid] += 1
+                if self.pending[cid] >= EGG_CLICKS_NEEDED:
+                    self._clear(world, cid)   # exits the while: cid leaves auto_ids
 
     def _register_hatch_click(self, creature_id, world):
+        # auto eggs open on their own timer; a click on one is consumed
+        # (so it isn't treated as a miss) but doesn't add a crack.
+        if creature_id in self.auto_ids:
+            return
         self.pending[creature_id] += 1
         if self.pending[creature_id] >= EGG_CLICKS_NEEDED:
-            del self.pending[creature_id]
-            world.set_dormant(creature_id, False)
+            self._clear(world, creature_id)
 
     def try_click(self, mx, my, world, pan_x, zoom=1.0):
         """Returns True if the click landed on a pending birth egg
@@ -2500,6 +2557,7 @@ def main():
                 needs.update(dt, world)
                 horror.update(world, dt)
                 climate.update(world, needs, dt)
+                birth_eggs.update(world, dt)   # self-hatching eggs (#3 on)
             needs_low = needs.lowest() < NEED_LOW_THRESHOLD
             sentience.update(world, horror, needs_low, birth_eggs, t, dt, paused,
                              storm=climate.is_storm())
