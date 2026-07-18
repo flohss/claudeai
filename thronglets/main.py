@@ -801,36 +801,49 @@ def init_sound():
     try:
         pygame.mixer.init(frequency=22050, size=-16, channels=2)
         sample_rate = pygame.mixer.get_init()[0]
-        tones = {token: _make_tone(freq, sample_rate) for token, freq in enumerate(TOKEN_FREQS) if token != 0}
+        tones = {token: _make_tone(freq, sample_rate, decay=True)
+                 for token, freq in enumerate(TOKEN_FREQS) if token != 0}
         return tones, pygame.mixer.Channel(0)
     except pygame.error:
         return None, None
 
 
-def _make_tone(freq, sample_rate, duration=0.6, volume=0.25):
-    """A short sine-wave tone with a fade in/out envelope - looped by the
-    caller, so the fades also soften the seam where the loop repeats."""
+def _make_tone(freq, sample_rate, duration=0.6, volume=0.25, decay=False):
+    """A short sine-wave tone. By default it has a symmetric fade in/out
+    envelope meant to be looped (the fades soften the loop seam). With
+    decay=True it gets a quick attack and a long ringing fall-off to
+    silence - a struck, bell-like note played once, not held (as in the VR
+    view)."""
     n = int(sample_rate * duration)
     t = np.linspace(0, duration, n, endpoint=False)
     wave = np.sin(2 * np.pi * freq * t)
-    fade = min(n // 20, 400)
-    envelope = np.ones(n)
-    envelope[:fade] = np.linspace(0, 1, fade)
-    envelope[-fade:] = np.linspace(1, 0, fade)
+    if decay:
+        attack = max(1, n // 40)
+        envelope = np.concatenate([
+            np.linspace(0, 1, attack),
+            np.linspace(1, 0, n - attack) ** 1.6,   # a smooth, ringing fall-off
+        ])
+    else:
+        fade = min(n // 20, 400)
+        envelope = np.ones(n)
+        envelope[:fade] = np.linspace(0, 1, fade)
+        envelope[-fade:] = np.linspace(1, 0, fade)
     wave = (wave * envelope * volume * 32767).astype(np.int16)
     stereo = np.column_stack([wave, wave])
     return pygame.sndarray.make_sound(np.ascontiguousarray(stereo))
 
 
-def update_listening(channel, tones, world, mouse_pos, hud_h, muted, listening_token):
-    """Plays a sustained tone for whichever living creature is closest to the
-    mouse, within LISTEN_RADIUS - a way to "listen in" on one creature's
-    signal instead of the whole population's noise. Returns the token now
-    playing (or None), so the caller can track it across frames without
-    re-querying the mixer every time."""
+def update_listening(channel, tones, world, mouse_pos, hud_h, muted, hovered_id):
+    """Strikes a creature's evolved signal once when the cursor moves ONTO
+    it - a single struck note, not a tone sustained for as long as you
+    hover (that constant drone was too much). Resting the cursor stays
+    silent; sliding onto a different creature strikes that one's note. Finds
+    the living creature nearest the mouse within LISTEN_RADIUS and returns
+    its id, so the caller can tell next frame when the hovered creature has
+    changed (an edge, not a hold)."""
     if channel is None:
         return None
-    target = None
+    target_id, target_token = None, 0
     if not muted and mouse_pos[1] > hud_h:
         wx, wy = mouse_pos[0] / SCALE_X, (mouse_pos[1] - hud_h) / SCALE_Y
         best_dist = LISTEN_RADIUS
@@ -840,13 +853,10 @@ def update_listening(channel, tones, world, mouse_pos, hud_h, muted, listening_t
             dist = ((c.pos[0] - wx) ** 2 + (c.pos[1] - wy) ** 2) ** 0.5
             if dist < best_dist:
                 best_dist = dist
-                target = c.token
-    if target != listening_token:
-        if target is None:
-            channel.stop()
-        else:
-            channel.play(tones[target], loops=-1)
-    return target
+                target_id, target_token = c.id, c.token
+    if target_id is not None and target_id != hovered_id:
+        channel.play(tones[target_token])
+    return target_id
 
 
 def draw(screen, font, world, paused, speed, mode, lang, expanded, trained=False, muted=False):
@@ -1643,7 +1653,7 @@ def main():
     speed = 1  # ticks per real second
     hud_expanded = False
     sound_muted = False
-    listening_token = None
+    hovered_id = None   # id of the creature the cursor is currently over
     tick_accumulator = 0.0
     running = True
 
@@ -1733,8 +1743,8 @@ def main():
         else:
             tick_accumulator = 0.0
 
-        listening_token = update_listening(sound_channel, tones, world, pygame.mouse.get_pos(),
-                                            HUD_H, sound_muted, listening_token)
+        hovered_id = update_listening(sound_channel, tones, world, pygame.mouse.get_pos(),
+                                       HUD_H, sound_muted, hovered_id)
 
         draw(screen, font, world, paused, speed, mode, lang, hud_expanded,
              trained=seed_genome is not None, muted=sound_muted)

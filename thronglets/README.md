@@ -112,12 +112,13 @@ if you just hit `ENTER` through all of them, and they stick for the whole run
 | right click   | place a predator                                              |
 | `ESC`         | quit                                                         |
 
-Move the mouse near a creature to hear it: a tone plays for whatever it's
-currently signaling (one fixed pitch per color, so alarm-call always
-sounds the same note wherever it comes from), and fades out as you move
-away or it falls silent. It's a way to listen to one creature at a time
-instead of the whole population's noise. If your machine has no audio
-device the game just runs silently - it never crashes over something
+Move the mouse **onto** a creature to hear it: a single struck, bell-like
+note plays once for whatever it's currently signaling (one fixed pitch per
+color, so alarm-call always sounds the same note wherever it comes from).
+Sliding onto another creature strikes that one's note; resting the cursor
+stays silent - a note per creature you touch, not a drone held for as long
+as you hover (the same behaviour as the VR view). If your machine has no
+audio device the game just runs silently - it never crashes over something
 this optional.
 
 `N`/`P`, and left/right click, all work the same whether the world is
