@@ -637,6 +637,28 @@ which adds a brand-new creature as another egg to go track down and
 hatch - also the *only* way past a single-creature population (see
 above).
 
+## Bonus: a native pixel-art view (`main_pixel.py`)
+
+```
+python main_pixel.py
+```
+
+A separate renderer that draws the same world as **real pixel art**. The
+whole scene is composed on a tiny low-resolution canvas with a small fixed
+palette and no anti-aliasing, then blown up to the window with
+nearest-neighbour scaling, so every pixel stays hard and square - genuine
+pixel art drawn on the grid, not a photo run through a pixelate filter.
+
+It's built the way a pixel artist layers a parallax backdrop, back to
+front - each layer is its own function: a banded sky, a sun/moon that
+tracks a day/night arc (stars come out at night), a snow-capped mountain
+skyline, a forest band, the grassy plain, a meandering river, foreground
+trees and rocks, then the creatures and food. The population is a real
+`simulation.py` World (no predators), stepped every frame and projected
+into the same pseudo-3D ground plane, depth-sorted so nearer things cover
+farther ones. Controls: `SPACE` pause, `LEFT`/`RIGHT` pan, `UP`/`DOWN`
+speed, `N` drop food, `R` reset, `ESC` quit.
+
 ## Where to take it next
 
 The simulation core (`simulation.py`) and renderer (`main.py`) are split on
