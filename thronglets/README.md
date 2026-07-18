@@ -390,7 +390,8 @@ open (the HUD counts the clicks); nothing in the world moves or steps
 until it hatches.
 Once hatched, `LEFT`/`RIGHT` pans the view (or left-click and drag with
 the mouse), the scroll wheel zooms in/out, `SPACE` pauses, `UP`/`DOWN`
-change speed, `R` resets back to a fresh egg, `ESC` quits. Everything
+change speed, `W` forces the next weather, `S` the next season, `R` resets
+back to a fresh egg, `ESC` quits. Everything
 you *do* to the creatures is driven from a **right-click context menu**
 (there's no on-screen panel of buttons).
 
@@ -401,6 +402,29 @@ token-colour ring (same evolved-signal meaning as always) plus a faint
 outer halo in its current emotion's colour (there's no face to read from
 overhead). Hatching eggs and the right-click action menu work exactly the
 same in 2D - only the camera changed. `V` again flips back to 3D.
+
+The sky is alive too. The world cycles through four kinds of **weather**
+(clear -> cloudy -> rain -> storm) and four **seasons** (spring -> summer
+-> autumn -> winter), both drifting on their own - the weather shifts
+every minute or two, and each full in-game day turns the season - or press
+**`W`** to force the next weather and **`S`** the next season. Neither is
+only cosmetic:
+
+- **Cloud cover dims the daylight** and hides the sun and moon, so a storm
+  noon is genuinely darker than a clear one.
+- **Rain washes the creatures** (their Wash meter climbs by itself) and
+  **waters the ground** so extra food sprouts.
+- A **storm** flashes lightning across the whole field and **frightens
+  every creature at once** - their faces turn fearful and the population
+  whimpers (real pain from fire or the knife still wins over storm-fear).
+- **Spring** is abundant, growing extra food on its own even in clear
+  weather; **autumn** rusts the foliage; **winter** is harsh - the cold
+  slowly **drains the energy** of every awake creature (dormant eggs are
+  spared), snow falls instead of rain, the river freezes over, and the
+  whole world takes on a pale, icy tint.
+
+Summer in clear weather is the neutral baseline that looks exactly like
+the scene always has.
 
 **Right-click a creature** and a small text menu opens on it with its
 care actions - **Feed**, **Wash**, **Play** - each labelled with that

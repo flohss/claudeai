@@ -146,6 +146,26 @@ forward, so every distance keeps the same size ratio to every other
 distance as you zoom - things get uniformly bigger or smaller, the
 perspective itself never distorts.
 
+The world also has a living sky. It runs through four kinds of weather -
+clear, cloudy, rain and storm - and four seasons - spring, summer, autumn
+and winter (see ClimateState). Both move on their own: the weather drifts
+to a new state every minute or two, and each full in-game day (the same
+24-minute day/night clock) turns the season over. Press W to force the
+next weather immediately, S the next season. Neither is only cosmetic -
+each has real consequences. Cloud cover dims the daylight (a storm noon is
+darker than a clear one) and hides the sun and moon behind the overcast.
+Rain washes the creatures clean (their Wash meter climbs by itself) and
+waters the ground so extra food sprouts; a storm adds lightning that
+flashes the whole field white, and the sight of it frightens every
+creature at once (their faces turn fearful and the population whimpers,
+though real pain from fire or the knife still wins over mere storm-fear).
+Spring is abundant and grows extra food on its own even in clear weather;
+autumn rusts the foliage; winter is harsh - the cold slowly drains the
+energy of every awake creature (dormant eggs are spared), snow falls
+instead of rain, the river freezes over, and the whole world takes on a
+pale, icy tint. Summer/clear is the neutral baseline that looks exactly
+like the scene always has.
+
 Press V to flip the whole thing to a flat, top-down 2D view of the same
 world, in the spirit of main.py: the field seen from straight above, with
 food as green dots and each creature a body dot wearing its token-colour
@@ -163,6 +183,8 @@ Controls:
   LEFT / RIGHT   pan the view with the keyboard
   SCROLL         zoom in / out (3D view)
   V              switch between the 3D view and a flat top-down 2D view
+  W              force the next weather (clear / cloudy / rain / storm)
+  S              force the next season (spring / summer / autumn / winter)
   SPACE          pause / resume
   UP / DOWN      simulation speed
   G              toggle the population chorus (on by default)
@@ -422,10 +444,47 @@ EMOTION_HALO = {
     "joy": (90, 220, 120),
 }
 
-# Bundles the three "how should this frame be projected/lit" values that
-# almost every draw_* function needs together, instead of three separate
-# parameters spreading through every signature.
-RenderCtx = namedtuple("RenderCtx", ["zoom", "shadow_dx", "shadow_len"])
+# Weather and seasons (ClimateState). W cycles the weather, S the
+# season; both also drift on their own - the weather changes naturally
+# every WEATHER_DRIFT_RANGE seconds, and each full in-game day (24 min)
+# turns the season. Weather dims the light (WEATHER_LIGHT multiplies the
+# day amount), seasons retint the landscape (SEASON_TINTS/LEAF_TINTS
+# blend over the computed day/night colours). Rain washes the creatures
+# and waters the ground (extra food), spring is abundant, winter cold
+# slowly drains real energy, and a storm frightens everyone.
+SEASONS = ("spring", "summer", "autumn", "winter")
+WEATHERS = ("clear", "cloudy", "rain", "storm")
+WEATHER_LIGHT = {"clear": 1.0, "cloudy": 0.8, "rain": 0.6, "storm": 0.45}
+SEASON_TINTS = {           # landscape tint: (colour, blend strength)
+    "spring": ((110, 205, 90), 0.20),
+    "summer": (None, 0.0),
+    "autumn": ((185, 125, 45), 0.35),
+    "winter": ((235, 240, 245), 0.60),
+}
+LEAF_TINTS = {             # tree canopies turn harder than the ground does
+    "spring": ((120, 215, 95), 0.35),
+    "summer": (None, 0.0),
+    "autumn": ((205, 110, 40), 0.75),
+    "winter": ((240, 244, 248), 0.80),
+}
+ICE_COLOR = (205, 225, 240)          # the river in winter
+WEATHER_DRIFT_RANGE = (60.0, 120.0)  # seconds between natural weather changes
+RAIN_WASH_PER_SECOND = 1.0 / 25.0    # rain refills the clean meter in ~25s
+RAIN_FOOD_INTERVAL = 6.0             # rain waters the ground: food every N s
+SPRING_FOOD_INTERVAL = 8.0           # spring abundance: extra food every N s
+WINTER_COLD_PER_SECOND = 0.05        # real energy drained per second of winter
+LIGHTNING_FLASH = 0.12               # seconds a lightning flash lights the sky
+CLOUD_COLOR = (222, 226, 230)
+STORM_CLOUD_COLOR = (88, 94, 104)
+RAIN_COLOR = (150, 180, 215)
+SNOW_COLOR = (245, 248, 252)
+
+# Bundles the "how should this frame be projected/lit/coloured" values
+# that almost every draw_* function needs together, instead of separate
+# parameters spreading through every signature. season/weather default
+# to the reference look, so existing callers are unchanged.
+RenderCtx = namedtuple("RenderCtx", ["zoom", "shadow_dx", "shadow_len", "season", "weather"],
+                       defaults=("summer", "clear"))
 DEFAULT_CTX = RenderCtx(zoom=1.0, shadow_dx=0.0, shadow_len=1.0)
 
 # A coherent back-to-front reading: mountains (the far hill ridge, see
@@ -499,6 +558,101 @@ _DEFAULT_LANDSCAPE = generate_landscape(seed=0)
 def lerp_color(c1, c2, t):
     t = max(0.0, min(1.0, t))
     return tuple(int(c1[i] + (c2[i] - c1[i]) * t) for i in range(3))
+
+
+def season_tint(color, season, tints=SEASON_TINTS):
+    """Blends an already day/night-resolved colour toward the season's
+    tint - summer is the untouched reference look."""
+    tint, strength = tints.get(season, (None, 0.0))
+    if tint is None or strength <= 0.0:
+        return color
+    return lerp_color(color, tint, strength)
+
+
+class ClimateState:
+    """The sky's moods: a weather (clear/cloudy/rain/storm) inside a
+    season (spring/summer/autumn/winter). W and S cycle them by hand;
+    left alone, the weather drifts naturally every minute or two and a
+    full in-game day turns the season. Each has real teeth, not just a
+    palette: rain washes the creatures (the clean meter refills) and
+    waters the ground (extra food grows), spring is abundant, winter
+    cold slowly drains real energy (food becomes survival), and a storm
+    frightens every creature caught out in it (see SentienceState).
+    In winter, rain falls as snow."""
+
+    def __init__(self, rng=None):
+        self.season = "summer"
+        self.weather = "clear"
+        self.rng = rng if rng is not None else random.Random()
+        self._weather_timer = self.rng.uniform(*WEATHER_DRIFT_RANGE)
+        self._season_clock = 0.0
+        self._rain_food_timer = 0.0
+        self._spring_food_timer = 0.0
+        self._flash_timer = self.rng.uniform(3.0, 8.0)
+        self.flash = 0.0
+
+    def cycle_weather(self):
+        self.weather = WEATHERS[(WEATHERS.index(self.weather) + 1) % len(WEATHERS)]
+        self._weather_timer = self.rng.uniform(*WEATHER_DRIFT_RANGE)
+
+    def cycle_season(self):
+        self.season = SEASONS[(SEASONS.index(self.season) + 1) % len(SEASONS)]
+        self._season_clock = 0.0   # a hand-turned season gets its full day
+
+    def light(self):
+        """How much of the sun/moon light gets through this weather."""
+        return WEATHER_LIGHT[self.weather]
+
+    def is_storm(self):
+        return self.weather == "storm"
+
+    def precipitation(self):
+        """What's falling right now: 'rain', 'snow' (winter rain), or None."""
+        if self.weather in ("rain", "storm"):
+            return "snow" if self.season == "winter" else "rain"
+        return None
+
+    def update(self, world, needs, dt):
+        """Advance drift timers and apply the climate's real effects -
+        call once per unpaused frame, once the world is running."""
+        # natural drift: the weather turns by itself now and then...
+        self._weather_timer -= dt
+        if self._weather_timer <= 0:
+            self.weather = self.rng.choice([w for w in WEATHERS if w != self.weather])
+            self._weather_timer = self.rng.uniform(*WEATHER_DRIFT_RANGE)
+        # ...and each full in-game day turns the season
+        self._season_clock += dt
+        if self._season_clock >= DAY_CYCLE_SECONDS:
+            self._season_clock -= DAY_CYCLE_SECONDS
+            self.season = SEASONS[(SEASONS.index(self.season) + 1) % len(SEASONS)]
+
+        # lightning punctuates a storm every few seconds
+        self.flash = max(0.0, self.flash - dt)
+        if self.weather == "storm":
+            self._flash_timer -= dt
+            if self._flash_timer <= 0:
+                self.flash = LIGHTNING_FLASH
+                self._flash_timer = self.rng.uniform(3.0, 8.0)
+
+        # rain washes the creatures and waters the ground
+        if self.weather in ("rain", "storm"):
+            needs.levels["clean"] = min(1.0, needs.levels["clean"] + RAIN_WASH_PER_SECOND * dt)
+            self._rain_food_timer += dt
+            if self._rain_food_timer >= RAIN_FOOD_INTERVAL:
+                self._rain_food_timer = 0.0
+                world.add_food(self.rng.uniform(0, WIDTH), self.rng.uniform(0, HEIGHT))
+
+        # spring: the ground simply gives more
+        if self.season == "spring":
+            self._spring_food_timer += dt
+            if self._spring_food_timer >= SPRING_FOOD_INTERVAL:
+                self._spring_food_timer = 0.0
+                world.add_food(self.rng.uniform(0, WIDTH), self.rng.uniform(0, HEIGHT))
+
+        # winter: the cold gnaws at everyone awake (eggs stay safe)
+        if self.season == "winter":
+            for c in world._alive():
+                c.energy = max(0.0, c.energy - WINTER_COLD_PER_SECOND * dt)
 
 
 def celestial_state(day_phase):
@@ -956,7 +1110,7 @@ class SentienceState:
         return {c.id for c in world.creatures if c.alive
                 and not (birth_eggs is not None and birth_eggs.is_pending(c.id))}
 
-    def update(self, world, horror, needs_low, birth_eggs, t, dt, paused):
+    def update(self, world, horror, needs_low, birth_eggs, t, dt, paused, storm=False):
         # 1. a creature that vanished since last frame just died - grieve
         #    the spot, so survivors nearby will feel it (skip ones still
         #    inside a birth egg, they never "appeared").
@@ -974,7 +1128,7 @@ class SentienceState:
         self.grief_marks = [g for g in self.grief_marks if g[2] > 0]
 
         # 3. how everyone feels, 4. how the population sounds
-        self.emotions = self._compute(world, horror, needs_low, birth_eggs)
+        self.emotions = self._compute(world, horror, needs_low, birth_eggs, storm)
         self.cry = self._dominant_cry()
 
         # 5. pain and fear move the body, not just the face
@@ -982,7 +1136,7 @@ class SentienceState:
             self._apply_panic(world, horror, t, dt)
         return self.emotions
 
-    def _compute(self, world, horror, needs_low, birth_eggs):
+    def _compute(self, world, horror, needs_low, birth_eggs, storm=False):
         alive = [c for c in world.creatures if c.alive
                  and not (birth_eggs is not None and birth_eggs.is_pending(c.id))]
         pain_pos = [c.pos for c in alive if horror is not None and horror.in_pain(c.id)]
@@ -991,6 +1145,8 @@ class SentienceState:
             if horror is not None and horror.in_pain(c.id):
                 emotions[c.id] = "pain"
             elif any(_dist2(c.pos, p) <= SENSE_RADIUS ** 2 for p in pain_pos if p is not c.pos):
+                emotions[c.id] = "fear"
+            elif storm:   # a storm frightens everyone caught out in it
                 emotions[c.id] = "fear"
             elif any(_dist2(c.pos, (g[0], g[1])) <= GRIEF_RADIUS ** 2 for g in self.grief_marks):
                 emotions[c.id] = "sad"
@@ -1418,10 +1574,17 @@ def project(x, z, zoom=1.0):
     return screen_x, screen_y, scale
 
 
-def draw_background(screen, day_phase, pan_x=0.0, zoom=1.0, landscape=None, t=0.0):
+def draw_background(screen, day_phase, pan_x=0.0, zoom=1.0, landscape=None, t=0.0,
+                    season="summer", weather="clear"):
     if landscape is None:
         landscape = _DEFAULT_LANDSCAPE
     sun_height, moon_height, day_amount, twilight_amount = celestial_state(day_phase)
+    # weather dims the daylight (a grey overcast, a dark storm) - the sky,
+    # hills and ground all read from these, so the whole world darkens
+    light = WEATHER_LIGHT.get(weather, 1.0)
+    day_amount *= light
+    twilight_amount *= light
+    overcast = weather in ("rain", "storm")
 
     sky_top = lerp_color(SKY_TOP_NIGHT, SKY_TOP_DAY, day_amount)
     sky_top = lerp_color(sky_top, SKY_TOP_TWILIGHT, twilight_amount * 0.5)
@@ -1437,14 +1600,15 @@ def draw_background(screen, day_phase, pan_x=0.0, zoom=1.0, landscape=None, t=0.
         pygame.draw.circle(screen, star_color,
                             (int(SCREEN_W * frac_x), int(HORIZON_Y * frac_y)), size)
 
-    if sun_height > 0:
+    # the sun and moon are hidden behind the clouds when it's raining/storming
+    if sun_height > 0 and not overcast:
         arc_t = day_phase / 0.5
         sun_pos = (int(SCREEN_W * (0.08 + 0.84 * arc_t)), int(HORIZON_Y * (1.0 - sun_height * 0.85)))
         near_horizon = 1.0 - sun_height
         core = lerp_color(SUN_COLOR, SUN_COLOR_HORIZON, near_horizon * 0.8)
         for r, color in ((54, lerp_color(core, sky_horizon, 0.5)), (38, core)):
             pygame.draw.circle(screen, color, sun_pos, r)
-    if moon_height > 0:
+    if moon_height > 0 and not overcast:
         arc_t = (day_phase - 0.5) / 0.5
         moon_pos = (int(SCREEN_W * (0.08 + 0.84 * arc_t)), int(HORIZON_Y * (1.0 - moon_height * 0.85)))
         pygame.draw.circle(screen, lerp_color(MOON_COLOR, sky_horizon, 0.5), moon_pos, 30)
@@ -1456,6 +1620,9 @@ def draw_background(screen, day_phase, pan_x=0.0, zoom=1.0, landscape=None, t=0.
     hill_near = lerp_color(HILL_NEAR_NIGHT, HILL_NEAR_DAY, day_amount)
     hill_far = lerp_color(hill_far, TWILIGHT_WARM, twilight_amount * 0.25)
     hill_near = lerp_color(hill_near, TWILIGHT_WARM, twilight_amount * 0.3)
+    # only the near, green foothills take the season tint; the far rocky
+    # range keeps its grey (a winter dusting reads on the near band).
+    hill_near = season_tint(hill_near, season)
 
     # The far layer is the true back of the landscape: a jagged mountain
     # range spanning the whole horizon, not gentle rolling hills - taller,
@@ -1482,6 +1649,8 @@ def draw_background(screen, day_phase, pan_x=0.0, zoom=1.0, landscape=None, t=0.
     ground_near = lerp_color(GROUND_NEAR_NIGHT, GROUND_NEAR_DAY, day_amount)
     ground_far = lerp_color(ground_far, TWILIGHT_WARM, twilight_amount * 0.2)
     ground_near = lerp_color(ground_near, TWILIGHT_WARM, twilight_amount * 0.2)
+    ground_far = season_tint(ground_far, season)
+    ground_near = season_tint(ground_near, season)
     for y in range(HORIZON_Y, SCREEN_H):
         frac = (y - HORIZON_Y) / (SCREEN_H - HORIZON_Y)
         pygame.draw.line(screen, lerp_color(ground_far, ground_near, frac), (0, y), (SCREEN_W, y))
@@ -1495,8 +1664,8 @@ def draw_background(screen, day_phase, pan_x=0.0, zoom=1.0, landscape=None, t=0.
         sx1, sy1, _ = project(x - pan_x, 1.0, zoom)
         pygame.draw.line(screen, grid_color, (sx0, sy0), (sx1, sy1), 1)
 
-    draw_grass_tufts(screen, landscape, pan_x, day_amount, zoom)
-    draw_river(screen, landscape.river_offset, pan_x, day_amount, zoom, t)
+    draw_grass_tufts(screen, landscape, pan_x, day_amount, zoom, season)
+    draw_river(screen, landscape.river_offset, pan_x, day_amount, zoom, t, season)
 
 
 def draw_ground_shadow(screen, sx, top_y, w, h, shadow_dx=0.0, shadow_len=1.0):
@@ -1528,6 +1697,9 @@ def draw_tree(screen, x, z, day_amount, ctx=DEFAULT_CTX):
 
     trunk_color = lerp_color(TREE_TRUNK_NIGHT, TREE_TRUNK_DAY, day_amount)
     leaves_color = lerp_color(TREE_LEAVES_NIGHT, TREE_LEAVES_DAY, day_amount)
+    # foliage turns with the season: green in spring/summer, rust in
+    # autumn, snow-laden in winter (a harder tint than the ground)
+    leaves_color = season_tint(leaves_color, ctx.season, LEAF_TINTS)
     pygame.draw.rect(screen, trunk_color, (sx - trunk_w / 2, sy - trunk_h, trunk_w, trunk_h))
     canopy_y = sy - trunk_h - leaf_r * 0.5
     # Three overlapping lobes instead of one circle - a fuller, less
@@ -1560,16 +1732,22 @@ def draw_rock(screen, x, z, day_amount, size=1.0, ctx=DEFAULT_CTX):
     pygame.draw.polygon(screen, shade, lit_face)
 
 
-def draw_river(screen, river_offset, pan_x, day_amount, zoom=1.0, t=0.0):
+def draw_river(screen, river_offset, pan_x, day_amount, zoom=1.0, t=0.0, season="summer"):
     """Three nested bands (muddy shore, deep water, a lighter shallow
     center) instead of one flat-colored ribbon, plus a couple of gently
     drifting sparkle lines instead of one static highlight - still cheap
     flat shapes, no per-pixel gradient, but reads as water rather than a
-    solid-colored road."""
+    solid-colored road. In winter it freezes over: pale ice, no sparkle."""
     deep = lerp_color(RIVER_COLOR_NIGHT, RIVER_COLOR_DAY, day_amount)
     shallow = lerp_color(RIVER_HIGHLIGHT_NIGHT, RIVER_HIGHLIGHT_DAY, day_amount)
     bank = lerp_color(RIVER_BANK_NIGHT, RIVER_BANK_DAY, day_amount)
     sparkle = lerp_color(RIVER_SPARKLE_NIGHT, RIVER_SPARKLE_DAY, day_amount)
+    frozen = season == "winter"
+    if frozen:
+        ice = lerp_color(ICE_COLOR, (120, 140, 160), 1.0 - day_amount)
+        deep = lerp_color(deep, ice, 0.75)
+        shallow = lerp_color(shallow, ice, 0.85)
+        bank = season_tint(bank, season)
 
     outer_left, outer_right = [], []
     left_bank, right_bank = [], []
@@ -1591,17 +1769,20 @@ def draw_river(screen, river_offset, pan_x, day_amount, zoom=1.0, t=0.0):
 
     # a couple of soft, slowly drifting sparkle lines rather than one
     # rigid highlight - suggests moving water without a real animation
-    for phase in (0.0, 2.4):
-        points = [(mx + math.sin(t * 0.8 + i * 0.9 + phase) * 3, my)
-                   for i, (mx, my) in enumerate(mid)]
-        pygame.draw.lines(screen, sparkle, False, points, 2)
+    # (frozen water doesn't shimmer, so skip them in winter)
+    if not frozen:
+        for phase in (0.0, 2.4):
+            points = [(mx + math.sin(t * 0.8 + i * 0.9 + phase) * 3, my)
+                       for i, (mx, my) in enumerate(mid)]
+            pygame.draw.lines(screen, sparkle, False, points, 2)
 
 
-def draw_grass_tufts(screen, landscape, pan_x, day_amount, zoom=1.0):
+def draw_grass_tufts(screen, landscape, pan_x, day_amount, zoom=1.0, season="summer"):
     """Small ground-texture marks scattered across the field so the grass
     reads as textured, mottled ground instead of a single flat color
     band - purely cosmetic, drawn on the ground plane like the grid."""
     base = lerp_color(GRASS_TUFT_COLOR_NIGHT, GRASS_TUFT_COLOR_DAY, day_amount)
+    base = season_tint(base, season)
     for x, z, shade in landscape.grass:
         sx, sy, scale = project(x - pan_x, z, zoom)
         r = max(1, int(3 * scale))
@@ -1618,6 +1799,62 @@ def draw_night_overlay(screen, day_amount):
     overlay = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
     overlay.fill((*NIGHT_OVERLAY_COLOR, int(95 * night_amount)))
     screen.blit(overlay, (0, 0))
+
+
+def draw_weather(screen, weather, season, t, flash=0.0, sky=True):
+    """Everything the weather adds over the finished scene: drifting
+    clouds (only where there's a sky, i.e. the 3D view), falling rain or
+    snow, a grey/blue veil that darkens rain and storm, and the white
+    stab of a lightning flash. Called last, over both views."""
+    if weather == "clear":
+        if flash > 0:   # (clear never flashes, but stay safe)
+            pass
+        return
+
+    storm = weather == "storm"
+
+    # drifting clouds - only over the 3D sky band
+    if sky and weather in ("cloudy", "rain", "storm"):
+        cloud = STORM_CLOUD_COLOR if storm else CLOUD_COLOR
+        alpha = 150 if storm else 90
+        surf = pygame.Surface((SCREEN_W, HORIZON_Y), pygame.SRCALPHA)
+        for i in range(6):
+            cx = int((i * 0.19 * SCREEN_W + t * (8 + i * 3)) % (SCREEN_W + 260)) - 130
+            cy = int(HORIZON_Y * (0.15 + 0.13 * (i % 3)))
+            for ox, oy, rw, rh in ((0, 0, 130, 46), (-70, 12, 90, 34), (75, 10, 95, 36)):
+                pygame.draw.ellipse(surf, (*cloud, alpha),
+                                    (cx + ox - rw // 2, cy + oy - rh // 2, rw, rh))
+        screen.blit(surf, (0, 0))
+
+    # the grey/blue veil that dims a wet sky (on top of the day/night one)
+    if weather in ("rain", "storm"):
+        veil = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
+        veil.fill((40, 46, 60, 70 if storm else 45))
+        screen.blit(veil, (0, 0))
+
+    precip = None
+    if weather in ("rain", "storm"):
+        precip = "snow" if season == "winter" else "rain"
+
+    if precip == "rain":
+        n = 130 if storm else 80
+        speed = 900 if storm else 650
+        length = 16 if storm else 12
+        for i in range(n):
+            x = (i * 137.5 + t * 40) % SCREEN_W
+            y = (i * 53.0 + t * speed) % SCREEN_H
+            pygame.draw.line(screen, RAIN_COLOR, (x, y), (x - 4, y + length), 1)
+    elif precip == "snow":
+        for i in range(90):
+            x = (i * 137.5 + math.sin(t * 1.5 + i) * 12) % SCREEN_W
+            y = (i * 61.0 + t * 60) % SCREEN_H
+            pygame.draw.circle(screen, SNOW_COLOR, (int(x), int(y)), 2)
+
+    # lightning: a brief full-screen white wash
+    if flash > 0:
+        bolt = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
+        bolt.fill((255, 255, 255, int(180 * min(1.0, flash / LIGHTNING_FLASH))))
+        screen.blit(bolt, (0, 0))
 
 
 def _creature_seed(creature_id):
@@ -1932,10 +2169,11 @@ def draw_scene(screen, world, pan_x, day_amount, landscape, distressed=False, t=
                      horror, emotion)
 
 
-def draw_background_2d(screen, day_amount):
+def draw_background_2d(screen, day_amount, season="summer"):
     """The flat overhead field: a single ground fill with a faint grid,
-    day/night blended - deliberately plain, like main.py's playfield."""
-    ground = lerp_color(GROUND_NEAR_NIGHT, GROUND_NEAR_DAY, day_amount)
+    day/night blended - deliberately plain, like main.py's playfield.
+    The ground also takes the season's tint."""
+    ground = season_tint(lerp_color(GROUND_NEAR_NIGHT, GROUND_NEAR_DAY, day_amount), season)
     screen.fill(ground)
     grid = lerp_color(GRID_COLOR_NIGHT, GRID_COLOR_DAY, day_amount)
     for gx in range(0, int(WIDTH) + 1, 20):
@@ -2025,7 +2263,7 @@ def sensor_label(enabled, available):
 
 def draw_status(screen, font, world, paused, speed, sensors, threshold, alert_flash,
                  hatched, egg_cracks, sound_muted=False, zoom=1.0, ambient_enabled=True, pending_eggs=0,
-                 top_down=False):
+                 top_down=False, season="summer", weather="clear"):
     if hatched:
         status = "PAUSED" if paused else f"x{speed}"
         view = "top-down 2D" if top_down else f"3D (zoom {zoom:.1f}x)"
@@ -2043,6 +2281,8 @@ def draw_status(screen, font, world, paused, speed, sensors, threshold, alert_fl
         f"[G] population chorus: {'on' if ambient_enabled else 'off'}   "
         f"[M] hover-listen sound: {'muted' if sound_muted else 'on'}",
     ]
+    if hatched:
+        lines.append(f"[S] season: {season}   [W] weather: {weather}")
     for i, text in enumerate(lines):
         screen.blit(font.render(text, True, (255, 255, 255)), (10, 10 + i * 22))
 
@@ -2056,8 +2296,8 @@ def draw_status(screen, font, world, paused, speed, sensors, threshold, alert_fl
         screen.blit(tip, (10, meter_y + 16))
 
     hint = font.render(
-        "V view   RIGHT-click menu   LEFT drag pan   SCROLL zoom   SPACE pause   UP/DOWN speed   "
-        "G chorus   M mute   R reset   ESC quit",
+        "V view   S season   W weather   RIGHT-click menu   LEFT drag pan   SCROLL zoom   "
+        "SPACE pause   UP/DOWN speed   G chorus   M mute   R reset   ESC quit",
         True, (255, 255, 255))
     screen.blit(hint, (10, SCREEN_H - 26))
 
@@ -2109,6 +2349,7 @@ def main():
     horror = HorrorState()
     sentience = SentienceState()
     ambient = AmbientChorus()
+    climate = ClimateState()
     menu = ContextMenu()
     hatch_flash = 0.0
     t = 0.0
@@ -2176,6 +2417,7 @@ def main():
                     horror = HorrorState()
                     sentience = SentienceState()
                     ambient = AmbientChorus()
+                    climate = ClimateState()
                     menu.close()
                     hatch_flash = 0.0
                     if sound_channel is not None:
@@ -2199,6 +2441,10 @@ def main():
                     sound_muted = not sound_muted
                 elif event.key == pygame.K_g:
                     ambient_enabled = not ambient_enabled
+                elif event.key == pygame.K_w:
+                    climate.cycle_weather()   # clear -> cloudy -> rain -> storm
+                elif event.key == pygame.K_s:
+                    climate.cycle_season()    # spring -> summer -> autumn -> winter
                 elif event.key == pygame.K_v:
                     top_down = not top_down   # switch 3D <-> flat overhead
                     menu.close()              # menu positions are view-specific
@@ -2253,8 +2499,10 @@ def main():
             if not paused:
                 needs.update(dt, world)
                 horror.update(world, dt)
+                climate.update(world, needs, dt)
             needs_low = needs.lowest() < NEED_LOW_THRESHOLD
-            sentience.update(world, horror, needs_low, birth_eggs, t, dt, paused)
+            sentience.update(world, horror, needs_low, birth_eggs, t, dt, paused,
+                             storm=climate.is_storm())
             listening_token = update_listening(sound_channel, tones, world, pygame.mouse.get_pos(),
                                                 pan_x, sound_muted, listening_token, zoom, birth_eggs)
             ambient.update(ambient_channels, ambient_tones, world, sound_muted, ambient_enabled, t, birth_eggs)
@@ -2268,14 +2516,18 @@ def main():
             ambient.update(ambient_channels, ambient_tones, world, True, ambient_enabled, t, birth_eggs)
 
         _, _, day_amount, _ = celestial_state(day_phase)
+        # weather dims the daylight everything (scene, overlays) reads from
+        eff_day = day_amount * climate.light()
         shadow_dx, shadow_len = light_direction(day_phase)
-        ctx = RenderCtx(zoom=zoom, shadow_dx=shadow_dx, shadow_len=shadow_len)
+        ctx = RenderCtx(zoom=zoom, shadow_dx=shadow_dx, shadow_len=shadow_len,
+                        season=climate.season, weather=climate.weather)
         if top_down:
             if egg.hatched:
-                draw_scene_2d(screen, world, day_amount, t=t, birth_eggs=birth_eggs,
+                draw_background_2d(screen, eff_day, climate.season)
+                draw_scene_2d(screen, world, eff_day, t=t, birth_eggs=birth_eggs,
                               horror=horror, sentience=sentience)
             else:
-                draw_background_2d(screen, day_amount)
+                draw_background_2d(screen, eff_day, climate.season)
                 # the lone starting egg, seen from above at its world spot
                 sx, sy = world_to_screen_2d(world.creatures[0].pos)
                 wob = int(math.sin(t * 14.0) * (2 + egg.cracks * 1.5))
@@ -2287,19 +2539,21 @@ def main():
                     if len(pts) >= 2:
                         pygame.draw.lines(screen, EGG_CRACK_COLOR, False, pts, 2)
         else:
-            draw_background(screen, day_phase, pan_x, zoom, landscape, t)
+            draw_background(screen, day_phase, pan_x, zoom, landscape, t,
+                            season=climate.season, weather=climate.weather)
             if egg.hatched:
-                draw_scene(screen, world, pan_x, day_amount, landscape,
+                draw_scene(screen, world, pan_x, eff_day, landscape,
                            distressed=needs.lowest() < NEED_LOW_THRESHOLD, t=t, ctx=ctx, birth_eggs=birth_eggs,
                            horror=horror, sentience=sentience)
             else:
-                draw_decor(screen, pan_x, day_amount, landscape, ctx)
+                draw_decor(screen, pan_x, eff_day, landscape, ctx)
                 wobble = math.sin(t * 14.0) * (2 + egg.cracks * 1.5)
                 draw_egg(screen, EGG_STAGE_X - pan_x, EGG_STAGE_Z, egg.cracks, wobble, egg.pulse, ctx)
-        draw_night_overlay(screen, day_amount)
+        draw_night_overlay(screen, eff_day)
+        draw_weather(screen, climate.weather, climate.season, t, climate.flash, sky=not top_down)
         draw_status(screen, font, world, paused, speed, sensors, threshold, alert.flash,
                     egg.hatched, egg.cracks, sound_muted, zoom, ambient_enabled, len(birth_eggs.pending),
-                    top_down=top_down)
+                    top_down=top_down, season=climate.season, weather=climate.weather)
         menu.draw(screen, font)
         if hatch_flash > 0:
             overlay = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
