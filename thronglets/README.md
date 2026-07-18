@@ -364,13 +364,22 @@ It now has a full **day/night cycle, seasons and weather**, driven by the
   falling around the camera; both overcast the sky and dim the light, and
   snow whitens the world further.
 
-It is still deliberately a **proof of concept**: no care menu or learning
-UI yet - the point is to show the world can look good in honest 3D before
-building it all out. `moderngl` is the one extra dependency and it is only
-imported when you run this file, so the other renderers keep working with
-just numpy + pygame.
+**It's interactive, and the flock learns who you are.** The mouse cursor is
+your hand (the opt-in `Mind` from `simulation.py`): **click a creature to
+select and feed it** - a kindness it, and the creatures near enough to
+witness it, learn to approach - and **right-click to startle it**, which
+teaches fear. A 2D HUD shows the season/weather/clock/population, the
+flock's overall feeling toward you (*"the flock trusts you (+45%)"*), and a
+panel for the selected creature (colour, generation, energy, and its own
+feeling). Little touches of life round it out: the canopies sway, the
+creatures bob, birds drift overhead, the lake mirrors the sky, shadows
+lengthen with the low sun, and a soft ambient drone plays.
 
-Controls: `LEFT-drag` orbits the camera, the scroll wheel zooms, `S`
+`moderngl` is the one extra dependency and it is only imported when you run
+this file, so the other renderers keep working with just numpy + pygame.
+
+Controls: `LEFT-drag` orbits the camera, the scroll wheel zooms, **left-
+click a creature** to select + feed it, **right-click** to startle it, `S`
 cycles the season, `W` cycles the weather, `T` toggles fast time, `ESC`
 quits. (On a machine without a GPU the scene still renders through Mesa's
 software rasterizer; `python main_gl.py --headless --phase=0.5

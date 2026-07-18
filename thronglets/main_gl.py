@@ -23,19 +23,25 @@ weather**, driven by the 3D lighting instead of flat tints:
     falling around the camera; both overcast the sky and dim the light,
     and snow whitens the world further.
 
-It is still deliberately a *proof of concept*, not a full port: there is
-no care menu or learning UI yet. The simulation itself is the real thing:
-it reuses simulation.World, so the spheres you see are real creatures at
-their real positions, stepped every frame.
+The creatures also learn who you are (the opt-in Mind in simulation.py):
+the mouse cursor is your hand - click a creature to feed it (kindness it
+learns to approach), right-click to startle it (harm it learns to flee) -
+and a 2D HUD shows the flock's feeling toward you plus a panel for the
+creature you've selected. The scene has small touches of life too: the
+canopies sway, the creatures bob, birds drift overhead, the lake reflects
+the sky, and shadows lengthen with the low sun. The simulation itself is
+the real thing: it reuses simulation.World, so the spheres you see are
+real creatures at their real positions, stepped every frame.
 
 Rendering goes through moderngl (OpenGL 3.3 core). On a normal machine
 pygame opens the window and moderngl draws into it; run it with:
 
     python3 main_gl.py
 
-Controls: LEFT-drag orbits the camera, scroll wheel zooms, S cycles the
-season, W cycles the weather, T toggles fast time, and the day/night
-cycle runs on its own. Press ESC or close the window to quit.
+Controls: LEFT-drag orbits the camera, scroll wheel zooms, left-CLICK a
+creature to select + feed it, right-click a creature to startle it, S
+cycles the season, W cycles the weather, T toggles fast time, and the
+day/night cycle runs on its own. Press ESC or close the window to quit.
 
 Because this environment has no GPU, the scene can also be rendered
 off-screen into a PNG for verification (render_headless), which is how the
@@ -48,7 +54,7 @@ import sys
 
 import numpy as np
 
-from simulation import WIDTH, HEIGHT, World
+from simulation import WIDTH, HEIGHT, MAX_ENERGY, World
 
 # The same 6-token palette as every other renderer, as 0..1 floats so a
 # creature's colour means the same thing here as in every other renderer.
@@ -64,6 +70,24 @@ TOKEN_COLORS_F = [(r / 255.0, g / 255.0, b / 255.0) for r, g, b in TOKEN_COLORS]
 
 TRUNK_COLOR = (0.38, 0.26, 0.15)
 ROCK_COLOR = (0.48, 0.48, 0.53)
+
+# Emergent learning (the opt-in Mind in simulation.py): the mouse cursor is
+# the player's hand. Left-click a creature to feed it (kindness it learns to
+# approach), right-click to startle it (harm it learns to flee).
+LEARN_FEED_REWARD = 1.0
+LEARN_SCARE_REWARD = -1.0
+
+
+def disposition_label(value):
+    if value >= 0.5:
+        return "adores you"
+    if value >= 0.15:
+        return "trusts you"
+    if value <= -0.5:
+        return "is terrified of you"
+    if value <= -0.15:
+        return "fears you"
+    return "is wary of you"
 FLOWER_COLORS = ((0.96, 0.34, 0.52), (0.98, 0.82, 0.24), (0.72, 0.46, 0.95))
 FLOWER_STEM_COLOR = (0.16, 0.42, 0.12)
 FLOWER_CENTER_COLOR = (0.99, 0.86, 0.30)   # sunny disc floret at the heart
@@ -564,6 +588,24 @@ out vec4 f_color;
 void main() { f_color = u_color; }
 """
 
+OVERLAY_VERT = """
+#version 330
+in vec2 in_pos;
+out vec2 v_uv;
+void main() {
+    v_uv = in_pos * 0.5 + 0.5;
+    gl_Position = vec4(in_pos, 0.0, 1.0);
+}
+"""
+
+OVERLAY_FRAG = """
+#version 330
+uniform sampler2D u_tex;
+in vec2 v_uv;
+out vec4 f_color;
+void main() { f_color = texture(u_tex, v_uv); }
+"""
+
 WATER_VERT = """
 #version 330
 uniform mat4 mvp;
@@ -585,6 +627,8 @@ uniform vec3 u_lightdir;
 uniform vec3 u_lightcol;
 uniform vec3 u_fogcol;
 uniform vec3 u_campos;
+uniform vec3 u_zenith;
+uniform vec3 u_horizon;
 uniform float u_fogdensity;
 uniform float u_time;
 in vec3 v_world;
@@ -603,6 +647,11 @@ void main() {
     float ripple = sin(v_world.x * 0.45 + v_world.z * 0.23 + u_time * 2.2) * 0.025;
     vec3 water = mix(vec3(0.06, 0.34, 0.42), vec3(0.008, 0.055, 0.14), depth);
     water += ripple;
+    // reflect the sky: more mirror-like at grazing angles (Fresnel), so the
+    // lake picks up the zenith/horizon colours of the current hour
+    float fres = pow(1.0 - clamp(view_dir.y, 0.0, 1.0), 3.0);
+    vec3 sky_refl = mix(u_horizon, u_zenith, clamp(view_dir.y * 1.3, 0.0, 1.0));
+    water = mix(water, sky_refl, fres * 0.65);
     water += u_lightcol * (0.16 + sparkle * 1.8);
     float dist = length(v_world - u_campos);
     float fog = clamp(1.0 - exp(-u_fogdensity * dist), 0.0, 1.0);
@@ -727,9 +776,14 @@ class Renderer:
         self.sky = ctx.program(vertex_shader=SKY_VERT, fragment_shader=SKY_FRAG)
         self.particle = ctx.program(vertex_shader=PARTICLE_VERT, fragment_shader=PARTICLE_FRAG)
         self.water = ctx.program(vertex_shader=WATER_VERT, fragment_shader=WATER_FRAG)
+        self.overlay = ctx.program(vertex_shader=OVERLAY_VERT, fragment_shader=OVERLAY_FRAG)
 
         self.trees, self.rocks, self.flowers, self.mushrooms = make_scene()
         self.precip = Precip()
+        self.selected_id = None            # creature the player clicked, or None
+        # a small flock of birds drifting through the sky (world-space points)
+        rng = np.random.default_rng(3)
+        self.birds = rng.random((14, 3)) * (260.0, 40.0, 260.0) - (130.0, -70.0, 130.0)
 
         self.vao_ground = self._vao(self.lit, mesh_terrain())
         self.vao_trunk = self._vao(self.lit, mesh_cylinder(0.6, 4.6, 14))
@@ -758,9 +812,17 @@ class Renderer:
         self.vao_sky = ctx.vertex_array(
             self.sky, [(ctx.buffer(sky_quad.tobytes()), "2f", "in_pos")])
 
-        # a reusable dynamic buffer for the weather particles
+        # a reusable dynamic buffer for the weather particles + birds
         self.pbuf = ctx.buffer(reserve=self.precip.n_rain * 2 * 3 * 4)
         self.vao_particle = ctx.vertex_array(self.particle, [(self.pbuf, "3f", "in_pos")])
+        self.bird_buf = ctx.buffer(reserve=len(self.birds) * 3 * 4)
+        self.vao_birds = ctx.vertex_array(self.particle, [(self.bird_buf, "3f", "in_pos")])
+
+        # a full-screen quad + RGBA texture for the 2D text overlay (HUD)
+        quad = np.array([-1, -1, 1, -1, -1, 1, 1, -1, 1, 1, -1, 1], dtype="f4")
+        self.vao_overlay = ctx.vertex_array(self.overlay, [(ctx.buffer(quad.tobytes()), "2f", "in_pos")])
+        self.overlay_tex = ctx.texture(size, 4)
+        self.overlay_tex.filter = (self.ctx.NEAREST, self.ctx.NEAREST)
 
     def _vao(self, prog, verts):
         vbo = self.ctx.buffer(verts.tobytes())
@@ -774,9 +836,16 @@ class Renderer:
         self.lit["u_snowcover"].value = 1.0 if env["season"] == "winter" else 0.0
         vao.render()
 
-    def _shadow(self, x, z, r, vp, strength):
-        # Keep the contact shadow at the same sampled elevation as its owner.
-        m = translate(x, float(terrain_height(x, z)) + 0.06, z) @ scale(r, 1.0, r)
+    def _shadow(self, x, z, r, vp, strength, sun):
+        # A directional shadow: offset away from the sun and stretched when the
+        # sun is low, so shadows lengthen at dawn/dusk like real ones. sun is
+        # the (normalised) direction TO the sun.
+        sx, sy, sz = sun
+        lift = max(sy, 0.08)
+        ox, oz = -sx / lift * r * 0.9, -sz / lift * r * 0.9
+        stretch = 1.0 + (1.0 - min(lift, 1.0)) * 1.6
+        m = (translate(x + ox, float(terrain_height(x, z)) + 0.06, z + oz)
+             @ scale(r * stretch, 1.0, r * stretch))
         self.shadow["mvp"].write(_bytes(vp @ m))
         self.shadow["u_color"].value = (0.05, 0.09, 0.05, strength)
         self.vao_disc.render()
@@ -789,7 +858,78 @@ class Renderer:
         self.water["u_fogcol"].value = env["fog_col"]
         self.water["u_fogdensity"].value = env["fog_density"]
         self.water["u_campos"].value = tuple(float(v) for v in eye)
+        self.water["u_zenith"].value = env["zenith"]
+        self.water["u_horizon"].value = env["horizon"]
         vao.render()
+
+    # -- interaction helpers ------------------------------------------------
+    def _camera_vp(self, camera):
+        eye, target = camera.eye_target()
+        view = look_at(eye, target, (0, 1, 0))
+        proj = perspective(52.0, self.size[0] / self.size[1], 1.0, 900.0)
+        return proj @ view, eye
+
+    def _mouse_ray(self, camera, mx, my):
+        """A world-space ray (origin, direction) through the pixel (mx, my)."""
+        vp, eye = self._camera_vp(camera)
+        inv = np.linalg.inv(vp.astype(np.float64))
+        ndc_x = 2.0 * mx / self.size[0] - 1.0
+        ndc_y = 1.0 - 2.0 * my / self.size[1]
+
+        def unproj(ndc_z):
+            p = inv @ np.array([ndc_x, ndc_y, ndc_z, 1.0])
+            return p[:3] / p[3]
+
+        near, far = unproj(-1.0), unproj(1.0)
+        d = far - near
+        return near, d / (np.linalg.norm(d) + 1e-9)
+
+    def creature_at(self, world, camera, mx, my):
+        """Return the creature whose body sphere the pixel ray hits first."""
+        o, d = self._mouse_ray(camera, mx, my)
+        best, best_t = None, 1e9
+        for c in world.creatures:
+            if not c.alive:
+                continue
+            cx, cz = world_to_scene(c.pos)
+            cy = float(terrain_height(cx, cz))
+            if float(terrain_water_mask(cx, cz)) > 0.5:
+                cy = WATER_LEVEL
+            centre = np.array([cx, cy + 2.1, cz])
+            oc = o - centre
+            b = np.dot(oc, d)
+            disc = b * b - (np.dot(oc, oc) - 2.6 * 2.6)
+            if disc < 0:
+                continue
+            t = -b - math.sqrt(disc)
+            if 0 < t < best_t:
+                best, best_t = c, t
+        return best
+
+    def hand_world(self, camera, mx, my):
+        """Where the mouse ray meets the ground - in simulation coordinates,
+        for World.hand_pos. None if it points at the sky."""
+        o, d = self._mouse_ray(camera, mx, my)
+        if abs(d[1]) < 1e-6:
+            return None
+        t = -o[1] / d[1]
+        if t <= 0:
+            return None
+        p = o + d * t
+        return (p[0] / WORLD_SCALE + WIDTH / 2.0, p[2] / WORLD_SCALE + HEIGHT / 2.0)
+
+    def draw_overlay(self, surface):
+        """Blit a pygame RGBA Surface over the finished 3D frame (the HUD)."""
+        import pygame
+        data = pygame.image.tostring(surface, "RGBA", True)
+        self.overlay_tex.write(data)
+        self.ctx.disable(self.ctx.DEPTH_TEST)
+        self.ctx.enable(self.ctx.BLEND)
+        self.overlay_tex.use(0)
+        self.overlay["u_tex"].value = 0
+        self.vao_overlay.render()
+        self.ctx.disable(self.ctx.BLEND)
+        self.ctx.enable(self.ctx.DEPTH_TEST)
 
     def render(self, world, camera, env, dt=0.0):
         ctx = self.ctx
@@ -834,18 +974,19 @@ class Renderer:
         ctx.depth_mask = True
         ctx.disable(ctx.BLEND)
 
-        # contact shadows (softer at night / under cloud)
+        # contact shadows, cast directionally from the sun (softer at night)
+        sun = tuple(float(v) for v in ld)
         sh = 0.10 + 0.20 * max(env["sun_h"], 0.0)
         ctx.enable(ctx.BLEND)
         ctx.depth_mask = False
         for x, z, s, _ in self.trees:
-            self._shadow(x, z, 3.6 * s, vp, sh)
+            self._shadow(x, z, 3.6 * s, vp, sh, sun)
         for (x, z, s, _) in self.rocks:
-            self._shadow(x, z, 3.0 * s, vp, sh)
+            self._shadow(x, z, 3.0 * s, vp, sh, sun)
         for c in world.creatures:
             if c.alive:
                 cx, cz = world_to_scene(c.pos)
-                self._shadow(cx, cz, 2.6, vp, sh)
+                self._shadow(cx, cz, 2.6, vp, sh, sun)
         ctx.depth_mask = True
         ctx.disable(ctx.BLEND)
 
@@ -854,9 +995,11 @@ class Renderer:
         for x, z, s, yaw in self.trees:
             base = translate(x, float(terrain_height(x, z)), z) @ rotate_y(yaw) @ scale(s, s, s)
             self._draw(self.vao_trunk, base, vp, TRUNK_COLOR, env)
-            canopy = base @ translate(0.0, 5.4, 0.0)
+            # the canopy leans a little in the wind, more the higher it sits
+            sway = math.sin(self.visual_time * 1.3 + (x + z) * 0.1) * 0.6
+            canopy = base @ translate(sway, 5.4, sway * 0.5)
             self._draw(self.vao_canopy, canopy, vp, env["canopy"], env)
-            crown = base @ translate(0.0, 8.4, 0.0) @ scale(0.7, 0.7, 0.7)
+            crown = base @ translate(sway * 1.5, 8.4, sway * 0.8) @ scale(0.7, 0.7, 0.7)
             self._draw(self.vao_canopy, crown, vp, env["crown"], env)
 
         for (x, z, s, yaw), vao in zip(self.rocks, self.vao_rocks):
@@ -887,7 +1030,7 @@ class Renderer:
                     spot = translate(x + dx * s, y + 1.16 * s, z + dz * s) @ scale(s, s, s)
                     self._draw(self.vao_mushroom_spot, spot, vp, MUSHROOM_SPOT_COLOR, env)
 
-        # creatures: lit spheres with two camera-facing eyes
+        # creatures: lit spheres with two camera-facing eyes, bobbing gently
         for c in world.creatures:
             if not c.alive:
                 continue
@@ -897,8 +1040,10 @@ class Renderer:
             # instead of sinking into the carved lake bed
             if float(terrain_water_mask(cx, cz)) > 0.5:
                 cy = WATER_LEVEL
+            bob = math.sin(self.visual_time * 2.2 + c.id * 1.7) * 0.18
+            by = cy + 2.1 + bob
             col = TOKEN_COLORS_F[c.token % len(TOKEN_COLORS_F)]
-            self._draw(self.vao_creature, translate(cx, cy + 2.1, cz), vp, col, env)
+            self._draw(self.vao_creature, translate(cx, by, cz), vp, col, env)
             face = np.array([eye[0] - cx, 0.0, eye[2] - cz])
             if np.linalg.norm(face) > 1e-3:
                 face /= np.linalg.norm(face)
@@ -906,7 +1051,31 @@ class Renderer:
             for side in (-1, 1):
                 ex = cx + face[0] * 2.0 + right[0] * 0.8 * side
                 ez = cz + face[2] * 2.0 + right[2] * 0.8 * side
-                self._draw(self.vao_eye, translate(ex, cy + 2.7, ez), vp, (0.08, 0.08, 0.10), env)
+                self._draw(self.vao_eye, translate(ex, by + 0.6, ez), vp, (0.08, 0.08, 0.10), env)
+            # a bright bobbing marker over the creature the player has selected
+            if c.id == self.selected_id:
+                mk = 5.6 + math.sin(self.visual_time * 4.0) * 0.4
+                self._draw(self.vao_eye, translate(cx, by + mk, cz) @ scale(1.4, 1.4, 1.4),
+                           vp, (1.0, 0.95, 0.35), env)
+
+        # a small flock of birds drifting across the sky
+        self.birds[:, 0] += dt * 9.0
+        self.birds[:, 2] += dt * 3.0
+        wrap = self.birds[:, 0] > 150.0
+        self.birds[wrap, 0] -= 300.0
+        wrapz = self.birds[:, 2] > 150.0
+        self.birds[wrapz, 2] -= 300.0
+        bird_world = self.birds + (target[0], 0.0, target[2] * 0.0)
+        ctx.enable(ctx.BLEND)
+        ctx.depth_mask = False
+        ctx.enable(ctx.PROGRAM_POINT_SIZE)
+        self.bird_buf.write(bird_world.astype("f4").tobytes())
+        self.particle["mvp"].write(_bytes(vp))
+        self.particle["u_size"].value = 4.0
+        self.particle["u_color"].value = (0.10, 0.10, 0.13, 0.9)
+        self.vao_birds.render(mode=ctx.POINTS, vertices=len(self.birds))
+        ctx.depth_mask = True
+        ctx.disable(ctx.BLEND)
 
         # weather particles
         if env["precip"]:
@@ -955,26 +1124,77 @@ class Camera:
         self.distance = max(40.0, min(320.0, self.distance * (0.9 ** amount)))
 
 
+TOKEN_NAMES = ["silent", "red", "blue", "yellow", "purple", "teal"]
+
+
+def build_hud(size, world, env, phase, selected_id, font, small):
+    """Draw the 2D HUD onto a transparent pygame Surface: the season/weather/
+    clock/population line, the flock's learned feeling toward you, a panel for
+    the selected creature, and a one-line controls hint."""
+    import pygame
+    surf = pygame.Surface(size, pygame.SRCALPHA)
+
+    def text(s, x, y, col=(240, 244, 250), fnt=None):
+        fnt = fnt or font
+        surf.blit(fnt.render(s, True, (0, 0, 0)), (x + 1, y + 1))
+        surf.blit(fnt.render(s, True, col), (x, y))
+
+    hh, mm = int(phase * 24) % 24, int(phase * 24 * 60) % 60
+    text("%s   |   %s   |   %02d:%02d   |   pop %d" % (
+        env["season"], env["precip"] or "clear", hh, mm, world.population()), 12, 10)
+    disp = world.disposition_summary()
+    if disp is not None:
+        col = (150, 220, 140) if disp > 0.05 else (225, 110, 110) if disp < -0.05 else (230, 230, 220)
+        text("the flock %s (%+.0f%%)" % (disposition_label(disp), disp * 100), 12, 36, col)
+
+    if selected_id is not None:
+        c = next((c for c in world.creatures if c.id == selected_id and c.alive), None)
+        if c is not None:
+            px, py, pw, ph = 12, size[1] - 118, 250, 78
+            panel = pygame.Surface((pw, ph), pygame.SRCALPHA)
+            panel.fill((12, 16, 22, 190))
+            pygame.draw.rect(panel, (110, 210, 130), panel.get_rect(), 1)
+            surf.blit(panel, (px, py))
+            text("creature #%d" % c.id, px + 10, py + 8, (170, 240, 175))
+            text("colour: %s   gen %d" % (TOKEN_NAMES[c.token % 6], getattr(c, "generation", 0)),
+                 px + 10, py + 30, fnt=small)
+            text("energy: %3.0f%%" % (100.0 * c.energy / MAX_ENERGY), px + 10, py + 48, fnt=small)
+            if c.mind is not None:
+                d = c.mind.disposition()
+                text("feeling: %s (%+.0f%%)" % (disposition_label(d), d * 100), px + 120, py + 48, fnt=small)
+
+    text("L-drag orbit   scroll zoom   click creature: feed   right-click: startle   "
+         "S season   W weather   T fast-time", 12, size[1] - 24, (206, 212, 220), small)
+    return surf
+
+
 # =========================================================================
 # headless render (for verification in a GPU-less environment)
 # =========================================================================
 def render_headless(path, size=(1000, 700), phase=0.5, season="summer",
                     weather="clear", seed=7, steps=40):
     import moderngl
+    import pygame
+    pygame.init()
     ctx = moderngl.create_standalone_context()
     fbo = ctx.simple_framebuffer(size)
     fbo.use()
-    world = World(init_pop=8, predator_count=0)
+    world = World(init_pop=8, predator_count=0, learning=True)
     for _ in range(steps):
         world.step()
     renderer = Renderer(ctx, size)
-    renderer.render(world, Camera(), environment(phase, season, weather), dt=0.05)
+    sel = next((c.id for c in world.creatures if c.alive), None)
+    renderer.selected_id = sel
+    env = environment(phase, season, weather)
+    renderer.render(world, Camera(), env, dt=0.05)
+    font = pygame.font.SysFont("consolas", 18)
+    small = pygame.font.SysFont("consolas", 14)
+    renderer.draw_overlay(build_hud(size, world, env, phase, sel, font, small))
     data = fbo.read(components=3)
     try:
         from PIL import Image
         Image.frombytes("RGB", size, data).transpose(Image.FLIP_TOP_BOTTOM).save(path)
     except ImportError:
-        import pygame
         surf = pygame.transform.flip(pygame.image.fromstring(data, size, "RGB"), False, True)
         pygame.image.save(surf, path)
     print("saved", path)
@@ -983,32 +1203,50 @@ def render_headless(path, size=(1000, 700), phase=0.5, season="summer",
 # =========================================================================
 # interactive main (needs a real display + OpenGL)
 # =========================================================================
+def _ambient_sound():
+    """A soft two-note drone looped quietly under the scene. Returns a running
+    Channel, or None if there's no audio device."""
+    import pygame
+    try:
+        pygame.mixer.init(frequency=22050, size=-16, channels=2)
+        rate = pygame.mixer.get_init()[0]
+        n = rate * 2
+        t = np.linspace(0, 2.0, n, endpoint=False)
+        wave = (0.5 * np.sin(2 * np.pi * 110 * t) + 0.3 * np.sin(2 * np.pi * 164.81 * t))
+        wave *= 0.12
+        stereo = np.column_stack([wave, wave])
+        snd = pygame.sndarray.make_sound(np.ascontiguousarray((stereo * 32767).astype(np.int16)))
+        ch = pygame.mixer.Channel(0)
+        ch.play(snd, loops=-1)
+        return ch
+    except pygame.error:
+        return None
+
+
 def main():
     import moderngl
     import pygame
     pygame.init()
     size = (1000, 700)
     pygame.display.set_mode(size, pygame.OPENGL | pygame.DOUBLEBUF)
+    pygame.display.set_caption("Thronglets - true 3D")
     ctx = moderngl.create_context()
     renderer = Renderer(ctx, size)
     cam = Camera()
-    world = World(init_pop=8, predator_count=0)
+    world = World(init_pop=8, predator_count=0, learning=True)
+    font = pygame.font.SysFont("consolas", 18)
+    small = pygame.font.SysFont("consolas", 14)
+    _ambient_sound()
 
     phase = 0.35            # early morning
     season_i, weather_i = 1, 0
     fast_time = False
     clock = pygame.time.Clock()
     dragging = False
+    drag_moved = False
     running = True
     accum = 0.0
 
-    def caption():
-        pygame.display.set_caption(
-            "Thronglets true-3D  |  %s  |  %s  |  %02d:%02d" % (
-                SEASONS[season_i], WEATHERS[weather_i],
-                int(phase * 24) % 24, int(phase * 24 * 60) % 60))
-
-    caption()
     while running:
         dt = clock.tick(60) / 1000.0
         for event in pygame.event.get():
@@ -1018,19 +1256,34 @@ def main():
                 if event.key == pygame.K_ESCAPE:
                     running = False
                 elif event.key == pygame.K_s:
-                    season_i = (season_i + 1) % len(SEASONS); caption()
+                    season_i = (season_i + 1) % len(SEASONS)
                 elif event.key == pygame.K_w:
-                    weather_i = (weather_i + 1) % len(WEATHERS); caption()
+                    weather_i = (weather_i + 1) % len(WEATHERS)
                 elif event.key == pygame.K_t:
                     fast_time = not fast_time
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                dragging = True
+                dragging, drag_moved = True, False
             elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
                 dragging = False
+                if not drag_moved:      # a click, not an orbit drag: select + feed
+                    c = renderer.creature_at(world, cam, *event.pos)
+                    if c is not None:
+                        renderer.selected_id = c.id
+                        world.deliver_experience(c, LEARN_FEED_REWARD)
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:
+                c = renderer.creature_at(world, cam, *event.pos)   # right-click: startle
+                if c is not None:
+                    renderer.selected_id = c.id
+                    world.deliver_experience(c, LEARN_SCARE_REWARD)
             elif event.type == pygame.MOUSEMOTION and dragging:
+                if abs(event.rel[0]) + abs(event.rel[1]) > 2:
+                    drag_moved = True
                 cam.orbit(event.rel[0], -event.rel[1])
             elif event.type == pygame.MOUSEWHEEL:
                 cam.zoom(event.y)
+
+        # the mouse cursor is the player's hand the creatures feel and learn
+        world.hand_pos = renderer.hand_world(cam, *pygame.mouse.get_pos())
 
         # advance the day: a full cycle in ~2 min (or ~12 s in fast mode)
         phase = (phase + dt / (12.0 if fast_time else 120.0)) % 1.0
@@ -1038,11 +1291,10 @@ def main():
         if accum >= 0.12:
             world.step()
             accum = 0.0
-        if int(phase * 24 * 60) % 5 == 0:
-            caption()
 
         env = environment(phase, SEASONS[season_i], WEATHERS[weather_i])
         renderer.render(world, cam, env, dt=dt)
+        renderer.draw_overlay(build_hud(size, world, env, phase, renderer.selected_id, font, small))
         pygame.display.flip()
     pygame.quit()
 
