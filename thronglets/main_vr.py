@@ -216,6 +216,7 @@ Controls:
   LEFT / RIGHT   pan the view with the keyboard
   SCROLL         zoom in / out (3D view)
   V              switch between the 3D view and a flat top-down 2D view
+  X              toggle the pixel-art look (a low-res, limited-palette filter)
   W              force the next weather (clear / cloudy / rain / storm)
   S              force the next season (spring / summer / autumn / winter)
   SPACE          pause / resume
@@ -242,6 +243,15 @@ from simulation import BUD_ENERGY, HEIGHT, MAX_ENERGY, WIDTH, World
 
 SCREEN_W, SCREEN_H = 1000, 700
 HORIZON_Y = int(SCREEN_H * 0.42)
+
+# Pixel-art post-process (toggled with X): the whole rendered world is
+# downsampled to 1/PIXEL_ART_SCALE resolution, its colours are posterised to
+# PIXEL_ART_LEVELS steps per channel (a limited palette), then it is blown
+# back up with nearest-neighbour scaling for hard, chunky pixels. It runs
+# on the finished scene, before the HUD, so the world reads as pixel art
+# while the text stays crisp and legible.
+PIXEL_ART_SCALE = 5
+PIXEL_ART_LEVELS = 6
 
 # The flat top-down 2D view (toggled with V): the World's field is
 # WIDTH x HEIGHT world units, mapped straight onto the whole screen -
@@ -1966,6 +1976,24 @@ def draw_night_overlay(screen, day_amount):
     screen.blit(overlay, (0, 0))
 
 
+def apply_pixel_art(surface, scale=PIXEL_ART_SCALE, levels=PIXEL_ART_LEVELS):
+    """Turn the finished (vector-drawn) scene into pixel art in one pass:
+    average-downsample it to 1/scale resolution, posterise the colours to
+    `levels` steps per channel (a small, chunky palette), then blow it back
+    up with nearest-neighbour scaling so the pixels stay hard and square.
+    Runs in place on `surface`. This is the whole-game preview filter - the
+    quick way to see the pixel-art direction before any sprite is redrawn."""
+    w, h = surface.get_size()
+    sw, sh = max(1, w // scale), max(1, h // scale)
+    small = pygame.transform.smoothscale(surface, (sw, sh))   # area-average shrink
+    if levels and levels > 1:
+        arr = pygame.surfarray.pixels3d(small)
+        step = 255.0 / (levels - 1)
+        arr[:] = (np.round(arr / step) * step).clip(0, 255).astype(arr.dtype)
+        del arr   # release the per-pixel lock before scaling back up
+    pygame.transform.scale(small, (w, h), surface)   # nearest-neighbour blow-up
+
+
 def draw_weather(screen, weather, season, t, flash=0.0, sky=True):
     """Everything the weather adds over the finished scene: drifting
     clouds (only where there's a sky, i.e. the 3D view), falling rain or
@@ -2464,8 +2492,8 @@ def draw_status(screen, font, world, paused, speed, sensors, threshold, alert_fl
         screen.blit(tip, (10, meter_y + 16))
 
     hint = font.render(
-        "V view   S season   W weather   RIGHT-click menu   LEFT drag pan   SCROLL zoom   "
-        "SPACE pause   UP/DOWN speed   G chorus   M mute   R reset   ESC quit",
+        "V view   X pixel-art   S season   W weather   RIGHT-click menu   LEFT drag pan   "
+        "SCROLL zoom   SPACE pause   UP/DOWN speed   G chorus   M mute   R reset   ESC quit",
         True, (255, 255, 255))
     screen.blit(hint, (10, SCREEN_H - 26))
 
@@ -2529,6 +2557,7 @@ def main():
     ambient_enabled = True  # the population's chorus is on by default
     zoom = 1.0
     top_down = False  # V toggles the flat overhead 2D view
+    pixel_art = True  # X toggles the pixel-art post-process (on for this test)
 
     dragging_view = False
     drag_start = None
@@ -2597,6 +2626,8 @@ def main():
                         cry_channel.stop()
                     listening_token = None
                     current_cry = None
+                elif event.key == pygame.K_x:
+                    pixel_art = not pixel_art
                 elif event.key == pygame.K_a:
                     sensors.toggle_mic()
                 elif event.key == pygame.K_c:
@@ -2730,6 +2761,8 @@ def main():
                 draw_egg(screen, EGG_STAGE_X - pan_x, EGG_STAGE_Z, egg.cracks, wobble, egg.pulse, ctx)
         draw_night_overlay(screen, eff_day)
         draw_weather(screen, climate.weather, climate.season, t, climate.flash, sky=not top_down)
+        if pixel_art:   # pixelate the whole world (before the HUD, which stays crisp)
+            apply_pixel_art(screen)
         draw_status(screen, font, world, paused, speed, sensors, threshold, alert.flash,
                     egg.hatched, egg.cracks, sound_muted, zoom, ambient_enabled, len(birth_eggs.pending),
                     top_down=top_down, season=climate.season, weather=climate.weather)
