@@ -234,6 +234,7 @@ Controls:
   LEFT / RIGHT   pan the view with the keyboard
   SCROLL         zoom in / out (3D view)
   V              switch between the 3D view and a flat top-down 2D view
+  TAB            open/close the care list (who needs looking after + buttons)
   W              force the next weather (clear / cloudy / rain / storm)
   S              force the next season (spring / summer / autumn / winter)
   SPACE          pause / resume
@@ -1454,16 +1455,26 @@ class SummonCare:
             return 1.0
         return sum(self.wellbeing(c) for c in alive) / len(alive)
 
+    def needs_of(self, c):
+        """Every need this creature has let run low (most urgent first) -
+        what the side panel lists a button for."""
+        low = [(self.level(c, k), k) for k in NEED_ITEMS if self.level(c, k) < SUMMON_THRESHOLD]
+        return [k for _v, k in sorted(low)]
+
+    def fulfill_kind(self, c, world, kind):
+        """Answer one specific need (feed / wash / play) and build trust."""
+        if kind == "hunger":
+            c.energy = min(MAX_ENERGY, c.energy + FEED_ENERGY_BOOST)
+        else:
+            self.levels.setdefault(c.id, {"clean": 1.0, "joy": 1.0})[kind] = 1.0
+        world.deliver_experience(c, LEARN_FEED_REWARD if kind == "hunger" else LEARN_CARE_REWARD)
+
     def fulfill(self, c, world):
-        """Answer a creature's summons; returns the need met (or None)."""
+        """Answer a creature's most urgent summons; returns the need met (or None)."""
         need = self.need_of(c)
         if need is None:
             return None
-        if need == "hunger":
-            c.energy = min(MAX_ENERGY, c.energy + FEED_ENERGY_BOOST)
-        else:
-            self.levels.setdefault(c.id, {"clean": 1.0, "joy": 1.0})[need] = 1.0
-        world.deliver_experience(c, LEARN_FEED_REWARD if need == "hunger" else LEARN_CARE_REWARD)
+        self.fulfill_kind(c, world, need)
         return need
 
 
@@ -1571,6 +1582,76 @@ class LearningWindow:
 
 # What each need is called in the right-click menu, as an action verb.
 NEED_MENU_LABELS = {"hunger": "Feed", "clean": "Wash", "joy": "Play"}
+
+CARE_PANEL_W = 300
+
+
+class CarePanel:
+    """A side panel (toggled with TAB) in the same look as the learning
+    window: it lists every creature that currently needs looking after, and
+    for each one a clickable button per unmet need (Feed / Wash / Play).
+    Click a button to answer that need straight from the list, without
+    hunting the creature down in the field."""
+
+    def __init__(self):
+        self.open = False
+        self.buttons = []   # (rect, creature_id, kind) rebuilt each draw
+
+    def toggle(self):
+        self.open = not self.open
+
+    def handle_click(self, mx, my, world, care):
+        """A click on one of the panel's buttons answers that need. Returns
+        True if it consumed the click (so it isn't also a world click)."""
+        for rect, cid, kind in self.buttons:
+            if rect.collidepoint(mx, my):
+                c = next((c for c in world.creatures if c.id == cid and c.alive), None)
+                if c is not None:
+                    care.fulfill_kind(c, world, kind)
+                return True
+        return False
+
+    def draw(self, screen, font, world, care):
+        self.buttons = []
+        if not self.open:
+            return
+        rows = []
+        for c in world._alive():
+            kinds = care.needs_of(c)
+            if kinds:
+                rows.append((c, kinds))
+        x = SCREEN_W - CARE_PANEL_W - 12
+        header_h, row_h = 34, 30
+        body_h = (row_h * len(rows)) if rows else 24
+        h = min(header_h + body_h + 12, SCREEN_H - 24)
+        y = 12
+        panel = pygame.Surface((CARE_PANEL_W, h), pygame.SRCALPHA)
+        panel.fill((14, 16, 18, 225))
+        pygame.draw.rect(panel, (110, 210, 130), panel.get_rect(), 2)
+        screen.blit(panel, (x, y))
+        screen.blit(font.render(f"> who needs you ({len(rows)})", True, (170, 240, 175)),
+                    (x + 12, y + 9))
+        mouse = pygame.mouse.get_pos()
+        cy = y + header_h
+        if not rows:
+            screen.blit(font.render("  all content :)", True, (150, 200, 160)), (x + 12, cy))
+            return
+        for c, kinds in rows:
+            if cy + row_h > y + h - 4:
+                break
+            screen.blit(font.render(f"#{c.id}", True, (170, 240, 175)), (x + 12, cy + 6))
+            bx = x + 66
+            for k in kinds:
+                label = NEED_MENU_LABELS[k]
+                bw = font.size(label)[0] + 16
+                rect = pygame.Rect(bx, cy + 2, bw, row_h - 6)
+                hover = rect.collidepoint(mouse)
+                pygame.draw.rect(screen, (40, 70, 48) if hover else (24, 40, 28), rect)
+                pygame.draw.rect(screen, (110, 210, 130), rect, 1)
+                screen.blit(font.render(label, True, (190, 245, 195)), (rect.x + 8, rect.y + 4))
+                self.buttons.append((rect, c.id, k))
+                bx += bw + 6
+            cy += row_h
 
 CONTEXT_MENU_W = 200
 CONTEXT_MENU_ROW_H = 26
@@ -2838,7 +2919,7 @@ def draw_status(screen, font, world, paused, speed, sensors, threshold, alert_fl
         screen.blit(tip, (10, meter_y + 16))
 
     hint = font.render(
-        "V view   S season   W weather   RIGHT-click menu   LEFT drag pan   "
+        "V view   TAB care list   S season   W weather   RIGHT-click menu   LEFT drag pan   "
         "SCROLL zoom   SPACE pause   UP/DOWN speed   G chorus   M mute   R reset   ESC quit",
         True, (255, 255, 255))
     screen.blit(hint, (10, SCREEN_H - 26))
@@ -2890,6 +2971,7 @@ def main():
     needs = NeedsState()
     care = SummonCare()
     learn_win = LearningWindow()
+    care_panel = CarePanel()
     horror = HorrorState()
     sentience = SentienceState()
     ambient = AmbientChorus()
@@ -2969,6 +3051,7 @@ def main():
                     needs = NeedsState()
                     care = SummonCare()
                     learn_win = LearningWindow()
+                    care_panel = CarePanel()
                     horror = HorrorState()
                     sentience = SentienceState()
                     ambient = AmbientChorus()
@@ -3003,8 +3086,12 @@ def main():
                 elif event.key == pygame.K_v:
                     top_down = not top_down   # switch 3D <-> flat overhead
                     menu.close()              # menu positions are view-specific
+                elif event.key == pygame.K_TAB:
+                    care_panel.toggle()       # side list of who needs looking after
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                if menu.is_open():
+                if care_panel.open and care_panel.handle_click(event.pos[0], event.pos[1], world, care):
+                    pass   # a click on a care-panel button is consumed there
+                elif menu.is_open():
                     # a left-click while the menu is up picks a row (or
                     # dismisses it); it never also pans or hatches
                     menu.click(event.pos[0], event.pos[1])
@@ -3129,6 +3216,8 @@ def main():
                     egg.hatched, egg.cracks, sound_muted, zoom, ambient_enabled, len(birth_eggs.pending),
                     top_down=top_down, season=climate.season, weather=climate.weather)
         learn_win.draw(screen, font, world, care)
+        if egg.hatched:
+            care_panel.draw(screen, font, world, care)
         menu.draw(screen, font)
         if hatch_flash > 0:
             overlay = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)

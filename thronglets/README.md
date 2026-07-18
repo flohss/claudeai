@@ -531,6 +531,12 @@ enough won't breed**: while the population's average wellbeing sits below a
 threshold, reproduction pauses until you care for them - neglect literally
 halts new life.
 
+Press **`TAB`** to open a **care list** side panel (same look as the
+learning window): it lists every creature that currently needs looking
+after and gives you a clickable button per unmet need (Feed / Wash /
+Play), so you can answer them straight from the list instead of hunting
+each one down in the field.
+
 Standing still doesn't mean frozen: each creature blinks on its own
 schedule and wanders a couple of pixels in place between simulation
 steps, purely cosmetic idle motion meant to make it read as alive rather
