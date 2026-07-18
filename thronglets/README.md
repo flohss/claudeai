@@ -139,8 +139,8 @@ enough to witness it - learns your hand is worth approaching; drop a
 predator and they learn to flee it.** Over a session the flock comes to
 **trust or fear you**, and passes what it learned on to its offspring, so a
 kind or cruel run compounds across generations. When it's on, it's shown
-two ways: a colour-coded line on the HUD's top row (*"the flock trusts you
-(+76%)"* / *"…fears you"*), and a **disposition sparkline** at the top of
+two ways: a colour-coded line on its own row under the HUD header (*"the
+flock trusts you (+76%)"* / *"…fears you"*), and a **disposition sparkline** at the top of
 the Graph screen (`G`) that plots that feeling over time next to the
 vocabulary curves. (With learning off, neither appears - the observatory,
 unchanged.)

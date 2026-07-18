@@ -14,9 +14,9 @@ view (simulation.py, opt-in) runs here: the mouse cursor is your "hand",
 and the two things you place are the lesson. Drop food near a creature and
 it - and the ones close enough to witness it - learn the hand is worth
 approaching; drop a predator and they learn to flee it. Over a session the
-flock comes to trust or fear you (shown on the HUD's top row and as a
-sparkline in the Graph screen), and passes what it learned to its
-offspring. With it off, none of that HUD/graph appears.
+flock comes to trust or fear you (shown on its own line under the HUD
+header and as a sparkline in the Graph screen), and passes what it learned
+to its offspring. With it off, none of that HUD/graph appears.
 
 Controls:
   SPACE        pause / resume
@@ -989,41 +989,41 @@ def draw_hud(screen, font, world, paused, speed, mode, lang, expanded, trained=F
                                      deaths=world.deaths, status=status)
     screen.blit(font.render(header, True, TEXT_COLOR), (10, 8))
 
-    # how the flock has come to feel about you, on its own line, right-
-    # aligned on a row whose left side is short so it never runs into the
-    # header's speed indicator or the controls hints: the mode/settings row
-    # when the HUD is expanded, the empty second row when it's collapsed.
+    # how the flock has come to feel about you, on its own line, left-
+    # aligned, right under the header - so it never runs into the header's
+    # speed indicator. Everything below it shifts down by one row (oy) to
+    # make room (the HUD is grown to match when learning is on).
     disp = world.disposition_summary()
+    oy = 0
     if disp is not None:
         line = t["hud_disposition"].format(label=disposition_label(disp, lang), pct=disp)
         color = (150, 220, 140) if disp > 0.05 else (225, 110, 110) if disp < -0.05 else (200, 200, 190)
-        surf = font.render(line, True, color)
-        disp_y = 108 if expanded else 28
-        screen.blit(surf, (SCREEN_W - surf.get_width() - 12, disp_y))
+        screen.blit(font.render(line, True, color), (10, 28))
+        oy = 20
 
     if not expanded:
         if pop == 0:
-            screen.blit(font.render(t["extinct"], True, (235, 90, 90)), (10, 28))
+            screen.blit(font.render(t["extinct"], True, (235, 90, 90)), (10, 28 + oy))
         else:
-            screen.blit(font.render(t["hud_expand_hint"], True, TEXT_COLOR), (10, 28))
-            draw_vocab_summary_line(screen, font, 48, world, labels)
+            screen.blit(font.render(t["hud_expand_hint"], True, TEXT_COLOR), (10, 28 + oy))
+            draw_vocab_summary_line(screen, font, 48 + oy, world, labels)
         return
 
-    screen.blit(font.render(t["hud_controls_hint1"], True, TEXT_COLOR), (10, 28))
-    screen.blit(font.render(t["hud_controls_hint2"], True, TEXT_COLOR), (10, 48))
-    screen.blit(font.render(t["hud_controls_hint3"], True, TEXT_COLOR), (10, 68))
+    screen.blit(font.render(t["hud_controls_hint1"], True, TEXT_COLOR), (10, 28 + oy))
+    screen.blit(font.render(t["hud_controls_hint2"], True, TEXT_COLOR), (10, 48 + oy))
+    screen.blit(font.render(t["hud_controls_hint3"], True, TEXT_COLOR), (10, 68 + oy))
     if tag:
-        screen.blit(font.render(tag, True, TEXT_COLOR), (10, 88))
+        screen.blit(font.render(tag, True, TEXT_COLOR), (10, 88 + oy))
 
     if mode == "manual":
         settings = t["hud_manual"]
     else:
         settings = t["hud_auto"].format(count=len(world.predators))
-    screen.blit(font.render(settings, True, TEXT_COLOR), (10, 108))
+    screen.blit(font.render(settings, True, TEXT_COLOR), (10, 108 + oy))
 
-    screen.blit(font.render(t["hud_vocab_title"], True, TEXT_COLOR), (10, 128))
+    screen.blit(font.render(t["hud_vocab_title"], True, TEXT_COLOR), (10, 128 + oy))
 
-    y = 150
+    y = 150 + oy
     breakdown = world.vocabulary_breakdown()
     for state in (DANGER, FOOD, DISTRESS, MATE, IDLE):
         draw_vocab_row(screen, font, y, labels[state], breakdown[state], t["vocab_other"])
@@ -1661,7 +1661,7 @@ def main():
     # world is stretched per-axis to exactly fill it - no fixed aspect ratio,
     # so no letterboxing bars on wide/narrow screens.
     screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
-    global SCREEN_W, SCREEN_H, SCALE_X, SCALE_Y, HUD_H
+    global SCREEN_W, SCREEN_H, SCALE_X, SCALE_Y, HUD_H, MINIMAL_HUD_H, EXPANDED_HUD_H
     SCREEN_W, SCREEN_H = screen.get_size()
     SCALE_X = SCREEN_W / WIDTH
     SCALE_Y = (SCREEN_H - HUD_H) / HEIGHT
@@ -1706,6 +1706,15 @@ def main():
         adaptive_traits = world.adaptive_traits
         learning = getattr(world, "learning", False)   # honour the saved world
     _ensure_disp_history(world)
+
+    # the disposition line takes one extra row, so grow both HUD sizes to fit
+    # it (only when learning is on - a pure-selection run keeps the old, tidy
+    # heights)
+    if learning:
+        MINIMAL_HUD_H += 20
+        EXPANDED_HUD_H += 20
+        HUD_H = MINIMAL_HUD_H
+        SCALE_Y = (SCREEN_H - HUD_H) / HEIGHT
 
     paused = False
     speed = 1  # ticks per real second
