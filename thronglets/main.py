@@ -7,13 +7,23 @@ bars regardless of aspect ratio). ESC quits back to the desktop.
 You pick a language, automatic or manual mode, and whether to seed the AI
 language once, at startup - not something you toggle mid-run.
 
+The creatures also learn who you are. The same Mind system as the VR view
+(simulation.py, opt-in) runs here: the mouse cursor is your "hand", and
+the two things you place are the lesson. Drop food near a creature and it -
+and the ones close enough to witness it - learn the hand is worth
+approaching; drop a predator and they learn to flee it. Over a session the
+flock comes to trust or fear you (shown on the HUD's top row and as a
+sparkline in the Graph screen), and passes what it learned to its
+offspring.
+
 Controls:
   SPACE        pause / resume
   UP / DOWN    simulation speed (ticks per real second - x1 is a genuine 1 tick/s)
   R            reset to a fresh world
-  N / P        drop food / add a predator at a random spot
-  LEFT/RIGHT CLICK   place food / a predator at the clicked spot
+  N / P        drop food / add a predator at a random spot (the flock learns from it)
+  LEFT/RIGHT CLICK   place food / a predator at the clicked spot (kindness / harm)
   [ / ]        remove/add a predator right now
+  G            graph screen (vocab, traits, and the flock's feeling toward you)
   V            show/hide the full HUD (or click the top HUD strip)
   M            mute the proximity-listening sound
   H            in-game notice/help screen
@@ -26,13 +36,14 @@ import random
 import sys
 import threading
 import time
+from collections import deque
 
 import numpy as np
 import pygame
 
 from i18n import STATE_LABELS, TRAIT_LABELS
-from simulation import (DANGER, DISTRESS, FOOD, Genome, HEIGHT, IDLE, MATE, MAX_POPULATION, N_TOKENS, N_TRAITS, World,
-                         WIDTH, compare_seeds, load_seed_genome, load_world, save_world, top3_and_other)
+from simulation import (DANGER, DISTRESS, FOOD, Genome, HAND_PERCEPTION, HEIGHT, IDLE, MATE, MAX_POPULATION, N_TOKENS,
+                         N_TRAITS, World, WIDTH, compare_seeds, load_seed_genome, load_world, save_world, top3_and_other)
 
 TRAIN_EPISODES = 3000
 TRAIN_BATCH_SIZE = 256
@@ -69,6 +80,58 @@ TOKEN_COLORS = [
 # pleasant together - index 0 (silence) is never looked up, no tone assigned.
 TOKEN_FREQS = [0, 261.63, 293.66, 329.63, 392.00, 440.00]
 LISTEN_RADIUS = 10.0  # world units - how close the mouse must be to hear a creature
+
+# Emergent learning (the same Mind system as main_vr, reused from
+# simulation.py). Here the player's "hand" is the mouse cursor, and the two
+# things you place are the reward: dropping food nearby is kindness the
+# creatures learn to approach, dropping a predator is harm they learn to
+# flee - and every creature close enough to witness it learns a weaker
+# version too (World.deliver_experience handles the observers). Over a
+# session the flock comes to trust or fear you, and passes what it learned
+# to its offspring, exactly as in the VR view.
+LEARN_FOOD_REWARD = 1.0
+LEARN_PREDATOR_REWARD = -1.0
+DISP_HISTORY_INTERVAL = 20   # ticks between disposition samples for the graph
+# Short words for a -1..1 feeling toward the player, per language.
+DISPO_LABELS = {
+    "en": [(0.5, "adores you"), (0.15, "trusts you"),
+           (-0.15, "is wary of you"), (-0.5, "fears you"), (-1.1, "is terrified of you")],
+    "fr": [(0.5, "t'adore"), (0.15, "te fait confiance"),
+           (-0.15, "se mefie de toi"), (-0.5, "te craint"), (-1.1, "est terrifie par toi")],
+}
+
+
+def disposition_label(value, lang):
+    for threshold, label in DISPO_LABELS.get(lang, DISPO_LABELS["en"]):
+        if value >= threshold:
+            return label
+    return DISPO_LABELS[lang][-1][1]
+
+
+def teach_nearby(world, x, y, reward):
+    """The player just placed food (reward > 0) or a predator (reward < 0)
+    at (x, y). Teach the nearest creature within reach - and, through
+    World.deliver_experience, the witnesses around it. A no-op when learning
+    is off or nobody is close enough to be affected."""
+    if not getattr(world, "learning", False):
+        return
+    point = np.array([x, y], dtype=float)
+    nearest, best = None, HAND_PERCEPTION
+    for c in world.creatures:
+        if not c.alive:
+            continue
+        d = float(np.linalg.norm(np.asarray(c.pos, dtype=float) - point))
+        if d < best:
+            nearest, best = c, d
+    if nearest is not None:
+        world.deliver_experience(nearest, reward)
+
+
+def _ensure_disp_history(world):
+    """Attach a fresh disposition sparkline buffer to a world (a plain
+    attribute, so it survives without touching simulation.py or the save
+    format)."""
+    world.disposition_history = deque(maxlen=5000)
 
 TEXT = {
     "en": {
@@ -130,6 +193,8 @@ TEXT = {
         "hud_auto": "mode: automatic   predators: {count} ([ / ] act immediately)",
         "hud_vocab_title": "vocabulary — top 3 colors per state, population share:",
         "vocab_other": "other",
+        "hud_disposition": "learning: the flock {label} ({pct:+.0%})",
+        "graph_disposition": "the flock's feeling toward you: {pct:+.0%} ({label})",
         "graph_title": "Vocabulary over time - dominant share per state",
         "graph_traits_title": "Physical traits over time - population average (share of range)",
         "graph_dismiss": "-- press any key to go back --",
@@ -322,6 +387,8 @@ TEXT = {
         "hud_auto": "mode: auto   predateurs : {count} ([ / ] agit tout de suite)",
         "hud_vocab_title": "vocabulaire — top 3 couleurs par etat, part de la population :",
         "vocab_other": "autre",
+        "hud_disposition": "apprentissage : le groupe {label} ({pct:+.0%})",
+        "graph_disposition": "sentiment du groupe envers toi : {pct:+.0%} ({label})",
         "graph_title": "Vocabulaire dans le temps - part dominante par etat",
         "graph_traits_title": "Traits physiques dans le temps - moyenne population (part de la plage)",
         "graph_dismiss": "-- une touche pour revenir --",
@@ -528,7 +595,9 @@ def show_graph(screen, font, world, lang):
     t = TEXT[lang]
     labels = STATE_LABELS[lang]
     trait_labels = TRAIT_LABELS[lang]
-    n_rows = 5 + (N_TRAITS if world.adaptive_traits else 0)
+    disp_hist = getattr(world, "disposition_history", None)
+    show_disp = getattr(world, "learning", False) and disp_hist is not None
+    n_rows = 5 + (N_TRAITS if world.adaptive_traits else 0) + (1 if show_disp else 0)
     title_h = 40 if world.adaptive_traits else 0
     row_h = (SCREEN_H - 80 - title_h) // n_rows
     graph_w = SCREEN_W - 260
@@ -540,6 +609,17 @@ def show_graph(screen, font, world, lang):
         screen.blit(font.render(t["graph_title"], True, (255, 255, 255)), (20, 20))
 
         y = 60
+        if show_disp:
+            # the flock's -1..1 feeling, stored normalised to 0..1 so it plots
+            # on the same sparkline (0.5 is neutral)
+            raw = disp_hist[-1] * 2.0 - 1.0 if disp_hist else 0.0
+            screen.blit(font.render(
+                t["graph_disposition"].format(pct=raw, label=disposition_label(raw, lang)),
+                True, (150, 220, 140) if raw > 0.05 else (225, 110, 110) if raw < -0.05 else TEXT_COLOR),
+                (20, y))
+            draw_sparkline(screen, 220, y - 6, graph_w, graph_h, disp_hist)
+            y += row_h
+
         for state in (DANGER, FOOD, DISTRESS, MATE, IDLE):
             history = world.vocab_history[state]
             current = f"{history[-1] * 100:3.0f}%" if history else "  -%"
@@ -883,6 +963,15 @@ def draw_hud(screen, font, world, paused, speed, mode, lang, expanded, trained=F
                                      deaths=world.deaths, status=status)
     screen.blit(font.render(header, True, TEXT_COLOR), (10, 8))
 
+    # how the flock has come to feel about you, right-aligned on the top row
+    # so it shows whether the HUD is collapsed or expanded
+    disp = world.disposition_summary()
+    if disp is not None:
+        line = t["hud_disposition"].format(label=disposition_label(disp, lang), pct=disp)
+        color = (150, 220, 140) if disp > 0.05 else (225, 110, 110) if disp < -0.05 else (200, 200, 190)
+        surf = font.render(line, True, color)
+        screen.blit(surf, (SCREEN_W - surf.get_width() - 12, 8))
+
     if not expanded:
         if pop == 0:
             screen.blit(font.render(t["extinct"], True, (235, 90, 90)), (10, 28))
@@ -934,11 +1023,13 @@ def draw_hud(screen, font, world, paused, speed, mode, lang, expanded, trained=F
 
 
 def _new_world(mode, predator_count, init_pop=DEFAULT_INIT_POP, seed_genome=None, adaptive_traits=False):
+    # learning is on for the live session so the flock adapts to you; the
+    # headless compare_seeds runs build their own worlds and stay unaffected.
     if mode == "manual":
         return World(init_pop=init_pop, manual_food=True, manual_predators=True,
-                      seed_genome=seed_genome, adaptive_traits=adaptive_traits)
+                      seed_genome=seed_genome, adaptive_traits=adaptive_traits, learning=True)
     return World(init_pop=init_pop, predator_count=predator_count,
-                 seed_genome=seed_genome, adaptive_traits=adaptive_traits)
+                 seed_genome=seed_genome, adaptive_traits=adaptive_traits, learning=True)
 
 
 def choose_language(screen, font):
@@ -1546,6 +1637,7 @@ def main():
         world = _new_world(mode, 6, init_pop, seed_genome, adaptive_traits)
     else:
         adaptive_traits = world.adaptive_traits
+    _ensure_disp_history(world)
 
     paused = False
     speed = 1  # ticks per real second
@@ -1569,14 +1661,19 @@ def main():
                     paused = not paused
                 elif event.key == pygame.K_r:
                     world = _new_world(mode, len(world.predators), init_pop, seed_genome, adaptive_traits)
+                    _ensure_disp_history(world)
                 elif event.key == pygame.K_UP:
                     speed = min(200, speed + (1 if speed < 10 else 10))
                 elif event.key == pygame.K_DOWN:
                     speed = max(1, speed - (1 if speed <= 10 else 10))
                 elif event.key == pygame.K_n:
-                    world.add_food(*world.rng.uniform([10, 10], [WIDTH - 10, HEIGHT - 10]))
+                    fx, fy = world.rng.uniform([10, 10], [WIDTH - 10, HEIGHT - 10])
+                    world.add_food(fx, fy)
+                    teach_nearby(world, fx, fy, LEARN_FOOD_REWARD)
                 elif event.key == pygame.K_p:
-                    world.add_random_predator()
+                    px, py = world.rng.uniform([0, 0], [WIDTH, HEIGHT])
+                    world.add_predator(px, py)
+                    teach_nearby(world, px, py, LEARN_PREDATOR_REWARD)
                 elif event.key == pygame.K_LEFTBRACKET:
                     world.remove_predator()
                 elif event.key == pygame.K_RIGHTBRACKET:
@@ -1612,8 +1709,16 @@ def main():
                     wx, wy = mx / SCALE_X, (my - HUD_H) / SCALE_Y
                     if event.button == 3:
                         world.add_predator(wx, wy)
+                        teach_nearby(world, wx, wy, LEARN_PREDATOR_REWARD)
                     else:
                         world.add_food(wx, wy)
+                        teach_nearby(world, wx, wy, LEARN_FOOD_REWARD)
+
+        # the mouse cursor is the player's "hand": creatures feel it, and it
+        # carries whatever they last learned to associate with it (approach
+        # food, flee predators). Only over the field, not the HUD strip.
+        mx, my = pygame.mouse.get_pos()
+        world.hand_pos = (mx / SCALE_X, (my - HUD_H) / SCALE_Y) if my > HUD_H else None
 
         if not paused:
             tick_accumulator += dt
@@ -1621,6 +1726,10 @@ def main():
             while tick_accumulator >= tick_interval:
                 world.step()
                 tick_accumulator -= tick_interval
+                # sample the flock's feeling for the Graph sparkline
+                disp = world.disposition_summary()
+                if disp is not None and world.tick % DISP_HISTORY_INTERVAL == 0:
+                    world.disposition_history.append((disp + 1.0) / 2.0)
         else:
             tick_accumulator = 0.0
 

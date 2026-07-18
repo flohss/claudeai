@@ -127,6 +127,18 @@ the tick/population line plus a one-line summary (each state's single
 strongest color) - `V`, or a click anywhere on that top strip, unfolds the
 full controls list, per-state top-3-plus-other breakdown, and legend.
 
+**The flock learns who you are.** The same emergent-learning system as the
+VR view (the opt-in `Mind` in `simulation.py`) runs here, with your mouse
+cursor as the "hand." The two things you place are the lesson: **drop food
+near a creature and it - plus every creature close enough to witness it -
+learns your hand is worth approaching; drop a predator and they learn to
+flee it.** Over a session the flock comes to **trust or fear you**, and
+passes what it learned on to its offspring, so a kind or cruel run
+compounds across generations. It's shown two ways: a colour-coded line on
+the HUD's top row (*"the flock trusts you (+76%)"* / *"…fears you"*), and a
+**disposition sparkline** at the top of the Graph screen (`G`) that plots
+that feeling over time next to the vocabulary curves.
+
 ### Termux (Android)
 
 Getting pygame's SDL2 dependencies to compile on Termux is a known pain
