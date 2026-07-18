@@ -547,7 +547,7 @@ SEASON_TINTS = {           # landscape tint: (colour, blend strength)
     "spring": ((110, 205, 90), 0.20),
     "summer": (None, 0.0),
     "autumn": ((185, 125, 45), 0.35),
-    "winter": ((235, 240, 245), 0.60),
+    "winter": ((244, 248, 252), 0.85),   # snow-covered ground, not just a pale tint
 }
 LEAF_TINTS = {             # tree canopies turn harder than the ground does
     "spring": ((120, 215, 95), 0.35),
