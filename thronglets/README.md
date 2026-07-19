@@ -138,9 +138,10 @@ system as the VR view (the opt-in `Mind` in `simulation.py`) runs here,
 with your mouse cursor as the "hand." The two things you place are the
 lesson: **drop food near a creature and it - plus every creature close
 enough to witness it - learns your hand is worth approaching; drop a
-predator and they learn to flee it.** Creatures that trust you gather in a
-ring *around* the cursor at a respectful distance rather than piling onto it
-(so they no longer crowd the exact point or set off the proximity chime by
+predator and they learn to flee it.** Creatures that trust you come from a
+good way off and each take their own spot on a ring *around* the cursor,
+forming an even circle at a respectful distance rather than piling onto the
+point (so they no longer crowd it or set off the proximity chime by
 themselves). Over a session the flock comes to
 **trust or fear you**, and passes what it learned on to its offspring, so a
 kind or cruel run compounds across generations. When it's on, it's shown

@@ -122,7 +122,9 @@ ELIG_DECAY = 0.88             # how fast the "what just happened to me" trace fa
 VALENCE_CLIP = 1.5            # bound on every learned weight (stops runaway)
 REWARD_EAT = 0.4              # mild reward for finding food while the hand is near
 HAND_MOVE_STRENGTH = 1.3      # how hard the learned feeling pulls toward/away the hand
-HAND_STANDOFF = 14.0          # trusting creatures gather around the hand at this distance, not on it
+HAND_STANDOFF = 14.0          # radius of the ring trusting creatures form around the hand
+HAND_CALL_RANGE = 80.0        # how far off a trusting creature will come to join the ring
+GOLDEN_ANGLE = 2.399963229728653  # spreads creature ids evenly around that ring (no clumping)
 INHERIT_BLEND = 0.85          # fraction of the parents' learned feelings a child keeps
 INHERIT_NOISE = 0.05          # small variation so offspring aren't carbon copies
 
@@ -913,29 +915,29 @@ class World:
                 d = max(pair_d[i, j], 1e-6)
                 move += _toward(c.pos, positions[j]) * (w / d) * SIGNAL_STRENGTH
 
-            # learned reaction to the player's hand: approach it if past
-            # experience says it feeds (appraisal > 0), flee if it hurts
-            # (< 0). The appraisal fades with distance on its own (the
-            # features carry hand proximity), so this only matters up close.
+            # learned reaction to the player's hand, driven by the creature's
+            # persistent feeling (disposition), not just an up-close appraisal:
+            # a creature that has come to trust the hand gathers into a ring
+            # around it from a good way off; one that fears it flees when near.
             if hand_np is not None and c.mind is not None:
+                disp = c.mind.disposition()          # -1 (fears) .. +1 (trusts)
                 to_hand = hand_np - c.pos
                 dist = np.linalg.norm(to_hand)
-                prox = max(0.0, 1.0 - dist / HAND_PERCEPTION)
-                if prox > 0.0 and dist > 1e-6:
-                    hunger = max(0.0, min(1.0, 1.0 - c.energy / MAX_ENERGY))
-                    v = c.mind.appraise(Mind.features(prox, hunger))
-                    unit = to_hand / dist
-                    if v >= 0.0:
-                        # trusting: gather NEAR the hand but keep a respectful
-                        # standoff, so the flock rings the cursor instead of
-                        # piling onto it (which was both unnatural and noisy).
-                        gap = dist - HAND_STANDOFF
-                        if gap > 0.0:
-                            move += unit * v * HAND_MOVE_STRENGTH * min(1.0, gap / HAND_STANDOFF)
-                        else:
-                            move -= unit * v * HAND_MOVE_STRENGTH * 0.6   # too close: ease back out
-                    else:
-                        move += unit * v * HAND_MOVE_STRENGTH             # fearful: flee (v < 0)
+                if disp > 0.05 and 1e-6 < dist < HAND_CALL_RANGE:
+                    # trusting: head for this creature's OWN slot on a ring
+                    # around the hand (its angle spread by the golden angle from
+                    # its id), so the flock forms an even circle around the
+                    # cursor. The ring sits just outside earshot, so it's quiet.
+                    ang = c.id * GOLDEN_ANGLE
+                    slot = hand_np + HAND_STANDOFF * np.array([np.cos(ang), np.sin(ang)])
+                    to_slot = slot - c.pos
+                    sd = np.linalg.norm(to_slot)
+                    if sd > 1e-6:
+                        move += (to_slot / sd) * disp * HAND_MOVE_STRENGTH * min(1.0, sd / HAND_STANDOFF)
+                elif disp < -0.05 and 1e-6 < dist < HAND_PERCEPTION:
+                    # fearful: flee, harder the closer the hand is
+                    prox = 1.0 - dist / HAND_PERCEPTION
+                    move += (-to_hand / dist) * (-disp) * prox * HAND_MOVE_STRENGTH
 
             # the creature's own persistent mood colours how it moves: arousal
             # makes it restless, terror makes it bolt, contentment seeks company
