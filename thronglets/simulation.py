@@ -544,8 +544,13 @@ class World:
             # the body right now - a full creature drifts toward calm content,
             # a starving one toward miserable and agitated - and the mood eases
             # toward that baseline slowly, so any recent jolt still lingers.
+            # hunger makes a creature miserable but LISTLESS (low arousal) -
+            # a despondent, sad baseline, not a panicked one. Only a real
+            # threat (harm) spikes arousal into fear; keeping hunger's arousal
+            # push below the fear threshold stops a starving creature from
+            # panic-fleeing the very hand that might feed it.
             valence_rest = MOOD_VALENCE_REST - hunger * 0.85
-            arousal_rest = MOOD_AROUSAL_REST + hunger * 0.45
+            arousal_rest = MOOD_AROUSAL_REST + hunger * 0.18
             c.mind.relax(valence_rest, arousal_rest)
             c.mind.memory *= MEM_DECAY   # the map of good/bad places fades slowly
 
