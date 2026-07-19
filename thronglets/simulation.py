@@ -137,6 +137,16 @@ MOOD_FEED_DV, MOOD_FEED_DA = 0.55, 0.22   # being fed: happier, a little excited
 MOOD_HARM_DV, MOOD_HARM_DA = -0.95, 0.75  # being hurt: miserable and panicked
 MOOD_WITNESS = 0.35           # fraction of a jolt a neighbour feels just from watching
 MOOD_INHERIT = 0.5            # how much of the parents' mood a newborn is born carrying
+# --- mood -> movement: the inner state actually drives how a creature moves --
+# arousal is its activity level (a calm/sad creature is listless, an agitated
+# one restless and quick); valence sets a goal (terror bolts from the hand,
+# contentment seeks company). All gated on a mind, so learning-off worlds move
+# exactly as before.
+MOOD_RESTLESS = 1.6           # how much arousal amplifies aimless wandering
+MOOD_PANIC_FLEE = 2.4         # extra push away from the hand when terrified
+MOOD_SOCIAL = 0.55            # gentle pull toward the nearest neighbour when content
+MOOD_SPEED_FLOOR = 0.6        # speed multiplier at zero arousal (placid / listless)
+MOOD_SPEED_GAIN = 0.8         # additional speed multiplier at full arousal
 
 
 class Genome:
@@ -809,6 +819,26 @@ class World:
                     v = c.mind.appraise(Mind.features(prox, hunger))
                     move += (to_hand / dist) * v * HAND_MOVE_STRENGTH
 
+            # the creature's own persistent mood colours how it moves: arousal
+            # makes it restless, terror makes it bolt, contentment seeks company
+            # (a listless low-arousal creature just moves little, via the speed
+            # cap below). Independent of the hand appraisal above.
+            if c.mind is not None:
+                val, arous = c.mind.valence, c.mind.arousal
+                move += self.rng.normal(0, 1, 2) * WANDER_STRENGTH * arous * MOOD_RESTLESS
+                if val < -0.2 and arous > 0.5:           # afraid: flee
+                    if hand_np is not None:
+                        away = c.pos - hand_np
+                        n = np.linalg.norm(away)
+                        move += (away / n) * MOOD_PANIC_FLEE if n > 1e-6 else \
+                            self.rng.normal(0, 1, 2) * MOOD_PANIC_FLEE
+                    else:
+                        move += self.rng.normal(0, 1, 2) * MOOD_PANIC_FLEE
+                elif val > 0.25:                          # content: seek company
+                    j = int(np.argmin(pair_d[i]))
+                    if np.isfinite(pair_d[i, j]):
+                        move += _toward(c.pos, positions[j]) * MOOD_SOCIAL
+
             move += _edge_push(c.pos)
             speed = np.linalg.norm(move)
             if self.adaptive_traits:
@@ -820,6 +850,10 @@ class World:
                 )
             else:
                 own_speed, metabolism = SPEED, METABOLISM
+            # mood sets the activity level: high arousal quickens, low arousal
+            # (calm or listless-sad) slows the creature right down.
+            if c.mind is not None:
+                own_speed *= MOOD_SPEED_FLOOR + MOOD_SPEED_GAIN * c.mind.arousal
             if speed > own_speed:
                 move = move / speed * own_speed
             c.pos = np.clip(c.pos + move, [0, 0], [WIDTH, HEIGHT])

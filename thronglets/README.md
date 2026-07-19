@@ -395,7 +395,13 @@ by its parents' mood (a nervous flock births nervous young). That mood
 drives what you see: the **expressive little face** (white eyes with
 pupils, a nose, a mouth) shows joy / sadness / fear / calm straight from
 the valence-arousal plane, and an agitated creature visibly **breathes
-faster and trembles** where a calm one is almost still. A 2D HUD shows the
+faster and trembles** where a calm one is almost still. **The mood also
+drives how a creature actually moves**: arousal is its activity level, so
+an agitated one darts about restlessly while a listless, low-arousal
+(sad or calm) one barely stirs; and valence sets a goal - a terrified
+creature **bolts away from your hand**, a content one **drifts toward the
+nearest neighbour** to be near company. So you don't just read a face,
+you watch a frightened flock scatter and a happy one gather. A 2D HUD shows the
 season/weather/clock/population, the flock's overall feeling toward you
 (*"the flock trusts you (+45%)"*), and a panel for the selected creature
 with its live mood (emotion, valence, arousal). The mood rides along with
