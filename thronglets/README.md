@@ -391,7 +391,12 @@ hurt jolts it, hunger tugs at it, and it only eases back toward a resting
 baseline slowly - so a fright genuinely lingers and contentment fades over
 many seconds instead of resetting instantly. Witnessing something happen to
 a neighbour moves your own mood too, and a newborn is born already coloured
-by its parents' mood (a nervous flock births nervous young). That mood
+by its parents' mood (a nervous flock births nervous young). Moods are also
+**contagious**: every moment a creature's feeling drifts a little toward
+that of the creatures around it, weighted by how close they are - so a
+fright kindled in one animal **ripples out through the flock** over the
+following moments (and a returning calm spreads the same way), a travelling
+wave rather than an instant hive-mind. That mood
 drives what you see: the **expressive little face** (white eyes with
 pupils, a nose, a mouth) shows joy / sadness / fear / calm straight from
 the valence-arousal plane, and an agitated creature visibly **breathes

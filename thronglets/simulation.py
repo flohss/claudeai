@@ -166,6 +166,16 @@ MEM_CLIP = 1.5                # bound on any one cell's remembered value
 MEM_MOVE_STRENGTH = 0.8       # how strongly the nearby map steers movement
 MEM_INHERIT = 0.6             # how much of the parents' maps a newborn is born knowing
 
+# --- emotional contagion: moods rub off between neighbours -------------------
+# The witness jolt above is a one-off shock at the moment something happens;
+# this is the slow, continuous spread. Every step, each creature's mood drifts
+# a little toward the average mood of the creatures around it, weighted by how
+# close they are - so a fright kindled in one animal ripples out through the
+# flock over many steps (and a returning calm spreads the same way). Small rate,
+# local radius, so it's a wave that travels, never an instant hive-mind.
+MOOD_CONTAGION_RADIUS = 30.0  # world units within which moods rub off
+MOOD_CONTAGION = 0.09         # per step, fraction of the way toward neighbours' mood
+
 
 def _mem_cell(pos):
     """Which affect-map cell (row, col) a world position falls in."""
@@ -492,6 +502,7 @@ class World:
         self._sense_and_signal()
         if self.learning:
             self._learn_sense()
+            self._spread_mood()
         self._move()
         self._move_predators()
         self._predator_kills()
@@ -553,6 +564,34 @@ class World:
             arousal_rest = MOOD_AROUSAL_REST + hunger * 0.18
             c.mind.relax(valence_rest, arousal_rest)
             c.mind.memory *= MEM_DECAY   # the map of good/bad places fades slowly
+
+    def _spread_mood(self):
+        """Emotional contagion: nudge every mind's mood toward the closeness-
+        weighted average mood of the creatures around it. Read from a snapshot
+        so the spread is order-independent (a wave, not a chain reaction within
+        one step)."""
+        c_ = self._cache
+        alive = c_["alive"]
+        if len(alive) < 2:
+            return
+        pair_d = c_["pair_d"]                     # inf on the diagonal (excludes self)
+        val = np.array([c.mind.valence if c.mind is not None else 0.0 for c in alive])
+        aro = np.array([c.mind.arousal if c.mind is not None else 0.0 for c in alive])
+        within = pair_d < MOOD_CONTAGION_RADIUS
+        for k, c in enumerate(alive):
+            if c.mind is None:
+                continue
+            neigh = np.where(within[k])[0]
+            if neigh.size == 0:
+                continue
+            w = 1.0 - pair_d[k, neigh] / MOOD_CONTAGION_RADIUS   # closer neighbours weigh more
+            wsum = float(w.sum())
+            if wsum <= 1e-9:
+                continue
+            mv = float(np.dot(val[neigh], w) / wsum)
+            ma = float(np.dot(aro[neigh], w) / wsum)
+            c.mind.valence += (mv - c.mind.valence) * MOOD_CONTAGION
+            c.mind.arousal += (ma - c.mind.arousal) * MOOD_CONTAGION
 
     def deliver_experience(self, creature, reward, observers=True):
         """The player just did something to this creature - fed it
