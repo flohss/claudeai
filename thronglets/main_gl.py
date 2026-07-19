@@ -947,12 +947,9 @@ class Renderer:
         self.vao_ground = self._vao(self.lit, mesh_terrain())
         self.vao_trunk = self._vao(self.lit, mesh_cylinder(0.6, 4.6, 14))
         self.vao_canopy = self._vao(self.lit, mesh_uv_sphere(3.4, 12, 16))
-        self.vao_creature = self._vao(self.lit, mesh_uv_sphere(2.2, 16, 24))
+        # a small sphere reused for the mouth and the selection marker
         self.vao_eye = self._vao(self.lit, mesh_uv_sphere(0.45, 8, 10))
-        # creature body parts (all one colour): head, torso, limbs
-        self.vao_body = self._vao(self.lit, mesh_uv_sphere(1.7, 12, 16))
-        self.vao_head = self._vao(self.lit, mesh_uv_sphere(1.2, 12, 16))
-        self.vao_limb = self._vao(self.lit, mesh_cylinder(0.30, 1.0, 8))
+        # the unit-ish sphere every creature body part is scaled from
         self.vao_hand = self._vao(self.lit, mesh_uv_sphere(0.42, 7, 9))
         # face parts: white eyeball, black pupil, nose, mouth
         self.vao_sclera = self._vao(self.lit, mesh_uv_sphere(0.27, 8, 10))
@@ -961,9 +958,6 @@ class Renderer:
         self.vao_egg = self._vao(self.lit, mesh_uv_sphere(1.0, 12, 14))
         self.emotion_fx = {}   # cid -> (emotion, expire_time) for transient moods
         self.dying = {}        # cid -> [kind, elapsed, duration] mid-death animation
-        # a translucent glow sphere for the signal halo (position only)
-        halo_v = mesh_uv_sphere(1.0, 14, 18)
-        self.vao_halo = ctx.vertex_array(self.shadow, [(ctx.buffer(halo_v.tobytes()), "3f 3x4", "in_pos")])
         self.vao_flower_stem = self._vao(self.lit, mesh_cylinder(0.09, 1.05, 7))
         self.vao_flower_petals = self._vao(self.lit, mesh_flower_petals())
         self.vao_flower_center = self._vao(self.lit, mesh_uv_sphere(0.22, 6, 8))
@@ -1010,21 +1004,13 @@ class Renderer:
         self.lit["u_snowcover"].value = 1.0 if env["season"] == "winter" else 0.0
         vao.render()
 
-    # small body-part builders (a sphere r0.42 and a cylinder r0.30 h1.0)
+    # a scaled unit sphere at a point (built from the r0.42 sphere mesh)
     def _sph(self, vp, env, x, y, z, r, color, sx=None, sy=None, sz=None):
         sx = r if sx is None else sx
         sy = r if sy is None else sy
         sz = r if sz is None else sz
         self._draw(self.vao_hand, translate(x, y, z) @ scale(sx / 0.42, sy / 0.42, sz / 0.42),
                    vp, color, env)
-
-    def _cyl(self, vp, env, x, y0, z, r, h, color):
-        self._draw(self.vao_limb, translate(x, y0, z) @ scale(r / 0.30, h, r / 0.30), vp, color, env)
-
-    def _capsule(self, vp, env, x, z, y0, y1, r, color):
-        self._cyl(vp, env, x, y0, z, r, y1 - y0, color)
-        self._sph(vp, env, x, y0, z, r, color)
-        self._sph(vp, env, x, y1, z, r, color)
 
     def _draw_face(self, vp, env, cx, cz, hy, hr, eye, emo):
         """White eyes + pupils, nose and an emotion-shaped mouth on a head of
