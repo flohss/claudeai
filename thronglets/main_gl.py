@@ -928,6 +928,11 @@ class Renderer:
         self.trees, self.rocks, self.flowers, self.mushrooms = make_scene()
         self.precip = Precip()
         self.selected_id = None            # creature the player clicked, or None
+        # per-creature gait state, so the feet step in time with real movement
+        self.prev_scene = {}   # id -> last (cx, cz), to measure how far it moved
+        self.walk_speed = {}   # id -> smoothed scene-units/frame (flicker-free)
+        self.walk_phase = {}   # id -> stride phase, advanced while moving
+        self.facing = {}       # id -> unit (fx, fz) heading it last walked toward
         # a small flock of birds drifting through the sky (world-space points)
         rng = np.random.default_rng(3)
         self.birds = rng.random((14, 3)) * (260.0, 40.0, 260.0) - (130.0, -70.0, 130.0)
@@ -1307,17 +1312,50 @@ class Renderer:
                     sq = max(0.12, 1.0 - frac * 0.9)
             cxj, czj = cx + jx, cz + jz
 
-            bob = 0.0 if dstate else math.sin(self.visual_time * 2.2 + c.id * 1.7) * 0.18
+            # --- gait: measure real movement, step the feet in time with it ---
+            pc = self.prev_scene.get(c.id)
+            self.prev_scene[c.id] = (cx, cz)
+            mvx = mvz = 0.0
+            dist = 0.0
+            if pc is not None:
+                mvx, mvz = cx - pc[0], cz - pc[1]
+                dist = math.hypot(mvx, mvz)
+            # smoothed speed so a single jittery frame can't start/stop the walk
+            sp = self.walk_speed.get(c.id, 0.0)
+            sp += (dist - sp) * (min(1.0, dt * 8.0) if dt > 0 else 1.0)
+            self.walk_speed[c.id] = sp
+            moving = sp > 0.01 and dstate is None
+            if moving and dist > 1e-5:
+                self.facing[c.id] = (mvx / dist, mvz / dist)
+            fx, fz = self.facing.get(c.id, (0.0, 1.0))
+            rx, rz = -fz, fx  # sideways ("right") vector, for foot spacing + waddle
+            ph = self.walk_phase.get(c.id, 0.0)
+            if moving:
+                ph += dt * 9.0    # cadence while walking
+            self.walk_phase[c.id] = ph
+            swing = math.sin(ph) if moving else 0.0
+            step_bob = abs(math.sin(ph)) * 0.14 if moving else 0.0   # rise on each step
+            roll = math.cos(ph) * 0.14 if moving else 0.0            # side-to-side waddle
+
+            idle_bob = math.sin(self.visual_time * 2.2 + c.id * 1.7) * 0.18
+            bob = 0.0 if (dstate or moving) else idle_bob
             foot = cy + bob
             # colour by the creature's current signal (its "status")
             col = TOKEN_COLORS_F[c.token % len(TOKEN_COLORS_F)]
             foot_col = tuple(v * 0.45 for v in col)   # darker version, for the feet
-            # just a big coloured head with a face, on two little feet
-            for lx in (-0.45, 0.45):
-                self._sph(vp, env, cxj + lx, foot + 0.15, czj + 0.25, 0.34, foot_col, 0.42, 0.28, 0.55)
-            head_y = foot + 1.35 * sq
-            self._sph(vp, env, cxj, head_y, czj, 1.25, col, 1.25, 1.25 * sq, 1.25)
-            self._draw_face(vp, env, cxj, czj, head_y, 1.25, eye,
+            # two little feet: opposite phase, swinging fore/aft and lifting per step
+            for side in (-1.0, 1.0):
+                s = swing * side
+                lift = max(0.0, s) * 0.35
+                fxp = cxj + rx * 0.45 * side + fx * (0.25 + s * 0.45)
+                fzp = czj + rz * 0.45 * side + fz * (0.25 + s * 0.45)
+                self._sph(vp, env, fxp, foot + 0.15 + lift, fzp, 0.34, foot_col, 0.42, 0.28, 0.55)
+            # big coloured head with a face; waddles sideways + bobs when walking
+            head_x = cxj + rx * roll
+            head_z = czj + rz * roll
+            head_y = foot + 1.35 * sq + step_bob
+            self._sph(vp, env, head_x, head_y, head_z, 1.25, col, 1.25, 1.25 * sq, 1.25)
+            self._draw_face(vp, env, head_x, head_z, head_y, 1.25, eye,
                             "fear" if dstate else self.emotion_of(c))
             if c.id == self.selected_id and dstate is None:
                 mk = 3.4 + math.sin(self.visual_time * 4.0) * 0.35

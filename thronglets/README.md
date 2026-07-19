@@ -344,7 +344,10 @@ three-dimensional trees and rocks that sit on the slopes, and the
 creatures as **big coloured heads on two little feet**, each with an
 expressive face (white eyes, nose, mouth) - **the head's colour is the
 signal it's emitting** (the same 6-token palette as everywhere else), so
-its colour is its status. Soft contact shadows, a
+its colour is its status. When a creature actually moves its two feet
+**step in time with it** - opposite feet swinging fore and aft and
+lifting on each stride, with a matching side-to-side head waddle - while
+a standing one just breathes with a gentle bob. Soft contact shadows, a
 gradient sky with a sun glow, and distance fog give it real depth. The
 population is a genuine `simulation.py` World, stepped every frame - they are
 real creatures at their real
