@@ -381,11 +381,26 @@ to select it**, and **right-click for a menu** of care acts (**Feed / Wash
 / Play**) and the episode's dark side (**Stab / Burn / Hit with a rock**).
 Kind acts teach that creature - and the ones near enough to witness them -
 to approach; cruel ones teach fear and kill **with an animation** (a stab
-shudder, a creature wreathed in flame, a rock that squashes it flat). Each creature has an
-**expressive little face** (white eyes with pupils, a nose, a mouth) that
-shifts with its emotion. A 2D HUD shows the season/weather/clock/population,
-the flock's overall feeling toward you (*"the flock trusts you (+45%)"*),
-and a panel for the selected creature. Little touches of life round it out:
+shudder, a creature wreathed in flame, a rock that squashes it flat).
+
+**Each creature carries a persistent inner mood** - a real affective state,
+not a value recomputed each frame. Following the circumplex model of
+emotion, it runs on two slow-moving axes, **valence** (miserable ↔ happy)
+and **arousal** (calm ↔ agitated), and it has *momentum*: being fed or
+hurt jolts it, hunger tugs at it, and it only eases back toward a resting
+baseline slowly - so a fright genuinely lingers and contentment fades over
+many seconds instead of resetting instantly. Witnessing something happen to
+a neighbour moves your own mood too, and a newborn is born already coloured
+by its parents' mood (a nervous flock births nervous young). That mood
+drives what you see: the **expressive little face** (white eyes with
+pupils, a nose, a mouth) shows joy / sadness / fear / calm straight from
+the valence-arousal plane, and an agitated creature visibly **breathes
+faster and trembles** where a calm one is almost still. A 2D HUD shows the
+season/weather/clock/population, the flock's overall feeling toward you
+(*"the flock trusts you (+45%)"*), and a panel for the selected creature
+with its live mood (emotion, valence, arousal). The mood rides along with
+save/load, so a traumatised or happy flock is still that way when you
+resume. Little touches of life round it out:
 the canopies sway, the creatures bob, birds drift overhead, the lake mirrors
 the sky, and shadows lengthen with the low sun.
 

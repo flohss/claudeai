@@ -121,6 +121,12 @@ EMOTION_FACE = {
     "fear":    dict(pupil_dy=0.0, sclera=1.30, mouth=(0.42, 0.52, 0.42), mouth_dy=-0.06),
 }
 
+# HUD text colours for the named emotions (the selected-creature mood line)
+MOOD_HUD_COLORS = {
+    "joy": (150, 220, 140), "neutral": (225, 225, 215),
+    "sad": (140, 170, 220), "fear": (230, 130, 120),
+}
+
 
 def disposition_label(value):
     if value >= 0.5:
@@ -1089,19 +1095,25 @@ class Renderer:
                     self.selected_id = None
 
     def emotion_of(self, c):
-        """A transient mood set by a recent action, else one derived from the
-        creature's energy and how it feels about the player."""
+        """A transient mood set by a recent action; otherwise the creature's
+        own persistent inner mood (valence/arousal) when it has a mind, or a
+        rough guess from energy + disposition when learning is off."""
         fx = self.emotion_fx.get(c.id)
         if fx is not None and self.visual_time < fx[1]:
             return fx[0]
-        disp = c.mind.disposition() if c.mind is not None else 0.0
+        if c.mind is not None:
+            return c.mind.emotion()   # the lasting inner feeling drives the face
         if c.energy / MAX_ENERGY < 0.28:
             return "sad"
-        if disp <= -0.25:
-            return "fear"
-        if disp >= 0.3:
-            return "joy"
         return "neutral"
+
+    def arousal_of(self, c):
+        """How agitated the creature is right now, 0 (calm) .. 1 (frantic) -
+        drives how much its body fidgets. Falls back to a mild default when
+        learning is off so standing creatures still breathe."""
+        if c.mind is not None:
+            return float(c.mind.arousal)
+        return 0.3
 
     # -- interaction helpers ------------------------------------------------
     def _camera_vp(self, camera):
@@ -1337,8 +1349,16 @@ class Renderer:
             step_bob = abs(math.sin(ph)) * 0.14 if moving else 0.0   # rise on each step
             roll = math.cos(ph) * 0.14 if moving else 0.0            # side-to-side waddle
 
-            idle_bob = math.sin(self.visual_time * 2.2 + c.id * 1.7) * 0.18
+            # the persistent inner mood shows even when standing still: an
+            # agitated creature (high arousal) breathes faster and trembles,
+            # a calm one is almost still.
+            arous = self.arousal_of(c)
+            idle_bob = math.sin(self.visual_time * (1.8 + arous * 3.2) + c.id * 1.7) * (0.08 + arous * 0.16)
             bob = 0.0 if (dstate or moving) else idle_bob
+            if arous > 0.5 and not dstate and not moving:
+                tr = (arous - 0.5) * 0.34   # a nervous tremor
+                cxj += math.sin(self.visual_time * 34.0 + c.id) * tr
+                czj += math.cos(self.visual_time * 29.0 + c.id * 1.3) * tr
             foot = cy + bob
             # colour by the creature's current signal (its "status")
             col = TOKEN_COLORS_F[c.token % len(TOKEN_COLORS_F)]
@@ -1463,7 +1483,9 @@ def build_hud(size, world, env, phase, selected_id, font, small, menu=None):
     if selected_id is not None:
         c = next((c for c in world.creatures if c.id == selected_id and c.alive), None)
         if c is not None:
-            px, py, pw, ph = 12, size[1] - 118, 250, 78
+            has_mind = c.mind is not None
+            ph = 96 if has_mind else 78
+            px, py, pw = 12, size[1] - ph - 40, 250
             panel = pygame.Surface((pw, ph), pygame.SRCALPHA)
             panel.fill((12, 16, 22, 190))
             pygame.draw.rect(panel, (110, 210, 130), panel.get_rect(), 1)
@@ -1472,9 +1494,14 @@ def build_hud(size, world, env, phase, selected_id, font, small, menu=None):
             text("colour: %s   gen %d" % (TOKEN_NAMES[c.token % 6], getattr(c, "generation", 0)),
                  px + 10, py + 30, fnt=small)
             text("energy: %3.0f%%" % (100.0 * c.energy / MAX_ENERGY), px + 10, py + 48, fnt=small)
-            if c.mind is not None:
+            if has_mind:
                 d = c.mind.disposition()
                 text("feeling: %s (%+.0f%%)" % (disposition_label(d), d * 100), px + 120, py + 48, fnt=small)
+                emo = c.mind.emotion()
+                ecol = MOOD_HUD_COLORS.get(emo, (230, 230, 220))
+                text("mood: %-8s  valence %+.0f%%  arousal %2.0f%%"
+                     % (emo, c.mind.valence * 100, c.mind.arousal * 100),
+                     px + 10, py + 70, ecol, small)
 
     text("L-drag orbit   scroll zoom   click: select   right-click creature: care/harm   "
          "right-click ground: lay an egg   S/W season/weather   T fast-time",

@@ -118,6 +118,26 @@ HAND_MOVE_STRENGTH = 1.3      # how hard the learned feeling pulls toward/away t
 INHERIT_BLEND = 0.85          # fraction of the parents' learned feelings a child keeps
 INHERIT_NOISE = 0.05          # small variation so offspring aren't carbon copies
 
+# --- persistent inner mood -------------------------------------------------
+# On top of the learned appraisal above, a mind carries a lasting AFFECTIVE
+# STATE - a real inner life, not a value recomputed from scratch each frame.
+# It follows the circumplex model of emotion: two slow-moving axes,
+#   valence  -1 (miserable) .. +1 (happy)
+#   arousal   0 (calm/sleepy) .. 1 (agitated)
+# together they place a creature's feeling on a plane - e.g. low valence +
+# high arousal reads as fear, low valence + low arousal as sadness. The mood
+# has MOMENTUM: events jolt it, but it only eases back toward a resting
+# baseline slowly (MOOD_DECAY), so a fright lingers and contentment fades over
+# many steps instead of resetting instantly. Bodily state (hunger) tugs the
+# baseline continuously; the player's acts (feed / harm) deliver the jolts.
+MOOD_DECAY = 0.04             # per step, how fast mood eases back toward baseline (low = it lingers)
+MOOD_VALENCE_REST = 0.12      # mild contentment when nothing is happening
+MOOD_AROUSAL_REST = 0.18      # gently calm at rest
+MOOD_FEED_DV, MOOD_FEED_DA = 0.55, 0.22   # being fed: happier, a little excited
+MOOD_HARM_DV, MOOD_HARM_DA = -0.95, 0.75  # being hurt: miserable and panicked
+MOOD_WITNESS = 0.35           # fraction of a jolt a neighbour feels just from watching
+MOOD_INHERIT = 0.5            # how much of the parents' mood a newborn is born carrying
+
 
 class Genome:
     __slots__ = ("emission_logits", "response_weights", "traits")
@@ -217,11 +237,14 @@ class Mind:
     A newborn inherits a blend of its parents' weights (Mind.inherit), so a
     family's lessons carry forward and compound across generations."""
 
-    __slots__ = ("w", "elig")
+    __slots__ = ("w", "elig", "valence", "arousal")
 
-    def __init__(self, w=None):
+    def __init__(self, w=None, valence=MOOD_VALENCE_REST, arousal=MOOD_AROUSAL_REST):
         self.w = np.zeros(LEARN_FEATURES) if w is None else np.asarray(w, dtype=float)
         self.elig = np.zeros(LEARN_FEATURES)
+        # the persistent inner mood (see the mood constants above)
+        self.valence = float(valence)
+        self.arousal = float(arousal)
 
     @staticmethod
     def features(hand_prox, hunger):
@@ -255,6 +278,32 @@ class Mind:
         roughly -1 (terrified) .. +1 (trusting), for display."""
         return float(np.clip(self.w[0], -1.0, 1.0))
 
+    # -- persistent inner mood ---------------------------------------------
+    def feel(self, dv, da):
+        """A jolt to the mood: shift valence by dv and arousal by da. Used for
+        discrete events (fed, hurt, or witnessing one). The mood keeps the new
+        level and only drifts back slowly, so the feeling lasts."""
+        self.valence = float(np.clip(self.valence + dv, -1.0, 1.0))
+        self.arousal = float(np.clip(self.arousal + da, 0.0, 1.0))
+
+    def relax(self, valence_target, arousal_target, rate=MOOD_DECAY):
+        """One step of momentum: ease the mood a little toward a baseline that
+        the body's current state (e.g. hunger) sets. Slow, so strong feelings
+        persist across many steps instead of snapping back at once."""
+        self.valence += (valence_target - self.valence) * rate
+        self.arousal += (arousal_target - self.arousal) * rate
+
+    def emotion(self):
+        """Collapse the continuous mood onto one of the named emotions the
+        renderers know how to draw a face for."""
+        if self.valence < -0.18 and self.arousal > 0.5:
+            return "fear"      # negative + agitated
+        if self.valence < -0.12:
+            return "sad"       # negative + subdued
+        if self.valence > 0.25:
+            return "joy"       # positive
+        return "neutral"
+
     @staticmethod
     def inherit(parents, rng):
         """A child's starting mind: a blend of its parents' learned weights,
@@ -266,7 +315,14 @@ class Mind:
             return Mind()
         base = np.mean([m.w for m in minds], axis=0) * INHERIT_BLEND
         base = base + rng.normal(0, INHERIT_NOISE, LEARN_FEATURES)
-        return Mind(np.clip(base, -VALENCE_CLIP, VALENCE_CLIP))
+        # a newborn is born already coloured by its parents' current mood,
+        # damped toward the resting baseline - a nervous flock births nervous
+        # young, a content one calm young - without ever getting stuck there.
+        pv = float(np.mean([m.valence for m in minds]))
+        pa = float(np.mean([m.arousal for m in minds]))
+        valence = MOOD_VALENCE_REST + (pv - MOOD_VALENCE_REST) * MOOD_INHERIT
+        arousal = MOOD_AROUSAL_REST + (pa - MOOD_AROUSAL_REST) * MOOD_INHERIT
+        return Mind(np.clip(base, -VALENCE_CLIP, VALENCE_CLIP), valence, arousal)
 
 
 class Creature:
@@ -429,6 +485,13 @@ class World:
             prox = self._hand_proximity(c.pos)
             hunger = max(0.0, min(1.0, 1.0 - c.energy / MAX_ENERGY))
             c.mind.sense(Mind.features(prox, hunger))
+            # let the persistent mood breathe: its resting baseline is set by
+            # the body right now - a full creature drifts toward calm content,
+            # a starving one toward miserable and agitated - and the mood eases
+            # toward that baseline slowly, so any recent jolt still lingers.
+            valence_rest = MOOD_VALENCE_REST - hunger * 0.85
+            arousal_rest = MOOD_AROUSAL_REST + hunger * 0.45
+            c.mind.relax(valence_rest, arousal_rest)
 
     def deliver_experience(self, creature, reward, observers=True):
         """The player just did something to this creature - fed it
@@ -441,12 +504,15 @@ class World:
         if not self.learning or creature is None or not creature.alive:
             return
         hunger = max(0.0, min(1.0, 1.0 - creature.energy / MAX_ENERGY))
+        good = reward > 0
+        dv, da = (MOOD_FEED_DV, MOOD_FEED_DA) if good else (MOOD_HARM_DV, MOOD_HARM_DA)
         if creature.mind is not None:
             # the victim/beneficiary: the hand is right here (prox = 1)
             creature.mind.teach(reward, Mind.features(1.0, hunger), LEARN_RATE * 2.0)
+            creature.mind.feel(dv, da)   # and it feels it, deeply, right now
         if not observers:
             return
-        valence = 1.0 if reward > 0 else -1.0
+        valence = 1.0 if good else -1.0
         victim_pos = np.asarray(creature.pos, dtype=float)
         for other in self._alive():
             if other is creature or other.mind is None:
@@ -457,6 +523,9 @@ class World:
                 continue
             hunger_o = max(0.0, min(1.0, 1.0 - other.energy / MAX_ENERGY))
             other.mind.teach(valence, Mind.features(prox, hunger_o), OBSERVE_RATE)
+            # witnessing it moves a neighbour's mood too, scaled by how close
+            # it was - the seed of a mood that ripples through the flock.
+            other.mind.feel(dv * MOOD_WITNESS * prox, da * MOOD_WITNESS * prox)
 
     def disposition_summary(self):
         """Population-average feeling toward the player's hand, -1 (the flock
@@ -824,6 +893,7 @@ class World:
                     # eligibility trace gates this to hand-near moments)
                     if self.learning and c.mind is not None:
                         c.mind.reinforce(REWARD_EAT)
+                        c.mind.feel(0.25, -0.05)   # a fed creature grows a little content
                     eaten.add(int(i))
                 break
         if eaten:
@@ -941,6 +1011,7 @@ def save_world(world, path):
                 "response_weights": c.genome.response_weights.tolist(),
                 "traits": c.genome.traits.tolist(),
                 "mind": c.mind.w.tolist() if c.mind is not None else None,
+                "mood": [c.mind.valence, c.mind.arousal] if c.mind is not None else None,
             }
             for c in world.creatures if c.alive
         ],
@@ -961,6 +1032,7 @@ def load_world(path, seed=None):
     world.manual_predators = data["manual_predators"]
     world.adaptive_traits = data.get("adaptive_traits", False)
     world.learning = data.get("learning", False)
+    world.dormant_ids = set()   # __init__ sets this; __new__ bypasses it, so restore it
     world.hand_pos = None
     world.tick = data["tick"]
     world.births = data["births"]
@@ -991,7 +1063,11 @@ def load_world(path, seed=None):
         creature = Creature(np.array(cd["pos"], dtype=float), cd["energy"], genome)
         creature.age = cd["age"]
         if cd.get("mind") is not None:
-            creature.mind = Mind(np.array(cd["mind"], dtype=float))
+            mood = cd.get("mood")   # older saves have no mood -> resting baseline
+            if mood is not None:
+                creature.mind = Mind(np.array(cd["mind"], dtype=float), mood[0], mood[1])
+            else:
+                creature.mind = Mind(np.array(cd["mind"], dtype=float))
         elif world.learning:
             creature.mind = Mind()
         if "id" in cd and cd["id"] in world.lineage:
