@@ -149,8 +149,12 @@ happy green, sad blue, fearful red), so a mood spreading through the flock is
 visible as a **wave of colour** rolling across the field; the signal-token
 ring around each creature is unchanged. **Hover a creature and its spatial
 memory is painted on the ground** - green tiles over the patches it trusts,
-red over the ones it fears, its mental map of the world laid bare. (With
-learning off, none of this appears - the observatory, unchanged.)
+red over the ones it fears, its mental map of the world laid bare. The
+disposition itself is drawn as a small **gauge** in the HUD (filling
+green/right as the flock trusts you, red/left as it fears you), and the
+expanded HUD carries a **colour key** naming each mood colour and the
+memory tiles. (With learning off, none of this appears - the observatory,
+unchanged.)
 
 ### Web (any device with a browser)
 

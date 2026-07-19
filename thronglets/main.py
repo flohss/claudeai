@@ -73,6 +73,9 @@ SCALE_X, SCALE_Y = 5.0, 5.0
 BG = (18, 22, 16)
 GROUND = (30, 38, 24)
 HUD_BG = (10, 12, 9)
+HUD_SEP = (44, 52, 38)       # thin rule between HUD sections
+HUD_ACCENT = (150, 200, 130) # section titles
+HUD_HINT = (140, 146, 132)   # secondary / hint text
 TEXT_COLOR = (220, 220, 210)
 FOOD_COLOR = (110, 220, 90)
 BODY_COLOR = (222, 208, 150)
@@ -217,6 +220,12 @@ TEXT = {
         "legend_creature": "creature (ring = its current signal)",
         "legend_food": "food",
         "legend_predator": "predator",
+        "hud_mood_title": "mood (body colour):",
+        "mood_calm": "calm",
+        "mood_joy": "happy",
+        "mood_sad": "sad",
+        "mood_fear": "afraid",
+        "hud_memory_hint": "hover a creature: green = places it trusts, red = places it fears",
         "extinct": "Extinct. Press R to start a new world.",
 
         "translator_title": "Translator - what each color currently means",
@@ -418,6 +427,12 @@ TEXT = {
         "legend_creature": "creature (anneau = son signal actuel)",
         "legend_food": "nourriture",
         "legend_predator": "predateur",
+        "hud_mood_title": "humeur (couleur du corps) :",
+        "mood_calm": "calme",
+        "mood_joy": "heureux",
+        "mood_sad": "triste",
+        "mood_fear": "apeure",
+        "hud_memory_hint": "survole une creature : vert = lieux de confiance, rouge = lieux de peur",
         "extinct": "Extinction. Appuie sur R pour un nouveau monde.",
 
         "translator_title": "Traducteur - ce que signifie chaque couleur en ce moment",
@@ -1012,82 +1027,114 @@ def draw_vocab_summary_line(screen, font, y, world, labels):
         x += 16 + txt.get_width() + 16
 
 
+def _disposition_gauge(screen, font, x, y, disp, t, lang):
+    """A small bar that reads at a glance: fills right/green as the flock comes
+    to trust you, left/red as it comes to fear you, centred on neutral."""
+    w, h = 150, 9
+    cx = x + w // 2
+    pygame.draw.rect(screen, (28, 34, 24), (x, y + 3, w, h))
+    fill = int(min(1.0, abs(disp)) * (w // 2))
+    if disp >= 0:
+        pygame.draw.rect(screen, (120, 200, 110), (cx, y + 3, fill, h))
+    else:
+        pygame.draw.rect(screen, (220, 95, 90), (cx - fill, y + 3, fill, h))
+    pygame.draw.rect(screen, (70, 78, 62), (x, y + 3, w, h), width=1)
+    pygame.draw.line(screen, (150, 158, 140), (cx, y + 1), (cx, y + h + 5))
+    line = t["hud_disposition"].format(label=disposition_label(disp, lang), pct=disp)
+    color = (150, 220, 140) if disp > 0.05 else (225, 110, 110) if disp < -0.05 else (200, 200, 190)
+    screen.blit(font.render(line, True, color), (x + w + 12, y))
+    return y + 22
+
+
+def _mood_legend(screen, font, x, y, t):
+    """Explain the creature fill colours (and, on the next line, the memory
+    overlay colours) - only shown when learning is on, since that's when they
+    appear."""
+    title = font.render(t["hud_mood_title"], True, HUD_ACCENT)
+    screen.blit(title, (x, y))
+    lx = x + title.get_width() + 14
+    for label, emo in ((t["mood_calm"], "neutral"), (t["mood_joy"], "joy"),
+                       (t["mood_sad"], "sad"), (t["mood_fear"], "fear")):
+        pygame.draw.circle(screen, MOOD_FILL[emo], (lx + 6, y + 8), 5)
+        lab = font.render(label, True, TEXT_COLOR)
+        screen.blit(lab, (lx + 16, y))
+        lx += 16 + lab.get_width() + 18
+    y += 20
+    screen.blit(font.render(t["hud_memory_hint"], True, HUD_HINT), (x, y))
+    return y + 20
+
+
 def draw_hud(screen, font, world, paused, speed, mode, lang, expanded, trained=False, muted=False):
     t = TEXT[lang]
     labels = STATE_LABELS[lang]
     pygame.draw.rect(screen, HUD_BG, (0, 0, SCREEN_W, HUD_H))
     pop = world.population()
     status = t["hud_paused"] if paused else f"x{speed}"
+    header = t["hud_header"].format(tick=world.tick, pop=pop, births=world.births,
+                                     deaths=world.deaths, status=status)
+    screen.blit(font.render(header, True, TEXT_COLOR), (10, 8))
+
+    # run-state tags right-aligned on the header row, out of the way
     tag_parts = [t["hud_trained_tag"]] if trained else []
     if world.adaptive_traits:
         tag_parts.append(t["hud_traits_tag"])
     if muted:
         tag_parts.append(t["hud_muted_tag"])
-    tag = "   ".join(tag_parts)
-    header = t["hud_header"].format(tick=world.tick, pop=pop, births=world.births,
-                                     deaths=world.deaths, status=status)
-    screen.blit(font.render(header, True, TEXT_COLOR), (10, 8))
+    if tag_parts:
+        tag = font.render("   ".join(tag_parts), True, HUD_HINT)
+        screen.blit(tag, (SCREEN_W - tag.get_width() - 12, 8))
 
-    # how the flock has come to feel about you, on its own line, left-
-    # aligned, right under the header - so it never runs into the header's
-    # speed indicator. Everything below it shifts down by one row (oy) to
-    # make room (the HUD is grown to match when learning is on).
+    pygame.draw.line(screen, HUD_SEP, (10, 29), (SCREEN_W - 10, 29))
+    y = 35
+
+    # how the flock has come to feel about you, as a compact gauge
     disp = world.disposition_summary()
-    oy = 0
     if disp is not None:
-        line = t["hud_disposition"].format(label=disposition_label(disp, lang), pct=disp)
-        color = (150, 220, 140) if disp > 0.05 else (225, 110, 110) if disp < -0.05 else (200, 200, 190)
-        screen.blit(font.render(line, True, color), (10, 28))
-        oy = 20
+        y = _disposition_gauge(screen, font, 10, y, disp, t, lang)
 
     if not expanded:
         if pop == 0:
-            screen.blit(font.render(t["extinct"], True, (235, 90, 90)), (10, 28 + oy))
+            screen.blit(font.render(t["extinct"], True, (235, 90, 90)), (10, y))
         else:
-            screen.blit(font.render(t["hud_expand_hint"], True, TEXT_COLOR), (10, 28 + oy))
-            draw_vocab_summary_line(screen, font, 48 + oy, world, labels)
+            screen.blit(font.render(t["hud_expand_hint"], True, HUD_HINT), (10, y))
+            draw_vocab_summary_line(screen, font, y + 20, world, labels)
         return
 
-    screen.blit(font.render(t["hud_controls_hint1"], True, TEXT_COLOR), (10, 28 + oy))
-    screen.blit(font.render(t["hud_controls_hint2"], True, TEXT_COLOR), (10, 48 + oy))
-    screen.blit(font.render(t["hud_controls_hint3"], True, TEXT_COLOR), (10, 68 + oy))
-    if tag:
-        screen.blit(font.render(tag, True, TEXT_COLOR), (10, 88 + oy))
+    for hint in ("hud_controls_hint1", "hud_controls_hint2", "hud_controls_hint3"):
+        screen.blit(font.render(t[hint], True, HUD_HINT), (10, y)); y += 20
 
-    if mode == "manual":
-        settings = t["hud_manual"]
-    else:
-        settings = t["hud_auto"].format(count=len(world.predators))
-    screen.blit(font.render(settings, True, TEXT_COLOR), (10, 108 + oy))
+    settings = t["hud_manual"] if mode == "manual" else t["hud_auto"].format(count=len(world.predators))
+    screen.blit(font.render(settings, True, TEXT_COLOR), (10, y)); y += 24
 
-    screen.blit(font.render(t["hud_vocab_title"], True, TEXT_COLOR), (10, 128 + oy))
-
-    y = 150 + oy
+    pygame.draw.line(screen, HUD_SEP, (10, y - 4), (SCREEN_W - 10, y - 4))
+    screen.blit(font.render(t["hud_vocab_title"], True, HUD_ACCENT), (10, y)); y += 22
     breakdown = world.vocabulary_breakdown()
     for state in (DANGER, FOOD, DISTRESS, MATE, IDLE):
         draw_vocab_row(screen, font, y, labels[state], breakdown[state], t["vocab_other"])
         y += 22
 
-    legend_y = y
+    # the mood/memory colour key, only meaningful while learning is on
+    if getattr(world, "learning", False):
+        pygame.draw.line(screen, HUD_SEP, (10, y - 2), (SCREEN_W - 10, y - 2))
+        y += 4
+        y = _mood_legend(screen, font, 10, y, t)
+
+    pygame.draw.line(screen, HUD_SEP, (10, y - 2), (SCREEN_W - 10, y - 2))
+    y += 4
     lx = 10
-    pygame.draw.circle(screen, BODY_COLOR, (lx + 6, legend_y + 8), 4)
-    pygame.draw.circle(screen, (150, 150, 150), (lx + 6, legend_y + 8), 7, width=2)
-    txt = font.render(t["legend_creature"], True, TEXT_COLOR)
-    screen.blit(txt, (lx + 18, legend_y))
-    lx += 18 + txt.get_width() + 20
-
-    pygame.draw.circle(screen, FOOD_COLOR, (lx + 6, legend_y + 8), 3)
-    txt = font.render(t["legend_food"], True, TEXT_COLOR)
-    screen.blit(txt, (lx + 18, legend_y))
-    lx += 18 + txt.get_width() + 20
-
-    pygame.draw.circle(screen, PREDATOR_COLOR, (lx + 6, legend_y + 8), 6)
-    txt = font.render(t["legend_predator"], True, TEXT_COLOR)
-    screen.blit(txt, (lx + 18, legend_y))
+    for color, radius, ring, key in (
+            (BODY_COLOR, 4, True, "legend_creature"),
+            (FOOD_COLOR, 3, False, "legend_food"),
+            (PREDATOR_COLOR, 6, False, "legend_predator")):
+        pygame.draw.circle(screen, color, (lx + 6, y + 8), radius)
+        if ring:
+            pygame.draw.circle(screen, (150, 150, 150), (lx + 6, y + 8), 7, width=2)
+        txt = font.render(t[key], True, TEXT_COLOR)
+        screen.blit(txt, (lx + 18, y))
+        lx += 18 + txt.get_width() + 20
 
     if pop == 0:
-        msg = font.render(t["extinct"], True, (235, 90, 90))
-        screen.blit(msg, (10, legend_y + 22))
+        screen.blit(font.render(t["extinct"], True, (235, 90, 90)), (10, y + 22))
 
 
 def _new_world(mode, predator_count, init_pop=DEFAULT_INIT_POP, seed_genome=None,
@@ -1750,8 +1797,8 @@ def main():
     # it (only when learning is on - a pure-selection run keeps the old, tidy
     # heights)
     if learning:
-        MINIMAL_HUD_H += 20
-        EXPANDED_HUD_H += 20
+        MINIMAL_HUD_H += 22   # the disposition gauge row
+        EXPANDED_HUD_H += 66   # gauge + mood legend + memory-colour hint
         HUD_H = MINIMAL_HUD_H
         SCALE_Y = (SCREEN_H - HUD_H) / HEIGHT
 
