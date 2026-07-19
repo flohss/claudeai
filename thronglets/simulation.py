@@ -122,6 +122,7 @@ ELIG_DECAY = 0.88             # how fast the "what just happened to me" trace fa
 VALENCE_CLIP = 1.5            # bound on every learned weight (stops runaway)
 REWARD_EAT = 0.4              # mild reward for finding food while the hand is near
 HAND_MOVE_STRENGTH = 1.3      # how hard the learned feeling pulls toward/away the hand
+HAND_STANDOFF = 14.0          # trusting creatures gather around the hand at this distance, not on it
 INHERIT_BLEND = 0.85          # fraction of the parents' learned feelings a child keeps
 INHERIT_NOISE = 0.05          # small variation so offspring aren't carbon copies
 
@@ -923,7 +924,18 @@ class World:
                 if prox > 0.0 and dist > 1e-6:
                     hunger = max(0.0, min(1.0, 1.0 - c.energy / MAX_ENERGY))
                     v = c.mind.appraise(Mind.features(prox, hunger))
-                    move += (to_hand / dist) * v * HAND_MOVE_STRENGTH
+                    unit = to_hand / dist
+                    if v >= 0.0:
+                        # trusting: gather NEAR the hand but keep a respectful
+                        # standoff, so the flock rings the cursor instead of
+                        # piling onto it (which was both unnatural and noisy).
+                        gap = dist - HAND_STANDOFF
+                        if gap > 0.0:
+                            move += unit * v * HAND_MOVE_STRENGTH * min(1.0, gap / HAND_STANDOFF)
+                        else:
+                            move -= unit * v * HAND_MOVE_STRENGTH * 0.6   # too close: ease back out
+                    else:
+                        move += unit * v * HAND_MOVE_STRENGTH             # fearful: flee (v < 0)
 
             # the creature's own persistent mood colours how it moves: arousal
             # makes it restless, terror makes it bolt, contentment seeks company
