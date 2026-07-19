@@ -111,6 +111,13 @@ LEARN_FEATURES = 2            # [hand proximity, hand proximity x hunger]
 HAND_PERCEPTION = 48.0        # world units: how near the hand must be to feel it
 LEARN_RATE = 0.05             # step size for learning from one's own experience
 OBSERVE_RATE = 0.02           # weaker step for learning by watching a neighbour
+# Seeing a neighbour hurt or killed is not idle observation - it is trauma, and
+# it must actually stick, or a player who keeps killing never comes to be
+# feared (the victims die and drop out of the flock's average, leaving only the
+# faintly-taught survivors). Violent events are witnessed from farther and burn
+# in far deeper than a feeding does.
+TRAUMA_PERCEPTION = 85.0      # world units a violent death is witnessed from
+TRAUMA_RATE = 0.11            # how deeply witnessing harm teaches fear of the hand
 ELIG_DECAY = 0.88             # how fast the "what just happened to me" trace fades
 VALENCE_CLIP = 1.5            # bound on every learned weight (stops runaway)
 REWARD_EAT = 0.4              # mild reward for finding food while the hand is near
@@ -615,16 +622,21 @@ class World:
         if not observers:
             return
         valence = 1.0 if good else -1.0
+        # a feeding is quietly noticed nearby; a violent death is trauma, seen
+        # from farther and learned much more deeply - so cruelty a witness
+        # survives actually turns the flock against you.
+        perception = HAND_PERCEPTION if good else TRAUMA_PERCEPTION
+        rate = OBSERVE_RATE if good else TRAUMA_RATE
         victim_pos = np.asarray(creature.pos, dtype=float)
         for other in self._alive():
             if other is creature or other.mind is None:
                 continue
             hand_dist = float(np.linalg.norm(np.asarray(other.pos, dtype=float) - victim_pos))
-            prox = max(0.0, 1.0 - hand_dist / HAND_PERCEPTION)
+            prox = max(0.0, 1.0 - hand_dist / perception)
             if prox <= 0.0:
                 continue
             hunger_o = max(0.0, min(1.0, 1.0 - other.energy / MAX_ENERGY))
-            other.mind.teach(valence, Mind.features(prox, hunger_o), OBSERVE_RATE)
+            other.mind.teach(valence, Mind.features(prox, hunger_o), rate)
             # witnessing it moves a neighbour's mood too, scaled by how close
             # it was - the seed of a mood that ripples through the flock.
             other.mind.feel(dv * MOOD_WITNESS * prox, da * MOOD_WITNESS * prox)
