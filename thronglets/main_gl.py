@@ -4,9 +4,9 @@ The other renderers in this project are 2D: main.py and main_web.py draw
 flat. This file is different - it is real
 3D: an OpenGL scene with a perspective camera you can orbit, a lit procedural
 mountain terrain mesh, three-dimensional trees and rocks, and the creatures
-as little yellow bodies in blue clothes (head, torso, arms, legs) standing
-on the ground, each wrapped in a faint misty coloured haze that shows the
-signal it's emitting. Nothing here is a 2D blit.
+as big coloured heads on two little feet - the head's colour is the signal
+each creature is currently emitting (the same 6-token palette as every
+other renderer). Nothing here is a 2D blit.
 
 On top of the base scene it has a full **day/night cycle, seasons and
 weather**, driven by the 3D lighting instead of flat tints:
@@ -82,11 +82,8 @@ TOKEN_COLORS_F = [(r / 255.0, g / 255.0, b / 255.0) for r, g, b in TOKEN_COLORS]
 
 TRUNK_COLOR = (0.38, 0.26, 0.15)
 ROCK_COLOR = (0.48, 0.48, 0.53)
-# Every creature looks the same: a yellow body in blue clothes. The token it
-# signals shows only as a soft coloured halo (TOKEN_COLORS_F), not as its skin.
-SKIN_COLOR = (0.98, 0.82, 0.26)     # yellow head, arms, legs, hands, feet
-CLOTHES_COLOR = (0.20, 0.36, 0.74)  # blue torso
-LIMB_COLOR = (0.90, 0.72, 0.20)     # a slightly deeper yellow for limbs
+# A creature is just a big head on two little feet, coloured by the signal
+# it's currently emitting (TOKEN_COLORS_F) - so its colour is its status.
 EYE_COLOR = (0.08, 0.08, 0.10)
 
 # Emergent learning (the opt-in Mind in simulation.py): the mouse cursor is
@@ -1133,10 +1130,10 @@ class Renderer:
             cy = float(terrain_height(cx, cz))
             if float(terrain_water_mask(cx, cz)) > 0.5:
                 cy = WATER_LEVEL
-            centre = np.array([cx, cy + 2.2, cz])
+            centre = np.array([cx, cy + 1.4, cz])
             oc = o - centre
             b = np.dot(oc, d)
-            disc = b * b - (np.dot(oc, oc) - 2.8 * 2.8)
+            disc = b * b - (np.dot(oc, oc) - 1.8 * 1.8)
             if disc < 0:
                 continue
             t = -b - math.sqrt(disc)
@@ -1269,9 +1266,8 @@ class Renderer:
                     spot = translate(x + dx * s, y + 1.16 * s, z + dz * s) @ scale(s, s, s)
                     self._draw(self.vao_mushroom_spot, spot, vp, MUSHROOM_SPOT_COLOR, env)
 
-        # creatures: eggs while unhatched, otherwise a little body (head,
-        # torso, arms, legs) with a face. The signal shows as a halo (below).
-        halos = []
+        # creatures: eggs while unhatched, otherwise a big coloured head on
+        # two little feet - the colour is the creature's current signal.
         flames = []   # (cx, cy, cz) burning creatures, drawn after the bodies
         for c in world.creatures:
             if not c.alive:
@@ -1311,27 +1307,18 @@ class Renderer:
 
             bob = 0.0 if dstate else math.sin(self.visual_time * 2.2 + c.id * 1.7) * 0.18
             foot = cy + bob
-            # legs: yellow capsules with little feet
-            for lx in (-0.4, 0.4):
-                self._capsule(vp, env, cxj + lx, czj, foot + 0.2 * sq, foot + 1.2 * sq, 0.2, LIMB_COLOR)
-                self._sph(vp, env, cxj + lx, foot, czj, 0.3, SKIN_COLOR, 0.38, 0.25, 0.5)
-            # pear-shaped blue torso (belly + shoulders) and a yellow neck
-            self._sph(vp, env, cxj, foot + 1.7 * sq, czj, 1.0, CLOTHES_COLOR, 0.9, 1.0 * sq, 0.9)
-            self._sph(vp, env, cxj, foot + 2.55 * sq, czj, 0.72, CLOTHES_COLOR)
-            self._cyl(vp, env, cxj, foot + 3.0 * sq, czj, 0.22, 0.22, SKIN_COLOR)
-            # arms held along the body - BLUE sleeves, with yellow hands
-            for ax in (-0.95, 0.95):
-                self._capsule(vp, env, cxj + ax, czj, foot + 1.4 * sq, foot + 2.55 * sq, 0.19, CLOTHES_COLOR)
-                self._sph(vp, env, cxj + ax, foot + 1.35 * sq, czj, 0.24, SKIN_COLOR)
-            # yellow head + expressive face (forced to fear while dying)
-            head_y = foot + 3.75 * sq
-            self._sph(vp, env, cxj, head_y, czj, 0.85, SKIN_COLOR)
-            self._draw_face(vp, env, cxj, czj, head_y, 0.85, eye,
+            # colour by the creature's current signal (its "status")
+            col = TOKEN_COLORS_F[c.token % len(TOKEN_COLORS_F)]
+            foot_col = tuple(v * 0.45 for v in col)   # darker version, for the feet
+            # just a big coloured head with a face, on two little feet
+            for lx in (-0.45, 0.45):
+                self._sph(vp, env, cxj + lx, foot + 0.15, czj + 0.25, 0.34, foot_col, 0.42, 0.28, 0.55)
+            head_y = foot + 1.35 * sq
+            self._sph(vp, env, cxj, head_y, czj, 1.25, col, 1.25, 1.25 * sq, 1.25)
+            self._draw_face(vp, env, cxj, czj, head_y, 1.25, eye,
                             "fear" if dstate else self.emotion_of(c))
-            if c.token != 0 and dstate is None:
-                halos.append((cx, foot + 2.0, cz, c.token))
             if c.id == self.selected_id and dstate is None:
-                mk = 6.4 + math.sin(self.visual_time * 4.0) * 0.4
+                mk = 3.4 + math.sin(self.visual_time * 4.0) * 0.35
                 self._draw(self.vao_eye, translate(cx, foot + mk, cz), vp, (1.0, 0.95, 0.35), env)
 
         # flames over burning creatures: several flickering tongues
@@ -1343,24 +1330,6 @@ class Renderer:
                 col = FLAME_COLORS[k % 2]
                 self._draw(self.vao_hand, translate(fx, cy + 1.3 + k * 0.55, fz) @ scale(1.5, 2.0 * fh, 1.5),
                            vp, col, env)
-
-        # signal halos: a faint, misty coloured glow around each signalling
-        # creature - two soft additive shells so it fades like fog, not a shell
-        if halos:
-            ctx.enable(ctx.BLEND)
-            ctx.blend_func = ctx.SRC_ALPHA, ctx.ONE
-            ctx.depth_mask = False
-            for cx, hy, cz, token in halos:
-                r, g, bl = TOKEN_COLORS_F[token]
-                pulse = 0.85 + 0.15 * math.sin(self.visual_time * 2.0 + cx)
-                for rad, a in ((2.7, 0.09), (3.7, 0.055)):   # inner + outer haze
-                    self.shadow["mvp"].write(_bytes(vp @ (translate(cx, hy, cz)
-                                             @ scale(rad, rad * 1.15, rad))))
-                    self.shadow["u_color"].value = (r, g, bl, a * pulse)
-                    self.vao_halo.render()
-            ctx.depth_mask = True
-            ctx.blend_func = ctx.SRC_ALPHA, ctx.ONE_MINUS_SRC_ALPHA
-            ctx.disable(ctx.BLEND)
 
         # a small flock of birds drifting across the sky
         self.birds[:, 0] += dt * 9.0
