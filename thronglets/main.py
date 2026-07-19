@@ -45,7 +45,14 @@ import pygame
 
 from i18n import STATE_LABELS, TRAIT_LABELS
 from simulation import (DANGER, DISTRESS, FOOD, Genome, HAND_PERCEPTION, HEIGHT, IDLE, MATE, MAX_POPULATION, N_TOKENS,
-                         N_TRAITS, World, WIDTH, compare_seeds, load_seed_genome, load_world, save_world, top3_and_other)
+                         N_TRAITS, World, WIDTH, compare_seeds, load_seed_genome, load_world, save_world, top3_and_other,
+                         MEM_ROWS, MEM_COLS, MEM_CLIP)
+
+# When learning is on, a creature's fill colour shows its inner emotion (so a
+# panic rippling through the flock is visible as a wave of red); the signal-token
+# ring around it is unchanged. Off, creatures keep the plain BODY_COLOR.
+MOOD_FILL = {"joy": (120, 210, 100), "neutral": (150, 150, 140),
+             "sad": (90, 130, 215), "fear": (225, 85, 75)}
 
 TRAIN_EPISODES = 3000
 TRAIN_BATCH_SIZE = 256
@@ -874,9 +881,37 @@ def update_listening(channel, tones, world, mouse_pos, hud_h, muted, hovered_id)
     return target_id
 
 
-def draw(screen, font, world, paused, speed, mode, lang, expanded, trained=False, muted=False):
+def draw_memory_overlay(screen, mind):
+    """Paint a creature's spatial memory over the field - green tiles over
+    ground it remembers as good, red over ground it fears - its mental map of
+    the world made visible. Drawn on a translucent surface so the field shows
+    through."""
+    cell_w = WIDTH / MEM_COLS * SCALE_X
+    cell_h = HEIGHT / MEM_ROWS * SCALE_Y
+    overlay = pygame.Surface((SCREEN_W, SCREEN_H - HUD_H), pygame.SRCALPHA)
+    for cy in range(MEM_ROWS):
+        for cx in range(MEM_COLS):
+            v = float(mind.memory[cy, cx])
+            if abs(v) < 0.06:
+                continue
+            mag = min(1.0, abs(v) / MEM_CLIP)
+            col = (60, 200, 90) if v > 0 else (210, 60, 50)
+            rect = (int(cx * cell_w), int(cy * cell_h), int(cell_w) + 1, int(cell_h) + 1)
+            overlay.fill((*col, int(45 + 120 * mag)), rect)
+    screen.blit(overlay, (0, HUD_H))
+
+
+def draw(screen, font, world, paused, speed, mode, lang, expanded, trained=False, muted=False,
+         hovered_id=None):
     screen.fill(BG)
     pygame.draw.rect(screen, GROUND, (0, HUD_H, SCREEN_W, SCREEN_H - HUD_H))
+
+    # the hovered creature's mental map, laid on the field (learning only)
+    if world.learning and hovered_id is not None:
+        hov = next((c for c in world.creatures
+                    if c.id == hovered_id and c.alive and c.mind is not None), None)
+        if hov is not None:
+            draw_memory_overlay(screen, hov.mind)
 
     for fx, fy in world.food:
         pygame.draw.circle(screen, FOOD_COLOR, (int(fx * SCALE_X), int(fy * SCALE_Y) + HUD_H), 3)
@@ -885,7 +920,12 @@ def draw(screen, font, world, paused, speed, mode, lang, expanded, trained=False
         if not c.alive:
             continue
         x, y = int(c.pos[0] * SCALE_X), int(c.pos[1] * SCALE_Y) + HUD_H
-        pygame.draw.circle(screen, BODY_COLOR, (x, y), 4)
+        # when learning is on, the fill colour is the creature's inner emotion,
+        # so a mood spreading through the flock is visible as a wave of colour
+        body = MOOD_FILL[c.mind.emotion()] if (world.learning and c.mind is not None) else BODY_COLOR
+        pygame.draw.circle(screen, body, (x, y), 4)
+        if c.id == hovered_id:
+            pygame.draw.circle(screen, (245, 245, 210), (x, y), 9, width=1)
         if c.token != 0:
             pygame.draw.circle(screen, TOKEN_COLORS[c.token], (x, y), 7, width=2)
 
@@ -1814,7 +1854,7 @@ def main():
                                        HUD_H, sound_muted, hovered_id)
 
         draw(screen, font, world, paused, speed, mode, lang, hud_expanded,
-             trained=seed_genome is not None, muted=sound_muted)
+             trained=seed_genome is not None, muted=sound_muted, hovered_id=hovered_id)
         pygame.display.flip()
 
     if sound_channel is not None:

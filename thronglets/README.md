@@ -140,11 +140,17 @@ enough to witness it - learns your hand is worth approaching; drop a
 predator and they learn to flee it.** Over a session the flock comes to
 **trust or fear you**, and passes what it learned on to its offspring, so a
 kind or cruel run compounds across generations. When it's on, it's shown
-two ways: a colour-coded line on its own row under the HUD header (*"the
-flock trusts you (+76%)"* / *"…fears you"*), and a **disposition sparkline** at the top of
+several ways: a colour-coded line on its own row under the HUD header (*"the
+flock trusts you (+76%)"* / *"…fears you"*), a **disposition sparkline** at the top of
 the Graph screen (`G`) that plots that feeling over time next to the
-vocabulary curves. (With learning off, neither appears - the observatory,
-unchanged.)
+vocabulary curves, and - surfacing the same inner life the 3D view shows -
+**each creature is filled with the colour of its emotion** (calm grey-green,
+happy green, sad blue, fearful red), so a mood spreading through the flock is
+visible as a **wave of colour** rolling across the field; the signal-token
+ring around each creature is unchanged. **Hover a creature and its spatial
+memory is painted on the ground** - green tiles over the patches it trusts,
+red over the ones it fears, its mental map of the world laid bare. (With
+learning off, none of this appears - the observatory, unchanged.)
 
 ### Web (any device with a browser)
 
