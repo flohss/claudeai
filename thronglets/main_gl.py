@@ -1001,6 +1001,45 @@ class Renderer:
         self.lit["u_snowcover"].value = 1.0 if env["season"] == "winter" else 0.0
         vao.render()
 
+    # small body-part builders (a sphere r0.42 and a cylinder r0.30 h1.0)
+    def _sph(self, vp, env, x, y, z, r, color, sx=None, sy=None, sz=None):
+        sx = r if sx is None else sx
+        sy = r if sy is None else sy
+        sz = r if sz is None else sz
+        self._draw(self.vao_hand, translate(x, y, z) @ scale(sx / 0.42, sy / 0.42, sz / 0.42),
+                   vp, color, env)
+
+    def _cyl(self, vp, env, x, y0, z, r, h, color):
+        self._draw(self.vao_limb, translate(x, y0, z) @ scale(r / 0.30, h, r / 0.30), vp, color, env)
+
+    def _capsule(self, vp, env, x, z, y0, y1, r, color):
+        self._cyl(vp, env, x, y0, z, r, y1 - y0, color)
+        self._sph(vp, env, x, y0, z, r, color)
+        self._sph(vp, env, x, y1, z, r, color)
+
+    def _draw_face(self, vp, env, cx, cz, hy, hr, eye, emo):
+        """White eyes + pupils, nose and an emotion-shaped mouth on a head of
+        radius hr, all turned to face the camera."""
+        fp = EMOTION_FACE[emo]
+        sc = hr / 0.96
+        face = np.array([eye[0] - cx, 0.0, eye[2] - cz])
+        if np.linalg.norm(face) > 1e-3:
+            face /= np.linalg.norm(face)
+        right = np.cross(np.array([0.0, 1.0, 0.0]), face)
+        for side in (-1, 1):
+            ex = cx + face[0] * hr * 0.72 + right[0] * hr * 0.34 * side
+            ez = cz + face[2] * hr * 0.72 + right[2] * hr * 0.34 * side
+            ey = hy + hr * 0.16
+            self._draw(self.vao_sclera, translate(ex, ey, ez) @ scale(sc * fp["sclera"], sc * fp["sclera"], sc * fp["sclera"]),
+                       vp, SCLERA_COLOR, env)
+            self._draw(self.vao_pupil, translate(ex + face[0] * 0.12, ey + fp["pupil_dy"], ez + face[2] * 0.12) @ scale(sc, sc, sc),
+                       vp, PUPIL_COLOR, env)
+        self._draw(self.vao_nose, translate(cx + face[0] * hr * 0.9, hy - hr * 0.05, cz + face[2] * hr * 0.9) @ scale(sc, sc, sc),
+                   vp, NOSE_COLOR, env)
+        mw, mh, mf = fp["mouth"]
+        self._draw(self.vao_eye, translate(cx + face[0] * hr * 0.84, hy - hr * 0.42 + fp["mouth_dy"], cz + face[2] * hr * 0.84)
+                   @ scale(mw * sc, mh * sc, mf * sc), vp, MOUTH_COLOR, env)
+
     def _shadow(self, x, z, r, vp, strength, sun):
         # A directional shadow: offset away from the sun and stretched when the
         # sun is low, so shadows lengthen at dawn/dusk like real ones. sun is
@@ -1272,45 +1311,27 @@ class Renderer:
 
             bob = 0.0 if dstate else math.sin(self.visual_time * 2.2 + c.id * 1.7) * 0.18
             foot = cy + bob
-            for lx in (-0.42, 0.42):
-                self._draw(self.vao_limb, translate(cxj + lx, foot, czj) @ scale(0.78, 1.0 * sq, 0.78),
-                           vp, LIMB_COLOR, env)
-                self._draw(self.vao_hand, translate(cxj + lx, foot, czj) @ scale(0.7, 0.7, 0.7),
-                           vp, SKIN_COLOR, env)
+            # legs: yellow capsules with little feet
+            for lx in (-0.4, 0.4):
+                self._capsule(vp, env, cxj + lx, czj, foot + 0.2 * sq, foot + 1.2 * sq, 0.2, LIMB_COLOR)
+                self._sph(vp, env, cxj + lx, foot, czj, 0.3, SKIN_COLOR, 0.38, 0.25, 0.5)
+            # pear-shaped blue torso (belly + shoulders) and a yellow neck
+            self._sph(vp, env, cxj, foot + 1.7 * sq, czj, 1.0, CLOTHES_COLOR, 0.9, 1.0 * sq, 0.9)
+            self._sph(vp, env, cxj, foot + 2.55 * sq, czj, 0.72, CLOTHES_COLOR)
+            self._cyl(vp, env, cxj, foot + 3.0 * sq, czj, 0.22, 0.22, SKIN_COLOR)
+            # arms held along the body - BLUE sleeves, with yellow hands
             for ax in (-0.95, 0.95):
-                self._draw(self.vao_limb, translate(cxj + ax, foot + 1.15 * sq, czj) @ scale(0.7, 1.25 * sq, 0.7),
-                           vp, LIMB_COLOR, env)
-                self._draw(self.vao_hand, translate(cxj + ax, foot + 1.15 * sq, czj) @ scale(0.75, 0.75, 0.75),
-                           vp, SKIN_COLOR, env)
-            self._draw(self.vao_body, translate(cxj, foot + 1.9 * sq, czj) @ scale(0.72, 0.95 * sq, 0.72),
-                       vp, CLOTHES_COLOR, env)
-            head_y = foot + 3.4 * sq
-            self._draw(self.vao_head, translate(cxj, head_y, czj) @ scale(0.8, 0.8, 0.8),
-                       vp, SKIN_COLOR, env)
-            # expressive face - forced to fear while dying
-            fp = EMOTION_FACE["fear" if dstate else self.emotion_of(c)]
-            face = np.array([eye[0] - cxj, 0.0, eye[2] - czj])
-            if np.linalg.norm(face) > 1e-3:
-                face /= np.linalg.norm(face)
-            right = np.cross(np.array([0.0, 1.0, 0.0]), face)
-            for side in (-1, 1):
-                ex = cxj + face[0] * 0.66 + right[0] * 0.32 * side
-                ez = czj + face[2] * 0.66 + right[2] * 0.32 * side
-                ey = head_y + 0.16
-                self._draw(self.vao_sclera, translate(ex, ey, ez) @ scale(fp["sclera"], fp["sclera"], fp["sclera"]),
-                           vp, SCLERA_COLOR, env)
-                self._draw(self.vao_pupil, translate(ex + face[0] * 0.12, ey + fp["pupil_dy"], ez + face[2] * 0.12),
-                           vp, PUPIL_COLOR, env)
-            self._draw(self.vao_nose, translate(cxj + face[0] * 0.86, head_y - 0.05, czj + face[2] * 0.86),
-                       vp, NOSE_COLOR, env)
-            mw, mh, mf = fp["mouth"]
-            self._draw(self.vao_eye,
-                       translate(cxj + face[0] * 0.80, head_y - 0.40 + fp["mouth_dy"], czj + face[2] * 0.80)
-                       @ scale(mw, mh, mf), vp, MOUTH_COLOR, env)
+                self._capsule(vp, env, cxj + ax, czj, foot + 1.4 * sq, foot + 2.55 * sq, 0.19, CLOTHES_COLOR)
+                self._sph(vp, env, cxj + ax, foot + 1.35 * sq, czj, 0.24, SKIN_COLOR)
+            # yellow head + expressive face (forced to fear while dying)
+            head_y = foot + 3.75 * sq
+            self._sph(vp, env, cxj, head_y, czj, 0.85, SKIN_COLOR)
+            self._draw_face(vp, env, cxj, czj, head_y, 0.85, eye,
+                            "fear" if dstate else self.emotion_of(c))
             if c.token != 0 and dstate is None:
-                halos.append((cx, foot + 1.9, cz, c.token))
+                halos.append((cx, foot + 2.0, cz, c.token))
             if c.id == self.selected_id and dstate is None:
-                mk = 6.0 + math.sin(self.visual_time * 4.0) * 0.4
+                mk = 6.4 + math.sin(self.visual_time * 4.0) * 0.4
                 self._draw(self.vao_eye, translate(cx, foot + mk, cz), vp, (1.0, 0.95, 0.35), env)
 
         # flames over burning creatures: several flickering tongues
