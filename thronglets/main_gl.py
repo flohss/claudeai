@@ -1029,7 +1029,9 @@ class Renderer:
             ey = hy + hr * 0.16
             self._draw(self.vao_sclera, translate(ex, ey, ez) @ scale(sc * fp["sclera"], sc * fp["sclera"], sc * fp["sclera"]),
                        vp, SCLERA_COLOR, env)
-            self._draw(self.vao_pupil, translate(ex + face[0] * 0.12, ey + fp["pupil_dy"], ez + face[2] * 0.12) @ scale(sc, sc, sc),
+            # sit the pupil on the front surface of the white so it stays visible
+            pr = 0.27 * sc * fp["sclera"] * 0.85
+            self._draw(self.vao_pupil, translate(ex + face[0] * pr, ey + fp["pupil_dy"], ez + face[2] * pr) @ scale(sc, sc, sc),
                        vp, PUPIL_COLOR, env)
         self._draw(self.vao_nose, translate(cx + face[0] * hr * 0.9, hy - hr * 0.05, cz + face[2] * hr * 0.9) @ scale(sc, sc, sc),
                    vp, NOSE_COLOR, env)
