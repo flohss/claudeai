@@ -105,11 +105,12 @@ if you just hit `ENTER` through all of them, and they stick for the whole run
 | `T`           | family tree - browse ancestors/descendants                  |
 | `C`           | compare seeds - is a result reproducible?                   |
 | `D`           | translator - what each color currently means                |
-| `F`           | FAQ - curated questions and answers                          |
+| `?`           | FAQ - curated questions and answers                          |
+| `F`           | fire tool - arm it, then left-click or drag to burn creatures |
 | `H`           | in-game notice explaining the mechanics                      |
 | `V`           | show/hide the full HUD (or click the top HUD strip)          |
 | `M`           | mute the proximity-listening sound                          |
-| left click    | place food (or expand/collapse the HUD if clicked there)     |
+| left click    | place food (or, while the fire tool is armed, burn)          |
 | right click   | place a predator                                              |
 | `ESC`         | quit                                                         |
 
@@ -315,8 +316,8 @@ moved on.
 
 ## FAQ
 
-A curated in-game FAQ (`F` in pygame, `Shift+F` in the terminal since
-lowercase `f` is already the manual food-drop key, an "FAQ" button on the
+A curated in-game FAQ (`?` in pygame - `f` now arms the fire tool - `Shift+F`
+in the terminal since lowercase `f` is already the manual food-drop key, an "FAQ" button on the
 web page) answers nine questions that actually came up while building and
 playing this - why creatures cluster near food they're not eating, whether
 distress leads to cooperation, why adaptive metabolism always bottoms out,

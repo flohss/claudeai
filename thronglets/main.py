@@ -25,6 +25,7 @@ Controls:
   N / P        drop food / add a predator at a random spot (the flock learns from it)
   LEFT/RIGHT CLICK   place food / a predator at the clicked spot (kindness / harm)
   [ / ]        remove/add a predator right now
+  F            fire tool: arm it, then left-click or drag to burn creatures
   G            graph screen (vocab, traits, and the flock's feeling toward you)
   V            show/hide the full HUD (or click the top HUD strip)
   M            mute the proximity-listening sound
@@ -33,6 +34,7 @@ Controls:
 """
 
 import argparse
+import math
 import os
 import random
 import sys
@@ -53,6 +55,26 @@ from simulation import (DANGER, DISTRESS, FOOD, Genome, HAND_PERCEPTION, HEIGHT,
 # ring around it is unchanged. Off, creatures keep the plain BODY_COLOR.
 MOOD_FILL = {"joy": (120, 210, 100), "neutral": (150, 150, 140),
              "sad": (90, 130, 215), "fear": (225, 85, 75)}
+
+# The fire tool (F arms it): a click or drag burns every creature within this
+# world-space radius of the cursor - so "one or several" is just a matter of how
+# many are under the brush. Each burned creature learns fear (deliver_experience)
+# and dies, leaving a brief flame.
+FIRE_RADIUS = 12.0
+FLAME_DUR = 0.6           # seconds a flame puff lingers where a creature burned
+FLAME_COLORS = [(255, 240, 120), (255, 150, 40), (220, 60, 30)]
+
+
+def burn_at(world, wx, wy, flames):
+    """Burn every living creature within FIRE_RADIUS of (wx, wy): each learns
+    fear from it (a no-op when learning is off) and dies, leaving a flame."""
+    for c in list(world.creatures):
+        if not c.alive:
+            continue
+        if (c.pos[0] - wx) ** 2 + (c.pos[1] - wy) ** 2 <= FIRE_RADIUS ** 2:
+            world.deliver_experience(c, LEARN_PREDATOR_REWARD)   # teach fear (+ witnesses)
+            world.kill_creature(c)
+            flames.append([float(c.pos[0]), float(c.pos[1]), 0.0])
 
 TRAIN_EPISODES = 3000
 TRAIN_BATCH_SIZE = 256
@@ -205,8 +227,9 @@ TEXT = {
         "hud_muted_tag": "[sound muted]",
         "hud_header": "tick {tick:>6}   pop {pop:>4}   births {births:>5}   deaths {deaths:>5}   {status}",
         "hud_controls_hint1": "(space=pause  up/down=speed  r=reset  s=save  g=graph",
-        "hud_controls_hint2": " t=family  c=compare  d=translator  f=faq  h=help  m=mute)",
-        "hud_controls_hint3": "n/click = food   p/right-click = predator",
+        "hud_controls_hint2": " t=family  c=compare  d=translator  ?=faq  h=help  m=mute)",
+        "hud_controls_hint3": "n/click = food   p/right-click = predator   f = fire tool",
+        "hud_fire_armed": "FIRE - left-click or drag to burn   (F to stop)",
         "hud_expand_hint": "V or click here = show full HUD",
         "hud_manual": "mode: manual (no automatic spawning)",
         "hud_auto": "mode: automatic   predators: {count} ([ / ] act immediately)",
@@ -412,8 +435,9 @@ TEXT = {
         "hud_muted_tag": "[son coupe]",
         "hud_header": "tick {tick:>6}   pop {pop:>4}   naissances {births:>5}   morts {deaths:>5}   {status}",
         "hud_controls_hint1": "(espace=pause  haut/bas=vitesse  r=reset  s=sauver  g=graphique",
-        "hud_controls_hint2": " t=famille  c=comparer  d=traducteur  f=faq  h=aide  m=silence)",
-        "hud_controls_hint3": "n/clic = nourriture   p/clic droit = predateur",
+        "hud_controls_hint2": " t=famille  c=comparer  d=traducteur  ?=faq  h=aide  m=silence)",
+        "hud_controls_hint3": "n/clic = nourriture   p/clic droit = predateur   f = outil feu",
+        "hud_fire_armed": "FEU - clic gauche ou glisser pour bruler   (F pour arreter)",
         "hud_expand_hint": "V ou clique ici = HUD complet",
         "hud_manual": "mode: manuel (pas d'apparition automatique)",
         "hud_auto": "mode: auto   predateurs : {count} ([ / ] agit tout de suite)",
@@ -1806,6 +1830,8 @@ def main():
     speed = 1  # ticks per real second
     hud_expanded = False
     sound_muted = False
+    fire_mode = False   # the fire tool: armed with F, burns on click/drag
+    flames = []         # [world_x, world_y, elapsed] flame puffs to animate
     hovered_id = None   # id of the creature the cursor is currently over
     tick_accumulator = 0.0
     running = True
@@ -1853,8 +1879,10 @@ def main():
                     run_compare_ui(screen, font, world, lang, init_pop, seed_genome)
                 elif event.key == pygame.K_d:
                     show_translator(screen, font, world, lang)
-                elif event.key == pygame.K_f:
+                elif event.key in (pygame.K_QUESTION, pygame.K_SLASH):
                     show_faq(screen, font, lang)
+                elif event.key == pygame.K_f:
+                    fire_mode = not fire_mode      # arm / disarm the fire tool
                 elif event.key == pygame.K_h:
                     show_help(screen, font, lang)
                 elif event.key == pygame.K_v:
@@ -1874,9 +1902,15 @@ def main():
                     if event.button == 3:
                         world.add_predator(wx, wy)
                         teach_nearby(world, wx, wy, LEARN_PREDATOR_REWARD)
+                    elif fire_mode:
+                        burn_at(world, wx, wy, flames)   # left-click burns while armed
                     else:
                         world.add_food(wx, wy)
                         teach_nearby(world, wx, wy, LEARN_FOOD_REWARD)
+            elif event.type == pygame.MOUSEMOTION and fire_mode and event.buttons[0]:
+                mx, my = event.pos                        # drag the fire brush
+                if my > HUD_H:
+                    burn_at(world, mx / SCALE_X, (my - HUD_H) / SCALE_Y, flames)
 
         # the mouse cursor is the player's "hand": creatures feel it, and it
         # carries whatever they last learned to associate with it (approach
@@ -1902,6 +1936,27 @@ def main():
 
         draw(screen, font, world, paused, speed, mode, lang, hud_expanded,
              trained=seed_genome is not None, muted=sound_muted, hovered_id=hovered_id)
+
+        # flame puffs where creatures burned, flickering out over FLAME_DUR
+        for f in flames:
+            f[2] += dt
+        flames[:] = [f for f in flames if f[2] < FLAME_DUR]
+        for fx, fy, el in flames:
+            sx, sy = int(fx * SCALE_X), int(fy * SCALE_Y) + HUD_H
+            frac = el / FLAME_DUR
+            for k, col in enumerate(FLAME_COLORS):
+                r = max(1, int((7 - k * 2) * (1.0 - frac)))
+                jitter = int((k + 1) * 2 * math.sin(el * 40 + k))
+                pygame.draw.circle(screen, col, (sx + jitter, sy - int(frac * 10) - k * 2), r)
+
+        # the fire tool: a red brush ring at the cursor + an armed banner
+        if fire_mode:
+            mx, my = pygame.mouse.get_pos()
+            if my > HUD_H:
+                pygame.draw.circle(screen, (235, 90, 40), (mx, my), int(FIRE_RADIUS * SCALE_X), width=2)
+            banner = font.render(TEXT[lang]["hud_fire_armed"], True, (245, 130, 60))
+            screen.blit(banner, (SCREEN_W // 2 - banner.get_width() // 2, HUD_H + 6))
+
         pygame.display.flip()
 
     if sound_channel is not None:
