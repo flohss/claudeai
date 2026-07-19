@@ -66,7 +66,8 @@ import sys
 
 import numpy as np
 
-from simulation import WIDTH, HEIGHT, MAX_ENERGY, World
+from simulation import (WIDTH, HEIGHT, MAX_ENERGY, World,
+                        MEM_ROWS, MEM_COLS, MEM_CLIP, _mem_cell_center)
 
 # The same 6-token palette as every other renderer, as 0..1 floats so a
 # creature's colour means the same thing here as in every other renderer.
@@ -1064,6 +1065,30 @@ class Renderer:
         self.shadow["u_color"].value = (0.05, 0.09, 0.05, strength)
         self.vao_disc.render()
 
+    def _draw_memory(self, vp, mind):
+        """Lay the selected creature's mental map on the ground: a green tile
+        over ground it remembers as good, a red one over ground it learned to
+        fear, brighter the stronger the memory. Its consciousness, made
+        visible. Call inside a blend / depth-write-off block."""
+        mem = mind.memory
+        for cy in range(MEM_ROWS):
+            for cx in range(MEM_COLS):
+                v = float(mem[cy, cx])
+                if abs(v) < 0.06:
+                    continue
+                wx, wy = _mem_cell_center(cy, cx)
+                sx, sz = world_to_scene((wx, wy))
+                ty = float(terrain_height(sx, sz))
+                if float(terrain_water_mask(sx, sz)) > 0.5:
+                    ty = WATER_LEVEL
+                mag = min(1.0, abs(v) / MEM_CLIP)
+                col = (0.30, 1.0, 0.55) if v > 0 else (1.0, 0.18, 0.12)
+                r = 7.5 * (0.55 + 0.45 * mag)
+                m = translate(sx, ty + 0.08, sz) @ scale(r, 1.0, r)
+                self.shadow["mvp"].write(_bytes(vp @ m))
+                self.shadow["u_color"].value = (col[0], col[1], col[2], 0.28 + 0.42 * mag)
+                self.vao_disc.render()
+
     def _draw_water(self, vao, vp, env, eye):
         self.water["mvp"].write(_bytes(vp))
         self.water["u_time"].value = self.visual_time
@@ -1242,6 +1267,12 @@ class Renderer:
             if c.alive:
                 cx, cz = world_to_scene(c.pos)
                 self._shadow(cx, cz, 2.6, vp, sh, sun)
+        # the selected creature's spatial memory, painted on the ground
+        if self.selected_id is not None:
+            sel = next((c for c in world.creatures
+                        if c.id == self.selected_id and c.alive and c.mind is not None), None)
+            if sel is not None:
+                self._draw_memory(vp, sel.mind)
         ctx.depth_mask = True
         ctx.disable(ctx.BLEND)
 

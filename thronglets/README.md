@@ -401,7 +401,19 @@ an agitated one darts about restlessly while a listless, low-arousal
 (sad or calm) one barely stirs; and valence sets a goal - a terrified
 creature **bolts away from your hand**, a content one **drifts toward the
 nearest neighbour** to be near company. So you don't just read a face,
-you watch a frightened flock scatter and a happy one gather. A 2D HUD shows the
+you watch a frightened flock scatter and a happy one gather.
+
+**Each creature also keeps a mental map of the world.** On top of a feeling
+about the hand, a mind remembers *where* good and bad things happened - a
+coarse affect map of the ground. Being hurt stains the spot it happened on;
+finding food (or watching a neighbour thrive there) marks a place as worth
+returning to. The map fades slowly, steers movement only through the cells
+right around a creature (a distant memory can't teleport it), and is
+**partly inherited**, so a lineage can come to shun the very ground where
+its ancestors were killed. **Select a creature and its map is painted on
+the ground** - green over places it trusts, red over places it fears -
+literally its consciousness made visible; the map is saved and restored
+with the game. A 2D HUD shows the
 season/weather/clock/population, the flock's overall feeling toward you
 (*"the flock trusts you (+45%)"*), and a panel for the selected creature
 with its live mood (emotion, valence, arousal). The mood rides along with

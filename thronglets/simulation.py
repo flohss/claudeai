@@ -148,6 +148,36 @@ MOOD_SOCIAL = 0.55            # gentle pull toward the nearest neighbour when co
 MOOD_SPEED_FLOOR = 0.6        # speed multiplier at zero arousal (placid / listless)
 MOOD_SPEED_GAIN = 0.8         # additional speed multiplier at full arousal
 
+# --- spatial memory: a creature's mental map of WHERE good/bad things happen --
+# On top of feeling something about the hand, a mind keeps a coarse affect map
+# of the world: a grid of cells, each holding how good (+) or bad (-) that
+# patch of ground has turned out to be. Being hurt stains the spot it happened
+# on; eating (or watching a neighbour thrive) marks a place as worth returning
+# to. The map fades slowly, steers movement only through the cells right around
+# the creature (it can't be pulled across the whole world by a distant memory),
+# and is partly inherited - so a lineage can come to shun the ground where its
+# ancestors were killed. Opt-in with learning, like everything else here.
+MEM_COLS, MEM_ROWS = 10, 7    # affect-map resolution (cells of ~20x20 world units)
+MEM_DECAY = 0.995             # per step, memories fade slowly toward neutral
+MEM_FOOD = 0.30               # how much finding food marks a place as good
+MEM_HARM = 1.0                # how much being hurt stains a place as bad
+MEM_WITNESS = 0.5             # fraction of that a witness records for the victim's spot
+MEM_CLIP = 1.5                # bound on any one cell's remembered value
+MEM_MOVE_STRENGTH = 0.8       # how strongly the nearby map steers movement
+MEM_INHERIT = 0.6             # how much of the parents' maps a newborn is born knowing
+
+
+def _mem_cell(pos):
+    """Which affect-map cell (row, col) a world position falls in."""
+    cx = min(MEM_COLS - 1, max(0, int(pos[0] / WIDTH * MEM_COLS)))
+    cy = min(MEM_ROWS - 1, max(0, int(pos[1] / HEIGHT * MEM_ROWS)))
+    return cy, cx
+
+
+def _mem_cell_center(cy, cx):
+    """The world position at the centre of affect-map cell (row, col)."""
+    return np.array([(cx + 0.5) * WIDTH / MEM_COLS, (cy + 0.5) * HEIGHT / MEM_ROWS])
+
 
 class Genome:
     __slots__ = ("emission_logits", "response_weights", "traits")
@@ -247,14 +277,18 @@ class Mind:
     A newborn inherits a blend of its parents' weights (Mind.inherit), so a
     family's lessons carry forward and compound across generations."""
 
-    __slots__ = ("w", "elig", "valence", "arousal")
+    __slots__ = ("w", "elig", "valence", "arousal", "memory")
 
-    def __init__(self, w=None, valence=MOOD_VALENCE_REST, arousal=MOOD_AROUSAL_REST):
+    def __init__(self, w=None, valence=MOOD_VALENCE_REST, arousal=MOOD_AROUSAL_REST,
+                 memory=None):
         self.w = np.zeros(LEARN_FEATURES) if w is None else np.asarray(w, dtype=float)
         self.elig = np.zeros(LEARN_FEATURES)
         # the persistent inner mood (see the mood constants above)
         self.valence = float(valence)
         self.arousal = float(arousal)
+        # the coarse affect map of the world (see the memory constants above)
+        self.memory = (np.zeros((MEM_ROWS, MEM_COLS)) if memory is None
+                       else np.asarray(memory, dtype=float).reshape(MEM_ROWS, MEM_COLS))
 
     @staticmethod
     def features(hand_prox, hunger):
@@ -314,6 +348,14 @@ class Mind:
             return "joy"       # positive
         return "neutral"
 
+    # -- spatial memory ----------------------------------------------------
+    def remember(self, pos, value):
+        """Stain the affect-map cell at a world position: a good place gets a
+        positive mark, a place where something bad happened a negative one."""
+        cy, cx = _mem_cell(pos)
+        self.memory[cy, cx] = float(np.clip(self.memory[cy, cx] + value,
+                                            -MEM_CLIP, MEM_CLIP))
+
     @staticmethod
     def inherit(parents, rng):
         """A child's starting mind: a blend of its parents' learned weights,
@@ -332,7 +374,10 @@ class Mind:
         pa = float(np.mean([m.arousal for m in minds]))
         valence = MOOD_VALENCE_REST + (pv - MOOD_VALENCE_REST) * MOOD_INHERIT
         arousal = MOOD_AROUSAL_REST + (pa - MOOD_AROUSAL_REST) * MOOD_INHERIT
-        return Mind(np.clip(base, -VALENCE_CLIP, VALENCE_CLIP), valence, arousal)
+        # a child is born already knowing part of its parents' map of the world,
+        # so a family can inherit which ground to shun and which to seek out.
+        memory = np.mean([m.memory for m in minds], axis=0) * MEM_INHERIT
+        return Mind(np.clip(base, -VALENCE_CLIP, VALENCE_CLIP), valence, arousal, memory)
 
 
 class Creature:
@@ -502,6 +547,7 @@ class World:
             valence_rest = MOOD_VALENCE_REST - hunger * 0.85
             arousal_rest = MOOD_AROUSAL_REST + hunger * 0.45
             c.mind.relax(valence_rest, arousal_rest)
+            c.mind.memory *= MEM_DECAY   # the map of good/bad places fades slowly
 
     def deliver_experience(self, creature, reward, observers=True):
         """The player just did something to this creature - fed it
@@ -516,10 +562,12 @@ class World:
         hunger = max(0.0, min(1.0, 1.0 - creature.energy / MAX_ENERGY))
         good = reward > 0
         dv, da = (MOOD_FEED_DV, MOOD_FEED_DA) if good else (MOOD_HARM_DV, MOOD_HARM_DA)
+        mem_mark = MEM_FOOD if good else -MEM_HARM
         if creature.mind is not None:
             # the victim/beneficiary: the hand is right here (prox = 1)
             creature.mind.teach(reward, Mind.features(1.0, hunger), LEARN_RATE * 2.0)
             creature.mind.feel(dv, da)   # and it feels it, deeply, right now
+            creature.mind.remember(creature.pos, mem_mark)   # and remembers where
         if not observers:
             return
         valence = 1.0 if good else -1.0
@@ -536,6 +584,8 @@ class World:
             # witnessing it moves a neighbour's mood too, scaled by how close
             # it was - the seed of a mood that ripples through the flock.
             other.mind.feel(dv * MOOD_WITNESS * prox, da * MOOD_WITNESS * prox)
+            # and it learns that the victim's SPOT is a place to seek or shun
+            other.mind.remember(victim_pos, mem_mark * MEM_WITNESS * prox)
 
     def disposition_summary(self):
         """Population-average feeling toward the player's hand, -1 (the flock
@@ -839,6 +889,29 @@ class World:
                     if np.isfinite(pair_d[i, j]):
                         move += _toward(c.pos, positions[j]) * MOOD_SOCIAL
 
+                # spatial memory: the cells right around the creature pull it
+                # toward remembered-good ground and push it off remembered-bad
+                # ground - a local read of its mental map, not teleporting to a
+                # distant memory.
+                mem = c.mind.memory
+                cy, cx = _mem_cell(c.pos)
+                for dy in (-1, 0, 1):
+                    for dx in (-1, 0, 1):
+                        if dx == 0 and dy == 0:
+                            continue
+                        ny, nx = cy + dy, cx + dx
+                        if 0 <= ny < MEM_ROWS and 0 <= nx < MEM_COLS:
+                            v = mem[ny, nx]
+                            if abs(v) > 0.05:
+                                move += _toward(c.pos, _mem_cell_center(ny, nx)) * v * MEM_MOVE_STRENGTH
+                # and flee the very ground it stands on if that turned out bad
+                own_v = mem[cy, cx]
+                if own_v < -0.05:
+                    away = c.pos - _mem_cell_center(cy, cx)
+                    n = np.linalg.norm(away)
+                    if n > 1e-6:
+                        move += (away / n) * (-own_v) * MEM_MOVE_STRENGTH
+
             move += _edge_push(c.pos)
             speed = np.linalg.norm(move)
             if self.adaptive_traits:
@@ -928,6 +1001,7 @@ class World:
                     if self.learning and c.mind is not None:
                         c.mind.reinforce(REWARD_EAT)
                         c.mind.feel(0.25, -0.05)   # a fed creature grows a little content
+                        c.mind.remember(c.pos, MEM_FOOD)   # good things happen here
                     eaten.add(int(i))
                 break
         if eaten:
@@ -1046,6 +1120,7 @@ def save_world(world, path):
                 "traits": c.genome.traits.tolist(),
                 "mind": c.mind.w.tolist() if c.mind is not None else None,
                 "mood": [c.mind.valence, c.mind.arousal] if c.mind is not None else None,
+                "memory": c.mind.memory.tolist() if c.mind is not None else None,
             }
             for c in world.creatures if c.alive
         ],
@@ -1098,10 +1173,11 @@ def load_world(path, seed=None):
         creature.age = cd["age"]
         if cd.get("mind") is not None:
             mood = cd.get("mood")   # older saves have no mood -> resting baseline
+            memory = cd.get("memory")   # older saves have no map -> blank
             if mood is not None:
-                creature.mind = Mind(np.array(cd["mind"], dtype=float), mood[0], mood[1])
+                creature.mind = Mind(np.array(cd["mind"], dtype=float), mood[0], mood[1], memory)
             else:
-                creature.mind = Mind(np.array(cd["mind"], dtype=float))
+                creature.mind = Mind(np.array(cd["mind"], dtype=float), memory=memory)
         elif world.learning:
             creature.mind = Mind()
         if "id" in cd and cd["id"] in world.lineage:
