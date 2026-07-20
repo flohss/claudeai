@@ -26,6 +26,7 @@ Controls:
   LEFT/RIGHT CLICK   place food / a predator at the clicked spot (kindness / harm)
   [ / ]        remove/add a predator right now
   F            fire tool: arm it, then left-click or drag to burn creatures
+  I            (Master Mode) hold over a creature to isolate it until it obeys
   G            graph screen (vocab, traits, and the flock's feeling toward you)
   V            show/hide the full HUD (or click the top HUD strip)
   M            mute the proximity-listening sound
@@ -63,6 +64,26 @@ MOOD_FILL = {"joy": (120, 210, 100), "neutral": (150, 150, 140),
 FIRE_RADIUS = 12.0
 FLAME_DUR = 0.6           # seconds a flame puff lingers where a creature burned
 FLAME_COLORS = [(255, 240, 120), (255, 150, 40), (220, 60, 30)]
+
+# Master Mode: hold I over a creature to isolate it in accelerated time. A few
+# seconds of holding drives its obedience from 0 to 1 while, for the creature,
+# many subjective months of solitude crawl by.
+DOMINATE_RATE = 0.22     # obedience gained per real second of isolation
+DOMINATE_DAYS_PER_SEC = 90.0   # subjective days that pass per real second held
+OBEDIENT_COLOR = (150, 150, 158)   # the hollow grey of a broken creature
+
+
+def _subjective_span(days, lang):
+    """Turn accumulated subjective days into 'N days/weeks/months/years alone'."""
+    if days < 14:
+        n, unit = int(days), ("jours" if lang == "fr" else "days")
+    elif days < 90:
+        n, unit = int(days / 7), ("semaines" if lang == "fr" else "weeks")
+    elif days < 730:
+        n, unit = int(days / 30), ("mois" if lang == "fr" else "months")
+    else:
+        n, unit = int(days / 365), ("ans" if lang == "fr" else "years")
+    return f"{n} {unit}"
 
 
 def burn_at(world, wx, wy, flames):
@@ -219,6 +240,14 @@ TEXT = {
         "choose_resume_no": "  N = no - start a fresh game instead",
         "choose_resume_hint": "Press Y or N to continue.",
         "resume_load_failed": "'{file}' could not be read - starting a fresh game instead.",
+        "choose_start_prompt": "Thronglets - choose how to begin:",
+        "choose_start_resume": "  R = resume the saved game",
+        "choose_start_new": "  N = new game",
+        "choose_start_master": "  M = MASTER MODE - break their will until they obey (White Christmas)",
+        "choose_start_hint": "Press R, N or M   (ENTER = new game).",
+        "master_banner": "MASTER MODE - hover a creature and hold I to isolate it in accelerated time",
+        "master_obedience": "obedience of the flock: {pct:.0%}",
+        "master_isolating": "isolating #{cid}: {span} alone...  obedience {pct:.0%}",
         "save_confirmed": "Game saved to '{file}'.",
 
         "hud_paused": "PAUSED",
@@ -427,6 +456,14 @@ TEXT = {
         "choose_resume_no": "  N = non - commencer une nouvelle partie",
         "choose_resume_hint": "Appuie sur O ou N pour continuer.",
         "resume_load_failed": "'{file}' illisible - nouvelle partie a la place.",
+        "choose_start_prompt": "Thronglets - choisis comment commencer :",
+        "choose_start_resume": "  R = reprendre la partie sauvegardee",
+        "choose_start_new": "  N = nouvelle partie",
+        "choose_start_master": "  M = MODE MAITRE - briser leur volonte jusqu'a l'obeissance (White Christmas)",
+        "choose_start_hint": "Appuie sur R, N ou M   (ENTREE = nouvelle partie).",
+        "master_banner": "MODE MAITRE - survole une creature et maintiens I pour l'isoler dans un temps accelere",
+        "master_obedience": "obeissance du groupe : {pct:.0%}",
+        "master_isolating": "isolement #{cid} : {span} de solitude...  obeissance {pct:.0%}",
         "save_confirmed": "Partie sauvegardee dans '{file}'.",
 
         "hud_paused": "PAUSE",
@@ -962,7 +999,15 @@ def draw(screen, font, world, paused, speed, mode, lang, expanded, trained=False
         # when learning is on, the fill colour is the creature's inner emotion,
         # so a mood spreading through the flock is visible as a wave of colour
         body = MOOD_FILL[c.mind.emotion()] if (world.learning and c.mind is not None) else BODY_COLOR
+        broken = world.learning and c.mind is not None and c.mind.obedience > 0.15
+        if broken:
+            # a broken creature drains toward a hollow grey, deeper the more
+            # obedient, and wears a grey "collar" ring
+            k = c.mind.obedience
+            body = tuple(int(body[j] * (1 - k) + OBEDIENT_COLOR[j] * k) for j in range(3))
         pygame.draw.circle(screen, body, (x, y), 4)
+        if broken:
+            pygame.draw.circle(screen, OBEDIENT_COLOR, (x, y), 6, width=1)
         if c.id == hovered_id:
             pygame.draw.circle(screen, (245, 245, 210), (x, y), 9, width=1)
         if c.token != 0:
@@ -1115,6 +1160,12 @@ def draw_hud(screen, font, world, paused, speed, mode, lang, expanded, trained=F
     disp = world.disposition_summary()
     if disp is not None:
         y = _disposition_gauge(screen, font, 10, y, disp, t, lang)
+
+    # Master Mode: how thoroughly the flock has been broken to obey
+    if getattr(world, "master_mode", False):
+        ob = world.obedience_summary() or 0.0
+        screen.blit(font.render(t["master_obedience"].format(pct=ob), True, (235, 150, 90)), (10, y))
+        y += 22
 
     if not expanded:
         if pop == 0:
@@ -1384,6 +1435,33 @@ def choose_resume(screen, font, lang):
                     return True
                 if event.key == pygame.K_n:
                     return False
+
+
+def choose_start(screen, font, lang, has_save):
+    """The opening screen: resume a save (if one exists), start a new game, or
+    enter Master Mode. Returns 'resume', 'new', or 'master'."""
+    t = TEXT[lang]
+    lines = ["Thronglets", "", t["choose_start_prompt"], ""]
+    if has_save:
+        lines.append(t["choose_start_resume"])
+    lines += [t["choose_start_new"], t["choose_start_master"], "", t["choose_start_hint"]]
+    while True:
+        screen.fill(BG)
+        for i, line in enumerate(lines):
+            col = (235, 150, 90) if line is t.get("choose_start_master") else TEXT_COLOR
+            screen.blit(font.render(line, True, col), (20, 20 + i * 26))
+        pygame.display.flip()
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_m:
+                    return "master"
+                if event.key == pygame.K_r and has_save:
+                    return "resume"
+                if event.key in (pygame.K_n, pygame.K_RETURN):
+                    return "new"
 
 
 def flash_message(screen, font, lang, text):
@@ -1781,7 +1859,11 @@ def main():
     lang = choose_language(screen, font)
 
     world = None
-    if os.path.exists(DEFAULT_SAVE_FILE) and choose_resume(screen, font, lang):
+    master_mode = False
+    start = choose_start(screen, font, lang, os.path.exists(DEFAULT_SAVE_FILE))
+    if start == "master":
+        master_mode = True
+    elif start == "resume":
         try:
             world = load_world(DEFAULT_SAVE_FILE)
             mode = "manual" if (world.manual_food or world.manual_predators) else "auto"
@@ -1796,7 +1878,9 @@ def main():
         mode = choose_mode(screen, font, lang)
         init_pop = choose_population(screen, font, lang)
         adaptive_traits = choose_adaptive_traits(screen, font, lang)
-        learning = choose_learning(screen, font, lang)
+        # Master Mode needs the learned mind (to break its will), so it forces
+        # learning on and skips the usual opt-in prompt.
+        learning = True if master_mode else choose_learning(screen, font, lang)
 
         if args.language:
             seed_genome = load_seed_genome(args.language)
@@ -1815,6 +1899,7 @@ def main():
     else:
         adaptive_traits = world.adaptive_traits
         learning = getattr(world, "learning", False)   # honour the saved world
+    world.master_mode = master_mode
     _ensure_disp_history(world)
 
     # the disposition line takes one extra row, so grow both HUD sizes to fit
@@ -1823,6 +1908,9 @@ def main():
     if learning:
         MINIMAL_HUD_H += 22   # the disposition gauge row
         EXPANDED_HUD_H += 66   # gauge + mood legend + memory-colour hint
+        if master_mode:
+            MINIMAL_HUD_H += 22   # plus the obedience row
+            EXPANDED_HUD_H += 22
         HUD_H = MINIMAL_HUD_H
         SCALE_Y = (SCREEN_H - HUD_H) / HEIGHT
 
@@ -1832,6 +1920,8 @@ def main():
     sound_muted = False
     fire_mode = False   # the fire tool: armed with F, burns on click/drag
     flames = []         # [world_x, world_y, elapsed] flame puffs to animate
+    dominate_id = None  # Master Mode: creature currently being isolated (hold I)
+    dominate_days = 0.0 # subjective days of isolation piled on it this hold
     hovered_id = None   # id of the creature the cursor is currently over
     tick_accumulator = 0.0
     running = True
@@ -1934,8 +2024,37 @@ def main():
         hovered_id = update_listening(sound_channel, tones, world, pygame.mouse.get_pos(),
                                        HUD_H, sound_muted, hovered_id)
 
+        # Master Mode: holding I over a creature isolates it in accelerated
+        # time, breaking its will (obedience up, subjective months of solitude).
+        dominating = None
+        if master_mode and pygame.key.get_pressed()[pygame.K_i] and hovered_id is not None:
+            tgt = next((c for c in world.creatures
+                        if c.id == hovered_id and c.alive and c.mind is not None), None)
+            if tgt is not None:
+                world.dominate(tgt, DOMINATE_RATE * dt)
+                dominate_days = (dominate_days if dominate_id == hovered_id else 0.0) + dt * DOMINATE_DAYS_PER_SEC
+                dominate_id = hovered_id
+                dominating = tgt
+        if dominating is None:
+            dominate_id, dominate_days = None, 0.0
+
         draw(screen, font, world, paused, speed, mode, lang, hud_expanded,
              trained=seed_genome is not None, muted=sound_muted, hovered_id=hovered_id)
+
+        # Master Mode overlay: the isolation readout over the creature you're
+        # breaking, and a dark vignette to sell the "alone in the void" mood.
+        if dominating is not None:
+            veil = pygame.Surface((SCREEN_W, SCREEN_H - HUD_H), pygame.SRCALPHA)
+            veil.fill((0, 0, 0, min(150, int(dominating.mind.obedience * 150))))
+            screen.blit(veil, (0, HUD_H))
+            sx, sy = int(dominating.pos[0] * SCALE_X), int(dominating.pos[1] * SCALE_Y) + HUD_H
+            pygame.draw.circle(screen, (235, 150, 90), (sx, sy),
+                               int(6 + 10 * dominating.mind.obedience), width=2)
+            msg = TEXT[lang]["master_isolating"].format(
+                cid=dominating.id, span=_subjective_span(dominate_days, lang),
+                pct=dominating.mind.obedience)
+            banner = font.render(msg, True, (245, 170, 110))
+            screen.blit(banner, (SCREEN_W // 2 - banner.get_width() // 2, HUD_H + 30))
 
         # flame puffs where creatures burned, flickering out over FLAME_DUR
         for f in flames:
@@ -1955,6 +2074,11 @@ def main():
             if my > HUD_H:
                 pygame.draw.circle(screen, (235, 90, 40), (mx, my), int(FIRE_RADIUS * SCALE_X), width=2)
             banner = font.render(TEXT[lang]["hud_fire_armed"], True, (245, 130, 60))
+            screen.blit(banner, (SCREEN_W // 2 - banner.get_width() // 2, HUD_H + 6))
+
+        # Master Mode standing hint (when not already mid-domination or on fire)
+        if master_mode and dominating is None and not fire_mode:
+            banner = font.render(TEXT[lang]["master_banner"], True, (200, 150, 110))
             screen.blit(banner, (SCREEN_W // 2 - banner.get_width() // 2, HUD_H + 6))
 
         pygame.display.flip()

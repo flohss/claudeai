@@ -160,6 +160,19 @@ expanded HUD carries a **colour key** naming each mood colour and the
 memory tiles. (With learning off, none of this appears - the observatory,
 unchanged.)
 
+**Master Mode** is a third choice on the opening screen (`M`, alongside
+resume and new game), inspired by the *White Christmas* Black Mirror episode.
+It starts a fresh game with learning forced on and hands you a darker power:
+**hover a creature and hold `I` to isolate it in accelerated time** - a few
+real seconds pass, but the creature lives through subjective *weeks and
+months of total solitude* (a counter shows how long), which breaks its will.
+As its **obedience** climbs from 0 to 100%, its mood is hollowed out (deep,
+numb despair) and it drains to a hollow grey with a small "collar" ring. A
+broken creature obeys: it comes to heel at your cursor and stays, **no matter
+how much it fears you** - obedience overrides trust and fear alike. The HUD
+shows the flock's average obedience, and the break is permanent and saved
+with the game. (Available only in Master Mode; a normal game is untouched.)
+
 ### Web (any device with a browser)
 
 No new dependency at all beyond numpy — the server is built on Python's

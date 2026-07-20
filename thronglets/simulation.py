@@ -296,10 +296,10 @@ class Mind:
     A newborn inherits a blend of its parents' weights (Mind.inherit), so a
     family's lessons carry forward and compound across generations."""
 
-    __slots__ = ("w", "elig", "valence", "arousal", "memory")
+    __slots__ = ("w", "elig", "valence", "arousal", "memory", "obedience")
 
     def __init__(self, w=None, valence=MOOD_VALENCE_REST, arousal=MOOD_AROUSAL_REST,
-                 memory=None):
+                 memory=None, obedience=0.0):
         self.w = np.zeros(LEARN_FEATURES) if w is None else np.asarray(w, dtype=float)
         self.elig = np.zeros(LEARN_FEATURES)
         # the persistent inner mood (see the mood constants above)
@@ -308,6 +308,10 @@ class Mind:
         # the coarse affect map of the world (see the memory constants above)
         self.memory = (np.zeros((MEM_ROWS, MEM_COLS)) if memory is None
                        else np.asarray(memory, dtype=float).reshape(MEM_ROWS, MEM_COLS))
+        # how thoroughly its will has been broken to the master (Master Mode):
+        # 0 free .. 1 utterly obedient. Not genetic, not learned - beaten into
+        # the individual by isolation, and it does not fade on its own.
+        self.obedience = float(obedience)
 
     @staticmethod
     def features(hand_prox, hunger):
@@ -374,6 +378,15 @@ class Mind:
         cy, cx = _mem_cell(pos)
         self.memory[cy, cx] = float(np.clip(self.memory[cy, cx] + value,
                                             -MEM_CLIP, MEM_CLIP))
+
+    # -- Master Mode: breaking the will ------------------------------------
+    def break_will(self, amount):
+        """Subjecting the mind to isolated, accelerated time (White Christmas):
+        obedience climbs while the isolation hollows it out - deepening despair
+        (valence down) and a numb flatness (arousal down). What's left obeys."""
+        self.obedience = float(np.clip(self.obedience + amount, 0.0, 1.0))
+        self.valence = float(np.clip(self.valence - amount * 1.2, -1.0, 1.0))
+        self.arousal = float(np.clip(self.arousal - amount * 0.4, 0.0, 1.0))
 
     @staticmethod
     def inherit(parents, rng):
@@ -657,6 +670,24 @@ class World:
             return None
         return float(np.mean(dispositions))
 
+    def dominate(self, creature, amount):
+        """Master Mode: break a creature's will by isolating it in accelerated
+        time. Raises its obedience and hollows its mood. A no-op unless learning
+        is on and the creature is alive."""
+        if not self.learning or creature is None or not creature.alive or creature.mind is None:
+            return
+        creature.mind.break_will(amount)
+
+    def obedience_summary(self):
+        """Population-average obedience, 0 (all free) .. 1 (all broken), or None
+        when learning is off or nobody is around - the Master Mode readout."""
+        if not self.learning:
+            return None
+        obs = [c.mind.obedience for c in self._alive() if c.mind is not None]
+        if not obs:
+            return None
+        return float(np.mean(obs))
+
     def add_food(self, x, y):
         if len(self.food) >= MAX_FOOD:
             return
@@ -922,7 +953,15 @@ class World:
                 disp = c.mind.disposition()          # -1 (fears) .. +1 (trusts)
                 to_hand = hand_np - c.pos
                 dist = np.linalg.norm(to_hand)
-                if disp > 0.05 and 1e-6 < dist < HAND_CALL_RANGE:
+                if c.mind.obedience > 0.15 and 1e-6 < dist < HAND_CALL_RANGE:
+                    # broken to the master: compelled to heel regardless of how
+                    # it actually feels - it comes to the hand and holds there,
+                    # overriding any fear. Obedience wins over trust/fear.
+                    unit = to_hand / dist
+                    gap = dist - HAND_STANDOFF
+                    if gap > 0.0:
+                        move += unit * c.mind.obedience * HAND_MOVE_STRENGTH * 1.6 * min(1.0, gap / HAND_STANDOFF)
+                elif disp > 0.05 and 1e-6 < dist < HAND_CALL_RANGE:
                     # trusting: drift toward the hand until a respectful
                     # standoff, then ease back if too close. No assigned slots -
                     # the flock just gathers loosely on whichever side it comes
@@ -1191,6 +1230,7 @@ def save_world(world, path):
                 "mind": c.mind.w.tolist() if c.mind is not None else None,
                 "mood": [c.mind.valence, c.mind.arousal] if c.mind is not None else None,
                 "memory": c.mind.memory.tolist() if c.mind is not None else None,
+                "obedience": c.mind.obedience if c.mind is not None else None,
             }
             for c in world.creatures if c.alive
         ],
@@ -1244,10 +1284,13 @@ def load_world(path, seed=None):
         if cd.get("mind") is not None:
             mood = cd.get("mood")   # older saves have no mood -> resting baseline
             memory = cd.get("memory")   # older saves have no map -> blank
+            obedience = cd.get("obedience") or 0.0   # older saves: nobody broken
             if mood is not None:
-                creature.mind = Mind(np.array(cd["mind"], dtype=float), mood[0], mood[1], memory)
+                creature.mind = Mind(np.array(cd["mind"], dtype=float), mood[0], mood[1],
+                                     memory, obedience)
             else:
-                creature.mind = Mind(np.array(cd["mind"], dtype=float), memory=memory)
+                creature.mind = Mind(np.array(cd["mind"], dtype=float), memory=memory,
+                                     obedience=obedience)
         elif world.learning:
             creature.mind = Mind()
         if "id" in cd and cd["id"] in world.lineage:
