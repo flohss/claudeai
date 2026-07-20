@@ -125,6 +125,18 @@ HAND_MOVE_STRENGTH = 1.3      # how hard the learned feeling pulls toward/away t
 HAND_STANDOFF = 14.0          # trusting creatures gather around the hand at this distance, not on it
 HAND_CALL_RANGE = 80.0        # how far off a trusting creature will come to gather near the hand
 HAND_GATHER = 5.0             # tight huddle radius when a broken flock is ordered to rally
+
+# --- Master Mode rebellion: obedience must be MAINTAINED, not just won -------
+# Breaking creatures terrorises the free ones (the trauma-witness spread), and a
+# frightened free flock fights back: a broken creature near enough frightened,
+# still-free kin has its will slowly loosened (solidarity) and can break free.
+# So domination is contested - you must isolate or subdue the flock faster than
+# fear can spread and undo your grip. When too much of the free flock is
+# terrified, it boils over into an uprising and the erosion accelerates.
+REBEL_RADIUS = 26.0           # how near a frightened free creature erodes a broken one
+EROSION_PER_AFRAID = 0.010    # obedience lost per step per nearby frightened free neighbour
+UPRISING_UNREST = 0.45        # fraction of the free flock terrified that tips into an uprising
+UPRISING_EROSION_MULT = 2.5   # how much faster grip crumbles once an uprising is under way
 INHERIT_BLEND = 0.85          # fraction of the parents' learned feelings a child keeps
 INHERIT_NOISE = 0.05          # small variation so offspring aren't carbon copies
 
@@ -503,6 +515,7 @@ class World:
         self.order = None   # Master Mode standing order broken creatures obey
         self.allow_reproduction = True   # Master Mode turns this off
         self.master_mode = False   # set by the pygame renderer; sustains the flock
+        self.master_unrest_level = 0.0   # fraction of the free flock in open fear
         self._cache = {"alive": []}
         self.vocab_history = {state: deque() for state in (IDLE, FOOD, MATE, DANGER, DISTRESS)}
         self.trait_history = {trait: deque() for trait in range(N_TRAITS)}
@@ -529,6 +542,8 @@ class World:
         if self.learning:
             self._learn_sense()
             self._spread_mood()
+            if self.master_mode:
+                self._master_rebellion()
         self._move()
         self._move_predators()
         self._predator_kills()
@@ -697,6 +712,35 @@ class World:
         if not obs:
             return None
         return float(np.mean(obs))
+
+    def _master_rebellion(self):
+        """The flock resists: a broken creature near frightened, still-free kin
+        has its obedience eroded (solidarity), faster during an uprising, so
+        domination has to be maintained. Also refreshes the unrest level."""
+        c_ = self._cache
+        alive = c_["alive"]
+        minded = [c for c in alive if c.mind is not None]
+        free = [c for c in minded if c.mind.obedience <= 0.15]
+        afraid_free = [c for c in free if c.mind.emotion() == "fear"]
+        # unrest = how much of the still-free flock is in open terror
+        self.master_unrest_level = (len(afraid_free) / len(free)) if free else 0.0
+        broken = [c for c in minded if c.mind.obedience > 0.15]
+        if not broken or not afraid_free:
+            return
+        mult = UPRISING_EROSION_MULT if self.master_unrest_level >= UPRISING_UNREST else 1.0
+        af_pos = np.array([c.pos for c in afraid_free], dtype=float)
+        for c in broken:
+            d = np.linalg.norm(af_pos - np.asarray(c.pos, dtype=float), axis=1)
+            n = int(np.count_nonzero(d < REBEL_RADIUS))   # frightened free kin nearby
+            if n:
+                c.mind.obedience = max(0.0, c.mind.obedience - EROSION_PER_AFRAID * n * mult)
+
+    def master_unrest(self):
+        """Fraction of the free flock in open fear (0..1), or None outside Master
+        Mode - the HUD's unrest / uprising readout."""
+        if not self.master_mode:
+            return None
+        return float(self.master_unrest_level)
 
     def add_food(self, x, y):
         if len(self.food) >= MAX_FOOD:
@@ -1294,6 +1338,7 @@ def load_world(path, seed=None):
     world.dormant_ids = set()   # __init__ sets this; __new__ bypasses it, so restore it
     world.order = None
     world.master_mode = data.get("master_mode", False)
+    world.master_unrest_level = 0.0
     world.allow_reproduction = data.get("allow_reproduction", True)
     world.hand_pos = None
     world.tick = data["tick"]

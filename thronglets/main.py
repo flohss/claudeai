@@ -52,7 +52,7 @@ import pygame
 from i18n import STATE_LABELS, TRAIT_LABELS
 from simulation import (DANGER, DISTRESS, FOOD, Genome, HAND_PERCEPTION, HEIGHT, IDLE, MATE, MAX_POPULATION, N_TOKENS,
                          N_TRAITS, World, WIDTH, compare_seeds, load_seed_genome, load_world, save_world, top3_and_other,
-                         MEM_ROWS, MEM_COLS, MEM_CLIP)
+                         MEM_ROWS, MEM_COLS, MEM_CLIP, UPRISING_UNREST)
 
 # When learning is on, a creature's fill colour shows its inner emotion (so a
 # panic rippling through the flock is visible as a wave of red); the signal-token
@@ -250,6 +250,8 @@ TEXT = {
         "choose_start_hint": "Press R, N or M   (ENTER = new game).",
         "master_banner": "MASTER MODE - hold I to break  |  left-click feeds  |  right-click births  |  F to kill",
         "master_obedience": "obedience of the flock: {pct:.0%}",
+        "master_readout": "obedience {ob:.0%}    unrest {unrest:.0%}",
+        "master_uprising": "UPRISING - the frightened are freeing the broken, your grip is slipping!",
         "master_isolating": "isolating #{cid}: {span} alone...  obedience {pct:.0%}",
         "order_follow": "follow", "order_gather": "gather", "order_disperse": "disperse", "order_halt": "halt",
         "master_order_line": "order to the broken: {name}   [1 follow  2 gather  3 disperse  4 halt]",
@@ -468,6 +470,8 @@ TEXT = {
         "choose_start_hint": "Appuie sur R, N ou M   (ENTREE = nouvelle partie).",
         "master_banner": "MODE MAITRE - maintiens I pour briser  |  clic gauche nourrit  |  clic droit cree  |  F pour tuer",
         "master_obedience": "obeissance du groupe : {pct:.0%}",
+        "master_readout": "obeissance {ob:.0%}    agitation {unrest:.0%}",
+        "master_uprising": "SOULEVEMENT - les effrayes liberent les brises, ton emprise lache !",
         "master_isolating": "isolement #{cid} : {span} de solitude...  obeissance {pct:.0%}",
         "order_follow": "au pied", "order_gather": "rassembler", "order_disperse": "disperser", "order_halt": "figer",
         "master_order_line": "ordre aux brises : {name}   [1 au pied  2 rassembler  3 disperser  4 figer]",
@@ -1123,14 +1127,17 @@ def _disposition_gauge(screen, font, x, y, disp, t, lang):
     return y + 22
 
 
-def _obedience_gauge(screen, font, x, y, ob, t):
-    """A grey bar that fills as the flock is broken to obey - the Master Mode
-    readout that replaces the (now irrelevant) trust gauge."""
+def _obedience_gauge(screen, font, x, y, ob, unrest, t):
+    """The Master Mode readout, replacing the (now irrelevant) trust gauge: a
+    grey bar for how broken the flock is, overlaid with a red sliver for how
+    much of the free flock is in open unrest (which erodes your grip)."""
     w, h = 150, 9
     pygame.draw.rect(screen, (28, 30, 34), (x, y + 3, w, h))
     pygame.draw.rect(screen, OBEDIENT_COLOR, (x, y + 3, int(min(1.0, ob) * w), h))
+    pygame.draw.rect(screen, (210, 70, 60), (x, y + 3, int(min(1.0, unrest) * w), 3))  # unrest overlay
     pygame.draw.rect(screen, (70, 72, 78), (x, y + 3, w, h), width=1)
-    screen.blit(font.render(t["master_obedience"].format(pct=ob), True, (235, 150, 90)), (x + w + 12, y))
+    screen.blit(font.render(t["master_readout"].format(ob=ob, unrest=unrest), True, (235, 150, 90)),
+                (x + w + 12, y))
     return y + 22
 
 
@@ -1180,7 +1187,8 @@ def draw_hud(screen, font, world, paused, speed, mode, lang, expanded, trained=F
     # has come to feel about you.
     if getattr(world, "master_mode", False):
         ob = world.obedience_summary() or 0.0
-        y = _obedience_gauge(screen, font, 10, y, ob, t)
+        unrest = world.master_unrest() or 0.0
+        y = _obedience_gauge(screen, font, 10, y, ob, unrest, t)
     else:
         disp = world.disposition_summary()
         if disp is not None:
@@ -2111,8 +2119,13 @@ def main():
             banner = font.render(TEXT[lang]["hud_fire_armed"], True, (245, 130, 60))
             screen.blit(banner, (SCREEN_W // 2 - banner.get_width() // 2, HUD_H + 6))
 
-        # Master Mode standing hints (when not already mid-domination or on fire)
-        if master_mode and dominating is None and not fire_mode:
+        # Master Mode: an uprising alert flashes when the free flock's terror
+        # is tipping your grip over (takes priority over the standing hint).
+        if master_mode and (world.master_unrest() or 0.0) >= UPRISING_UNREST:
+            if int(pygame.time.get_ticks() / 250) % 2 == 0:   # flash
+                al = font.render(TEXT[lang]["master_uprising"], True, (245, 80, 60))
+                screen.blit(al, (SCREEN_W // 2 - al.get_width() // 2, HUD_H + 6))
+        elif master_mode and dominating is None and not fire_mode:
             banner = font.render(TEXT[lang]["master_banner"], True, (200, 150, 110))
             screen.blit(banner, (SCREEN_W // 2 - banner.get_width() // 2, HUD_H + 6))
             oname = TEXT[lang]["order_follow"] if order is None else TEXT[lang]["order_" + order]

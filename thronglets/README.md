@@ -177,8 +177,21 @@ have broken some, you **command them with number keys**: `1` follow (heel at
 your cursor), `2` gather (huddle tightly onto the cursor from anywhere on the
 map), `3` disperse (driven outward), `4` halt (freeze in place). Only broken
 creatures obey; the still-free ignore you. The HUD shows the flock's average
-obedience and the current order, and the break is permanent and saved with the
+obedience and the current order, and the state of the flock is saved with the
 game.
+
+**But domination has to be maintained - the flock fights back.** Breaking
+and killing terrorises the still-free creatures (the same trauma-spread as a
+normal game), and a frightened free creature standing near a broken one
+slowly **loosens its will** (solidarity), so a broken creature left among
+frightened, still-free kin has its obedience eroded and can **break free
+again**. So you can't just break a few and relax: you have to isolate the
+broken (order them to *gather* away from the free, or *disperse* the free),
+subdue the whole flock, or cull the frightened - faster than fear can spread
+and undo your grip. When too much of the free flock is terrified it tips into
+an **uprising** (a flashing HUD alert), and the erosion accelerates. The HUD
+gauge shows both your **obedience** (grey) and the flock's **unrest** (a red
+sliver) so you can see your hold slipping.
 
 Master Mode also reshapes the world around your rule: **no predators at all**,
 **no reproduction** (the flock never grows on its own), and **no hunger** -
