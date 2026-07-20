@@ -122,9 +122,8 @@ ELIG_DECAY = 0.88             # how fast the "what just happened to me" trace fa
 VALENCE_CLIP = 1.5            # bound on every learned weight (stops runaway)
 REWARD_EAT = 0.4              # mild reward for finding food while the hand is near
 HAND_MOVE_STRENGTH = 1.3      # how hard the learned feeling pulls toward/away the hand
-HAND_STANDOFF = 14.0          # radius of the ring trusting creatures form around the hand
-HAND_CALL_RANGE = 80.0        # how far off a trusting creature will come to join the ring
-GOLDEN_ANGLE = 2.399963229728653  # spreads creature ids evenly around that ring (no clumping)
+HAND_STANDOFF = 14.0          # trusting creatures gather around the hand at this distance, not on it
+HAND_CALL_RANGE = 80.0        # how far off a trusting creature will come to gather near the hand
 INHERIT_BLEND = 0.85          # fraction of the parents' learned feelings a child keeps
 INHERIT_NOISE = 0.05          # small variation so offspring aren't carbon copies
 
@@ -924,16 +923,17 @@ class World:
                 to_hand = hand_np - c.pos
                 dist = np.linalg.norm(to_hand)
                 if disp > 0.05 and 1e-6 < dist < HAND_CALL_RANGE:
-                    # trusting: head for this creature's OWN slot on a ring
-                    # around the hand (its angle spread by the golden angle from
-                    # its id), so the flock forms an even circle around the
-                    # cursor. The ring sits just outside earshot, so it's quiet.
-                    ang = c.id * GOLDEN_ANGLE
-                    slot = hand_np + HAND_STANDOFF * np.array([np.cos(ang), np.sin(ang)])
-                    to_slot = slot - c.pos
-                    sd = np.linalg.norm(to_slot)
-                    if sd > 1e-6:
-                        move += (to_slot / sd) * disp * HAND_MOVE_STRENGTH * min(1.0, sd / HAND_STANDOFF)
+                    # trusting: drift toward the hand until a respectful
+                    # standoff, then ease back if too close. No assigned slots -
+                    # the flock just gathers loosely on whichever side it comes
+                    # from, an organic crowd; the standoff keeps it off the exact
+                    # point (and, sitting outside earshot, quiet).
+                    unit = to_hand / dist
+                    gap = dist - HAND_STANDOFF
+                    if gap > 0.0:
+                        move += unit * disp * HAND_MOVE_STRENGTH * min(1.0, gap / HAND_STANDOFF)
+                    else:
+                        move -= unit * disp * HAND_MOVE_STRENGTH * 0.6   # too close: ease back out
                 elif disp < -0.05 and 1e-6 < dist < HAND_PERCEPTION:
                     # fearful: flee, harder the closer the hand is
                     prox = 1.0 - dist / HAND_PERCEPTION
