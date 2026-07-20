@@ -358,8 +358,8 @@ class Mind:
         """One step of momentum: ease the mood a little toward a baseline that
         the body's current state (e.g. hunger) sets. Slow, so strong feelings
         persist across many steps instead of snapping back at once."""
-        self.valence += (valence_target - self.valence) * rate
-        self.arousal += (arousal_target - self.arousal) * rate
+        self.valence = float(np.clip(self.valence + (valence_target - self.valence) * rate, -1.0, 1.0))
+        self.arousal = float(np.clip(self.arousal + (arousal_target - self.arousal) * rate, 0.0, 1.0))
 
     def emotion(self):
         """Collapse the continuous mood onto one of the named emotions the
@@ -588,6 +588,12 @@ class World:
             # panic-fleeing the very hand that might feed it.
             valence_rest = MOOD_VALENCE_REST - hunger * 0.85
             arousal_rest = MOOD_AROUSAL_REST + hunger * 0.18
+            # a broken creature stays hollowed out: its resting mood is dragged
+            # toward a numb, joyless floor in proportion to how broken it is, so
+            # the emptiness lasts instead of quietly healing back to neutral.
+            if c.mind.obedience > 0.0:
+                valence_rest -= 1.0 * c.mind.obedience
+                arousal_rest -= 0.15 * c.mind.obedience
             c.mind.relax(valence_rest, arousal_rest)
             c.mind.memory *= MEM_DECAY   # the map of good/bad places fades slowly
 

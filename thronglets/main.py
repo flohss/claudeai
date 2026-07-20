@@ -1014,7 +1014,8 @@ def draw(screen, font, world, paused, speed, mode, lang, expanded, trained=False
             body = tuple(int(body[j] * (1 - k) + OBEDIENT_COLOR[j] * k) for j in range(3))
         pygame.draw.circle(screen, body, (x, y), 4)
         if broken:
-            pygame.draw.circle(screen, OBEDIENT_COLOR, (x, y), 6, width=1)
+            # a dark grey "collar" ring marks a broken creature at a glance
+            pygame.draw.circle(screen, (70, 70, 78), (x, y), 7, width=2)
         if c.id == hovered_id:
             pygame.draw.circle(screen, (245, 245, 210), (x, y), 9, width=1)
         if c.token != 0:
@@ -1122,6 +1123,17 @@ def _disposition_gauge(screen, font, x, y, disp, t, lang):
     return y + 22
 
 
+def _obedience_gauge(screen, font, x, y, ob, t):
+    """A grey bar that fills as the flock is broken to obey - the Master Mode
+    readout that replaces the (now irrelevant) trust gauge."""
+    w, h = 150, 9
+    pygame.draw.rect(screen, (28, 30, 34), (x, y + 3, w, h))
+    pygame.draw.rect(screen, OBEDIENT_COLOR, (x, y + 3, int(min(1.0, ob) * w), h))
+    pygame.draw.rect(screen, (70, 72, 78), (x, y + 3, w, h), width=1)
+    screen.blit(font.render(t["master_obedience"].format(pct=ob), True, (235, 150, 90)), (x + w + 12, y))
+    return y + 22
+
+
 def _mood_legend(screen, font, x, y, t):
     """Explain the creature fill colours (and, on the next line, the memory
     overlay colours) - only shown when learning is on, since that's when they
@@ -1163,16 +1175,16 @@ def draw_hud(screen, font, world, paused, speed, mode, lang, expanded, trained=F
     pygame.draw.line(screen, HUD_SEP, (10, 29), (SCREEN_W - 10, 29))
     y = 35
 
-    # how the flock has come to feel about you, as a compact gauge
-    disp = world.disposition_summary()
-    if disp is not None:
-        y = _disposition_gauge(screen, font, 10, y, disp, t, lang)
-
-    # Master Mode: how thoroughly the flock has been broken to obey
+    # Master Mode is governed by obedience, not affection - so show obedience
+    # there and drop the (now vestigial) trust gauge. Otherwise: how the flock
+    # has come to feel about you.
     if getattr(world, "master_mode", False):
         ob = world.obedience_summary() or 0.0
-        screen.blit(font.render(t["master_obedience"].format(pct=ob), True, (235, 150, 90)), (10, y))
-        y += 22
+        y = _obedience_gauge(screen, font, 10, y, ob, t)
+    else:
+        disp = world.disposition_summary()
+        if disp is not None:
+            y = _disposition_gauge(screen, font, 10, y, disp, t, lang)
 
     if not expanded:
         if pop == 0:
@@ -1919,11 +1931,8 @@ def main():
     # it (only when learning is on - a pure-selection run keeps the old, tidy
     # heights)
     if learning:
-        MINIMAL_HUD_H += 22   # the disposition gauge row
+        MINIMAL_HUD_H += 22   # the disposition/obedience gauge row
         EXPANDED_HUD_H += 66   # gauge + mood legend + memory-colour hint
-        if master_mode:
-            MINIMAL_HUD_H += 22   # plus the obedience row
-            EXPANDED_HUD_H += 22
         HUD_H = MINIMAL_HUD_H
         SCALE_Y = (SCREEN_H - HUD_H) / HEIGHT
 
@@ -2007,16 +2016,13 @@ def main():
                 else:
                     wx, wy = mx / SCALE_X, (my - HUD_H) / SCALE_Y
                     if master_mode:
-                        # Master Mode: right-click births a new creature, left
-                        # click drops food as a bare gesture - it does NOT teach
-                        # trust (a fed servant doesn't come to love you; the flock
-                        # can't starve here anyway). To kill, use the fire tool F.
+                        # Master Mode: right-click births a new creature; left
+                        # click does nothing on its own (the flock can't starve,
+                        # so there is no feeding) - arm the fire tool F to kill.
                         if event.button == 3:
                             world.add_creature(wx, wy)
                         elif fire_mode:
                             burn_at(world, wx, wy, flames)
-                        else:
-                            world.add_food(wx, wy)
                     elif event.button == 3:
                         world.add_predator(wx, wy)
                         teach_nearby(world, wx, wy, LEARN_PREDATOR_REWARD)

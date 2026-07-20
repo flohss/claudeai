@@ -185,11 +185,14 @@ Master Mode also reshapes the world around your rule: **no predators at all**,
 your domain sustains the flock, so creatures never starve or age to death and
 you never have to feed them (which sidesteps the trap where feeding to keep
 them alive would make them adore you). The only deaths are the ones you deal
-with the fire tool (`F`). **Left-click** still drops food, but purely as a
-gesture - in Master Mode it does **not** teach trust, so a fed servant never
-comes to love you; only its **obedience** governs it. **Right-click births a
-new creature**, so the population only ever changes by your own hand. (All of this is
-Master Mode only; a normal game is untouched.) Master Mode is saved with the
+with the fire tool (`F`); there's no feeding (left-click does nothing on its
+own), and **right-click births a new creature**, so the population only ever
+changes by your own hand. The HUD shows the flock's **obedience** rather than
+its trust (in Master Mode affection is irrelevant - only obedience governs),
+and a broken creature is easy to spot on the field: it drains to a **hollow
+grey with a dark "collar" ring** and stays visibly empty for good, its will
+not healing back on its own. (All of this is Master Mode only; a normal game
+is untouched.) Master Mode is saved with the
 game, so resuming a saved Master game (`R` on the opening screen) brings you
 back into Master Mode - obedience, broken minds and all - rather than an
 ordinary run.
