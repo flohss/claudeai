@@ -178,10 +178,10 @@ obedience and the current order, and the break is permanent and saved with the
 game.
 
 Master Mode also reshapes the world around your rule: **no predators at all**,
-**no reproduction** (the flock never grows on its own), **left-click always
-kills** (no food placement), and **right-click births a new creature** - so
-the population only ever changes by your own hand. (All of this is Master Mode
-only; a normal game is untouched.)
+**no reproduction** (the flock never grows on its own), **left-click feeds** a
+creature, and **right-click births a new one** - so the population only ever
+changes by your own hand (to kill, arm the fire tool with `F`). (All of this is
+Master Mode only; a normal game is untouched.)
 
 ### Web (any device with a browser)
 

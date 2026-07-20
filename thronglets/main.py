@@ -28,8 +28,8 @@ Controls:
   F            fire tool: arm it, then left-click or drag to burn creatures
   I            (Master Mode) hold over a creature to isolate it until it obeys
   1/2/3/4      (Master Mode) order the broken: follow / gather / disperse / halt
-               (Master Mode: no predators, no reproduction; left-click kills,
-                right-click births a new creature)
+               (Master Mode: no predators, no reproduction; left-click feeds,
+                right-click births a new creature, F still kills)
   G            graph screen (vocab, traits, and the flock's feeling toward you)
   V            show/hide the full HUD (or click the top HUD strip)
   M            mute the proximity-listening sound
@@ -248,7 +248,7 @@ TEXT = {
         "choose_start_new": "  N = new game",
         "choose_start_master": "  M = MASTER MODE - break their will until they obey (White Christmas)",
         "choose_start_hint": "Press R, N or M   (ENTER = new game).",
-        "master_banner": "MASTER MODE - hold I to break a creature  |  left-click kills  |  right-click births one",
+        "master_banner": "MASTER MODE - hold I to break  |  left-click feeds  |  right-click births  |  F to kill",
         "master_obedience": "obedience of the flock: {pct:.0%}",
         "master_isolating": "isolating #{cid}: {span} alone...  obedience {pct:.0%}",
         "order_follow": "follow", "order_gather": "gather", "order_disperse": "disperse", "order_halt": "halt",
@@ -466,7 +466,7 @@ TEXT = {
         "choose_start_new": "  N = nouvelle partie",
         "choose_start_master": "  M = MODE MAITRE - briser leur volonte jusqu'a l'obeissance (White Christmas)",
         "choose_start_hint": "Appuie sur R, N ou M   (ENTREE = nouvelle partie).",
-        "master_banner": "MODE MAITRE - maintiens I pour briser  |  clic gauche tue  |  clic droit cree une creature",
+        "master_banner": "MODE MAITRE - maintiens I pour briser  |  clic gauche nourrit  |  clic droit cree  |  F pour tuer",
         "master_obedience": "obeissance du groupe : {pct:.0%}",
         "master_isolating": "isolement #{cid} : {span} de solitude...  obeissance {pct:.0%}",
         "order_follow": "au pied", "order_gather": "rassembler", "order_disperse": "disperser", "order_halt": "figer",
@@ -2007,11 +2007,14 @@ def main():
                     wx, wy = mx / SCALE_X, (my - HUD_H) / SCALE_Y
                     if master_mode:
                         # Master Mode: right-click births a new creature, left
-                        # click always kills - no predators, no feeding placement.
+                        # click feeds (to kill, use the fire tool F). No predators.
                         if event.button == 3:
                             world.add_creature(wx, wy)
-                        else:
+                        elif fire_mode:
                             burn_at(world, wx, wy, flames)
+                        else:
+                            world.add_food(wx, wy)
+                            teach_nearby(world, wx, wy, LEARN_FOOD_REWARD)
                     elif event.button == 3:
                         world.add_predator(wx, wy)
                         teach_nearby(world, wx, wy, LEARN_PREDATOR_REWARD)
@@ -2020,8 +2023,8 @@ def main():
                     else:
                         world.add_food(wx, wy)
                         teach_nearby(world, wx, wy, LEARN_FOOD_REWARD)
-            elif event.type == pygame.MOUSEMOTION and (fire_mode or master_mode) and event.buttons[0]:
-                mx, my = event.pos                        # drag to burn (or Master left-drag kills)
+            elif event.type == pygame.MOUSEMOTION and fire_mode and event.buttons[0]:
+                mx, my = event.pos                        # drag the fire brush
                 if my > HUD_H:
                     burn_at(world, mx / SCALE_X, (my - HUD_H) / SCALE_Y, flames)
 
