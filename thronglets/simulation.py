@@ -502,6 +502,7 @@ class World:
         self.dormant_ids = set()
         self.order = None   # Master Mode standing order broken creatures obey
         self.allow_reproduction = True   # Master Mode turns this off
+        self.master_mode = False   # set by the pygame renderer; sustains the flock
         self._cache = {"alive": []}
         self.vocab_history = {state: deque() for state in (IDLE, FOOD, MATE, DANGER, DISTRESS)}
         self.trait_history = {trait: deque() for trait in range(N_TRAITS)}
@@ -1054,9 +1055,12 @@ class World:
             if speed > own_speed:
                 move = move / speed * own_speed
             c.pos = np.clip(c.pos + move, [0, 0], [WIDTH, HEIGHT])
-            c.energy -= metabolism
-            if c.token != 0:
-                c.energy -= SIGNAL_COST
+            if not self.master_mode:
+                # Master Mode: the master's domain sustains the flock - no hunger,
+                # so you never have to feed them (and so never buy their love).
+                c.energy -= metabolism
+                if c.token != 0:
+                    c.energy -= SIGNAL_COST
 
     def _move_predators(self):
         if not self.predators:
@@ -1187,7 +1191,9 @@ class World:
             if not c.alive or c.id in self.dormant_ids:
                 continue
             c.age += 1
-            if c.energy <= 0 or c.age > MAX_AGE:
+            # Master Mode: nothing dies of hunger or old age - the master alone
+            # decides who lives and who dies (by the fire tool).
+            if not self.master_mode and (c.energy <= 0 or c.age > MAX_AGE):
                 c.alive = False
                 self.deaths += 1
                 self.lineage[c.id]["death"] = self.tick

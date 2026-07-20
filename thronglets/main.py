@@ -2008,14 +2008,15 @@ def main():
                     wx, wy = mx / SCALE_X, (my - HUD_H) / SCALE_Y
                     if master_mode:
                         # Master Mode: right-click births a new creature, left
-                        # click feeds (to kill, use the fire tool F). No predators.
+                        # click drops food as a bare gesture - it does NOT teach
+                        # trust (a fed servant doesn't come to love you; the flock
+                        # can't starve here anyway). To kill, use the fire tool F.
                         if event.button == 3:
                             world.add_creature(wx, wy)
                         elif fire_mode:
                             burn_at(world, wx, wy, flames)
                         else:
                             world.add_food(wx, wy)
-                            teach_nearby(world, wx, wy, LEARN_FOOD_REWARD)
                     elif event.button == 3:
                         world.add_predator(wx, wy)
                         teach_nearby(world, wx, wy, LEARN_PREDATOR_REWARD)
