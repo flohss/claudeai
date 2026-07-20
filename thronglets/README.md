@@ -181,7 +181,10 @@ Master Mode also reshapes the world around your rule: **no predators at all**,
 **no reproduction** (the flock never grows on its own), **left-click feeds** a
 creature, and **right-click births a new one** - so the population only ever
 changes by your own hand (to kill, arm the fire tool with `F`). (All of this is
-Master Mode only; a normal game is untouched.)
+Master Mode only; a normal game is untouched.) Master Mode is saved with the
+game, so resuming a saved Master game (`R` on the opening screen) brings you
+back into Master Mode - obedience, broken minds and all - rather than an
+ordinary run.
 
 ### Web (any device with a browser)
 

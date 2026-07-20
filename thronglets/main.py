@@ -1911,6 +1911,7 @@ def main():
     else:
         adaptive_traits = world.adaptive_traits
         learning = getattr(world, "learning", False)   # honour the saved world
+        master_mode = getattr(world, "master_mode", False)   # a resumed Master game stays Master
     world.master_mode = master_mode
     _ensure_disp_history(world)
 

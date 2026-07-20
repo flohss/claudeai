@@ -1225,6 +1225,8 @@ def save_world(world, path):
         "manual_predators": world.manual_predators,
         "adaptive_traits": world.adaptive_traits,
         "learning": world.learning,
+        "master_mode": getattr(world, "master_mode", False),
+        "allow_reproduction": getattr(world, "allow_reproduction", True),
         "vocab_history": {state: list(hist) for state, hist in world.vocab_history.items()},
         "trait_history": {trait: list(hist) for trait, hist in world.trait_history.items()},
         "food": [[float(x), float(y)] for x, y in world.food],
@@ -1270,7 +1272,8 @@ def load_world(path, seed=None):
     world.learning = data.get("learning", False)
     world.dormant_ids = set()   # __init__ sets this; __new__ bypasses it, so restore it
     world.order = None
-    world.allow_reproduction = True
+    world.master_mode = data.get("master_mode", False)
+    world.allow_reproduction = data.get("allow_reproduction", True)
     world.hand_pos = None
     world.tick = data["tick"]
     world.births = data["births"]
