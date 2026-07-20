@@ -27,6 +27,7 @@ Controls:
   [ / ]        remove/add a predator right now
   F            fire tool: arm it, then left-click or drag to burn creatures
   I            (Master Mode) hold over a creature to isolate it until it obeys
+  1/2/3/4      (Master Mode) order the broken: follow / gather / disperse / halt
   G            graph screen (vocab, traits, and the flock's feeling toward you)
   V            show/hide the full HUD (or click the top HUD strip)
   M            mute the proximity-listening sound
@@ -248,6 +249,8 @@ TEXT = {
         "master_banner": "MASTER MODE - hover a creature and hold I to isolate it in accelerated time",
         "master_obedience": "obedience of the flock: {pct:.0%}",
         "master_isolating": "isolating #{cid}: {span} alone...  obedience {pct:.0%}",
+        "order_follow": "follow", "order_gather": "gather", "order_disperse": "disperse", "order_halt": "halt",
+        "master_order_line": "order to the broken: {name}   [1 follow  2 gather  3 disperse  4 halt]",
         "save_confirmed": "Game saved to '{file}'.",
 
         "hud_paused": "PAUSED",
@@ -464,6 +467,8 @@ TEXT = {
         "master_banner": "MODE MAITRE - survole une creature et maintiens I pour l'isoler dans un temps accelere",
         "master_obedience": "obeissance du groupe : {pct:.0%}",
         "master_isolating": "isolement #{cid} : {span} de solitude...  obeissance {pct:.0%}",
+        "order_follow": "au pied", "order_gather": "rassembler", "order_disperse": "disperser", "order_halt": "figer",
+        "master_order_line": "ordre aux brises : {name}   [1 au pied  2 rassembler  3 disperser  4 figer]",
         "save_confirmed": "Partie sauvegardee dans '{file}'.",
 
         "hud_paused": "PAUSE",
@@ -1922,6 +1927,7 @@ def main():
     flames = []         # [world_x, world_y, elapsed] flame puffs to animate
     dominate_id = None  # Master Mode: creature currently being isolated (hold I)
     dominate_days = 0.0 # subjective days of isolation piled on it this hold
+    order = None        # Master Mode standing order (None=follow / gather / disperse / halt)
     hovered_id = None   # id of the creature the cursor is currently over
     tick_accumulator = 0.0
     running = True
@@ -1981,6 +1987,9 @@ def main():
                     SCALE_Y = (SCREEN_H - HUD_H) / HEIGHT
                 elif event.key == pygame.K_m:
                     sound_muted = not sound_muted
+                elif master_mode and event.key in (pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4):
+                    order = {pygame.K_1: None, pygame.K_2: "gather",
+                             pygame.K_3: "disperse", pygame.K_4: "halt"}[event.key]
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button in (1, 3):
                 mx, my = event.pos
                 if my <= HUD_H:
@@ -2007,6 +2016,7 @@ def main():
         # food, flee predators). Only over the field, not the HUD strip.
         mx, my = pygame.mouse.get_pos()
         world.hand_pos = (mx / SCALE_X, (my - HUD_H) / SCALE_Y) if my > HUD_H else None
+        world.order = order if master_mode else None   # broken creatures obey it
 
         if not paused:
             tick_accumulator += dt
@@ -2076,10 +2086,13 @@ def main():
             banner = font.render(TEXT[lang]["hud_fire_armed"], True, (245, 130, 60))
             screen.blit(banner, (SCREEN_W // 2 - banner.get_width() // 2, HUD_H + 6))
 
-        # Master Mode standing hint (when not already mid-domination or on fire)
+        # Master Mode standing hints (when not already mid-domination or on fire)
         if master_mode and dominating is None and not fire_mode:
             banner = font.render(TEXT[lang]["master_banner"], True, (200, 150, 110))
             screen.blit(banner, (SCREEN_W // 2 - banner.get_width() // 2, HUD_H + 6))
+            oname = TEXT[lang]["order_follow"] if order is None else TEXT[lang]["order_" + order]
+            ol = font.render(TEXT[lang]["master_order_line"].format(name=oname), True, (235, 150, 90))
+            screen.blit(ol, (SCREEN_W // 2 - ol.get_width() // 2, HUD_H + 26))
 
         pygame.display.flip()
 

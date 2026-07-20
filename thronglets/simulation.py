@@ -124,6 +124,7 @@ REWARD_EAT = 0.4              # mild reward for finding food while the hand is n
 HAND_MOVE_STRENGTH = 1.3      # how hard the learned feeling pulls toward/away the hand
 HAND_STANDOFF = 14.0          # trusting creatures gather around the hand at this distance, not on it
 HAND_CALL_RANGE = 80.0        # how far off a trusting creature will come to gather near the hand
+HAND_GATHER = 5.0             # tight huddle radius when a broken flock is ordered to rally
 INHERIT_BLEND = 0.85          # fraction of the parents' learned feelings a child keeps
 INHERIT_NOISE = 0.05          # small variation so offspring aren't carbon copies
 
@@ -499,6 +500,7 @@ class World:
         # birth egg completely inert; it stays empty (no effect) everywhere
         # else.
         self.dormant_ids = set()
+        self.order = None   # Master Mode standing order broken creatures obey
         self._cache = {"alive": []}
         self.vocab_history = {state: deque() for state in (IDLE, FOOD, MATE, DANGER, DISTRESS)}
         self.trait_history = {trait: deque() for trait in range(N_TRAITS)}
@@ -929,6 +931,7 @@ class World:
 
         for i, c in enumerate(alive):
             move = self.rng.normal(0, 1, 2) * WANDER_STRENGTH
+            frozen = False   # set when a broken creature is ordered to halt
 
             if c.state == DANGER:
                 predator = c_["predator_pos"][c_["nearest_pred_i"][i]]
@@ -953,14 +956,22 @@ class World:
                 disp = c.mind.disposition()          # -1 (fears) .. +1 (trusts)
                 to_hand = hand_np - c.pos
                 dist = np.linalg.norm(to_hand)
-                if c.mind.obedience > 0.15 and 1e-6 < dist < HAND_CALL_RANGE:
-                    # broken to the master: compelled to heel regardless of how
-                    # it actually feels - it comes to the hand and holds there,
-                    # overriding any fear. Obedience wins over trust/fear.
+                if c.mind.obedience > 0.15 and dist > 1e-6:
+                    # broken to the master: it obeys the standing order regardless
+                    # of how it actually feels, from anywhere on the map. Obedience
+                    # wins over trust/fear.
+                    ob = c.mind.obedience
                     unit = to_hand / dist
-                    gap = dist - HAND_STANDOFF
-                    if gap > 0.0:
-                        move += unit * c.mind.obedience * HAND_MOVE_STRENGTH * 1.6 * min(1.0, gap / HAND_STANDOFF)
+                    order = getattr(self, "order", None)
+                    if order == "halt":
+                        frozen = True                      # stand still, wherever it is
+                    elif order == "disperse":
+                        move += -unit * ob * HAND_MOVE_STRENGTH * 1.3   # driven away, outward
+                    else:
+                        target = HAND_GATHER if order == "gather" else HAND_STANDOFF
+                        gap = dist - target
+                        if gap > 0.0:
+                            move += unit * ob * HAND_MOVE_STRENGTH * 1.6 * min(1.0, gap / max(target, 1e-6))
                 elif disp > 0.05 and 1e-6 < dist < HAND_CALL_RANGE:
                     # trusting: drift toward the hand until a respectful
                     # standoff, then ease back if too close. No assigned slots -
@@ -981,8 +992,9 @@ class World:
             # the creature's own persistent mood colours how it moves: arousal
             # makes it restless, terror makes it bolt, contentment seeks company
             # (a listless low-arousal creature just moves little, via the speed
-            # cap below). Independent of the hand appraisal above.
-            if c.mind is not None:
+            # cap below). Independent of the hand appraisal above. A creature
+            # ordered to halt does none of this - it just stands.
+            if c.mind is not None and not frozen:
                 val, arous = c.mind.valence, c.mind.arousal
                 move += self.rng.normal(0, 1, 2) * WANDER_STRENGTH * arous * MOOD_RESTLESS
                 if val < -0.2 and arous > 0.5:           # afraid: flee
@@ -1021,6 +1033,8 @@ class World:
                     if n > 1e-6:
                         move += (away / n) * (-own_v) * MEM_MOVE_STRENGTH
 
+            if frozen:
+                move = np.zeros(2)   # ordered to halt: hold position completely
             move += _edge_push(c.pos)
             speed = np.linalg.norm(move)
             if self.adaptive_traits:
@@ -1252,6 +1266,7 @@ def load_world(path, seed=None):
     world.adaptive_traits = data.get("adaptive_traits", False)
     world.learning = data.get("learning", False)
     world.dormant_ids = set()   # __init__ sets this; __new__ bypasses it, so restore it
+    world.order = None
     world.hand_pos = None
     world.tick = data["tick"]
     world.births = data["births"]

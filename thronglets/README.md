@@ -169,9 +169,13 @@ months of total solitude* (a counter shows how long), which breaks its will.
 As its **obedience** climbs from 0 to 100%, its mood is hollowed out (deep,
 numb despair) and it drains to a hollow grey with a small "collar" ring. A
 broken creature obeys: it comes to heel at your cursor and stays, **no matter
-how much it fears you** - obedience overrides trust and fear alike. The HUD
-shows the flock's average obedience, and the break is permanent and saved
-with the game. (Available only in Master Mode; a normal game is untouched.)
+how much it fears you** - obedience overrides trust and fear alike. Once you
+have broken some, you **command them with number keys**: `1` follow (heel at
+your cursor), `2` gather (huddle tightly onto the cursor from anywhere on the
+map), `3` disperse (driven outward), `4` halt (freeze in place). Only broken
+creatures obey; the still-free ignore you. The HUD shows the flock's average
+obedience and the current order, and the break is permanent and saved with the
+game. (Available only in Master Mode; a normal game is untouched.)
 
 ### Web (any device with a browser)
 
