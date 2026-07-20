@@ -934,6 +934,7 @@ class World:
         for i, c in enumerate(alive):
             move = self.rng.normal(0, 1, 2) * WANDER_STRENGTH
             frozen = False   # set when a broken creature is ordered to halt
+            obeying = False  # set when a broken creature is carrying out an order
 
             if c.state == DANGER:
                 predator = c_["predator_pos"][c_["nearest_pred_i"][i]]
@@ -961,19 +962,23 @@ class World:
                 if c.mind.obedience > 0.15 and dist > 1e-6:
                     # broken to the master: it obeys the standing order regardless
                     # of how it actually feels, from anywhere on the map. Obedience
-                    # wins over trust/fear.
+                    # wins over trust/fear - and it obeys PROMPTLY: dead inside,
+                    # but the body snaps to the command (see the speed cap below).
                     ob = c.mind.obedience
+                    obeying = True
                     unit = to_hand / dist
                     order = getattr(self, "order", None)
                     if order == "halt":
                         frozen = True                      # stand still, wherever it is
                     elif order == "disperse":
-                        move += -unit * ob * HAND_MOVE_STRENGTH * 1.3   # driven away, outward
+                        move += -unit * ob * HAND_MOVE_STRENGTH * 1.6   # driven away, outward
                     else:
                         target = HAND_GATHER if order == "gather" else HAND_STANDOFF
                         gap = dist - target
                         if gap > 0.0:
-                            move += unit * ob * HAND_MOVE_STRENGTH * 1.6 * min(1.0, gap / max(target, 1e-6))
+                            # full drive right up to the last few units, then ease
+                            # just enough to settle without jitter - no dawdling.
+                            move += unit * ob * HAND_MOVE_STRENGTH * 2.0 * min(1.0, gap / 4.0)
                 elif disp > 0.05 and 1e-6 < dist < HAND_CALL_RANGE:
                     # trusting: drift toward the hand until a respectful
                     # standoff, then ease back if too close. No assigned slots -
@@ -1049,8 +1054,12 @@ class World:
             else:
                 own_speed, metabolism = SPEED, METABOLISM
             # mood sets the activity level: high arousal quickens, low arousal
-            # (calm or listless-sad) slows the creature right down.
-            if c.mind is not None:
+            # (calm or listless-sad) slows the creature right down - EXCEPT a
+            # creature carrying out the master's order, which snaps to it at full
+            # speed (crisper the more broken it is): dead inside, prompt outside.
+            if obeying:
+                own_speed *= 1.0 + 0.4 * c.mind.obedience
+            elif c.mind is not None:
                 own_speed *= MOOD_SPEED_FLOOR + MOOD_SPEED_GAIN * c.mind.arousal
             if speed > own_speed:
                 move = move / speed * own_speed
