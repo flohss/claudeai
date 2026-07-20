@@ -501,6 +501,7 @@ class World:
         # else.
         self.dormant_ids = set()
         self.order = None   # Master Mode standing order broken creatures obey
+        self.allow_reproduction = True   # Master Mode turns this off
         self._cache = {"alive": []}
         self.vocab_history = {state: deque() for state in (IDLE, FOOD, MATE, DANGER, DISTRESS)}
         self.trait_history = {trait: deque() for trait in range(N_TRAITS)}
@@ -1131,6 +1132,8 @@ class World:
             self.food = [f for i, f in enumerate(self.food) if i not in eaten]
 
     def _reproduce(self):
+        if not getattr(self, "allow_reproduction", True):
+            return   # Master Mode: the flock only grows by the master's hand
         if len(self.creatures) >= MAX_POPULATION:
             return
         alive = self._alive()
@@ -1267,6 +1270,7 @@ def load_world(path, seed=None):
     world.learning = data.get("learning", False)
     world.dormant_ids = set()   # __init__ sets this; __new__ bypasses it, so restore it
     world.order = None
+    world.allow_reproduction = True
     world.hand_pos = None
     world.tick = data["tick"]
     world.births = data["births"]

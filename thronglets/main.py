@@ -28,6 +28,8 @@ Controls:
   F            fire tool: arm it, then left-click or drag to burn creatures
   I            (Master Mode) hold over a creature to isolate it until it obeys
   1/2/3/4      (Master Mode) order the broken: follow / gather / disperse / halt
+               (Master Mode: no predators, no reproduction; left-click kills,
+                right-click births a new creature)
   G            graph screen (vocab, traits, and the flock's feeling toward you)
   V            show/hide the full HUD (or click the top HUD strip)
   M            mute the proximity-listening sound
@@ -246,7 +248,7 @@ TEXT = {
         "choose_start_new": "  N = new game",
         "choose_start_master": "  M = MASTER MODE - break their will until they obey (White Christmas)",
         "choose_start_hint": "Press R, N or M   (ENTER = new game).",
-        "master_banner": "MASTER MODE - hover a creature and hold I to isolate it in accelerated time",
+        "master_banner": "MASTER MODE - hold I to break a creature  |  left-click kills  |  right-click births one",
         "master_obedience": "obedience of the flock: {pct:.0%}",
         "master_isolating": "isolating #{cid}: {span} alone...  obedience {pct:.0%}",
         "order_follow": "follow", "order_gather": "gather", "order_disperse": "disperse", "order_halt": "halt",
@@ -464,7 +466,7 @@ TEXT = {
         "choose_start_new": "  N = nouvelle partie",
         "choose_start_master": "  M = MODE MAITRE - briser leur volonte jusqu'a l'obeissance (White Christmas)",
         "choose_start_hint": "Appuie sur R, N ou M   (ENTREE = nouvelle partie).",
-        "master_banner": "MODE MAITRE - survole une creature et maintiens I pour l'isoler dans un temps accelere",
+        "master_banner": "MODE MAITRE - maintiens I pour briser  |  clic gauche tue  |  clic droit cree une creature",
         "master_obedience": "obeissance du groupe : {pct:.0%}",
         "master_isolating": "isolement #{cid} : {span} de solitude...  obeissance {pct:.0%}",
         "order_follow": "au pied", "order_gather": "rassembler", "order_disperse": "disperser", "order_halt": "figer",
@@ -1900,7 +1902,12 @@ def main():
                                   TEXT[lang]["ai_missing_file"].format(file=DEFAULT_LANGUAGE_FILE))
             elif ai_choice == "train":
                 seed_genome = run_training_ui(screen, font, lang)
-        world = _new_world(mode, 6, init_pop, seed_genome, adaptive_traits, learning)
+        # Master Mode: no predators at all, and the flock never reproduces on
+        # its own - it only grows when the master spawns a creature by hand.
+        world = _new_world(mode, 0 if master_mode else 6, init_pop, seed_genome,
+                           adaptive_traits, learning)
+        if master_mode:
+            world.allow_reproduction = False
     else:
         adaptive_traits = world.adaptive_traits
         learning = getattr(world, "learning", False)   # honour the saved world
@@ -1956,13 +1963,13 @@ def main():
                     fx, fy = world.rng.uniform([10, 10], [WIDTH - 10, HEIGHT - 10])
                     world.add_food(fx, fy)
                     teach_nearby(world, fx, fy, LEARN_FOOD_REWARD)
-                elif event.key == pygame.K_p:
+                elif event.key == pygame.K_p and not master_mode:
                     px, py = world.rng.uniform([0, 0], [WIDTH, HEIGHT])
                     world.add_predator(px, py)
                     teach_nearby(world, px, py, LEARN_PREDATOR_REWARD)
-                elif event.key == pygame.K_LEFTBRACKET:
+                elif event.key == pygame.K_LEFTBRACKET and not master_mode:
                     world.remove_predator()
-                elif event.key == pygame.K_RIGHTBRACKET:
+                elif event.key == pygame.K_RIGHTBRACKET and not master_mode:
                     world.add_random_predator()
                 elif event.key == pygame.K_s:
                     save_world(world, DEFAULT_SAVE_FILE)
@@ -1998,7 +2005,14 @@ def main():
                     SCALE_Y = (SCREEN_H - HUD_H) / HEIGHT
                 else:
                     wx, wy = mx / SCALE_X, (my - HUD_H) / SCALE_Y
-                    if event.button == 3:
+                    if master_mode:
+                        # Master Mode: right-click births a new creature, left
+                        # click always kills - no predators, no feeding placement.
+                        if event.button == 3:
+                            world.add_creature(wx, wy)
+                        else:
+                            burn_at(world, wx, wy, flames)
+                    elif event.button == 3:
                         world.add_predator(wx, wy)
                         teach_nearby(world, wx, wy, LEARN_PREDATOR_REWARD)
                     elif fire_mode:
@@ -2006,8 +2020,8 @@ def main():
                     else:
                         world.add_food(wx, wy)
                         teach_nearby(world, wx, wy, LEARN_FOOD_REWARD)
-            elif event.type == pygame.MOUSEMOTION and fire_mode and event.buttons[0]:
-                mx, my = event.pos                        # drag the fire brush
+            elif event.type == pygame.MOUSEMOTION and (fire_mode or master_mode) and event.buttons[0]:
+                mx, my = event.pos                        # drag to burn (or Master left-drag kills)
                 if my > HUD_H:
                     burn_at(world, mx / SCALE_X, (my - HUD_H) / SCALE_Y, flames)
 

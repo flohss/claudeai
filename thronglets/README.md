@@ -175,7 +175,13 @@ your cursor), `2` gather (huddle tightly onto the cursor from anywhere on the
 map), `3` disperse (driven outward), `4` halt (freeze in place). Only broken
 creatures obey; the still-free ignore you. The HUD shows the flock's average
 obedience and the current order, and the break is permanent and saved with the
-game. (Available only in Master Mode; a normal game is untouched.)
+game.
+
+Master Mode also reshapes the world around your rule: **no predators at all**,
+**no reproduction** (the flock never grows on its own), **left-click always
+kills** (no food placement), and **right-click births a new creature** - so
+the population only ever changes by your own hand. (All of this is Master Mode
+only; a normal game is untouched.)
 
 ### Web (any device with a browser)
 
