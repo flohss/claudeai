@@ -189,7 +189,9 @@ again**. So you can't just break a few and relax: you have to isolate the
 broken (order them to *gather* away from the free, or *disperse* the free),
 subdue the whole flock, or cull the frightened - faster than fear can spread
 and undo your grip. When too much of the free flock is terrified it tips into
-an **uprising** (a flashing HUD alert), and the erosion accelerates. The HUD
+an **uprising** (a flashing HUD alert): the erosion accelerates, and the
+frightened free creatures stop fleeing and **actively charge the broken ones
+to tear them free** - a visible liberating mob swarming your servants. The HUD
 gauge shows both your **obedience** (grey) and the flock's **unrest** (a red
 sliver) so you can see your hold slipping.
 

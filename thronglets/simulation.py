@@ -137,6 +137,7 @@ REBEL_RADIUS = 26.0           # how near a frightened free creature erodes a bro
 EROSION_PER_AFRAID = 0.010    # obedience lost per step per nearby frightened free neighbour
 UPRISING_UNREST = 0.45        # fraction of the free flock terrified that tips into an uprising
 UPRISING_EROSION_MULT = 2.5   # how much faster grip crumbles once an uprising is under way
+REBEL_RALLY_STRENGTH = 2.6    # how hard frightened free creatures surge to free the broken in an uprising
 INHERIT_BLEND = 0.85          # fraction of the parents' learned feelings a child keeps
 INHERIT_NOISE = 0.05          # small variation so offspring aren't carbon copies
 
@@ -981,6 +982,14 @@ class World:
         hand_np = (np.asarray(self.hand_pos, dtype=float)
                    if self.learning and self.hand_pos is not None else None)
 
+        # during a Master-Mode uprising, frightened free creatures actively surge
+        # to free their broken kin - precompute where the broken ones are.
+        uprising = self.master_mode and self.master_unrest_level >= UPRISING_UNREST
+        broken_pos = None
+        if uprising:
+            bp = [c.pos for c in alive if c.mind is not None and c.mind.obedience > 0.15]
+            broken_pos = np.array(bp, dtype=float) if bp else None
+
         for i, c in enumerate(alive):
             move = self.rng.normal(0, 1, 2) * WANDER_STRENGTH
             frozen = False   # set when a broken creature is ordered to halt
@@ -1054,7 +1063,14 @@ class World:
             if c.mind is not None and not frozen:
                 val, arous = c.mind.valence, c.mind.arousal
                 move += self.rng.normal(0, 1, 2) * WANDER_STRENGTH * arous * MOOD_RESTLESS
-                if val < -0.2 and arous > 0.5:           # afraid: flee
+                rallying = (uprising and broken_pos is not None
+                            and c.mind.obedience <= 0.15 and c.mind.emotion() == "fear")
+                if rallying:
+                    # the uprising: overcome fear and charge the nearest broken
+                    # kin to tear it free of the master's grip.
+                    d = np.linalg.norm(broken_pos - np.asarray(c.pos, dtype=float), axis=1)
+                    move += _toward(c.pos, broken_pos[int(np.argmin(d))]) * REBEL_RALLY_STRENGTH
+                elif val < -0.2 and arous > 0.5:           # afraid: flee
                     if hand_np is not None:
                         away = c.pos - hand_np
                         n = np.linalg.norm(away)
