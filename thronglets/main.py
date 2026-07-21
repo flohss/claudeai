@@ -1012,10 +1012,9 @@ def draw(screen, font, world, paused, speed, mode, lang, expanded, trained=False
         body = MOOD_FILL[c.mind.emotion()] if (world.learning and c.mind is not None) else BODY_COLOR
         broken = world.learning and c.mind is not None and c.mind.obedience > 0.15
         if broken:
-            # a broken creature is voided out: its heart drains to black, deeper
-            # the more broken it is, under a black "collar" ring
-            k = c.mind.obedience
-            body = tuple(int(body[j] * (1 - k)) for j in range(3))
+            # a broken creature is voided out: it emits no mood colour at all,
+            # just a black heart under a black "collar" ring
+            body = (0, 0, 0)
         pygame.draw.circle(screen, body, (x, y), 4)
         if broken:
             pygame.draw.circle(screen, (0, 0, 0), (x, y), 7, width=2)
