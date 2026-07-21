@@ -1012,14 +1012,13 @@ def draw(screen, font, world, paused, speed, mode, lang, expanded, trained=False
         body = MOOD_FILL[c.mind.emotion()] if (world.learning and c.mind is not None) else BODY_COLOR
         broken = world.learning and c.mind is not None and c.mind.obedience > 0.15
         if broken:
-            # a broken creature drains toward a hollow grey, deeper the more
-            # obedient, and wears a grey "collar" ring
+            # a broken creature is voided out: its heart drains to black, deeper
+            # the more broken it is, under a black "collar" ring
             k = c.mind.obedience
-            body = tuple(int(body[j] * (1 - k) + OBEDIENT_COLOR[j] * k) for j in range(3))
+            body = tuple(int(body[j] * (1 - k)) for j in range(3))
         pygame.draw.circle(screen, body, (x, y), 4)
         if broken:
-            # a dark grey "collar" ring marks a broken creature at a glance
-            pygame.draw.circle(screen, (70, 70, 78), (x, y), 7, width=2)
+            pygame.draw.circle(screen, (0, 0, 0), (x, y), 7, width=2)
         if c.id == hovered_id:
             pygame.draw.circle(screen, (245, 245, 210), (x, y), 9, width=1)
         if c.token != 0:
