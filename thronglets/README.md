@@ -449,21 +449,42 @@ Kind acts teach that creature - and the ones near enough to witness them -
 to approach; cruel ones teach fear and kill **with an animation** (a stab
 shudder, a creature wreathed in flame, a rock that squashes it flat).
 
-**Under the hood, each mind is a small neural network**, not a lookup or a
-weighted sum. Five perceptions feed it - how near the hand is, how hungry the
-creature is, their product, how crowded it is right here, and how fast the
-hand is closing in - through a hidden `tanh` layer to a single output: its
-live appraisal of the hand, +1 *approach* .. -1 *flee*. It learns by real
-**reinforcement + backpropagation**: an eligibility trace accumulates the
-gradient of recent situations so a later reward (a feeding, a burn, or simply
-finding food while the hand is near) is credited back to the weights that
-earned it - temporal credit assignment. Nothing scripts "fear the player";
-the sign is discovered from the sign of experienced reward. Because there is a
-hidden layer, a mind can learn **non-linear** lessons a plain weighted sum
-never could - *"the hand is worth approaching when I'm hungry, but not when it
-lunges at me while I'm alone."* A newborn inherits a blend of its parents'
-whole network, so hard-won lessons compound across generations. It stays
-numpy-only, opt-in, and fully saved/loaded with the world.
+**Under the hood, each mind is a small neural network that predicts - and
+decides from its predictions.** Eight perceptions feed it: how near the hand
+is, how hungry the creature is, their product, how crowded it is right here,
+how fast the hand is closing in, how near a predator is, how near food is, and
+its own agitation. They pass through a hidden `tanh` layer to one output - the
+creature's learned estimate of *how good this moment is about to turn out*.
+
+It learns by **temporal-difference reinforcement learning**, trained by real
+backpropagation. Every step it measures its own surprise -
+
+> `surprise = reward + γ·(what the next moment looks worth) − (what this one looked worth)`
+
+\- and trains the network to shrink it, so the estimate comes to *predict*
+what is coming rather than merely record what came. Because the estimate
+**bootstraps** off itself, dread travels **backward in time**: being burned
+teaches *"hand on me = agony"*, and TD then quietly teaches *"hand closing on
+me = about to be agony."* A mistreated flock learns to **bolt at the approach
+rather than at the touch** - anticipation that is learned, never coded. (In a
+headless run, a burned flock ends up valuing a *lunging* hand measurably worse
+than the same hand sitting still.)
+
+**Nothing scripts what to do about you, either.** To act, a creature looks one
+step ahead: it imagines the hand a little nearer and a little further, asks its
+own network what each would be worth, and picks between approaching, fleeing
+and ignoring by softmax over those imagined values. So a creature flees only
+because it *predicts* that closer is worse. Sampling rather than always taking
+the best is what keeps it exploring, and it commits to a choice for a moment so
+its behaviour reads as intent rather than a twitch.
+
+Two details keep the lessons honest. Learning is driven by **surprise**, not by
+raw reward, so an outcome that merely meets expectations teaches nothing and
+arbitrary habits never snowball. And a witness learns a lesson **diluted by how
+far off it stood**, which is what gives the network its sense that near the hand
+is worth much more - or much less - than far from it. A newborn inherits a
+blend of its parents' whole network, so hard-won predictions compound across
+generations. It stays numpy-only, opt-in, and fully saved/loaded with the world.
 
 **Each creature carries a persistent inner mood** - a real affective state,
 not a value recomputed each frame. Following the circumplex model of

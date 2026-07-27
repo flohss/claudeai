@@ -107,18 +107,39 @@ DANGER_VISION_RATIO = DANGER_RADIUS / SEE_RADIUS  # keeps danger-spotting propor
 # the sign of experienced reward. All of it stays dormant unless
 # learning=True, so the other renderers and the headless smoke test are
 # completely unaffected.
-# The mind is a tiny neural network. Its input is a richer view of the moment
-# than the original two numbers: how near the hand is, how hungry the creature
-# is, their product, how crowded it is right here, and how fast the hand is
-# closing in. A single hidden layer lets it learn NON-LINEAR relations between
-# these (e.g. "the hand is worth approaching when I'm hungry, unless it is
-# lunging at me while I'm alone") that a plain weighted sum never could.
-LEARN_FEATURES = 5            # [hand_prox, hunger, hand_prox*hunger, crowd, hand_speed]
-LEARN_HIDDEN = 6              # hidden units in the mind's one hidden layer
+# The mind is a small neural network that does not merely FEEL about the
+# player - it DECIDES what to do about them. Eight perceptions feed a shared
+# hidden layer that splits into two heads:
+#   * a critic  - "how good is my situation right now?" (a value function)
+#   * an actor  - "approach / flee / ignore the hand?" (a policy)
+# The critic is trained by temporal-difference learning and the actor by
+# policy gradient, using the critic's error as its advantage signal: textbook
+# actor-critic reinforcement learning, in numpy. Because the critic bootstraps
+# (the value of now is learned from the value of the next moment), fear flows
+# BACKWARD in time: a hand that lunges comes to be dreaded before it ever
+# lands, so a burned flock learns to bolt at the approach, not at the touch.
+LEARN_FEATURES = 8    # [hand_prox, hunger, hand_prox*hunger, crowd,
+                      #  hand_speed, predator_prox, food_prox, arousal]
+LEARN_HIDDEN = 10             # hidden units in the shared trunk
+N_ACTIONS = 3                 # the choices the actor picks between
+ACT_APPROACH, ACT_FLEE, ACT_IGNORE = 0, 1, 2
+ACTION_HOLD = 10              # steps a creature commits to a choice before rethinking
+GAMMA = 0.97                  # discount: how far ahead the critic looks
+# The critic's output is a bounded -1 .. +1 "how good is this?", so the rewards
+# flowing into the TD error must be scaled to match: a reward of +1 sustained
+# forever is worth exactly +1 to it, not the 1/(1-GAMMA) an unscaled sum would
+# imply. Without this the TD error saturates and never settles, and the actor
+# ends up reinforcing whatever a creature happened to be doing near the hand.
+REWARD_SCALE = 1.0 - GAMMA
+CRITIC_RATE = 0.06            # step size for learning to predict what is coming
+DECIDE_TEMP = 0.12            # how decisively it acts on what it predicts
+LOOKAHEAD = 0.35              # how much nearer/further a step is imagined to get it
 PARAM_CLIP = 3.0             # bound on every network weight (stops runaway)
 CROWD_RADIUS = 40.0          # world units within which neighbours count as "crowd"
 CROWD_CAP = 6                # neighbour count that reads as a full house (feature=1)
 HAND_APPROACH_SCALE = 6.0    # per-step closing distance that reads as a full lunge
+PREDATOR_PERCEPTION = 70.0   # world units a predator is felt from
+FOOD_PERCEPTION = 60.0       # world units food is noticed from
 _MIND_INIT_SEED = 20240517   # fixed seed: every naive founder starts identical
 HAND_PERCEPTION = 48.0        # world units: how near the hand must be to feel it
 LEARN_RATE = 0.05             # step size for learning from one's own experience
@@ -130,7 +151,6 @@ OBSERVE_RATE = 0.02           # weaker step for learning by watching a neighbour
 # in far deeper than a feeding does.
 TRAUMA_PERCEPTION = 85.0      # world units a violent death is witnessed from
 TRAUMA_RATE = 0.11            # how deeply witnessing harm teaches fear of the hand
-ELIG_DECAY = 0.88             # how fast the "what just happened to me" trace fades
 VALENCE_CLIP = 1.5            # bound on every learned weight (stops runaway)
 REWARD_EAT = 0.4              # mild reward for finding food while the hand is near
 HAND_MOVE_STRENGTH = 1.3      # how hard the learned feeling pulls toward/away the hand
@@ -300,63 +320,88 @@ def load_seed_genome(path):
     return Genome.from_lookup(data["state_to_token"], data["token_to_state"])
 
 
+# shape of every weight array in a mind: a shared trunk (W1/b1), a critic head
+# (Wv/bv) and an actor head (Wp/bp). One table, so building, loading, blending
+# and saving a network all stay in step with each other.
+NET_SHAPES = {
+    "W1": (LEARN_HIDDEN, LEARN_FEATURES),
+    "b1": (LEARN_HIDDEN,),
+    "Wv": (LEARN_HIDDEN,),
+    "bv": (),
+}
+
+
 def _fresh_net():
-    """A naive mind's starting weights: a single tanh hidden layer. Every
-    founder starts from the SAME small random weights (fixed seed), so runs
-    stay reproducible, yet the hidden units differ from each other (symmetry
-    broken) so learning can actually specialise them."""
+    """A naive mind's starting weights. Every founder starts from the SAME
+    small random weights (fixed seed), so runs stay reproducible, yet the
+    hidden units differ from each other (symmetry broken) so learning can
+    specialise them. The weights are small on purpose: an untrained creature
+    values nothing in particular and picks between its three options almost at
+    random - it has no idea yet what you are."""
     r = np.random.default_rng(_MIND_INIT_SEED)
-    # small weights: a naive founder starts near-neutral about the hand (its
-    # untrained appraisal is ~0, like the old model's zero weights), yet the
-    # hidden units still differ from one another so learning can specialise them
-    return {
-        "W1": r.normal(0.0, 0.12, (LEARN_HIDDEN, LEARN_FEATURES)),
-        "b1": np.zeros(LEARN_HIDDEN),
-        "W2": r.normal(0.0, 0.12, LEARN_HIDDEN),
-        "b2": np.zeros(()),
-    }
+    net = {}
+    for k, shape in NET_SHAPES.items():
+        net[k] = np.zeros(shape) if k in ("b1", "bv", "bp") else r.normal(0.0, 0.12, shape)
+    return net
 
 
 def _net_from(d):
-    """Rebuild network weights from a serialised (JSON-friendly) dict."""
-    return {
-        "W1": np.asarray(d["W1"], dtype=float).reshape(LEARN_HIDDEN, LEARN_FEATURES),
-        "b1": np.asarray(d["b1"], dtype=float).reshape(LEARN_HIDDEN),
-        "W2": np.asarray(d["W2"], dtype=float).reshape(LEARN_HIDDEN),
-        "b2": np.asarray(d["b2"], dtype=float).reshape(()),
-    }
+    """Rebuild network weights from a serialised (JSON-friendly) dict. Returns
+    None if the save predates this architecture (or came from a different one),
+    so the caller can fall back to a fresh brain instead of crashing."""
+    if not isinstance(d, dict):
+        return None
+    try:
+        return {k: np.asarray(d[k], dtype=float).reshape(shape)
+                for k, shape in NET_SHAPES.items()}
+    except (KeyError, ValueError, TypeError):
+        return None
 
 
 class Mind:
     """A creature's small, learned brain - separate from its evolved genome.
 
-    It is a tiny neural network: five perceptual inputs (how near the hand is,
-    how hungry the creature is, their product, how crowded it is here, how fast
-    the hand is closing in) feed a single tanh hidden layer, which feeds one
-    tanh output - the creature's live appraisal of the hand, +1 "worth
-    approaching" (it has been fed) .. -1 "flee" (it has been hurt, or has
-    watched others be hurt). The hidden layer is what lets it learn NON-LINEAR
-    lessons a plain weighted sum never could ("approach when hungry, but not if
-    a lunging hand catches me alone").
+    It is a neural network that does not just feel, it PREDICTS - and decides
+    from its predictions. Eight perceptions (how near the hand is, how hungry
+    it is, their product, how crowded it is here, how fast the hand is closing,
+    how near a predator is, how near food is, and its own agitation) feed a
+    tanh hidden layer and then a single output: the creature's learned estimate
+    of how good this moment is about to turn out.
 
-    Learning is online reinforcement, by real backpropagation: `sense` folds
-    the gradient of the current situation into a decaying eligibility trace, so
-    when something good or bad later happens (`reinforce`) the trace tells the
-    update which weights to credit or blame - temporal credit assignment.
-    `teach` is the same gradient step applied at once for an event the creature
-    directly lives or witnesses. Nothing scripts "fear the player"; the sign is
-    discovered from the sign of experienced reward.
+    Learning is temporal-difference reinforcement learning, by backpropagation:
 
-    A newborn inherits a blend of its parents' weights (Mind.inherit), so a
-    family's hard-won lessons carry forward and compound across generations."""
+      * every step, the TD error  d = r + GAMMA*V(next) - V(now)  measures how
+        much better or worse things turned out than the creature expected -
+        its surprise;
+      * the network is trained to shrink that surprise, so V comes to predict
+        what is coming rather than merely record what came.
 
-    __slots__ = ("p", "elig", "valence", "arousal", "memory", "obedience")
+    Because the estimate BOOTSTRAPS - the value of now is learned from the
+    value of the next moment - dread flows BACKWARD in time. Being burned
+    teaches "hand on me = agony"; TD then quietly teaches "hand closing on me =
+    about to be agony", so a mistreated flock learns to bolt at the approach
+    rather than at the touch. That anticipation is learned, never coded.
+
+    Acting is one-step lookahead on what it has learned: the creature imagines
+    the hand a little nearer and a little further, asks its own network what
+    each would be worth, and picks between approaching, fleeing and ignoring by
+    softmax over those imagined values. So the sign of its behaviour is never
+    scripted - a creature flees only because it predicts that closer is worse.
+    Sampling rather than always taking the best is what keeps it exploring.
+
+    A newborn inherits a blend of its parents' whole network, so hard-won
+    predictions carry across generations."""
+
+    __slots__ = ("p", "valence", "arousal", "memory", "obedience",
+                 "act", "confidence", "surprise", "_last", "_pending", "_hold")
 
     def __init__(self, params=None, valence=MOOD_VALENCE_REST, arousal=MOOD_AROUSAL_REST,
                  memory=None, obedience=0.0):
-        # the network weights, and a matching eligibility trace over them
-        self.p = _fresh_net() if params is None else _net_from(params)
-        self.elig = {k: np.zeros_like(v) for k, v in self.p.items()}
+        # the network weights; a save from an older architecture can't seed
+        # this one, so fall back to a fresh brain rather than crash
+        self.p = _net_from(params) if params is not None else None
+        if self.p is None:
+            self.p = _fresh_net()
         # the persistent inner mood (see the mood constants above)
         self.valence = float(valence)
         self.arousal = float(arousal)
@@ -367,63 +412,137 @@ class Mind:
         # 0 free .. 1 utterly obedient. Not genetic, not learned - beaten into
         # the individual by isolation, and it does not fade on its own.
         self.obedience = float(obedience)
+        # what it has decided to do about the hand, how sure it is, and how
+        # badly its last expectation was violated (its surprise)
+        self.act = ACT_IGNORE
+        self.confidence = 1.0 / N_ACTIONS
+        self.surprise = 0.0
+        self._last = None       # (features, action) of the step just lived
+        self._pending = 0.0     # reward banked since then, paid in at the next step
+        self._hold = 0          # steps left before it reconsiders its choice
 
     @staticmethod
-    def features(hand_prox, hunger, crowd=0.0, hand_speed=0.0):
-        """The situation right now, as the network sees it. hand_prox 0 (hand
-        out of reach) .. 1 (right on top); hunger 0 (full) .. 1 (starving);
-        crowd 0 (alone) .. 1 (packed); hand_speed 0 (still/receding) .. 1
-        (lunging in). The hand-linked terms vanish when the hand is far, which
-        keeps the hand-specific lessons hand-specific."""
-        return np.array([hand_prox, hunger, hand_prox * hunger, crowd, hand_speed])
+    def features(hand_prox, hunger, crowd=0.0, hand_speed=0.0,
+                 predator=0.0, food=0.0, arousal=0.0):
+        """The situation right now, as the network sees it. Every term is
+        0 .. 1: hand_prox (out of reach .. right on top), hunger (full ..
+        starving), crowd (alone .. packed), hand_speed (still or receding ..
+        lunging in), predator/food (none in sight .. right here), arousal
+        (calm .. agitated). The hand-linked terms vanish when the hand is far,
+        which keeps hand-specific lessons hand-specific."""
+        return np.array([hand_prox, hunger, hand_prox * hunger, crowd,
+                         hand_speed, predator, food, arousal])
 
-    def _eval(self, x):
-        """Forward pass. Returns the appraisal y and the hidden activations h
-        (kept so the gradient can be taken without recomputing them)."""
+    # -- the network -------------------------------------------------------
+    def _forward(self, x):
+        """One pass: the hidden activations and the predicted value."""
         h = np.tanh(self.p["W1"] @ x + self.p["b1"])
-        y = np.tanh(self.p["W2"] @ h + self.p["b2"])
-        return y, h
+        v = np.tanh(self.p["Wv"] @ h + self.p["bv"])
+        return h, float(v)
 
-    def _grad(self, x):
-        """Backprop: the gradient of the scalar appraisal wrt every weight, at
-        input x. For the old linear model this reduced to just `x`; the hidden
-        layer is what makes it more than a weighted sum."""
-        h = np.tanh(self.p["W1"] @ x + self.p["b1"])
-        y = np.tanh(self.p["W2"] @ h + self.p["b2"])
-        gy = 1.0 - y * y                       # through the output tanh
-        gh = (gy * self.p["W2"]) * (1.0 - h * h)   # through W2 and the hidden tanh
-        return {"W1": np.outer(gh, x), "b1": gh, "W2": gy * h, "b2": np.asarray(gy)}
+    def _grad_value(self, x):
+        """Backprop the predicted value back through the network."""
+        h, v = self._forward(x)
+        gv = 1.0 - v * v                            # through the output tanh
+        gh = (gv * self.p["Wv"]) * (1.0 - h * h)    # through Wv and the hidden tanh
+        return {"W1": np.outer(gh, x), "b1": gh, "Wv": gv * h, "bv": np.asarray(gv)}
+
+    def _apply(self, signal, grad, rate):
+        for k in self.p:
+            self.p[k] = np.clip(self.p[k] + rate * signal * grad[k], -PARAM_CLIP, PARAM_CLIP)
+
+    # -- what it expects, and what it decides -------------------------------
+    def value(self, feat):
+        """What it predicts this moment is worth: -1 (dreadful) .. +1 (promising)."""
+        return self._forward(feat)[1]
 
     def appraise(self, feat):
-        return float(self._eval(feat)[0])
+        """The creature's read on a moment - its learned predicted value."""
+        return self.value(feat)
 
-    def sense(self, feat):
-        """Fold the gradient of this step's situation into the decaying
-        eligibility trace, so a later reward can be credited to it."""
-        g = self._grad(feat)
-        for k in self.elig:
-            self.elig[k] = ELIG_DECAY * self.elig[k] + g[k]
+    @staticmethod
+    def _shift(feat, delta):
+        """The same moment imagined with the hand nearer (delta > 0) or further
+        away (delta < 0) - the creature's little model of what its own move
+        would do. Only the hand-linked terms move; the rest of the world does
+        not care where this creature steps."""
+        f = feat.copy()
+        f[0] = min(1.0, max(0.0, f[0] + delta))
+        f[2] = f[0] * f[1]                     # the hand x hunger term follows
+        return f
 
-    def _apply(self, reward, grad, rate):
-        for k in self.p:
-            self.p[k] = np.clip(self.p[k] + rate * reward * grad[k], -PARAM_CLIP, PARAM_CLIP)
+    def policy(self, feat):
+        """The odds it approaches / flees / ignores the hand, worked out by
+        imagining each and asking itself what each would be worth. Softmax over
+        those imagined values: a creature acts on what it predicts, decisively
+        when its predictions differ, near-randomly when they do not."""
+        q = np.array([self.value(Mind._shift(feat, +LOOKAHEAD)),   # approach
+                      self.value(Mind._shift(feat, -LOOKAHEAD)),   # flee
+                      self.value(feat)])                           # ignore
+        e = np.exp((q - q.max()) / DECIDE_TEMP)
+        return e / e.sum()
 
-    def reinforce(self, reward, rate=LEARN_RATE):
-        """Learn from an outcome, crediting the recently-active situations held
-        in the eligibility trace (temporal credit assignment)."""
-        self._apply(reward, self.elig, rate)
+    def sense(self, feat, rng=None):
+        """One step of life: settle up with the last moment, then choose.
+
+        Settling up is the TD update - the error between what the last moment
+        promised and what this one delivered trains the network to predict
+        better. Then, unless it is still committed to an earlier choice, the
+        creature looks one step ahead and picks: sampling (not always taking
+        the best) is what keeps it exploring."""
+        _h, v = self._forward(feat)
+        if self._last is not None:
+            x0, v0 = self._last
+            delta = REWARD_SCALE * self._pending + GAMMA * v - v0
+            self._pending = 0.0
+            self.surprise = abs(delta)
+            # it learns to have expected what actually came. This single update
+            # is what makes dread travel backward in time: once "hand on me" is
+            # known to be dreadful, the moment BEFORE it inherits that dread.
+            self._apply(delta, self._grad_value(x0), CRITIC_RATE)
+        # commit to a choice for a while, so behaviour reads as intent rather
+        # than as a twitch, then reconsider
+        self._hold -= 1
+        if self._hold <= 0:
+            pi = self.policy(feat)
+            if rng is None:
+                self.act = int(np.argmax(pi))
+            else:
+                self.act = min(int(np.searchsorted(np.cumsum(pi), rng.random())),
+                               N_ACTIONS - 1)
+            self.confidence = float(pi[self.act])
+            self._hold = ACTION_HOLD
+        # keep the value it expected at this moment, so the next step's
+        # surprise is measured against that expectation
+        self._last = (feat, v)
+
+    # -- learning from what happens ----------------------------------------
+    def reinforce(self, reward):
+        """Bank an outcome, to be paid into the TD error at the next step. It
+        raises or lowers what the creature expects of the moment it just lived,
+        and from there TD carries it back through whatever led up to it."""
+        self._pending += reward
 
     def teach(self, reward, feat, rate):
-        """A direct lesson tied to a specific situation - used when the player
-        acts on this creature (the hand is certainly right here) and when it
-        witnesses something happen to a neighbour: one gradient step at feat."""
-        self._apply(reward, self._grad(feat), rate)
+        """A lesson tied to a specific situation - the player acting on this
+        creature, or this creature watching it happen to a neighbour. The
+        prediction is pulled hard toward the truth of that moment; that is what
+        makes trauma stick, and what TD later spreads backward into dread of
+        the approach itself. Learning is driven by the SURPRISE (how far the
+        truth was from what it expected), so an outcome that merely meets
+        expectations teaches nothing."""
+        surprise = reward - self.value(feat)
+        self._apply(surprise, self._grad_value(feat), rate * 4.0)
 
     def disposition(self):
-        """The creature's context-free feeling about the hand, clamped to
-        roughly -1 (terrified) .. +1 (trusting): its appraisal of a hand right
-        on it in a neutral, calm, un-crowded moment. For display and movement."""
-        return float(np.clip(self.appraise(Mind.features(1.0, 0.0)), -1.0, 1.0))
+        """How the flock has come to regard the hand, -1 (flees you) .. +1
+        (comes to you). It is the creature's own prediction: how much better or
+        worse it expects to be with the hand right here than with it out of
+        reach. Not a feeling handed to it, but a conclusion it drew - and the
+        very quantity its behaviour is decided from."""
+        near = self.value(Mind.features(1.0, 0.0))
+        far = self.value(Mind.features(0.0, 0.0))
+        return float(np.clip(near - far, -1.0, 1.0))
 
     # -- persistent inner mood ---------------------------------------------
     def feel(self, dv, da):
@@ -655,16 +774,17 @@ class World:
         return max(0.0, 1.0 - dist / HAND_PERCEPTION)
 
     def _learn_sense(self):
-        """Once per step: let every mind fold its current situation (how near
-        the hand is, how hungry it is, how crowded, how fast the hand closes)
-        into its eligibility trace, so a later reward can be credited to the
-        hand only when the hand was involved."""
+        """Once per step: every mind perceives the moment, settles up with the
+        last one (the actor-critic update), and decides what to do next. This
+        is where the creature's whole learned life actually happens."""
         self._hand_np = None if self.hand_pos is None else np.asarray(self.hand_pos, dtype=float)
         prev_hand = getattr(self, "_prev_hand_np", None)
         alive = self._alive()
         # local crowd density per creature: one cheap pairwise sweep, so each
         # mind can perceive whether it is alone or in a packed flock.
         crowd_counts = None
+        pred_pos = np.array([p.pos for p in self.predators], dtype=float) if self.predators else None
+        food_pos = np.array(self.food, dtype=float) if self.food else None
         if alive:
             pos = np.array([c.pos for c in alive], dtype=float)
             dd = np.linalg.norm(pos[:, None, :] - pos[None, :, :], axis=2)
@@ -684,7 +804,19 @@ class World:
                 cur_d = float(np.linalg.norm(c.pos - self._hand_np))
                 prev_d = float(np.linalg.norm(c.pos - prev_hand))
                 hand_speed = max(0.0, min(1.0, (prev_d - cur_d) / HAND_APPROACH_SCALE))
-            c.mind.sense(Mind.features(prox, hunger, crowd, hand_speed))
+            # the rest of the world it can feel: the nearest predator and the
+            # nearest food, so the critic can learn what a moment is really worth
+            pred_prox = 0.0
+            if pred_pos is not None:
+                d = float(np.min(np.linalg.norm(pred_pos - c.pos, axis=1)))
+                pred_prox = max(0.0, 1.0 - d / PREDATOR_PERCEPTION)
+            food_prox = 0.0
+            if food_pos is not None:
+                d = float(np.min(np.linalg.norm(food_pos - c.pos, axis=1)))
+                food_prox = max(0.0, 1.0 - d / FOOD_PERCEPTION)
+            c.mind.sense(Mind.features(prox, hunger, crowd, hand_speed,
+                                       pred_prox, food_prox, c.mind.arousal),
+                         self.rng)
             # let the persistent mood breathe: its resting baseline is set by
             # the body right now - a full creature drifts toward calm content,
             # a starving one toward miserable and agitated - and the mood eases
@@ -750,8 +882,13 @@ class World:
         dv, da = (MOOD_FEED_DV, MOOD_FEED_DA) if good else (MOOD_HARM_DV, MOOD_HARM_DA)
         mem_mark = MEM_FOOD if good else -MEM_HARM
         if creature.mind is not None:
-            # the victim/beneficiary: the hand is right here (prox = 1)
-            creature.mind.teach(reward, Mind.features(1.0, hunger), LEARN_RATE * 2.0)
+            # the victim/beneficiary: the hand is right here (prox = 1), and it
+            # got here by closing in (hand_speed = 1) - so the critic learns the
+            # value of a lunge landing, which is what TD later spreads backward
+            # into dread of the lunge itself.
+            creature.mind.teach(reward, Mind.features(1.0, hunger, 0.0, 1.0,
+                                                      arousal=creature.mind.arousal),
+                                LEARN_RATE * 2.0)
             creature.mind.feel(dv, da)   # and it feels it, deeply, right now
             creature.mind.remember(creature.pos, mem_mark)   # and remembers where
         if not observers:
@@ -771,7 +908,15 @@ class World:
             if prox <= 0.0:
                 continue
             hunger_o = max(0.0, min(1.0, 1.0 - other.energy / MAX_ENERGY))
-            other.mind.teach(valence, Mind.features(prox, hunger_o), rate)
+            # what a witness learns is diluted by how far off it was: the value
+            # it takes away is valence * prox, not the full lesson. That
+            # dilution is what gives the critic a PROXIMITY GRADIENT - near the
+            # hand is worth much more (or much less) than far from it - and
+            # that gradient is precisely what teaches the actor to close in or
+            # break away. Teaching every witness the same value regardless of
+            # distance would flatten it and leave the policy with nothing to go on.
+            other.mind.teach(valence * prox, Mind.features(prox, hunger_o, 0.0, prox,
+                                                           arousal=other.mind.arousal), rate)
             # witnessing it moves a neighbour's mood too, scaled by how close
             # it was - the seed of a mood that ripples through the flock.
             other.mind.feel(dv * MOOD_WITNESS * prox, da * MOOD_WITNESS * prox)
@@ -1104,12 +1249,13 @@ class World:
                 d = max(pair_d[i, j], 1e-6)
                 move += _toward(c.pos, positions[j]) * (w / d) * SIGNAL_STRENGTH
 
-            # learned reaction to the player's hand, driven by the creature's
-            # persistent feeling (disposition), not just an up-close appraisal:
-            # a creature that has come to trust the hand gathers into a ring
-            # around it from a good way off; one that fears it flees when near.
+            # what the creature has DECIDED to do about the player's hand. This
+            # is not a rule - it is the action its policy chose this moment
+            # (approach / flee / ignore), learned from what approaching and
+            # fleeing have actually cost it. The strength is its confidence in
+            # that choice, so a creature sure of itself commits and an undecided
+            # one barely leans.
             if hand_np is not None and c.mind is not None:
-                disp = c.mind.disposition()          # -1 (fears) .. +1 (trusts)
                 to_hand = hand_np - c.pos
                 dist = np.linalg.norm(to_hand)
                 if c.mind.obedience > 0.15 and dist > 1e-6:
@@ -1132,22 +1278,25 @@ class World:
                             # full drive right up to the last few units, then ease
                             # just enough to settle without jitter - no dawdling.
                             move += unit * ob * HAND_MOVE_STRENGTH * 2.0 * min(1.0, gap / 4.0)
-                elif disp > 0.05 and 1e-6 < dist < HAND_CALL_RANGE:
-                    # trusting: drift toward the hand until a respectful
-                    # standoff, then ease back if too close. No assigned slots -
-                    # the flock just gathers loosely on whichever side it comes
-                    # from, an organic crowd; the standoff keeps it off the exact
-                    # point (and, sitting outside earshot, quiet).
+                elif c.mind.act == ACT_APPROACH and 1e-6 < dist < HAND_CALL_RANGE:
+                    # it has decided you are worth coming to: drift in until a
+                    # respectful standoff, then ease back if too close. No
+                    # assigned slots - the flock just gathers loosely on
+                    # whichever side it comes from, an organic crowd; the
+                    # standoff keeps it off the exact point (and, sitting
+                    # outside earshot, quiet).
+                    pull = c.mind.confidence * HAND_MOVE_STRENGTH
                     unit = to_hand / dist
                     gap = dist - HAND_STANDOFF
                     if gap > 0.0:
-                        move += unit * disp * HAND_MOVE_STRENGTH * min(1.0, gap / HAND_STANDOFF)
+                        move += unit * pull * min(1.0, gap / HAND_STANDOFF)
                     else:
-                        move -= unit * disp * HAND_MOVE_STRENGTH * 0.6   # too close: ease back out
-                elif disp < -0.05 and 1e-6 < dist < HAND_PERCEPTION:
-                    # fearful: flee, harder the closer the hand is
+                        move -= unit * pull * 0.6   # too close: ease back out
+                elif c.mind.act == ACT_FLEE and 1e-6 < dist < HAND_PERCEPTION:
+                    # it has decided to get away from you: harder the closer
+                    # the hand is
                     prox = 1.0 - dist / HAND_PERCEPTION
-                    move += (-to_hand / dist) * (-disp) * prox * HAND_MOVE_STRENGTH
+                    move += (-to_hand / dist) * c.mind.confidence * prox * HAND_MOVE_STRENGTH
 
             # the creature's own persistent mood colours how it moves: arousal
             # makes it restless, terror makes it bolt, contentment seeks company
