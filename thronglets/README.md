@@ -486,6 +486,33 @@ is worth much more - or much less - than far from it. A newborn inherits a
 blend of its parents' whole network, so hard-won predictions compound across
 generations. It stays numpy-only, opt-in, and fully saved/loaded with the world.
 
+**One shock teaches the whole approach, not just its last step.** Learning uses
+**TD(λ)**: each moment leaves a fading imprint, and a surprise corrects every
+recent moment at once, faded by how long ago it was. So a creature can connect a
+blow to the run-up that preceded it from a *single* experience, instead of
+needing the sequence over and over. Measured against plain one-step TD, a single
+shock moves the *start* of an approach about four times as far.
+
+**And you are not the only teacher - the world teaches too.** A predator taking
+a neighbour is no longer a silent event: every creature near enough to see it
+learns from it, exactly as they learn from your cruelty. The lesson attaches to
+*predators*, not to you, so a flock can come to understand what a hunter means
+while remaining completely unbothered by a player who has never touched it (in a
+headless run: after a life among predators, `V(predator on me)` sits well below
+`V(none in sight)`, while the untouched hand stays neutral). The kill also
+leaves an **emotional and spatial scar** - fear ripples out through the flock by
+contagion, and the ground where it happened is marked as somewhere to shun.
+
+**Flight from a predator, though, stays innate - and that is a finding, not an
+oversight.** Making it learned was implemented and measured, and it fails for a
+real reason: a creature that must learn to run is eaten *during the lesson*
+(the flock collapsed to a single survivor within 500 ticks). Worse, gating a
+lethal behaviour on a lagging estimate makes the ecosystem oscillate - at one
+setting the learned urge inverted, which would have had creatures walking into
+predators. Real prey animals are born with anti-predator reflexes for exactly
+this reason. So the reflex is innate; what experience adds is *meaning*, mood
+and memory.
+
 **Each creature carries a persistent inner mood** - a real affective state,
 not a value recomputed each frame. Following the circumplex model of
 emotion, it runs on two slow-moving axes, **valence** (miserable ↔ happy)

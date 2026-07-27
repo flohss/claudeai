@@ -120,6 +120,9 @@ DANGER_VISION_RATIO = DANGER_RADIUS / SEE_RADIUS  # keeps danger-spotting propor
 # lands, so a burned flock learns to bolt at the approach, not at the touch.
 LEARN_FEATURES = 8    # [hand_prox, hunger, hand_prox*hunger, crowd,
                       #  hand_speed, predator_prox, food_prox, arousal]
+# named slots into that vector, so the code reads as perceptions, not indices
+F_HAND, F_HUNGER, F_HAND_HUNGER, F_CROWD = 0, 1, 2, 3
+F_HAND_SPEED, F_PREDATOR, F_FOOD, F_AROUSAL = 4, 5, 6, 7
 LEARN_HIDDEN = 10             # hidden units in the shared trunk
 N_ACTIONS = 3                 # the choices the actor picks between
 ACT_APPROACH, ACT_FLEE, ACT_IGNORE = 0, 1, 2
@@ -134,6 +137,14 @@ REWARD_SCALE = 1.0 - GAMMA
 CRITIC_RATE = 0.06            # step size for learning to predict what is coming
 DECIDE_TEMP = 0.12            # how decisively it acts on what it predicts
 LOOKAHEAD = 0.35              # how much nearer/further a step is imagined to get it
+# TD(lambda): one surprise does not only correct the moment just lived, it
+# corrects the whole run-up to it, faded by how long ago each moment was. This
+# is what lets a creature connect a blow to the approach that preceded it in
+# ONE experience instead of needing the sequence over and over.
+TD_LAMBDA = 0.9
+# a predator killing a neighbour is the world's own lesson, learned by whoever
+# was near enough to see it - the same way the player's cruelty is learned
+PREDATOR_TRAUMA_RATE = 0.16
 PARAM_CLIP = 3.0             # bound on every network weight (stops runaway)
 CROWD_RADIUS = 40.0          # world units within which neighbours count as "crowd"
 CROWD_CAP = 6                # neighbour count that reads as a full house (feature=1)
@@ -392,7 +403,7 @@ class Mind:
     A newborn inherits a blend of its parents' whole network, so hard-won
     predictions carry across generations."""
 
-    __slots__ = ("p", "valence", "arousal", "memory", "obedience",
+    __slots__ = ("p", "trace", "valence", "arousal", "memory", "obedience",
                  "act", "confidence", "surprise", "_last", "_pending", "_hold")
 
     def __init__(self, params=None, valence=MOOD_VALENCE_REST, arousal=MOOD_AROUSAL_REST,
@@ -402,6 +413,9 @@ class Mind:
         self.p = _net_from(params) if params is not None else None
         if self.p is None:
             self.p = _fresh_net()
+        # the fading imprint of the moments just lived (TD(lambda)), so one
+        # surprise can correct the whole run-up to it and not just its last step
+        self.trace = {k: np.zeros_like(v) for k, v in self.p.items()}
         # the persistent inner mood (see the mood constants above)
         self.valence = float(valence)
         self.arousal = float(arousal)
@@ -461,14 +475,15 @@ class Mind:
         return self.value(feat)
 
     @staticmethod
-    def _shift(feat, delta):
-        """The same moment imagined with the hand nearer (delta > 0) or further
-        away (delta < 0) - the creature's little model of what its own move
-        would do. Only the hand-linked terms move; the rest of the world does
+    def _imagine(feat, slot, delta):
+        """The same moment imagined with something nearer (delta > 0) or
+        further away (delta < 0) - the creature's little model of what its own
+        move would do. Only that perception moves; the rest of the world does
         not care where this creature steps."""
         f = feat.copy()
-        f[0] = min(1.0, max(0.0, f[0] + delta))
-        f[2] = f[0] * f[1]                     # the hand x hunger term follows
+        f[slot] = min(1.0, max(0.0, f[slot] + delta))
+        if slot == F_HAND:
+            f[F_HAND_HUNGER] = f[F_HAND] * f[F_HUNGER]   # the compound term follows
         return f
 
     def policy(self, feat):
@@ -476,11 +491,12 @@ class Mind:
         imagining each and asking itself what each would be worth. Softmax over
         those imagined values: a creature acts on what it predicts, decisively
         when its predictions differ, near-randomly when they do not."""
-        q = np.array([self.value(Mind._shift(feat, +LOOKAHEAD)),   # approach
-                      self.value(Mind._shift(feat, -LOOKAHEAD)),   # flee
-                      self.value(feat)])                           # ignore
+        q = np.array([self.value(Mind._imagine(feat, F_HAND, +LOOKAHEAD)),   # approach
+                      self.value(Mind._imagine(feat, F_HAND, -LOOKAHEAD)),   # flee
+                      self.value(feat)])                                     # ignore
         e = np.exp((q - q.max()) / DECIDE_TEMP)
         return e / e.sum()
+
 
     def sense(self, feat, rng=None):
         """One step of life: settle up with the last moment, then choose.
@@ -496,10 +512,16 @@ class Mind:
             delta = REWARD_SCALE * self._pending + GAMMA * v - v0
             self._pending = 0.0
             self.surprise = abs(delta)
-            # it learns to have expected what actually came. This single update
-            # is what makes dread travel backward in time: once "hand on me" is
-            # known to be dreadful, the moment BEFORE it inherits that dread.
-            self._apply(delta, self._grad_value(x0), CRITIC_RATE)
+            # fold the moment being left behind into the fading trace of recent
+            # moments, then correct them ALL by this one surprise, each in
+            # proportion to how recent it was. This is what makes dread travel
+            # backward through time: once "hand on me" is known to be dreadful,
+            # the whole approach that led to it inherits that dread at once,
+            # instead of one step per repetition.
+            g0 = self._grad_value(x0)
+            for k in self.trace:
+                self.trace[k] = GAMMA * TD_LAMBDA * self.trace[k] + g0[k]
+            self._apply(delta, self.trace, CRITIC_RATE)
         # commit to a choice for a while, so behaviour reads as intent rather
         # than as a twitch, then reconsider
         self._hold -= 1
@@ -1236,6 +1258,13 @@ class World:
 
             if c.state == DANGER:
                 predator = c_["predator_pos"][c_["nearest_pred_i"][i]]
+                # Flight from a hunter stays INNATE, deliberately. Letting the
+                # learned estimate gate it was tried and measured: a creature
+                # that must learn to run is eaten during the lesson (the flock
+                # collapsed to one survivor in 500 ticks), and once a lethal
+                # behaviour is gated on a lagging estimate the whole ecosystem
+                # oscillates - at one setting the learned urge even inverted.
+                # Prey animals are born knowing this for the same reason.
                 move += -_toward(c.pos, predator) * FLEE_STRENGTH
             elif c.state == FOOD:
                 move += _toward(c.pos, c_["food_pos"][c_["nearest_food_i"][i]]) * DRIVE_STRENGTH
@@ -1425,7 +1454,33 @@ class World:
                 alive[i].alive = False
                 self.lineage[alive[i].id]["death"] = self.tick
                 killed.add(i)
+                # the kill is not silent: whoever was near enough to see it
+                # learns from it, exactly as they learn from the player's cruelty
+                self._predator_trauma(np.asarray(alive[i].pos, dtype=float))
         self.deaths += len(killed)
+
+    def _predator_trauma(self, victim_pos):
+        """A neighbour has just been taken by a predator. Every creature near
+        enough to witness it learns - tied to how near a PREDATOR is, not to
+        the hand - that being close to one is a very bad place to be. Nothing
+        tells them predators are dangerous; the world does, by killing in front
+        of them, and a lineage that has never seen a kill is genuinely naive."""
+        if not self.learning:
+            return
+        for other in self._alive():
+            if other.mind is None:
+                continue
+            d = float(np.linalg.norm(np.asarray(other.pos, dtype=float) - victim_pos))
+            prox = max(0.0, 1.0 - d / TRAUMA_PERCEPTION)
+            if prox <= 0.0:
+                continue
+            hunger = max(0.0, min(1.0, 1.0 - other.energy / MAX_ENERGY))
+            feat = Mind.features(0.0, hunger, 0.0, 0.0,
+                                 predator=prox, arousal=other.mind.arousal)
+            other.mind.teach(-prox, feat, PREDATOR_TRAUMA_RATE)
+            other.mind.feel(MOOD_HARM_DV * MOOD_WITNESS * prox,
+                            MOOD_HARM_DA * MOOD_WITNESS * prox)
+            other.mind.remember(victim_pos, -MEM_HARM * MEM_WITNESS * prox)
 
     def _eat(self):
         if not self.food:
