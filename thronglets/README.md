@@ -449,6 +449,22 @@ Kind acts teach that creature - and the ones near enough to witness them -
 to approach; cruel ones teach fear and kill **with an animation** (a stab
 shudder, a creature wreathed in flame, a rock that squashes it flat).
 
+**Under the hood, each mind is a small neural network**, not a lookup or a
+weighted sum. Five perceptions feed it - how near the hand is, how hungry the
+creature is, their product, how crowded it is right here, and how fast the
+hand is closing in - through a hidden `tanh` layer to a single output: its
+live appraisal of the hand, +1 *approach* .. -1 *flee*. It learns by real
+**reinforcement + backpropagation**: an eligibility trace accumulates the
+gradient of recent situations so a later reward (a feeding, a burn, or simply
+finding food while the hand is near) is credited back to the weights that
+earned it - temporal credit assignment. Nothing scripts "fear the player";
+the sign is discovered from the sign of experienced reward. Because there is a
+hidden layer, a mind can learn **non-linear** lessons a plain weighted sum
+never could - *"the hand is worth approaching when I'm hungry, but not when it
+lunges at me while I'm alone."* A newborn inherits a blend of its parents'
+whole network, so hard-won lessons compound across generations. It stays
+numpy-only, opt-in, and fully saved/loaded with the world.
+
 **Each creature carries a persistent inner mood** - a real affective state,
 not a value recomputed each frame. Following the circumplex model of
 emotion, it runs on two slow-moving axes, **valence** (miserable ↔ happy)

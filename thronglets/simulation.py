@@ -107,7 +107,19 @@ DANGER_VISION_RATIO = DANGER_RADIUS / SEE_RADIUS  # keeps danger-spotting propor
 # the sign of experienced reward. All of it stays dormant unless
 # learning=True, so the other renderers and the headless smoke test are
 # completely unaffected.
-LEARN_FEATURES = 2            # [hand proximity, hand proximity x hunger]
+# The mind is a tiny neural network. Its input is a richer view of the moment
+# than the original two numbers: how near the hand is, how hungry the creature
+# is, their product, how crowded it is right here, and how fast the hand is
+# closing in. A single hidden layer lets it learn NON-LINEAR relations between
+# these (e.g. "the hand is worth approaching when I'm hungry, unless it is
+# lunging at me while I'm alone") that a plain weighted sum never could.
+LEARN_FEATURES = 5            # [hand_prox, hunger, hand_prox*hunger, crowd, hand_speed]
+LEARN_HIDDEN = 6              # hidden units in the mind's one hidden layer
+PARAM_CLIP = 3.0             # bound on every network weight (stops runaway)
+CROWD_RADIUS = 40.0          # world units within which neighbours count as "crowd"
+CROWD_CAP = 6                # neighbour count that reads as a full house (feature=1)
+HAND_APPROACH_SCALE = 6.0    # per-step closing distance that reads as a full lunge
+_MIND_INIT_SEED = 20240517   # fixed seed: every naive founder starts identical
 HAND_PERCEPTION = 48.0        # world units: how near the hand must be to feel it
 LEARN_RATE = 0.05             # step size for learning from one's own experience
 OBSERVE_RATE = 0.02           # weaker step for learning by watching a neighbour
@@ -288,34 +300,63 @@ def load_seed_genome(path):
     return Genome.from_lookup(data["state_to_token"], data["token_to_state"])
 
 
+def _fresh_net():
+    """A naive mind's starting weights: a single tanh hidden layer. Every
+    founder starts from the SAME small random weights (fixed seed), so runs
+    stay reproducible, yet the hidden units differ from each other (symmetry
+    broken) so learning can actually specialise them."""
+    r = np.random.default_rng(_MIND_INIT_SEED)
+    # small weights: a naive founder starts near-neutral about the hand (its
+    # untrained appraisal is ~0, like the old model's zero weights), yet the
+    # hidden units still differ from one another so learning can specialise them
+    return {
+        "W1": r.normal(0.0, 0.12, (LEARN_HIDDEN, LEARN_FEATURES)),
+        "b1": np.zeros(LEARN_HIDDEN),
+        "W2": r.normal(0.0, 0.12, LEARN_HIDDEN),
+        "b2": np.zeros(()),
+    }
+
+
+def _net_from(d):
+    """Rebuild network weights from a serialised (JSON-friendly) dict."""
+    return {
+        "W1": np.asarray(d["W1"], dtype=float).reshape(LEARN_HIDDEN, LEARN_FEATURES),
+        "b1": np.asarray(d["b1"], dtype=float).reshape(LEARN_HIDDEN),
+        "W2": np.asarray(d["W2"], dtype=float).reshape(LEARN_HIDDEN),
+        "b2": np.asarray(d["b2"], dtype=float).reshape(()),
+    }
+
+
 class Mind:
-    """A creature's small, learned memory - separate from its evolved genome.
+    """A creature's small, learned brain - separate from its evolved genome.
 
-    It is a reward-modulated linear model: a weight vector over a couple of
-    perceptual features (how near the player's hand is, and that scaled by
-    how hungry the creature is). Their dot product is the creature's live
-    appraisal of the hand - positive means "worth approaching" (it has been
-    fed), negative means "flee" (it has been hurt, or has watched others be
-    hurt).
+    It is a tiny neural network: five perceptual inputs (how near the hand is,
+    how hungry the creature is, their product, how crowded it is here, how fast
+    the hand is closing in) feed a single tanh hidden layer, which feeds one
+    tanh output - the creature's live appraisal of the hand, +1 "worth
+    approaching" (it has been fed) .. -1 "flee" (it has been hurt, or has
+    watched others be hurt). The hidden layer is what lets it learn NON-LINEAR
+    lessons a plain weighted sum never could ("approach when hungry, but not if
+    a lunging hand catches me alone").
 
-    Learning is online and, in the reinforcement-learning sense,
-    unsupervised: an eligibility trace remembers which features were active
-    recently, so when something good or bad actually happens the trace tells
-    the update rule what to credit or blame. Because the features only fire
-    while the hand is near, credit is assigned to the hand exactly when the
-    hand was involved - a creature that eats far from the cursor learns
-    nothing about it. Nothing scripts "fear the player"; the sign is
+    Learning is online reinforcement, by real backpropagation: `sense` folds
+    the gradient of the current situation into a decaying eligibility trace, so
+    when something good or bad later happens (`reinforce`) the trace tells the
+    update which weights to credit or blame - temporal credit assignment.
+    `teach` is the same gradient step applied at once for an event the creature
+    directly lives or witnesses. Nothing scripts "fear the player"; the sign is
     discovered from the sign of experienced reward.
 
     A newborn inherits a blend of its parents' weights (Mind.inherit), so a
-    family's lessons carry forward and compound across generations."""
+    family's hard-won lessons carry forward and compound across generations."""
 
-    __slots__ = ("w", "elig", "valence", "arousal", "memory", "obedience")
+    __slots__ = ("p", "elig", "valence", "arousal", "memory", "obedience")
 
-    def __init__(self, w=None, valence=MOOD_VALENCE_REST, arousal=MOOD_AROUSAL_REST,
+    def __init__(self, params=None, valence=MOOD_VALENCE_REST, arousal=MOOD_AROUSAL_REST,
                  memory=None, obedience=0.0):
-        self.w = np.zeros(LEARN_FEATURES) if w is None else np.asarray(w, dtype=float)
-        self.elig = np.zeros(LEARN_FEATURES)
+        # the network weights, and a matching eligibility trace over them
+        self.p = _fresh_net() if params is None else _net_from(params)
+        self.elig = {k: np.zeros_like(v) for k, v in self.p.items()}
         # the persistent inner mood (see the mood constants above)
         self.valence = float(valence)
         self.arousal = float(arousal)
@@ -328,36 +369,61 @@ class Mind:
         self.obedience = float(obedience)
 
     @staticmethod
-    def features(hand_prox, hunger):
-        """The situation right now, as the model sees it. hand_prox is 0
-        (hand out of reach) .. 1 (right on top); hunger is 0 (full) .. 1
-        (starving). Both feature terms vanish when the hand is far, which is
-        what keeps learning hand-specific."""
-        return np.array([hand_prox, hand_prox * hunger])
+    def features(hand_prox, hunger, crowd=0.0, hand_speed=0.0):
+        """The situation right now, as the network sees it. hand_prox 0 (hand
+        out of reach) .. 1 (right on top); hunger 0 (full) .. 1 (starving);
+        crowd 0 (alone) .. 1 (packed); hand_speed 0 (still/receding) .. 1
+        (lunging in). The hand-linked terms vanish when the hand is far, which
+        keeps the hand-specific lessons hand-specific."""
+        return np.array([hand_prox, hunger, hand_prox * hunger, crowd, hand_speed])
+
+    def _eval(self, x):
+        """Forward pass. Returns the appraisal y and the hidden activations h
+        (kept so the gradient can be taken without recomputing them)."""
+        h = np.tanh(self.p["W1"] @ x + self.p["b1"])
+        y = np.tanh(self.p["W2"] @ h + self.p["b2"])
+        return y, h
+
+    def _grad(self, x):
+        """Backprop: the gradient of the scalar appraisal wrt every weight, at
+        input x. For the old linear model this reduced to just `x`; the hidden
+        layer is what makes it more than a weighted sum."""
+        h = np.tanh(self.p["W1"] @ x + self.p["b1"])
+        y = np.tanh(self.p["W2"] @ h + self.p["b2"])
+        gy = 1.0 - y * y                       # through the output tanh
+        gh = (gy * self.p["W2"]) * (1.0 - h * h)   # through W2 and the hidden tanh
+        return {"W1": np.outer(gh, x), "b1": gh, "W2": gy * h, "b2": np.asarray(gy)}
 
     def appraise(self, feat):
-        return float(np.dot(self.w, feat))
+        return float(self._eval(feat)[0])
 
     def sense(self, feat):
-        """Fold this step's situation into the decaying eligibility trace."""
-        self.elig = ELIG_DECAY * self.elig + feat
+        """Fold the gradient of this step's situation into the decaying
+        eligibility trace, so a later reward can be credited to it."""
+        g = self._grad(feat)
+        for k in self.elig:
+            self.elig[k] = ELIG_DECAY * self.elig[k] + g[k]
+
+    def _apply(self, reward, grad, rate):
+        for k in self.p:
+            self.p[k] = np.clip(self.p[k] + rate * reward * grad[k], -PARAM_CLIP, PARAM_CLIP)
 
     def reinforce(self, reward, rate=LEARN_RATE):
-        """Learn from an outcome, crediting the recently-active features
-        held in the eligibility trace (temporal credit assignment)."""
-        self.w += rate * reward * self.elig
-        np.clip(self.w, -VALENCE_CLIP, VALENCE_CLIP, out=self.w)
+        """Learn from an outcome, crediting the recently-active situations held
+        in the eligibility trace (temporal credit assignment)."""
+        self._apply(reward, self.elig, rate)
 
     def teach(self, reward, feat, rate):
-        """A direct lesson tied to a specific situation - used when the
-        player acts on this creature (the hand is certainly right here) and
-        when it witnesses something happen to a neighbour."""
-        self.w = np.clip(self.w + rate * reward * feat, -VALENCE_CLIP, VALENCE_CLIP)
+        """A direct lesson tied to a specific situation - used when the player
+        acts on this creature (the hand is certainly right here) and when it
+        witnesses something happen to a neighbour: one gradient step at feat."""
+        self._apply(reward, self._grad(feat), rate)
 
     def disposition(self):
         """The creature's context-free feeling about the hand, clamped to
-        roughly -1 (terrified) .. +1 (trusting), for display."""
-        return float(np.clip(self.w[0], -1.0, 1.0))
+        roughly -1 (terrified) .. +1 (trusting): its appraisal of a hand right
+        on it in a neutral, calm, un-crowded moment. For display and movement."""
+        return float(np.clip(self.appraise(Mind.features(1.0, 0.0)), -1.0, 1.0))
 
     # -- persistent inner mood ---------------------------------------------
     def feel(self, dv, da):
@@ -411,8 +477,14 @@ class Mind:
         minds = [p.mind for p in parents if getattr(p, "mind", None) is not None]
         if not minds:
             return Mind()
-        base = np.mean([m.w for m in minds], axis=0) * INHERIT_BLEND
-        base = base + rng.normal(0, INHERIT_NOISE, LEARN_FEATURES)
+        # blend every weight of the parents' networks, damp toward neutral, and
+        # jitter a little, so lessons persist and compound over generations
+        # without running away or becoming impossible to un-learn.
+        params = {}
+        for k in minds[0].p:
+            avg = np.mean([m.p[k] for m in minds], axis=0) * INHERIT_BLEND
+            params[k] = np.clip(avg + rng.normal(0, INHERIT_NOISE, avg.shape),
+                                -PARAM_CLIP, PARAM_CLIP)
         # a newborn is born already coloured by its parents' current mood,
         # damped toward the resting baseline - a nervous flock births nervous
         # young, a content one calm young - without ever getting stuck there.
@@ -423,7 +495,7 @@ class Mind:
         # a child is born already knowing part of its parents' map of the world,
         # so a family can inherit which ground to shun and which to seek out.
         memory = np.mean([m.memory for m in minds], axis=0) * MEM_INHERIT
-        return Mind(np.clip(base, -VALENCE_CLIP, VALENCE_CLIP), valence, arousal, memory)
+        return Mind(params, valence, arousal, memory)
 
 
 class Creature:
@@ -584,15 +656,35 @@ class World:
 
     def _learn_sense(self):
         """Once per step: let every mind fold its current situation (how near
-        the hand is, how hungry it is) into its eligibility trace, so a later
-        reward can be credited to the hand only when the hand was involved."""
+        the hand is, how hungry it is, how crowded, how fast the hand closes)
+        into its eligibility trace, so a later reward can be credited to the
+        hand only when the hand was involved."""
         self._hand_np = None if self.hand_pos is None else np.asarray(self.hand_pos, dtype=float)
-        for c in self._alive():
+        prev_hand = getattr(self, "_prev_hand_np", None)
+        alive = self._alive()
+        # local crowd density per creature: one cheap pairwise sweep, so each
+        # mind can perceive whether it is alone or in a packed flock.
+        crowd_counts = None
+        if alive:
+            pos = np.array([c.pos for c in alive], dtype=float)
+            dd = np.linalg.norm(pos[:, None, :] - pos[None, :, :], axis=2)
+            np.fill_diagonal(dd, np.inf)
+            crowd_counts = (dd < CROWD_RADIUS).sum(axis=1)
+        for i, c in enumerate(alive):
             if c.mind is None:
                 continue
             prox = self._hand_proximity(c.pos)
             hunger = max(0.0, min(1.0, 1.0 - c.energy / MAX_ENERGY))
-            c.mind.sense(Mind.features(prox, hunger))
+            crowd = min(1.0, crowd_counts[i] / CROWD_CAP)
+            # how fast the hand is closing on THIS creature over the last step -
+            # a lunging hand reads differently from a still one; 0 when the hand
+            # is absent, far, or moving away.
+            hand_speed = 0.0
+            if self._hand_np is not None and prev_hand is not None and prox > 0.0:
+                cur_d = float(np.linalg.norm(c.pos - self._hand_np))
+                prev_d = float(np.linalg.norm(c.pos - prev_hand))
+                hand_speed = max(0.0, min(1.0, (prev_d - cur_d) / HAND_APPROACH_SCALE))
+            c.mind.sense(Mind.features(prox, hunger, crowd, hand_speed))
             # let the persistent mood breathe: its resting baseline is set by
             # the body right now - a full creature drifts toward calm content,
             # a starving one toward miserable and agitated - and the mood eases
@@ -612,6 +704,8 @@ class World:
                 arousal_rest -= 0.15 * c.mind.obedience
             c.mind.relax(valence_rest, arousal_rest)
             c.mind.memory *= MEM_DECAY   # the map of good/bad places fades slowly
+        # remember where the hand was, to measure its approach speed next step
+        self._prev_hand_np = self._hand_np
 
     def _spread_mood(self):
         """Emotional contagion: nudge every mind's mood toward the closeness-
@@ -1327,7 +1421,7 @@ def save_world(world, path):
                 "emission_logits": c.genome.emission_logits.tolist(),
                 "response_weights": c.genome.response_weights.tolist(),
                 "traits": c.genome.traits.tolist(),
-                "mind": c.mind.w.tolist() if c.mind is not None else None,
+                "mind": {k: v.tolist() for k, v in c.mind.p.items()} if c.mind is not None else None,
                 "mood": [c.mind.valence, c.mind.arousal] if c.mind is not None else None,
                 "memory": c.mind.memory.tolist() if c.mind is not None else None,
                 "obedience": c.mind.obedience if c.mind is not None else None,
@@ -1389,12 +1483,14 @@ def load_world(path, seed=None):
             mood = cd.get("mood")   # older saves have no mood -> resting baseline
             memory = cd.get("memory")   # older saves have no map -> blank
             obedience = cd.get("obedience") or 0.0   # older saves: nobody broken
+            # a pre-network save stored a flat weight vector; it can't seed the
+            # new brain, so that creature starts learning afresh but keeps its
+            # hard-won mood, map and obedience.
+            params = cd["mind"] if isinstance(cd["mind"], dict) else None
             if mood is not None:
-                creature.mind = Mind(np.array(cd["mind"], dtype=float), mood[0], mood[1],
-                                     memory, obedience)
+                creature.mind = Mind(params, mood[0], mood[1], memory, obedience)
             else:
-                creature.mind = Mind(np.array(cd["mind"], dtype=float), memory=memory,
-                                     obedience=obedience)
+                creature.mind = Mind(params, memory=memory, obedience=obedience)
         elif world.learning:
             creature.mind = Mind()
         if "id" in cd and cd["id"] in world.lineage:
