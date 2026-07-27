@@ -52,7 +52,8 @@ import pygame
 from i18n import STATE_LABELS, TRAIT_LABELS
 from simulation import (DANGER, DISTRESS, FOOD, Genome, HAND_PERCEPTION, HEIGHT, IDLE, MATE, MAX_POPULATION, N_TOKENS,
                          N_TRAITS, World, WIDTH, compare_seeds, load_seed_genome, load_world, save_world, top3_and_other,
-                         MEM_ROWS, MEM_COLS, MEM_CLIP, UPRISING_UNREST)
+                         MEM_ROWS, MEM_COLS, MEM_CLIP, UPRISING_UNREST,
+                         ACT_APPROACH, ACT_FLEE, F_HAND, F_PREDATOR, F_FOOD, REPLAY_SIZE)
 
 # When learning is on, a creature's fill colour shows its inner emotion (so a
 # panic rippling through the flock is visible as a wave of red); the signal-token
@@ -287,6 +288,20 @@ TEXT = {
         "hud_memory_hint": "hover a creature: green = places it trusts, red = places it fears",
         "extinct": "Extinct. Press R to start a new world.",
 
+        "mind_title": "INSIDE THIS ONE",
+        "mind_expects": "expects of this moment",
+        "mind_decided": "has decided to",
+        "mind_surprise": "surprise",
+        "mind_dwells": "cannot stop going over",
+        "mind_dwells_none": "nothing has shocked it yet",
+        "act_approach": "come to you",
+        "act_flee": "get away",
+        "act_ignore": "ignore you",
+        "mem_hand": "your hand",
+        "mem_predator": "a predator",
+        "mem_food": "food",
+        "mem_other": "a moment",
+
         "translator_title": "Translator - what each color currently means",
         "translator_unused": "unused / ambiguous",
         "translator_homonym": "  ! homonym - shared with another state",
@@ -506,6 +521,20 @@ TEXT = {
         "mood_fear": "apeure",
         "hud_memory_hint": "survole une creature : vert = lieux de confiance, rouge = lieux de peur",
         "extinct": "Extinction. Appuie sur R pour un nouveau monde.",
+
+        "mind_title": "DANS SA TETE",
+        "mind_expects": "ce qu'elle attend de cet instant",
+        "mind_decided": "elle a decide de",
+        "mind_surprise": "surprise",
+        "mind_dwells": "ce qu'elle ressasse",
+        "mind_dwells_none": "rien ne l'a encore choquee",
+        "act_approach": "venir vers toi",
+        "act_flee": "s'eloigner",
+        "act_ignore": "t'ignorer",
+        "mem_hand": "ta main",
+        "mem_predator": "un predateur",
+        "mem_food": "la nourriture",
+        "mem_other": "un instant",
 
         "translator_title": "Traducteur - ce que signifie chaque couleur en ce moment",
         "translator_unused": "inutilisee / ambigue",
@@ -988,12 +1017,91 @@ def draw_memory_overlay(screen, mind):
     screen.blit(overlay, (0, HUD_H))
 
 
+def _signed_bar(screen, x, y, w, h, value, good=(120, 210, 100), bad=(225, 85, 75)):
+    """A bar that grows right from a centre line when positive and left when
+    negative - for quantities that are meaningfully signed, like what a creature
+    expects of a moment."""
+    mid = x + w // 2
+    pygame.draw.rect(screen, (30, 36, 26), (x, y, w, h))
+    span = int(abs(value) * (w // 2))
+    if span > 0:
+        col = good if value > 0 else bad
+        rect = (mid, y, span, h) if value > 0 else (mid - span, y, span, h)
+        pygame.draw.rect(screen, col, rect)
+    pygame.draw.line(screen, HUD_SEP, (mid, y - 1), (mid, y + h))
+
+
+def _memory_label(t, feat):
+    """Name what a remembered moment was ABOUT: whichever of the things it can
+    perceive stood out most when it happened, read straight out of the stored
+    perceptions. A shock with nothing in particular going on stays unnamed."""
+    candidates = ((feat[F_HAND], t["mem_hand"]),
+                  (feat[F_PREDATOR], t["mem_predator"]),
+                  (feat[F_FOOD], t["mem_food"]))
+    strength, label = max(candidates, key=lambda c: c[0])
+    return label if strength >= 0.2 else t["mem_other"]
+
+
+def draw_mind_panel(screen, font, mind, t):
+    """What the hovered creature predicts, what it has decided, and which
+    moments it cannot let go of - the learned inner life, which until now ran
+    entirely unseen. Drawn bottom-left over the field, out of the HUD's way."""
+    pad, w = 10, 300
+    rows = max(1, len(mind.replay))
+    h = 128 + rows * 15
+    x, y = 10, SCREEN_H - h - 10
+    panel = pygame.Surface((w, h), pygame.SRCALPHA)
+    panel.fill((16, 20, 14, 232))
+    screen.blit(panel, (x, y))
+    pygame.draw.rect(screen, HUD_SEP, (x, y, w, h), width=1)
+
+    now = mind.situation()
+    cy = y + pad
+    screen.blit(font.render(t["mind_title"], True, HUD_ACCENT), (x + pad, cy)); cy += 20
+
+    # what it expects of right now (its own learned estimate)
+    screen.blit(font.render(t["mind_expects"], True, HUD_HINT), (x + pad, cy)); cy += 16
+    v = mind.value(now)
+    _signed_bar(screen, x + pad, cy, w - 2 * pad, 8, v)
+    screen.blit(font.render(f"{v:+.2f}", True, HUD_HINT), (x + w - pad - 34, cy - 1)); cy += 20
+
+    # what it has decided to do about you, and how sure it is
+    pi = mind.policy(now)
+    choice = (t["act_approach"] if mind.act == ACT_APPROACH else
+              t["act_flee"] if mind.act == ACT_FLEE else t["act_ignore"])
+    line = f"{t['mind_decided']} {choice} ({pi[mind.act] * 100:.0f}%)"
+    col = (120, 210, 100) if mind.act == ACT_APPROACH else \
+          (225, 85, 75) if mind.act == ACT_FLEE else HUD_HINT
+    screen.blit(font.render(line, True, col), (x + pad, cy)); cy += 18
+
+    # how badly its last expectation was violated
+    screen.blit(font.render(f"{t['mind_surprise']}  {mind.surprise:.3f}", True, HUD_HINT),
+                (x + pad, cy)); cy += 20
+
+    pygame.draw.line(screen, HUD_SEP, (x + pad, cy - 5), (x + w - pad, cy - 5))
+    screen.blit(font.render(f"{t['mind_dwells']} ({len(mind.replay)}/{REPLAY_SIZE})",
+                            True, HUD_ACCENT), (x + pad, cy)); cy += 18
+
+    if not mind.replay:
+        screen.blit(font.render(t["mind_dwells_none"], True, HUD_HINT), (x + pad, cy))
+        return
+    # worst first - the order the creature itself prioritises them by
+    for shock, feat, target in sorted(mind.replay, key=lambda m: -m[0]):
+        bar = int(min(1.0, shock / 0.6) * 60)
+        col = (120, 210, 100) if target > 0 else (225, 85, 75)
+        pygame.draw.rect(screen, col, (x + pad, cy + 4, max(1, bar), 6))
+        screen.blit(font.render(_memory_label(t, feat), True, HUD_HINT), (x + pad + 66, cy))
+        screen.blit(font.render(f"{target:+.2f}", True, col), (x + w - pad - 34, cy))
+        cy += 15
+
+
 def draw(screen, font, world, paused, speed, mode, lang, expanded, trained=False, muted=False,
          hovered_id=None):
     screen.fill(BG)
     pygame.draw.rect(screen, GROUND, (0, HUD_H, SCREEN_W, SCREEN_H - HUD_H))
 
     # the hovered creature's mental map, laid on the field (learning only)
+    hov = None
     if world.learning and hovered_id is not None:
         hov = next((c for c in world.creatures
                     if c.id == hovered_id and c.alive and c.mind is not None), None)
@@ -1027,6 +1135,10 @@ def draw(screen, font, world, paused, speed, mode, lang, expanded, trained=False
     for p in world.predators:
         x, y = int(p.pos[0] * SCALE_X), int(p.pos[1] * SCALE_Y) + HUD_H
         pygame.draw.circle(screen, PREDATOR_COLOR, (x, y), 6)
+
+    # what that one creature predicts, decided and cannot stop going over
+    if hov is not None:
+        draw_mind_panel(screen, font, hov.mind, TEXT[lang])
 
     draw_hud(screen, font, world, paused, speed, mode, lang, expanded, trained, muted)
 

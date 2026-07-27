@@ -493,6 +493,18 @@ blow to the run-up that preceded it from a *single* experience, instead of
 needing the sequence over and over. Measured against plain one-step TD, a single
 shock moves the *start* of an approach about four times as far.
 
+**And you can look inside one.** All of this used to run entirely unseen. In the
+2D view, hovering a creature (with learning on) now opens a small panel showing
+its learned inner life directly: **what it expects of this very moment** (its own
+value estimate, as a signed bar), **what it has decided to do about you** -
+come to you / get away / ignore you - and how sure it is, **how badly its last
+expectation was violated**, and finally **the moments it cannot stop going
+over**: its replay buffer, worst first, each named by whatever it was about
+(your hand, a predator, food) and coloured by whether it turned out good or
+bad. A creature that has been mostly fed and twice burned reads as six green
+memories of your hand and two red ones. The spatial memory is still painted on
+the ground at the same time, so you get the map and the mind together.
+
 **A creature keeps its worst moments, and goes back over them.** Learning only
 in the instant wastes the rarest lessons: a burning, or a neighbour taken by a
 predator, happens *once*, while the long quiet stretch that follows steadily

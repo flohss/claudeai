@@ -481,6 +481,11 @@ class Mind:
             self.p[k] = np.clip(self.p[k] + rate * signal * grad[k], -PARAM_CLIP, PARAM_CLIP)
 
     # -- what it expects, and what it decides -------------------------------
+    def situation(self):
+        """The perceptions it last took in - what "right now" looks like from
+        inside. A mind that has not lived a step yet reports a blank world."""
+        return self._last[0] if self._last is not None else np.zeros(LEARN_FEATURES)
+
     def value(self, feat):
         """What it predicts this moment is worth: -1 (dreadful) .. +1 (promising)."""
         return self._forward(feat)[1]
