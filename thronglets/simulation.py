@@ -145,6 +145,18 @@ TD_LAMBDA = 0.9
 # a predator killing a neighbour is the world's own lesson, learned by whoever
 # was near enough to see it - the same way the player's cruelty is learned
 PREDATOR_TRAUMA_RATE = 0.16
+# Experience replay. Learning only in the moment wastes the rarest lessons: a
+# burning or a neighbour taken by a predator happens once, while the steady
+# drift of ordinary uneventful steps quietly erodes it (measured - the predator
+# lesson plateaued because of exactly this). So a creature KEEPS its most
+# shocking moments and re-lives them afterwards, learning from each one many
+# times over. What it holds on to is chosen by how badly the moment violated
+# its expectations, so the worst things that ever happened to it are the ones
+# it cannot stop going over.
+REPLAY_SIZE = 8               # how many shocking moments a creature carries
+REPLAY_PER_STEP = 2           # how many it re-lives each step
+REPLAY_THRESHOLD = 0.05       # a moment must shock it at least this much to stick
+REPLAY_RATE = 0.03            # gentler than living it the first time
 PARAM_CLIP = 3.0             # bound on every network weight (stops runaway)
 CROWD_RADIUS = 40.0          # world units within which neighbours count as "crowd"
 CROWD_CAP = 6                # neighbour count that reads as a full house (feature=1)
@@ -403,7 +415,7 @@ class Mind:
     A newborn inherits a blend of its parents' whole network, so hard-won
     predictions carry across generations."""
 
-    __slots__ = ("p", "trace", "valence", "arousal", "memory", "obedience",
+    __slots__ = ("p", "trace", "replay", "valence", "arousal", "memory", "obedience",
                  "act", "confidence", "surprise", "_last", "_pending", "_hold")
 
     def __init__(self, params=None, valence=MOOD_VALENCE_REST, arousal=MOOD_AROUSAL_REST,
@@ -416,6 +428,9 @@ class Mind:
         # the fading imprint of the moments just lived (TD(lambda)), so one
         # surprise can correct the whole run-up to it and not just its last step
         self.trace = {k: np.zeros_like(v) for k, v in self.p.items()}
+        # the moments it cannot let go of: [shock, situation, what it turned out
+        # to be worth], kept in full and re-lived long after the fact
+        self.replay = []
         # the persistent inner mood (see the mood constants above)
         self.valence = float(valence)
         self.arousal = float(arousal)
@@ -498,8 +513,37 @@ class Mind:
         return e / e.sum()
 
 
+    # -- the moments it cannot let go of -----------------------------------
+    def _keep(self, shock, feat, target):
+        """Hold on to a moment that went badly (or wonderfully) differently
+        from what was expected, along with what it turned out to be worth. Room
+        is finite, so a new shock only displaces a milder one - what a creature
+        carries is always the worst (and best) of what it has lived."""
+        if shock < REPLAY_THRESHOLD:
+            return
+        if len(self.replay) >= REPLAY_SIZE:
+            weakest = min(range(len(self.replay)), key=lambda i: self.replay[i][0])
+            if self.replay[weakest][0] >= shock:
+                return
+            self.replay.pop(weakest)
+        self.replay.append((float(shock), feat.copy(), float(target)))
+
+    def _relive(self, rng):
+        """Go back over a few of those moments and learn from them again. This
+        is what stops a rare horror from being washed away by the long stretch
+        of ordinary moments that follow it - the lesson is taken not once, but
+        every time the creature returns to it."""
+        if not self.replay:
+            return
+        n = min(REPLAY_PER_STEP, len(self.replay))
+        for _ in range(n):
+            i = int(rng.integers(len(self.replay))) if rng is not None else 0
+            _shock, feat, target = self.replay[i]
+            self._apply(target - self.value(feat), self._grad_value(feat), REPLAY_RATE)
+
     def sense(self, feat, rng=None):
-        """One step of life: settle up with the last moment, then choose.
+        """One step of life: settle up with the last moment, re-live the worst
+        of the old ones, then choose.
 
         Settling up is the TD update - the error between what the last moment
         promised and what this one delivered trains the network to predict
@@ -522,6 +566,9 @@ class Mind:
             for k in self.trace:
                 self.trace[k] = GAMMA * TD_LAMBDA * self.trace[k] + g0[k]
             self._apply(delta, self.trace, CRITIC_RATE)
+            # if that moment was a shock, it is not let go of
+            self._keep(abs(delta), x0, v0 + delta)
+        self._relive(rng)
         # commit to a choice for a while, so behaviour reads as intent rather
         # than as a twitch, then reconsider
         self._hold -= 1
@@ -555,6 +602,9 @@ class Mind:
         expectations teaches nothing."""
         surprise = reward - self.value(feat)
         self._apply(surprise, self._grad_value(feat), rate * 4.0)
+        # a lesson this sharp is kept and gone over again long afterwards,
+        # which is what stops it being eroded by the quiet stretch that follows
+        self._keep(abs(surprise), feat, reward)
 
     def disposition(self):
         """How the flock has come to regard the hand, -1 (flees you) .. +1

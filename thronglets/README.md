@@ -493,6 +493,21 @@ blow to the run-up that preceded it from a *single* experience, instead of
 needing the sequence over and over. Measured against plain one-step TD, a single
 shock moves the *start* of an approach about four times as far.
 
+**A creature keeps its worst moments, and goes back over them.** Learning only
+in the instant wastes the rarest lessons: a burning, or a neighbour taken by a
+predator, happens *once*, while the long quiet stretch that follows steadily
+erodes it. So each creature carries a handful of the moments that most violated
+its expectations - along with what they turned out to be worth - and **re-lives
+a couple of them every step**, learning from each many times over. Space is
+finite, so a new shock only ever displaces a milder one: what a creature holds
+on to is always the worst of what it has lived. (This is prioritised experience
+replay, the idea that made deep reinforcement learning work, and here it reads
+as rumination.) It is not idle flavour - it is measured: the predator lesson,
+which used to fade almost to nothing, comes out **about seven times deeper**
+with replay on (−0.05 → −0.40), and the dread of a closing hand doubles.
+Memories are *not* inherited and *not* saved with the world - only what they
+taught is.
+
 **And you are not the only teacher - the world teaches too.** A predator taking
 a neighbour is no longer a silent event: every creature near enough to see it
 learns from it, exactly as they learn from your cruelty. The lesson attaches to
