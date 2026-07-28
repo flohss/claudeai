@@ -118,11 +118,28 @@ DANGER_VISION_RATIO = DANGER_RADIUS / SEE_RADIUS  # keeps danger-spotting propor
 # (the value of now is learned from the value of the next moment), fear flows
 # BACKWARD in time: a hand that lunges comes to be dreaded before it ever
 # lands, so a burned flock learns to bolt at the approach, not at the touch.
-LEARN_FEATURES = 8    # [hand_prox, hunger, hand_prox*hunger, crowd,
-                      #  hand_speed, predator_prox, food_prox, arousal]
+# The flock's own voices are perceived too - one input per signal colour, how
+# loudly that colour is being called right now. This is where the two halves of
+# the project finally meet: WHICH colour a creature cries for danger is evolved
+# and inherited, but what that colour MEANS - what it predicts is about to
+# happen - is learned, within one lifetime, from what actually followed it. A
+# flock that has never been hunted hears the alarm call as noise.
+N_SIGNALS = N_TOKENS - 1      # token 0 is silence and is not perceived
+LEARN_FEATURES = 8 + N_SIGNALS
 # named slots into that vector, so the code reads as perceptions, not indices
 F_HAND, F_HUNGER, F_HAND_HUNGER, F_CROWD = 0, 1, 2, 3
 F_HAND_SPEED, F_PREDATOR, F_FOOD, F_AROUSAL = 4, 5, 6, 7
+F_SIGNAL = 8                  # signals for tokens 1..N_TOKENS-1 live at F_SIGNAL onward
+# Hearing a call you have learned to dread is itself frightening - the word
+# moves you before the thing it warns of arrives. Scaled by how much worse the
+# voices make the moment look than silence would.
+SIGNAL_ALARM_DV = 0.5         # how far a dreaded call pushes valence down
+SIGNAL_ALARM_DA = 0.6         # and arousal up
+# Below this a call means nothing in particular and is ignored. Set from what
+# creatures actually learn (meanings land around 0.05 at full volume, less at
+# realistic distances) - and safe to keep low because a naive mind values every
+# call at exactly 0.0, so early noise cannot trip it.
+SIGNAL_ALARM_MIN = 0.012
 LEARN_HIDDEN = 10             # hidden units in the shared trunk
 N_ACTIONS = 3                 # the choices the actor picks between
 ACT_APPROACH, ACT_FLEE, ACT_IGNORE = 0, 1, 2
@@ -161,7 +178,12 @@ PARAM_CLIP = 3.0             # bound on every network weight (stops runaway)
 CROWD_RADIUS = 40.0          # world units within which neighbours count as "crowd"
 CROWD_CAP = 6                # neighbour count that reads as a full house (feature=1)
 HAND_APPROACH_SCALE = 6.0    # per-step closing distance that reads as a full lunge
-PREDATOR_PERCEPTION = 70.0   # world units a predator is felt from
+# A creature feels a predator only close up - deliberately SHORTER than
+# HEAR_RADIUS, so its flock's voices genuinely extend its senses beyond its own.
+# This is the whole reason an alarm call is worth anything: with perception
+# wider than earshot, a warning tells you only what you already knew, and
+# (measured) the creatures correctly learned it was worthless noise.
+PREDATOR_PERCEPTION = 26.0   # world units a predator is felt from
 FOOD_PERCEPTION = 60.0       # world units food is noticed from
 _MIND_INIT_SEED = 20240517   # fixed seed: every naive founder starts identical
 HAND_PERCEPTION = 48.0        # world units: how near the hand must be to feel it
@@ -362,10 +384,18 @@ def _fresh_net():
     values nothing in particular and picks between its three options almost at
     random - it has no idea yet what you are."""
     r = np.random.default_rng(_MIND_INIT_SEED)
-    net = {}
-    for k, shape in NET_SHAPES.items():
-        net[k] = np.zeros(shape) if k in ("b1", "bv", "bp") else r.normal(0.0, 0.12, shape)
-    return net
+    return {
+        # the hidden layer starts varied, so its units can specialise
+        "W1": r.normal(0.0, 0.12, NET_SHAPES["W1"]),
+        "b1": np.zeros(NET_SHAPES["b1"]),
+        # ...but the output layer starts at exactly zero, so a naive creature
+        # predicts the same thing (nothing) of every situation it could ever be
+        # in. It holds no opinions at birth - not faint random ones - and every
+        # value it ever has is one it worked out. Learning breaks the tie on the
+        # first update, since this layer's gradient is the hidden activity.
+        "Wv": np.zeros(NET_SHAPES["Wv"]),
+        "bv": np.zeros(NET_SHAPES["bv"]),
+    }
 
 
 def _net_from(d):
@@ -452,15 +482,55 @@ class Mind:
 
     @staticmethod
     def features(hand_prox, hunger, crowd=0.0, hand_speed=0.0,
-                 predator=0.0, food=0.0, arousal=0.0):
+                 predator=0.0, food=0.0, arousal=0.0, signals=None):
         """The situation right now, as the network sees it. Every term is
         0 .. 1: hand_prox (out of reach .. right on top), hunger (full ..
         starving), crowd (alone .. packed), hand_speed (still or receding ..
         lunging in), predator/food (none in sight .. right here), arousal
-        (calm .. agitated). The hand-linked terms vanish when the hand is far,
+        (calm .. agitated), and `signals` - how loudly each signal colour is
+        being called nearby. The hand-linked terms vanish when the hand is far,
         which keeps hand-specific lessons hand-specific."""
-        return np.array([hand_prox, hunger, hand_prox * hunger, crowd,
-                         hand_speed, predator, food, arousal])
+        x = np.zeros(LEARN_FEATURES)
+        x[:8] = (hand_prox, hunger, hand_prox * hunger, crowd,
+                 hand_speed, predator, food, arousal)
+        if signals is not None:
+            x[F_SIGNAL:] = signals
+        return x
+
+    @staticmethod
+    def _hushed(feat):
+        """The same moment with the voices taken out of it - what the creature
+        would expect if nobody were calling. Comparing against this is how the
+        meaning it has learned for what it hears is read back out."""
+        f = feat.copy()
+        f[F_SIGNAL:] = 0.0
+        return f
+
+    def moment_with(self, overrides):
+        """The situation this creature is ACTUALLY in right now, with a few
+        perceptions overridden ({slot: value}) - used to teach it about an event
+        that just happened to it, or in front of it.
+
+        Teaching at a fabricated vector instead would anchor the lesson to a
+        moment that never existed - in particular one where nobody was calling -
+        and the creature could then never connect what it suffered to what it
+        was hearing at the time. Everything not named here stays exactly as it
+        was perceived."""
+        f = self.situation().copy()
+        for slot, value in overrides.items():
+            f[slot] = value
+        f[F_HAND_HUNGER] = f[F_HAND] * f[F_HUNGER]
+        return f
+
+    def signal_meaning(self, token):
+        """What this creature has learned a signal colour PREDICTS: negative if
+        hearing it means things are about to go badly, positive if it means the
+        opposite, ~0 if it is still just noise to it. Nothing assigns these -
+        they are whatever actually followed that call in this creature's life."""
+        heard = np.zeros(N_SIGNALS)
+        heard[token - 1] = 1.0
+        return float(self.value(Mind.features(0.0, 0.2, signals=heard))
+                     - self.value(Mind.features(0.0, 0.2)))
 
     # -- the network -------------------------------------------------------
     def _forward(self, x):
@@ -856,17 +926,25 @@ class World:
         is where the creature's whole learned life actually happens."""
         self._hand_np = None if self.hand_pos is None else np.asarray(self.hand_pos, dtype=float)
         prev_hand = getattr(self, "_prev_hand_np", None)
-        alive = self._alive()
-        # local crowd density per creature: one cheap pairwise sweep, so each
-        # mind can perceive whether it is alone or in a packed flock.
-        crowd_counts = None
+        c_ = self._cache
+        alive = c_["alive"]      # the same list _sense_and_signal just worked from
         pred_pos = np.array([p.pos for p in self.predators], dtype=float) if self.predators else None
         food_pos = np.array(self.food, dtype=float) if self.food else None
+        crowd_counts = signal_heard = None
         if alive:
-            pos = np.array([c.pos for c in alive], dtype=float)
-            dd = np.linalg.norm(pos[:, None, :] - pos[None, :, :], axis=2)
-            np.fill_diagonal(dd, np.inf)
-            crowd_counts = (dd < CROWD_RADIUS).sum(axis=1)
+            # reuse the pairwise distances already computed this step
+            pair_d = c_["pair_d"]                 # inf on the diagonal (excludes self)
+            crowd_counts = (pair_d < CROWD_RADIUS).sum(axis=1)
+            # what each creature can hear right now, one column per signal
+            # colour: the loudest call of that colour reaching it. This is the
+            # raw material for learning what the flock's words mean.
+            audible = np.clip(1.0 - pair_d / np.asarray(c_["hearing"])[:, None], 0.0, 1.0)
+            tokens = np.array([c.token for c in alive])
+            signal_heard = np.zeros((len(alive), N_SIGNALS))
+            for k in range(1, N_TOKENS):
+                speaking = tokens == k
+                if speaking.any():
+                    signal_heard[:, k - 1] = audible[:, speaking].max(axis=1)
         for i, c in enumerate(alive):
             if c.mind is None:
                 continue
@@ -891,9 +969,19 @@ class World:
             if food_pos is not None:
                 d = float(np.min(np.linalg.norm(food_pos - c.pos, axis=1)))
                 food_prox = max(0.0, 1.0 - d / FOOD_PERCEPTION)
-            c.mind.sense(Mind.features(prox, hunger, crowd, hand_speed,
-                                       pred_prox, food_prox, c.mind.arousal),
-                         self.rng)
+            heard = signal_heard[i]
+            feat = Mind.features(prox, hunger, crowd, hand_speed,
+                                 pred_prox, food_prox, c.mind.arousal, heard)
+            c.mind.sense(feat, self.rng)
+            # the voices themselves move it, once it has learned what they mean:
+            # if what it is hearing makes the moment look worse than silence
+            # would, that IS alarm - it is frightened by the call before
+            # whatever the call is about ever reaches it. A creature that has
+            # not learned that colour yet hears nothing but noise and is unmoved.
+            if heard.any():
+                alarm = c.mind.value(Mind._hushed(feat)) - c.mind.value(feat)
+                if abs(alarm) > SIGNAL_ALARM_MIN:
+                    c.mind.feel(-alarm * SIGNAL_ALARM_DV, alarm * SIGNAL_ALARM_DA)
             # let the persistent mood breathe: its resting baseline is set by
             # the body right now - a full creature drifts toward calm content,
             # a starving one toward miserable and agitated - and the mood eases
@@ -954,7 +1042,6 @@ class World:
         something to flee. A no-op unless learning is on."""
         if not self.learning or creature is None or not creature.alive:
             return
-        hunger = max(0.0, min(1.0, 1.0 - creature.energy / MAX_ENERGY))
         good = reward > 0
         dv, da = (MOOD_FEED_DV, MOOD_FEED_DA) if good else (MOOD_HARM_DV, MOOD_HARM_DA)
         mem_mark = MEM_FOOD if good else -MEM_HARM
@@ -963,8 +1050,8 @@ class World:
             # got here by closing in (hand_speed = 1) - so the critic learns the
             # value of a lunge landing, which is what TD later spreads backward
             # into dread of the lunge itself.
-            creature.mind.teach(reward, Mind.features(1.0, hunger, 0.0, 1.0,
-                                                      arousal=creature.mind.arousal),
+            creature.mind.teach(reward,
+                                creature.mind.moment_with({F_HAND: 1.0, F_HAND_SPEED: 1.0}),
                                 LEARN_RATE * 2.0)
             creature.mind.feel(dv, da)   # and it feels it, deeply, right now
             creature.mind.remember(creature.pos, mem_mark)   # and remembers where
@@ -984,7 +1071,6 @@ class World:
             prox = max(0.0, 1.0 - hand_dist / perception)
             if prox <= 0.0:
                 continue
-            hunger_o = max(0.0, min(1.0, 1.0 - other.energy / MAX_ENERGY))
             # what a witness learns is diluted by how far off it was: the value
             # it takes away is valence * prox, not the full lesson. That
             # dilution is what gives the critic a PROXIMITY GRADIENT - near the
@@ -992,8 +1078,8 @@ class World:
             # that gradient is precisely what teaches the actor to close in or
             # break away. Teaching every witness the same value regardless of
             # distance would flatten it and leave the policy with nothing to go on.
-            other.mind.teach(valence * prox, Mind.features(prox, hunger_o, 0.0, prox,
-                                                           arousal=other.mind.arousal), rate)
+            other.mind.teach(valence * prox,
+                             other.mind.moment_with({F_HAND: prox, F_HAND_SPEED: prox}), rate)
             # witnessing it moves a neighbour's mood too, scaled by how close
             # it was - the seed of a mood that ripples through the flock.
             other.mind.feel(dv * MOOD_WITNESS * prox, da * MOOD_WITNESS * prox)
@@ -1529,10 +1615,8 @@ class World:
             prox = max(0.0, 1.0 - d / TRAUMA_PERCEPTION)
             if prox <= 0.0:
                 continue
-            hunger = max(0.0, min(1.0, 1.0 - other.energy / MAX_ENERGY))
-            feat = Mind.features(0.0, hunger, 0.0, 0.0,
-                                 predator=prox, arousal=other.mind.arousal)
-            other.mind.teach(-prox, feat, PREDATOR_TRAUMA_RATE)
+            other.mind.teach(-prox, other.mind.moment_with({F_PREDATOR: prox}),
+                             PREDATOR_TRAUMA_RATE)
             other.mind.feel(MOOD_HARM_DV * MOOD_WITNESS * prox,
                             MOOD_HARM_DA * MOOD_WITNESS * prox)
             other.mind.remember(victim_pos, -MEM_HARM * MEM_WITNESS * prox)

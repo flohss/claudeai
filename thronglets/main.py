@@ -292,6 +292,7 @@ TEXT = {
         "mind_expects": "expects of this moment",
         "mind_decided": "has decided to",
         "mind_surprise": "surprise",
+        "mind_words": "what the flock's calls mean to it",
         "mind_dwells": "cannot stop going over",
         "mind_dwells_none": "nothing has shocked it yet",
         "act_approach": "come to you",
@@ -526,6 +527,7 @@ TEXT = {
         "mind_expects": "ce qu'elle attend de cet instant",
         "mind_decided": "elle a decide de",
         "mind_surprise": "surprise",
+        "mind_words": "ce que les cris du groupe veulent dire pour elle",
         "mind_dwells": "ce qu'elle ressasse",
         "mind_dwells_none": "rien ne l'a encore choquee",
         "act_approach": "venir vers toi",
@@ -1048,7 +1050,7 @@ def draw_mind_panel(screen, font, mind, t):
     entirely unseen. Drawn bottom-left over the field, out of the HUD's way."""
     pad, w = 10, 300
     rows = max(1, len(mind.replay))
-    h = 128 + rows * 15
+    h = 166 + rows * 15
     x, y = 10, SCREEN_H - h - 10
     panel = pygame.Surface((w, h), pygame.SRCALPHA)
     panel.fill((16, 20, 14, 232))
@@ -1076,7 +1078,22 @@ def draw_mind_panel(screen, font, mind, t):
 
     # how badly its last expectation was violated
     screen.blit(font.render(f"{t['mind_surprise']}  {mind.surprise:.3f}", True, HUD_HINT),
-                (x + pad, cy)); cy += 20
+                (x + pad, cy)); cy += 18
+
+    # what the flock's own calls have come to mean to it: the colour swatch is
+    # the evolved, inherited word; the bar beside it is the meaning this one
+    # creature learned for it, from whatever actually followed that call
+    screen.blit(font.render(t["mind_words"], True, HUD_HINT), (x + pad, cy)); cy += 16
+    sx = x + pad
+    for tok in range(1, N_TOKENS):
+        meaning = mind.signal_meaning(tok)
+        pygame.draw.circle(screen, TOKEN_COLORS[tok], (sx + 5, cy + 5), 4)
+        span = int(min(1.0, abs(meaning) / 0.08) * 14)
+        if span:
+            col = (120, 210, 100) if meaning > 0 else (225, 85, 75)
+            pygame.draw.rect(screen, col, (sx + 12, cy + 8 - span // 2, 5, max(2, span)))
+        sx += 26
+    cy += 22
 
     pygame.draw.line(screen, HUD_SEP, (x + pad, cy - 5), (x + w - pad, cy - 5))
     screen.blit(font.render(f"{t['mind_dwells']} ({len(mind.replay)}/{REPLAY_SIZE})",

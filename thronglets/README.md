@@ -493,6 +493,36 @@ blow to the run-up that preceded it from a *single* experience, instead of
 needing the sequence over and over. Measured against plain one-step TD, a single
 shock moves the *start* of an approach about four times as far.
 
+**The shape of a word is inherited; its meaning is lived.** This is where the
+two halves of the project finally meet. *Which* colour a creature cries for
+danger is **evolved** - selected over generations, inherited, the thing the
+Translator screen reads off. But what that colour **means** - what it predicts
+is about to happen - is now **learned**, inside one lifetime, from whatever
+actually followed that call. Each creature perceives how loudly every signal
+colour is being called nearby, and TD does the rest. A flock that has lived
+among predators comes to dread some of its own calls; **a flock that has never
+met one hears the very same words as noise.** Measured across three seeds, the
+most dreaded call lands at **-0.067** in a world with predators and **-0.003**
+in one without - a twentyfold difference from experience alone, with the words
+themselves unchanged. Once a call *does* mean something, hearing it is
+frightening in itself: the word moves a creature before the thing it warns of
+ever arrives. A newborn values every call at exactly `0.0` - it has no opinions
+to begin with, only ones it earned.
+
+One honest limit: *which* call picks up the dread is **not** reproducible. It is
+often the alarm call, but not reliably - other calls (distress, for instance)
+also ring out when things are going badly, and a creature that hears a warning
+is usually close enough to feel the predator itself, so the credit is genuinely
+ambiguous. What reproduces is the thing being claimed here: that meaning comes
+from experience rather than from inheritance.
+
+For any of that to be learnable, a warning has to tell you something you don't
+already know - so a creature now feels a predator only close up
+(`PREDATOR_PERCEPTION`), **deliberately shorter than earshot** (`HEAR_RADIUS`).
+With perception wider than hearing, as it was before, a call was always
+redundant, and the creatures correctly learned it was worthless noise. That is
+exactly why alarm calls exist in nature: they extend your senses through others.
+
 **And you can look inside one.** All of this used to run entirely unseen. In the
 2D view, hovering a creature (with learning on) now opens a small panel showing
 its learned inner life directly: **what it expects of this very moment** (its own
@@ -502,7 +532,9 @@ expectation was violated**, and finally **the moments it cannot stop going
 over**: its replay buffer, worst first, each named by whatever it was about
 (your hand, a predator, food) and coloured by whether it turned out good or
 bad. A creature that has been mostly fed and twice burned reads as six green
-memories of your hand and two red ones. The spatial memory is still painted on
+memories of your hand and two red ones. A row of colour swatches shows **what
+the flock's calls have come to mean to this one** - the swatch is the evolved,
+inherited word, the bar beside it the meaning it learned for itself. The spatial memory is still painted on
 the ground at the same time, so you get the map and the mind together.
 
 **A creature keeps its worst moments, and goes back over them.** Learning only
