@@ -28,7 +28,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from simulation import (DANGER, DISTRESS, FOOD, HEIGHT, IDLE, MATE, MAX_POPULATION, N_TOKENS, N_TRAITS, TRAIT_HEARING,
                          TRAIT_METABOLISM, TRAIT_SPEED, TRAIT_VISION, World, WIDTH,
-                         compare_seeds, load_seed_genome, load_world, save_world)
+                         compare_seeds, load_bundled_genome, load_seed_genome, load_world, save_world)
 
 DEFAULT_PORT = 8765
 STEP_INTERVAL = 0.05
@@ -259,10 +259,13 @@ class Handler(BaseHTTPRequestHandler):
                     state.active_seed_genome = state.cli_seed_genome
                 elif body.get("use_ai"):
                     try:
+                        # a language you trained yourself wins; otherwise fall
+                        # back to the trained one shipped with the project
                         state.active_seed_genome = load_seed_genome(DEFAULT_LANGUAGE_FILE)
                     except OSError:
-                        state.active_seed_genome = None
-                        error_code = "ai_missing"
+                        state.active_seed_genome = load_bundled_genome()
+                        if state.active_seed_genome is None:
+                            error_code = "ai_missing"
                 else:
                     state.active_seed_genome = None
 

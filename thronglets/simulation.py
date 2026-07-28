@@ -16,6 +16,7 @@ be driven headlessly (see test_smoke.py); main.py is the renderer.
 """
 
 import json
+import os
 import random
 from collections import deque
 
@@ -363,6 +364,25 @@ def load_seed_genome(path):
     with open(path) as f:
         data = json.load(f)
     return Genome.from_lookup(data["state_to_token"], data["token_to_state"])
+
+
+# A trained language shipped with the project, so the AI-language option works
+# out of the box - no PyTorch, no waiting, nothing to train first. Resolved
+# next to this file rather than the working directory, so it is found however
+# the game is launched. See BUNDLED_LANGUAGE_FILE in the README for how it was
+# produced and why this particular one was chosen.
+BUNDLED_LANGUAGE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                     "default_language.json")
+
+
+def load_bundled_genome():
+    """The project's own pre-trained language, or None if the file is missing
+    (someone running from a partial copy shouldn't crash - they just get the
+    ordinary evolved-from-scratch language instead)."""
+    try:
+        return load_seed_genome(BUNDLED_LANGUAGE_FILE)
+    except (OSError, ValueError, KeyError):
+        return None
 
 
 # shape of every weight array in a mind: a shared trunk (W1/b1), a critic head

@@ -51,6 +51,7 @@ import pygame
 
 from i18n import STATE_LABELS, TRAIT_LABELS
 from simulation import (DANGER, DISTRESS, FOOD, Genome, HAND_PERCEPTION, HEIGHT, IDLE, MATE, MAX_POPULATION, N_TOKENS,
+                         load_bundled_genome,
                          N_TRAITS, World, WIDTH, compare_seeds, load_seed_genome, load_world, save_world, top3_and_other,
                          MEM_ROWS, MEM_COLS, MEM_CLIP, UPRISING_UNREST,
                          ACT_APPROACH, ACT_FLEE, F_HAND, F_PREDATOR, F_FOOD, REPLAY_SIZE)
@@ -2043,11 +2044,15 @@ def main():
             ai_choice = choose_ai(screen, font, lang)
             if ai_choice == "yes":
                 try:
+                    # a language you trained yourself wins; otherwise fall back
+                    # to the trained one shipped with the project, so this
+                    # option works out of the box with no PyTorch involved
                     seed_genome = load_seed_genome(DEFAULT_LANGUAGE_FILE)
                 except OSError:
-                    seed_genome = None
-                    flash_message(screen, font, lang,
-                                  TEXT[lang]["ai_missing_file"].format(file=DEFAULT_LANGUAGE_FILE))
+                    seed_genome = load_bundled_genome()
+                    if seed_genome is None:
+                        flash_message(screen, font, lang,
+                                      TEXT[lang]["ai_missing_file"].format(file=DEFAULT_LANGUAGE_FILE))
             elif ai_choice == "train":
                 seed_genome = run_training_ui(screen, font, lang)
         # Master Mode: no predators at all, and the flock never reproduces on

@@ -711,9 +711,35 @@ You don't have to remember that flag, though: if you launch any renderer
 without `--language`, right after picking the mode and the starting
 population you're asked "Activer le langage pre-entraine par IA ?" (`O`/`N`
 in pygame and the terminal, a checkbox on the web start screen) - answering
-yes loads `language_model.json` from the current folder automatically. If
-that file doesn't exist yet (you haven't run `train_language.py` there),
-you get a clear message and the game starts normally instead of crashing.
+yes loads `language_model.json` from the current folder automatically.
+
+**You don't have to train anything, either.** The project ships a trained
+language of its own, `default_language.json`, and that is what the AI-language
+option falls back to when you have no `language_model.json` of your own - so it
+works out of the box, with no PyTorch and no waiting. A language you trained
+yourself always wins; the bundled one is only the default. It is resolved next
+to the source files rather than the working directory, so it is found however
+you launch the game, and a missing or corrupted copy degrades quietly to the
+ordinary evolved-from-scratch language rather than crashing.
+
+It was produced with `train_language.py --episodes 8000 --seed 3 --uniform`,
+picked out of a sweep of seeds on two criteria that matter in play:
+
+| state | token |
+|---|---|
+| idle | **0 - silent** |
+| food-call | 3 |
+| mate-call | 5 |
+| alarm-call | 2 |
+| distress-call | 1 |
+
+**No two calls share a colour** - the homonymy that blind evolutionary drift
+keeps producing is gone - and **idle maps to silence**, which is the reading you
+want: a calm creature simply says nothing, and the field stays quiet until
+something is actually worth calling about. Most seeds train to 100% accuracy but
+spend token 0 on a state that ought to be audible (a mute food-call, say); this
+one spends it on idle. Verified in a real 1500-tick run: every state's token is
+used by 100% of the flock, with no audible homonyms.
 
 Every creature in generation 0 gets an exact copy of the trained genome
 (a spiked emission for its trained token per state, and response weights
