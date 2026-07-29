@@ -66,6 +66,7 @@ import sys
 
 import numpy as np
 
+from i18n import disposition_label
 from simulation import (WIDTH, HEIGHT, MAX_ENERGY, World,
                         MEM_ROWS, MEM_COLS, MEM_CLIP, _mem_cell_center)
 
@@ -128,17 +129,6 @@ MOOD_HUD_COLORS = {
     "sad": (140, 170, 220), "fear": (230, 130, 120),
 }
 
-
-def disposition_label(value):
-    if value >= 0.5:
-        return "adores you"
-    if value >= 0.15:
-        return "trusts you"
-    if value <= -0.5:
-        return "is terrified of you"
-    if value <= -0.15:
-        return "fears you"
-    return "is wary of you"
 
 
 # The right-click menu: three kind acts, then three from the episode's dark

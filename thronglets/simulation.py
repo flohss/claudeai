@@ -234,6 +234,22 @@ INHERIT_NOISE = 0.05          # small variation so offspring aren't carbon copie
 MOOD_DECAY = 0.04             # per step, how fast mood eases back toward baseline (low = it lingers)
 MOOD_VALENCE_REST = 0.12      # mild contentment when nothing is happening
 MOOD_AROUSAL_REST = 0.18      # gently calm at rest
+# How much of the mood going hungry is allowed to own. This flock genuinely
+# lives on the edge: measured over a settled world, median energy is ~27 of 120
+# and the lower quartile sits at 18 - below DISTRESS_ENERGY itself. So letting
+# hunger set the mood outright pinned nearly every creature to "sad" for life
+# (measured: 94% of the flock), which made the body colour carry no information
+# and left a player who had never touched anything convinced they had terrified
+# the whole flock.
+#
+# Hunger is therefore a background tint, not a verdict: it only bites as a
+# creature falls toward the energy the simulation already calls distress, and
+# even at its worst it stays smaller than a single jolt from being fed (+0.55)
+# or hurt (-0.95). That ordering is the point - the mood you SEE should be
+# mostly about what has been done to a creature, which is what the colour is
+# there to show, with deprivation shading it rather than deciding it.
+MOOD_GLOOM_ONSET = DISTRESS_ENERGY * 2.0   # 40: below this, deprivation starts to show
+MOOD_GLOOM_WEIGHT = 0.35                   # at its very worst, versus a 0.55 feeding
 MOOD_FEED_DV, MOOD_FEED_DA = 0.55, 0.22   # being fed: happier, a little excited
 MOOD_HARM_DV, MOOD_HARM_DA = -0.95, 0.75  # being hurt: miserable and panicked
 MOOD_WITNESS = 0.35           # fraction of a jolt a neighbour feels just from watching
@@ -1003,16 +1019,18 @@ class World:
                 if abs(alarm) > SIGNAL_ALARM_MIN:
                     c.mind.feel(-alarm * SIGNAL_ALARM_DV, alarm * SIGNAL_ALARM_DA)
             # let the persistent mood breathe: its resting baseline is set by
-            # the body right now - a full creature drifts toward calm content,
-            # a starving one toward miserable and agitated - and the mood eases
-            # toward that baseline slowly, so any recent jolt still lingers.
-            # hunger makes a creature miserable but LISTLESS (low arousal) -
-            # a despondent, sad baseline, not a panicked one. Only a real
-            # threat (harm) spikes arousal into fear; keeping hunger's arousal
-            # push below the fear threshold stops a starving creature from
-            # panic-fleeing the very hand that might feed it.
-            valence_rest = MOOD_VALENCE_REST - hunger * 0.85
-            arousal_rest = MOOD_AROUSAL_REST + hunger * 0.18
+            # the body right now - a well-fed creature drifts toward calm
+            # content, one heading for starvation toward miserable - and the
+            # mood eases toward that baseline slowly, so any recent jolt still
+            # lingers. Going hungry makes a creature miserable but LISTLESS
+            # (low arousal) - a despondent, sad baseline, not a panicked one.
+            # Only a real threat (harm) spikes arousal into fear; keeping this
+            # arousal push below the fear threshold stops a starving creature
+            # from panic-fleeing the very hand that might feed it.
+            gloom = min(1.0, max(0.0, (MOOD_GLOOM_ONSET - c.energy)
+                                 / (MOOD_GLOOM_ONSET - DISTRESS_ENERGY)))
+            valence_rest = MOOD_VALENCE_REST - gloom * MOOD_GLOOM_WEIGHT
+            arousal_rest = MOOD_AROUSAL_REST + gloom * 0.18
             # a broken creature stays hollowed out: its resting mood is dragged
             # toward a numb, joyless floor in proportion to how broken it is, so
             # the emptiness lasts instead of quietly healing back to neutral.

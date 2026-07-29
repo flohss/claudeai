@@ -145,7 +145,15 @@ or set off the proximity chime by themselves). Over a session the flock comes to
 **trust or fear you**, and passes what it learned on to its offspring, so a
 kind or cruel run compounds across generations. When it's on, it's shown
 several ways: a colour-coded line on its own row under the HUD header (*"the
-flock trusts you (+76%)"* / *"…fears you"*), a **disposition sparkline** at the top of
+flock trusts you (+76%)"* / *"…fears you"*). That line has a real **neutral
+band** — a flock nobody has touched reads *"doesn't know you yet"*, not
+*"is wary of you"*. It has to: a creature is born valuing every situation at
+exactly `0.0`, holding no opinion of you whatsoever, so without a neutral band
+the very first thing a player saw was an accusation they had done nothing to
+earn. The band matches the ±0.05 dead zone the gauge beside it already used, so
+the words and the colour can no longer contradict each other, and the wording
+now lives once in `i18n.py` — the 3D view had its own copy with the same flaw.
+There is also a **disposition sparkline** at the top of
 the Graph screen (`G`) that plots that feeling over time next to the
 vocabulary curves, and - surfacing the same inner life the 3D view shows -
 **each creature is filled with the colour of its emotion** (calm grey-green,
@@ -598,9 +606,25 @@ and memory.
 not a value recomputed each frame. Following the circumplex model of
 emotion, it runs on two slow-moving axes, **valence** (miserable ↔ happy)
 and **arousal** (calm ↔ agitated), and it has *momentum*: being fed or
-hurt jolts it, hunger tugs at it, and it only eases back toward a resting
+hurt jolts it, deprivation tints it, and it only eases back toward a resting
 baseline slowly - so a fright genuinely lingers and contentment fades over
-many seconds instead of resetting instantly. Witnessing something happen to
+many seconds instead of resetting instantly.
+
+Going hungry shades that baseline, but deliberately does **not** own it. This
+flock lives on the edge — in a settled world the median creature holds around
+27 energy of 120, and the lower quarter sits *below* the threshold the
+simulation itself calls distress — so treating any hunger as misery pinned
+essentially every creature to "sad" for life (measured: **94%** of the flock).
+The body colour then said nothing, and a player who had only moved their mouse
+across the field was left certain they had terrified a flock they had never
+once touched. Hunger now only bites as a creature falls toward that distress
+line, and even at its worst it stays smaller than a single jolt from being fed
+or hurt. That ordering is the point: the mood you *see* is mostly about what has
+been **done** to a creature, which is what the colour is there to show, with
+deprivation shading it rather than deciding it. Blue now means *this one is
+really in trouble* — a world with no predators reads as sad-but-calm (crowded,
+underfed), one with predators as frightened-but-fed, and the two are finally
+telling you different things. Witnessing something happen to
 a neighbour moves your own mood too, and a newborn is born already coloured
 by its parents' mood (a nervous flock births nervous young). Moods are also
 **contagious**: every moment a creature's feeling drifts a little toward

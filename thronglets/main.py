@@ -49,7 +49,7 @@ from collections import deque
 import numpy as np
 import pygame
 
-from i18n import STATE_LABELS, TRAIT_LABELS
+from i18n import STATE_LABELS, TRAIT_LABELS, disposition_label
 from simulation import (DANGER, DISTRESS, FOOD, Genome, HAND_PERCEPTION, HEIGHT, IDLE, MATE, MAX_POPULATION, N_TOKENS,
                          load_bundled_genome,
                          N_TRAITS, World, WIDTH, compare_seeds, load_seed_genome, load_world, save_world, top3_and_other,
@@ -152,20 +152,6 @@ LISTEN_RADIUS = 10.0  # world units - how close the mouse must be to hear a crea
 LEARN_FOOD_REWARD = 1.0
 LEARN_PREDATOR_REWARD = -1.0
 DISP_HISTORY_INTERVAL = 20   # ticks between disposition samples for the graph
-# Short words for a -1..1 feeling toward the player, per language.
-DISPO_LABELS = {
-    "en": [(0.5, "adores you"), (0.15, "trusts you"),
-           (-0.15, "is wary of you"), (-0.5, "fears you"), (-1.1, "is terrified of you")],
-    "fr": [(0.5, "t'adore"), (0.15, "te fait confiance"),
-           (-0.15, "se mefie de toi"), (-0.5, "te craint"), (-1.1, "est terrifie par toi")],
-}
-
-
-def disposition_label(value, lang):
-    for threshold, label in DISPO_LABELS.get(lang, DISPO_LABELS["en"]):
-        if value >= threshold:
-            return label
-    return DISPO_LABELS[lang][-1][1]
 
 
 def teach_nearby(world, x, y, reward):
