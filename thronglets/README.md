@@ -393,7 +393,29 @@ python test_smoke.py
 
 This runs several thousand ticks and asserts the population survives and
 vocabulary agreement increases — i.e. that a language is actually emerging,
-not just that the window doesn't crash.
+not just that the window doesn't crash. It runs with learning **off**, so it
+covers the original core.
+
+The learned mind gets its own check, because **none of it is visible from
+watching the game** — a flock whose learning has silently stopped still moves,
+still has colours, still breeds; only the numbers show that cruelty has stopped
+teaching fear:
+
+```bash
+python test_learning.py            # everything, about five minutes
+python test_learning.py --quick    # the instant half, a few seconds
+```
+
+Eleven checks, each one guarding against a failure that actually happened while
+this was being built: backpropagation against a directly measured slope; a
+newborn holding *no* opinions rather than faint random ones; kindness and
+cruelty teaching opposite things; dread reaching a hand that is only *closing
+in*; one shock correcting the whole run-up to it; re-living shocks deepening a
+rare lesson (replay on versus off, same seed); the flock's own calls meaning
+something only where there was something to learn (with predators versus
+without); a mind surviving save/load unchanged and an older save degrading
+gracefully; and the flock still being alive at the end. Every world is seeded,
+so two runs print the same numbers.
 
 ## Bonus: a *true* 3D proof-of-concept (`main_gl.py`)
 
