@@ -894,6 +894,12 @@ class World:
         self._cache = {"alive": []}
         self.vocab_history = {state: deque() for state in (IDLE, FOOD, MATE, DANGER, DISTRESS)}
         self.trait_history = {trait: deque() for trait in range(N_TRAITS)}
+        # How the flock's feeling about the player moved over the whole run, in
+        # the same -1..1 units as disposition_summary(). It belongs to the world
+        # rather than to a renderer because it is part of what happened here:
+        # resuming a save restored every creature's mind but left the story of
+        # how they came to feel that way blank.
+        self.disposition_history = deque()
         if not manual_food:
             for _ in range(4):
                 self._spawn_food_patch()
@@ -931,6 +937,10 @@ class World:
             self._record_vocab_history()
             if self.adaptive_traits:
                 self._record_trait_history()
+            if self.learning:
+                disp = self.disposition_summary()
+                if disp is not None:
+                    self.disposition_history.append(disp)
 
     def _record_vocab_history(self):
         for state, (_token, share) in self.vocabulary().items():
@@ -1135,6 +1145,39 @@ class World:
         if not dispositions:
             return None
         return float(np.mean(dispositions))
+
+    def choice_summary(self):
+        """What the flock has decided to do about you RIGHT NOW, as fractions
+        that sum to 1: {ACT_APPROACH, ACT_FLEE, ACT_IGNORE}. None when learning
+        is off or nobody is around.
+
+        The average in disposition_summary() hides this: a flock split down the
+        middle between coming to you and running from you averages out to the
+        same number as one that is uniformly indifferent, and those are very
+        different rooms to be standing in."""
+        if not self.learning:
+            return None
+        minds = [c.mind for c in self._alive() if c.mind is not None]
+        if not minds:
+            return None
+        return {act: sum(1 for m in minds if m.act == act) / len(minds)
+                for act in range(N_ACTIONS)}
+
+    def signal_meanings(self):
+        """What the flock has come to believe each of its own signal colours
+        predicts: {token: -1 (dread) .. +1 (welcome)}, averaged over everyone
+        alive. None when learning is off or nobody is around.
+
+        Which colour means which state is evolved and inherited (see
+        translator()); this is the other half - what living with that call
+        actually taught them it foretells."""
+        if not self.learning:
+            return None
+        minds = [c.mind for c in self._alive() if c.mind is not None]
+        if not minds:
+            return None
+        return {token: float(np.mean([m.signal_meaning(token) for m in minds]))
+                for token in range(1, N_TOKENS)}
 
     def dominate(self, creature, amount):
         """Master Mode: break a creature's will by isolating it in accelerated
@@ -1785,6 +1828,7 @@ def save_world(world, path):
         "allow_reproduction": getattr(world, "allow_reproduction", True),
         "vocab_history": {state: list(hist) for state, hist in world.vocab_history.items()},
         "trait_history": {trait: list(hist) for trait, hist in world.trait_history.items()},
+        "disposition_history": list(world.disposition_history),
         "food": [[float(x), float(y)] for x, y in world.food],
         "predators": [[float(p.pos[0]), float(p.pos[1])] for p in world.predators],
         "next_id": world._next_id,
@@ -1841,6 +1885,8 @@ def load_world(path, seed=None):
         state: deque(saved_history.get(str(state), []))
         for state in (IDLE, FOOD, MATE, DANGER, DISTRESS)
     }
+    # older saves have no arc recorded - it simply starts from here
+    world.disposition_history = deque(data.get("disposition_history", []))
     saved_trait_history = data.get("trait_history", {})
     world.trait_history = {
         trait: deque(saved_trait_history.get(str(trait), []))

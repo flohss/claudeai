@@ -44,7 +44,6 @@ import random
 import sys
 import threading
 import time
-from collections import deque
 
 import numpy as np
 import pygame
@@ -54,7 +53,7 @@ from simulation import (DANGER, DISTRESS, FOOD, Genome, HAND_PERCEPTION, HEIGHT,
                          load_bundled_genome,
                          N_TRAITS, World, WIDTH, compare_seeds, load_seed_genome, load_world, save_world, top3_and_other,
                          MEM_ROWS, MEM_COLS, MEM_CLIP, UPRISING_UNREST,
-                         ACT_APPROACH, ACT_FLEE, F_HAND, F_PREDATOR, F_FOOD, REPLAY_SIZE)
+                         ACT_APPROACH, ACT_FLEE, ACT_IGNORE, F_HAND, F_PREDATOR, F_FOOD, REPLAY_SIZE)
 
 # When learning is on, a creature's fill colour shows its inner emotion (so a
 # panic rippling through the flock is visible as a wave of red); the signal-token
@@ -151,7 +150,6 @@ LISTEN_RADIUS = 10.0  # world units - how close the mouse must be to hear a crea
 # to its offspring.
 LEARN_FOOD_REWARD = 1.0
 LEARN_PREDATOR_REWARD = -1.0
-DISP_HISTORY_INTERVAL = 20   # ticks between disposition samples for the graph
 
 
 def teach_nearby(world, x, y, reward):
@@ -172,12 +170,6 @@ def teach_nearby(world, x, y, reward):
     if nearest is not None:
         world.deliver_experience(nearest, reward)
 
-
-def _ensure_disp_history(world):
-    """Attach a fresh disposition sparkline buffer to a world (a plain
-    attribute, so it survives without touching simulation.py or the save
-    format)."""
-    world.disposition_history = deque(maxlen=5000)
 
 TEXT = {
     "en": {
@@ -272,6 +264,9 @@ TEXT = {
         "mood_joy": "happy",
         "mood_sad": "sad",
         "mood_fear": "afraid",
+        "hud_choice_approach": "coming",
+        "hud_choice_flee": "fleeing",
+        "hud_choice_ignore": "ignoring you",
         "hud_memory_hint": "hover a creature: green = places it trusts, red = places it fears",
         "extinct": "Extinct. Press R to start a new world.",
 
@@ -293,6 +288,12 @@ TEXT = {
         "translator_title": "Translator - what each color currently means",
         "translator_unused": "unused / ambiguous",
         "translator_homonym": "  ! homonym - shared with another state",
+        "translator_col_word": "the word - inherited",
+        "translator_col_meaning": "what it came to mean - learned",
+        "translator_dreaded": "dreaded",
+        "translator_welcomed": "welcomed",
+        "translator_noise": "still just noise",
+        "translator_learned_hint": "which colour means which state is inherited; what it predicts is learned in one lifetime",
 
         "family_title": "Family tree",
         "family_gen": "generation {gen}",
@@ -507,6 +508,9 @@ TEXT = {
         "mood_joy": "heureux",
         "mood_sad": "triste",
         "mood_fear": "apeure",
+        "hud_choice_approach": "viennent",
+        "hud_choice_flee": "fuient",
+        "hud_choice_ignore": "t'ignorent",
         "hud_memory_hint": "survole une creature : vert = lieux de confiance, rouge = lieux de peur",
         "extinct": "Extinction. Appuie sur R pour un nouveau monde.",
 
@@ -528,6 +532,12 @@ TEXT = {
         "translator_title": "Traducteur - ce que signifie chaque couleur en ce moment",
         "translator_unused": "inutilisee / ambigue",
         "translator_homonym": "  ! homonymie - partagee avec un autre etat",
+        "translator_col_word": "le mot - herite",
+        "translator_col_meaning": "ce qu'il annonce - appris",
+        "translator_dreaded": "redoute",
+        "translator_welcomed": "bienvenu",
+        "translator_noise": "encore du bruit",
+        "translator_learned_hint": "quelle couleur veut dire quel etat est herite ; ce qu'elle annonce s'apprend en une vie",
 
         "family_title": "Arbre genealogique",
         "family_gen": "generation {gen}",
@@ -738,14 +748,15 @@ def show_graph(screen, font, world, lang):
 
         y = 60
         if show_disp:
-            # the flock's -1..1 feeling, stored normalised to 0..1 so it plots
-            # on the same sparkline (0.5 is neutral)
-            raw = disp_hist[-1] * 2.0 - 1.0 if disp_hist else 0.0
+            # the world records the flock's feeling in its own -1..1 units, so
+            # map it onto the 0..1 the shared sparkline plots (0.5 is neutral)
+            raw = disp_hist[-1] if disp_hist else 0.0
             screen.blit(font.render(
                 t["graph_disposition"].format(pct=raw, label=disposition_label(raw, lang)),
                 True, (150, 220, 140) if raw > 0.05 else (225, 110, 110) if raw < -0.05 else TEXT_COLOR),
                 (20, y))
-            draw_sparkline(screen, 220, y - 6, graph_w, graph_h, disp_hist)
+            draw_sparkline(screen, 220, y - 6, graph_w, graph_h,
+                           [(v + 1.0) / 2.0 for v in disp_hist])
             y += row_h
 
         for state in (DANGER, FOOD, DISTRESS, MATE, IDLE):
@@ -783,6 +794,10 @@ def show_translator(screen, font, world, lang):
     t = TEXT[lang]
     labels = STATE_LABELS[lang]
     by_token = world.translator()
+    # the other half of a word: what living with that call taught them it
+    # foretells. The colour->state mapping above is evolved and inherited; this
+    # is learned, within a lifetime, and only exists when learning is on.
+    meanings = world.signal_meanings()
 
     waiting = True
     while waiting:
@@ -790,6 +805,10 @@ def show_translator(screen, font, world, lang):
         screen.blit(font.render(t["translator_title"], True, (255, 255, 255)), (20, 20))
 
         y = 60
+        if meanings is not None:
+            screen.blit(font.render(t["translator_col_word"], True, HUD_ACCENT), (46, y))
+            screen.blit(font.render(t["translator_col_meaning"], True, HUD_ACCENT), (470, y))
+            y += 26
         for token in range(N_TOKENS):
             claims = by_token[token]
             if token == 0:
@@ -799,11 +818,33 @@ def show_translator(screen, font, world, lang):
             text = (" / ".join(f"{labels[state]} ({frac * 100:.0f}%)" for state, frac in claims)
                     if claims else t["translator_unused"])
             screen.blit(font.render(text, True, TEXT_COLOR), (46, y))
+            if meanings is not None and token in meanings:
+                m = meanings[token]
+                # a bar growing left from a centre line for dread, right for
+                # welcome, so a glance down the column shows which of their own
+                # words the flock has come to fear
+                bx, bw, mid = 470, 120, 470 + 60
+                pygame.draw.rect(screen, (28, 34, 24), (bx, y + 4, bw, 8))
+                span = int(min(1.0, abs(m) / 0.08) * (bw // 2))
+                if span:
+                    col = (120, 200, 110) if m > 0 else (220, 95, 90)
+                    rect = (mid, y + 4, span, 8) if m > 0 else (mid - span, y + 4, span, 8)
+                    pygame.draw.rect(screen, col, rect)
+                pygame.draw.line(screen, (150, 158, 140), (mid, y + 2), (mid, y + 13))
+                word = (t["translator_dreaded"] if m < -0.02 else
+                        t["translator_welcomed"] if m > 0.02 else t["translator_noise"])
+                col = (225, 110, 110) if m < -0.02 else \
+                      (150, 220, 140) if m > 0.02 else HUD_HINT
+                screen.blit(font.render(f"{m:+.3f}  {word}", True, col), (bx + bw + 12, y))
             y += 24
             if len(claims) > 1:
                 screen.blit(font.render(t["translator_homonym"], True, (235, 90, 90)), (46, y))
                 y += 24
 
+        if meanings is not None:
+            y += 8
+            screen.blit(font.render(t["translator_learned_hint"], True, HUD_HINT), (46, y))
+            y += 24
         screen.blit(font.render(t["graph_dismiss"], True, (150, 155, 145)), (20, y + 16))
         pygame.display.flip()
         for event in pygame.event.get():
@@ -1242,6 +1283,40 @@ def _disposition_gauge(screen, font, x, y, disp, t, lang):
     return y + 22
 
 
+# what a creature has decided to do about you, in the order the bar stacks them
+CHOICE_COLORS = {ACT_APPROACH: (120, 200, 110), ACT_FLEE: (220, 95, 90),
+                 ACT_IGNORE: (120, 126, 112)}
+
+
+def _choice_bar(screen, font, x, y, choices, t):
+    """Who is coming, who is running and who could not care less, right now.
+
+    The average above cannot show this: a flock split between coming to you and
+    fleeing you averages to the same number as one that is uniformly
+    indifferent. This is a single stacked bar, so a divided flock reads as two
+    strong blocks and an indifferent one as a wall of grey."""
+    w, h = 150, 9
+    pygame.draw.rect(screen, (28, 34, 24), (x, y + 3, w, h))
+    left = x
+    for act in (ACT_APPROACH, ACT_FLEE, ACT_IGNORE):
+        span = int(round(choices.get(act, 0.0) * w))
+        if span > 0:
+            pygame.draw.rect(screen, CHOICE_COLORS[act], (left, y + 3, span, h))
+        left += span
+    pygame.draw.rect(screen, (70, 78, 62), (x, y + 3, w, h), width=1)
+    parts = [(t["hud_choice_approach"], ACT_APPROACH), (t["hud_choice_flee"], ACT_FLEE),
+             (t["hud_choice_ignore"], ACT_IGNORE)]
+    tx = x + w + 12
+    for i, (word, act) in enumerate(parts):
+        label = f"{choices.get(act, 0.0) * 100:.0f}% {word}"
+        if i < len(parts) - 1:
+            label += "   "
+        surf = font.render(label, True, CHOICE_COLORS[act])
+        screen.blit(surf, (tx, y))
+        tx += surf.get_width()
+    return y + 22
+
+
 def _obedience_gauge(screen, font, x, y, ob, unrest, t):
     """The Master Mode readout, replacing the (now irrelevant) trust gauge: a
     grey bar for how broken the flock is, overlaid with a red sliver for how
@@ -1308,6 +1383,10 @@ def draw_hud(screen, font, world, paused, speed, mode, lang, expanded, trained=F
         disp = world.disposition_summary()
         if disp is not None:
             y = _disposition_gauge(screen, font, 10, y, disp, t, lang)
+            if expanded:
+                choices = world.choice_summary()
+                if choices is not None:
+                    y = _choice_bar(screen, font, 10, y, choices, t)
 
     if not expanded:
         if pop == 0:
@@ -2052,14 +2131,13 @@ def main():
         learning = getattr(world, "learning", False)   # honour the saved world
         master_mode = getattr(world, "master_mode", False)   # a resumed Master game stays Master
     world.master_mode = master_mode
-    _ensure_disp_history(world)
 
     # the disposition line takes one extra row, so grow both HUD sizes to fit
     # it (only when learning is on - a pure-selection run keeps the old, tidy
     # heights)
     if learning:
         MINIMAL_HUD_H += 22   # the disposition/obedience gauge row
-        EXPANDED_HUD_H += 66   # gauge + mood legend + memory-colour hint
+        EXPANDED_HUD_H += 88   # gauge + choice breakdown + mood legend + memory hint
         HUD_H = MINIMAL_HUD_H
         SCALE_Y = (SCREEN_H - HUD_H) / HEIGHT
 
@@ -2091,7 +2169,6 @@ def main():
                 elif event.key == pygame.K_r:
                     world = _new_world(mode, len(world.predators), init_pop, seed_genome,
                                        adaptive_traits, learning)
-                    _ensure_disp_history(world)
                 elif event.key == pygame.K_UP:
                     speed = min(200, speed + (1 if speed < 10 else 10))
                 elif event.key == pygame.K_DOWN:
@@ -2176,10 +2253,6 @@ def main():
             while tick_accumulator >= tick_interval:
                 world.step()
                 tick_accumulator -= tick_interval
-                # sample the flock's feeling for the Graph sparkline
-                disp = world.disposition_summary()
-                if disp is not None and world.tick % DISP_HISTORY_INTERVAL == 0:
-                    world.disposition_history.append((disp + 1.0) / 2.0)
         else:
             tick_accumulator = 0.0
 

@@ -216,13 +216,21 @@ def check_calls_mean_what_experience_taught(worlds):
 def check_a_mind_survives_being_saved():
     world = hand_session(3, +1.0, ticks=250)
     before = world.disposition_summary()
+    arc = list(world.disposition_history)
     fd, path = tempfile.mkstemp(suffix=".json")
     os.close(fd)
     try:
         S.save_world(world, path)
-        after = S.load_world(path).disposition_summary()
+        reloaded = S.load_world(path)
+        after = reloaded.disposition_summary()
         print(f"  disposition across save/load: {before:+.5f} -> {after:+.5f}")
         assert abs(before - after) < 1e-6, "a mind changed when written to disk and back"
+        # the ARC has to come back too, not just the minds - resuming a game
+        # used to restore what the flock felt while losing how it got there
+        print(f"  the arc of how they got there: {len(arc)} points -> "
+              f"{len(reloaded.disposition_history)}")
+        assert arc and list(reloaded.disposition_history) == arc, \
+            "the flock's history with the player was lost on save/load"
     finally:
         os.remove(path)
     # a save from an older architecture must not crash the loader
@@ -243,13 +251,30 @@ def check_the_flock_still_survives_learning(worlds):
 
 
 def check_learning_off_changes_nothing():
-    """The whole system is opt-in. With it off, no creature may carry a mind."""
+    """The whole system is opt-in. With it off, no creature may carry a mind,
+    and every learned readout must decline to answer rather than invent one."""
     world = S.World(init_pop=40, seed=8)
     for _ in range(200):
         world.step()
     assert all(c.mind is None for c in world.creatures), "a mind appeared with learning off"
-    assert world.disposition_summary() is None, "a disposition appeared with learning off"
-    print("  learning off: no minds, no disposition - the core is untouched")
+    for name in ("disposition_summary", "choice_summary", "signal_meanings"):
+        assert getattr(world, name)() is None, f"{name}() answered with learning off"
+    assert not world.disposition_history, "an arc was recorded with learning off"
+    print("  learning off: no minds, no readouts, no arc - the core is untouched")
+
+
+def check_the_flock_can_be_divided():
+    """The averaged disposition cannot tell a split flock from an indifferent
+    one, which is what choice_summary exists for. Both must be readable."""
+    world = hand_session(0, +1.0, ticks=400)
+    choices = world.choice_summary()
+    assert choices is not None and abs(sum(choices.values()) - 1.0) < 1e-9, \
+        "the choice breakdown does not account for the whole flock"
+    meanings = world.signal_meanings()
+    assert meanings is not None and set(meanings) == set(range(1, S.N_TOKENS)), \
+        "the learned meanings do not cover every audible call"
+    print("  choices " + "  ".join(f"{k}={v:.0%}" for k, v in sorted(choices.items())) +
+          f"   |  learned meanings for {len(meanings)} calls")
 
 
 # --- runner ----------------------------------------------------------------
@@ -285,6 +310,7 @@ def main():
             ("dread travels backward in time",
              lambda: check_dread_travels_backward_in_time(lived["cruel"])),
             ("a mind survives being saved", check_a_mind_survives_being_saved),
+            ("a flock can be divided, not just averaged", check_the_flock_can_be_divided),
             ("living out several whole lives", live_several_lives),
             ("re-living shocks deepens rare lessons",
              lambda: check_reliving_shocks_deepens_rare_lessons(lived["worlds"])),

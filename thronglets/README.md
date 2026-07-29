@@ -153,9 +153,19 @@ the very first thing a player saw was an accusation they had done nothing to
 earn. The band matches the ±0.05 dead zone the gauge beside it already used, so
 the words and the colour can no longer contradict each other, and the wording
 now lives once in `i18n.py` — the 3D view had its own copy with the same flaw.
-There is also a **disposition sparkline** at the top of
+Under that line, the expanded HUD adds the thing the average cannot show: a
+**stacked bar of what the flock has actually decided** — how many are *coming*,
+how many *fleeing*, how many *ignoring you*, right now. A flock split down the
+middle between coming to you and running from you averages out to exactly the
+same number as one that is uniformly indifferent, and those are very different
+rooms to be standing in; one reads as two strong blocks, the other as a wall of
+grey. There is also a **disposition sparkline** at the top of
 the Graph screen (`G`) that plots that feeling over time next to the
-vocabulary curves, and - surfacing the same inner life the 3D view shows -
+vocabulary curves. That arc belongs to the **world**, not to the window, so it
+is **saved and restored with everything else**: resuming a game used to bring
+back every creature's mind while leaving the story of how they came to feel that
+way completely blank, which is the wrong half to keep. And - surfacing the same
+inner life the 3D view shows -
 **each creature is filled with the colour of its emotion** (calm grey-green,
 happy green, sad blue, fearful red), so a mood spreading through the flock is
 visible as a **wave of colour** rolling across the field; the signal-token
@@ -377,6 +387,17 @@ five separate HUD rows. Unlike the Graph screen this is a frozen snapshot of
 right now, not a history - open it again later to see how the mapping has
 moved on.
 
+**With learning on it shows both halves of a word.** Down the left, the word
+itself — which colour means which state, *inherited*, selected over generations.
+Down the right, **what living with that call actually taught them it foretells**
+— a bar growing red for dread, green for welcome, with the number and a plain
+reading (*dreaded* / *welcomed* / *still just noise*). The pairing is the whole
+point of the screen now: a colour's **shape** is evolved, its **meaning** is
+lived, and you can see the two side by side. A flock that has never met a
+predator shows a full column of *still just noise* — the same words, no
+experience to give them weight. (Which particular call picks up the dread varies
+between runs; see the note on that in the learning section.)
+
 ## FAQ
 
 A curated in-game FAQ (`?` in pygame - `f` now arms the fire tool - `Shift+F`
@@ -414,16 +435,19 @@ python test_learning.py            # everything, about five minutes
 python test_learning.py --quick    # the instant half, a few seconds
 ```
 
-Eleven checks, each one guarding against a failure that actually happened while
-this was being built: backpropagation against a directly measured slope; a
-newborn holding *no* opinions rather than faint random ones; kindness and
-cruelty teaching opposite things; dread reaching a hand that is only *closing
-in*; one shock correcting the whole run-up to it; re-living shocks deepening a
-rare lesson (replay on versus off, same seed); the flock's own calls meaning
-something only where there was something to learn (with predators versus
-without); a mind surviving save/load unchanged and an older save degrading
-gracefully; and the flock still being alive at the end. Every world is seeded,
-so two runs print the same numbers.
+Each check guards against a failure that actually happened while this was being
+built: backpropagation against a directly measured slope; a newborn holding *no*
+opinions rather than faint random ones; kindness and cruelty teaching opposite
+things; dread reaching a hand that is only *closing in*; one shock correcting the
+whole run-up to it; re-living shocks deepening a rare lesson (replay on versus
+off, same seed); the flock's own calls meaning something only where there was
+something to learn (with predators versus without); a mind surviving save/load
+unchanged — **along with the arc of how it got there** — and an older save
+degrading gracefully; the flock's decisions accounting for the whole population,
+so a divided flock stays distinguishable from an indifferent one; and the flock
+still being alive at the end. With learning off, every learned readout must
+decline to answer rather than invent one. Every world is seeded, so two runs
+print the same numbers.
 
 ## Bonus: a *true* 3D proof-of-concept (`main_gl.py`)
 
