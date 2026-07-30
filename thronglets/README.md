@@ -398,6 +398,49 @@ predator shows a full column of *still just noise* — the same words, no
 experience to give them weight. (Which particular call picks up the dread varies
 between runs; see the note on that in the learning section.)
 
+## Run the measurements yourself (`report.py`)
+
+Every number this project claims came from running worlds headlessly and reading
+them. `report.py` puts that instrument in your hands and writes the result to a
+file you can send to someone:
+
+```bash
+python3 report.py                  # 3 seeds x 1500 ticks, six scenarios
+python3 report.py --quick          # 2 seeds x 600 ticks, a rough first look
+python3 report.py --seeds 5 --ticks 3000 --out long_run.txt
+```
+
+It plays six scenarios - hunted and unhunted with nobody touching the game, a
+hand that only wanders, a hand that feeds, a hand that burns, and learning
+switched off as a control - and reports **every metric as mean ± standard
+deviation across seeds, with the range**. The spread is not decoration: two
+seeds of the same setup routinely differ more than a real effect does, so a
+figure without one cannot be argued with. Population, births, deaths, energy
+percentiles, mood and its spread, the emotion split, disposition, what the flock
+decided to do about you, what a predator came to mean, what each call came to
+mean, vocabulary agreement per state, homonyms, evolved traits.
+
+**The file opens with the parameters actually in force**, including anything
+pinned in the tuning screen, plus seeds, tick count, versions and the commit.
+That header is the most important part: since parameters are now editable, a
+measurement that doesn't say what it was measured under is not evidence of
+anything.
+
+It closes by **re-measuring the claims this README makes** - and distinguishes
+two kinds, because conflating them inverts meanings. A claim that two things come
+out *different* (calls only mean something where there was something to learn)
+is reported as both sides plus the gap, and passes only if the gap clears the
+spread. A claim that something *doesn't happen* (a hand that only moves is not
+blamed) is an equivalence test, checked against a threshold with a meaning in the
+game - the ±0.05 band the HUD itself calls *"doesn't know you yet"*. Run through
+the difference test, that second kind would report "the gap clears the spread"
+about two values that are both essentially zero, which reads as the exact
+opposite of the claim.
+
+It is not fast - these numbers only exist by living the worlds out. On one
+ordinary laptop `--quick` took about 3 minutes and the standard sweep about 11.
+Progress prints as it goes so you can tell it from a hang.
+
 ## Parameters: every number, in one place (`P` at startup)
 
 `simulation.py` is deliberately a wall of named constants - each one a decision
