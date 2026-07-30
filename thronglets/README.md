@@ -430,6 +430,23 @@ the simulation, it would break it. They're listed anyway - the point is to see
 the whole machine in one place - greyed out, each saying *why* it can't move, and
 the cursor still walks onto them so you can read them.
 
+**No setting the screen offers can break the world**, and getting that right
+took two methods rather than one. Roughly fifteen of these constants are
+*divisors*: sliding one to zero isn't an extreme setting, it's a crash - or
+worse, `DECIDE_TEMP` at zero yields `NaN` instead of raising, quietly corrupting
+every decision a creature makes. Searching the source for `/ NAME` and `% NAME`
+found most of them, but missed `HEAR_RADIUS`, which flows into a traits array
+that gets divided by later, so its name never appears next to a slash. Sweeping
+every parameter to both extremes and running a world found that one - but the
+first sweep missed three others purely because it never positioned a hand. Both
+methods, then: divisors get a floor above zero, the one constraint that spans
+*two* parameters (`MOOD_GLOOM_ONSET` vs `DISTRESS_ENERGY`) is guarded in the
+simulation itself, and `test_tuning.py` re-runs the whole sweep - 210 extremes,
+warnings promoted to errors so a silent `NaN` fails too - along with a check
+that every numeric constant in `simulation.py` is on the screen at all, so a
+parameter added later can't quietly go missing from the list that claims to show
+everything.
+
 Your defaults live in `thronglets_params.json` next to the save file, holding
 **only what differs** from the built-in values - so it stays a readable record of
 what you changed, and a parameter you reset disappears from it. Delete the file

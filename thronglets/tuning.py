@@ -142,6 +142,42 @@ def _harvest_docs():
 DOCS = _harvest_docs()
 
 
+# Parameters the simulation DIVIDES or takes a modulus by. Sliding one of these
+# to zero is not an extreme setting, it is a crash (or worse: DECIDE_TEMP at zero
+# yields NaN instead of raising, which quietly corrupts every decision a creature
+# makes). So their range never reaches zero.
+#
+# This list needed BOTH a source search and a runtime sweep, because neither
+# found all of them:
+#   - searching simulation.py for `/ NAME` and `% NAME` finds the direct ones,
+#     but misses HEAR_RADIUS, which flows into a traits array that is divided by
+#     later - the constant's own name never appears next to a slash;
+#   - sweeping every parameter to its extremes and running the world finds that
+#     one, but only trips the divisors a given scenario exercises - it missed
+#     HAND_PERCEPTION, HAND_STANDOFF and SEE_RADIUS purely because the first
+#     sweep never positioned a hand.
+# The sweep is in test_tuning.py and runs with warnings promoted to errors, so a
+# divide that yields NaN instead of raising is caught too.
+DIVISORS = (
+    "CROWD_CAP", "DECIDE_TEMP", "FOOD_PERCEPTION", "FOOD_SPAWN_INTERVAL",
+    "HAND_APPROACH_SCALE", "HAND_PERCEPTION", "HAND_STANDOFF", "HEAR_RADIUS",
+    "MAX_ENERGY", "MOOD_CONTAGION_RADIUS", "PREDATOR_PERCEPTION", "SEE_RADIUS",
+    "SIGNAL_ALARM_FULL", "TRAUMA_PERCEPTION", "VOCAB_HISTORY_INTERVAL",
+)
+
+
+def _floor_for(name, value):
+    """The smallest value a divisor may take: 1 for the integer ones (they are
+    used as `tick % N`, where anything below 1 is meaningless anyway) and a
+    hundredth of the built-in for the rest - low enough to be a real extreme,
+    never low enough to divide by zero."""
+    if name not in DIVISORS:
+        return None
+    if isinstance(value, int) and not isinstance(value, bool):
+        return 1
+    return round(abs(value) / 100.0, 10) or 1e-6
+
+
 def _range_for(name, value):
     """A sane slider range around the built-in value.
 
@@ -188,7 +224,13 @@ def capture_builtins():
 
 capture_builtins()
 
-RANGES = {n: _range_for(n, BUILTIN[n]) for n in BUILTIN if n not in LOCKED}
+def _bounded(name):
+    lo, hi = _range_for(name, BUILTIN[name])
+    floor = _floor_for(name, BUILTIN[name])
+    return (max(lo, floor), hi) if floor is not None else (lo, hi)
+
+
+RANGES = {n: _bounded(n) for n in BUILTIN if n not in LOCKED}
 STEPS = {n: _step_for(BUILTIN[n]) for n in BUILTIN if n not in LOCKED}
 
 

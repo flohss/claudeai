@@ -1053,8 +1053,12 @@ class World:
             # Only a real threat (harm) spikes arousal into fear; keeping this
             # arousal push below the fear threshold stops a starving creature
             # from panic-fleeing the very hand that might feed it.
-            gloom = min(1.0, max(0.0, (MOOD_GLOOM_ONSET - c.energy)
-                                 / (MOOD_GLOOM_ONSET - DISTRESS_ENERGY)))
+            # the span is guarded because it is a gap between TWO tunables: the
+            # tuning screen can floor each one away from zero, but nothing stops
+            # someone setting them equal, and that is a divide-by-zero rather
+            # than an extreme setting
+            gloom_span = max(1e-6, MOOD_GLOOM_ONSET - DISTRESS_ENERGY)
+            gloom = min(1.0, max(0.0, (MOOD_GLOOM_ONSET - c.energy) / gloom_span))
             valence_rest = MOOD_VALENCE_REST - gloom * MOOD_GLOOM_WEIGHT
             arousal_rest = MOOD_AROUSAL_REST + gloom * MOOD_GLOOM_AROUSAL
             # and what it can hear right now, on the same footing as its body
