@@ -263,6 +263,35 @@ def check_learning_off_changes_nothing():
     print("  learning off: no minds, no readouts, no arc - the core is untouched")
 
 
+def check_dread_from_calls_is_bounded_and_lets_go():
+    """Hearing a dreaded call must move the resting mood, not deliver a jolt
+    every step. This was a real bug: feel() is for discrete events, and calling
+    it once per step while the calling lasted accumulated without bound - it
+    produced ALL of the fear in an idle world and shifted the median mood by
+    +/-0.2 on its own. So: dread must build toward the baseline, stop there, and
+    drain away once the voices do."""
+    m = S.Mind()
+    loud = S.Mind.features(0, 0.2, 0, 0,
+                           signals=np.array([1.0] + [0.0] * (S.N_SIGNALS - 1)))
+    for _ in range(400):
+        m.teach(-1.0, loud, S.LEARN_RATE * 2)
+    alarm = m.value(S.Mind._hushed(loud)) - m.value(loud)
+    assert alarm > S.SIGNAL_ALARM_MIN, "the call never became dreaded, so this proves nothing"
+    dread = max(-1.0, min(1.0, alarm / S.SIGNAL_ALARM_FULL))
+    floor = S.MOOD_VALENCE_REST - dread * S.SIGNAL_ALARM_DV
+
+    for _ in range(600):                       # the voices keep on and on
+        m.relax(floor, S.MOOD_AROUSAL_REST + dread * S.SIGNAL_ALARM_DA)
+    settled = m.valence
+    assert settled >= floor - 1e-6, \
+        f"dread ran past its own baseline ({settled:+.3f} < {floor:+.3f}) - it is accumulating again"
+    for _ in range(600):                       # and then silence
+        m.relax(S.MOOD_VALENCE_REST, S.MOOD_AROUSAL_REST)
+    print(f"  under a dreaded call {settled:+.3f} (baseline {floor:+.3f}, cannot pass it), "
+          f"after silence {m.valence:+.3f}")
+    assert m.valence > settled + 0.05, "dread never let go once the calling stopped"
+
+
 def check_the_flock_can_be_divided():
     """The averaged disposition cannot tell a split flock from an indifferent
     one, which is what choice_summary exists for. Both must be readable."""
@@ -310,6 +339,8 @@ def main():
             ("dread travels backward in time",
              lambda: check_dread_travels_backward_in_time(lived["cruel"])),
             ("a mind survives being saved", check_a_mind_survives_being_saved),
+            ("dread from a call is bounded and lets go",
+             check_dread_from_calls_is_bounded_and_lets_go),
             ("a flock can be divided, not just averaged", check_the_flock_can_be_divided),
             ("living out several whole lives", live_several_lives),
             ("re-living shocks deepens rare lessons",

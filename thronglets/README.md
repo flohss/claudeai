@@ -398,6 +398,45 @@ predator shows a full column of *still just noise* — the same words, no
 experience to give them weight. (Which particular call picks up the dread varies
 between runs; see the note on that in the learning section.)
 
+## Parameters: every number, in one place (`P` at startup)
+
+`simulation.py` is deliberately a wall of named constants - each one a decision
+about how these creatures work, most of them arrived at by measuring something.
+Press `P` on the opening screen to **see that whole wall and change it**, grouped
+the way you'd go looking for something rather than by name: senses and distances,
+movement, body and energy, reproduction, food and predators, calls and their
+meaning, mood, your hand, learning, memory of places, Master Mode.
+
+- `UP`/`DOWN` to move, `LEFT`/`RIGHT` to change (hold `SHIFT` for ×10 steps)
+- `BACKSPACE` resets the one under the cursor; `R` resets everything
+- **`D` makes the current values your defaults** for every future run
+- anything you moved shows in amber next to what it was born as, so you can
+  always see how far you have wandered from the original
+
+Two things are worth knowing about how this is built.
+
+**The descriptions are not retyped.** Every constant already carries the comment
+explaining it, written next to the code that uses it; `tuning.py` harvests those
+out of `simulation.py` at import rather than keeping a second copy that would
+drift. So the screen cannot go stale, and there is exactly one place to edit a
+parameter's meaning. (Building this found 31 constants with no comment at all -
+they got one, which improved the source as well as the screen.)
+
+**Some parameters are shown but locked.** Network shape, feature-vector indices,
+token counts, world dimensions and the affect-map grid are not preferences,
+they're the shape of the data: a mind's weight matrices are built to a fixed size
+and saved minds are restored to it, so changing one mid-flight wouldn't retune
+the simulation, it would break it. They're listed anyway - the point is to see
+the whole machine in one place - greyed out, each saying *why* it can't move, and
+the cursor still walks onto them so you can read them.
+
+Your defaults live in `thronglets_params.json` next to the save file, holding
+**only what differs** from the built-in values - so it stays a readable record of
+what you changed, and a parameter you reset disappears from it. Delete the file
+and you're back to stock. Nothing else in the codebase knows the screen exists:
+it writes into `simulation.py`'s module globals, and the simulation goes on
+reading its own constants exactly as before.
+
 ## FAQ
 
 A curated in-game FAQ (`?` in pygame - `f` now arms the fire tool - `Shift+F`
@@ -556,12 +595,24 @@ actually followed that call. Each creature perceives how loudly every signal
 colour is being called nearby, and TD does the rest. A flock that has lived
 among predators comes to dread some of its own calls; **a flock that has never
 met one hears the very same words as noise.** Measured across three seeds, the
-most dreaded call lands at **-0.067** in a world with predators and **-0.003**
-in one without - a twentyfold difference from experience alone, with the words
+most dreaded call lands at **-0.045** in a world with predators and **-0.002**
+in one without - a nineteenfold difference from experience alone, with the words
 themselves unchanged. Once a call *does* mean something, hearing it is
 frightening in itself: the word moves a creature before the thing it warns of
 ever arrives. A newborn values every call at exactly `0.0` - it has no opinions
 to begin with, only ones it earned.
+
+That fright shifts the **resting mood**, it is not a jolt. Being called to is a
+condition that holds, not an event that happens - and getting that distinction
+wrong was a real bug worth recording. Delivering a jolt on every step while the
+calling lasted accumulated without bound: measured on an idle world, it produced
+**100% of the fear** (16% of the flock afraid with it, **0%** with it disabled)
+and shifted the median mood by **±0.2** on its own, swamping hunger, predators
+and everything the player did. As a baseline it behaves: dread builds over about
+a hundred ticks while the voices keep up, **stops at that baseline instead of
+running past it**, and drains away when they stop - at the same `MOOD_DECAY` pace
+as every other feeling. A world with nothing to fear now reads as calm (0% afraid,
+91% neutral) rather than manufacturing fear out of noise.
 
 One honest limit: *which* call picks up the dread is **not** reproducible. It is
 often the alarm call, but not reliably - other calls (distress, for instance)

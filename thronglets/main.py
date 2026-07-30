@@ -48,6 +48,7 @@ import time
 import numpy as np
 import pygame
 
+import tuning
 from i18n import STATE_LABELS, TRAIT_LABELS, disposition_label
 from simulation import (DANGER, DISTRESS, FOOD, Genome, HAND_PERCEPTION, HEIGHT, IDLE, MATE, MAX_POPULATION, N_TOKENS,
                          load_bundled_genome,
@@ -227,7 +228,20 @@ TEXT = {
         "choose_start_resume": "  R = resume the saved game",
         "choose_start_new": "  N = new game",
         "choose_start_master": "  M = MASTER MODE - break their will until they obey (White Christmas)",
-        "choose_start_hint": "Press R, N or M   (ENTER = new game).",
+        "choose_start_tuning": "  P = parameters - see and change every number in the simulation",
+        "choose_start_pinned": "      ({n} pinned as your defaults)",
+        "tuning_title": "Parameters - everything that shapes the simulation",
+        "tuning_hint": "UP/DOWN move   LEFT/RIGHT change (hold SHIFT for x10)   BACKSPACE reset this one",
+        "tuning_hint2": "D = make these my defaults   R = reset everything   ESC = back",
+        "tuning_was": "(was {v})",
+        "tuning_footer": "{shown} parameters   {moved} changed from built-in   {pinned} pinned as defaults",
+        "tuning_status_ready": "{n} of your saved defaults are in force",
+        "tuning_status_saved": "{n} written to {file} - these are your defaults from now on",
+        "tuning_status_cleared": "nothing differs from built-in any more - your defaults file was removed",
+        "tuning_status_reset": "everything back to the built-in values",
+        "tuning_status_one_reset": "{name} back to its built-in value",
+        "tuning_status_locked": "{name} cannot be changed: {why}",
+        "choose_start_hint": "Press R, N, M or P   (ENTER = new game).",
         "master_banner": "MASTER MODE - hold I to break  |  left-click feeds  |  right-click births  |  F to kill",
         "master_obedience": "obedience of the flock: {pct:.0%}",
         "master_readout": "obedience {ob:.0%}    unrest {unrest:.0%}",
@@ -471,7 +485,20 @@ TEXT = {
         "choose_start_resume": "  R = reprendre la partie sauvegardee",
         "choose_start_new": "  N = nouvelle partie",
         "choose_start_master": "  M = MODE MAITRE - briser leur volonte jusqu'a l'obeissance (White Christmas)",
-        "choose_start_hint": "Appuie sur R, N ou M   (ENTREE = nouvelle partie).",
+        "choose_start_tuning": "  P = parametres - voir et modifier chaque nombre de la simulation",
+        "choose_start_pinned": "      ({n} epingles comme tes valeurs par defaut)",
+        "tuning_title": "Parametres - tout ce qui faconne la simulation",
+        "tuning_hint": "HAUT/BAS deplacer   GAUCHE/DROITE modifier (SHIFT pour x10)   RETOUR ARRIERE remet celui-ci",
+        "tuning_hint2": "D = en faire mes valeurs par defaut   R = tout remettre   ESC = revenir",
+        "tuning_was": "(etait {v})",
+        "tuning_footer": "{shown} parametres   {moved} modifies   {pinned} epingles par defaut",
+        "tuning_status_ready": "{n} de tes valeurs par defaut sont actives",
+        "tuning_status_saved": "{n} ecrits dans {file} - ce sont tes valeurs par defaut desormais",
+        "tuning_status_cleared": "plus rien ne differe des valeurs d'origine - ton fichier a ete supprime",
+        "tuning_status_reset": "tout est revenu aux valeurs d'origine",
+        "tuning_status_one_reset": "{name} revenu a sa valeur d'origine",
+        "tuning_status_locked": "{name} non modifiable : {why}",
+        "choose_start_hint": "Appuie sur R, N, M ou P   (ENTREE = nouvelle partie).",
         "master_banner": "MODE MAITRE - maintiens I pour briser  |  clic gauche nourrit  |  clic droit cree  |  F pour tuer",
         "master_obedience": "obeissance du groupe : {pct:.0%}",
         "master_readout": "obeissance {ob:.0%}    agitation {unrest:.0%}",
@@ -1665,7 +1692,11 @@ def choose_start(screen, font, lang, has_save):
     lines = ["Thronglets", "", t["choose_start_prompt"], ""]
     if has_save:
         lines.append(t["choose_start_resume"])
-    lines += [t["choose_start_new"], t["choose_start_master"], "", t["choose_start_hint"]]
+    lines += [t["choose_start_new"], t["choose_start_master"], t["choose_start_tuning"]]
+    pinned = len(tuning.load())
+    if pinned:
+        lines.append(t["choose_start_pinned"].format(n=pinned))
+    lines += ["", t["choose_start_hint"]]
     while True:
         screen.fill(BG)
         for i, line in enumerate(lines):
@@ -1677,12 +1708,163 @@ def choose_start(screen, font, lang, has_save):
                 pygame.quit()
                 sys.exit()
             elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_p:
+                    return "tuning"
                 if event.key == pygame.K_m:
                     return "master"
                 if event.key == pygame.K_r and has_save:
                     return "resume"
                 if event.key in (pygame.K_n, pygame.K_RETURN):
                     return "new"
+
+
+def show_tuning(screen, font, lang):
+    """Every number that shapes the simulation, in one scrollable list you can
+    edit - and make the default for every future run.
+
+    Deliberately shows ALL of them, including the ones that cannot move: the
+    point is to see the whole machine in one place, so a parameter that is fixed
+    by the shape of the data says so rather than quietly not being listed. The
+    registry, the ranges and each parameter's description all come from
+    tuning.py, which harvests the descriptions out of simulation.py itself - so
+    this screen cannot drift from the code it is showing."""
+    t = TEXT[lang]
+    # a flat list of ("group", label) / ("param", name) rows, so one cursor and
+    # one scroll offset cover headers and values alike
+    rows = []
+    for _key, en, fr, names in tuning.GROUPS:
+        rows.append(("group", fr if lang == "fr" else en))
+        for name in names:
+            rows.append(("param", name))
+
+    values = tuning.current()
+    saved = tuning.load()          # what is currently pinned as the default
+    cursor = 1                     # start on the first real parameter
+    top = 0
+    per_page = (SCREEN_H - 150) // 20
+    status = t["tuning_status_ready"].format(n=len(saved)) if saved else ""
+
+    def move(delta):
+        """The cursor lands on any parameter, locked ones included - you must be
+        able to scroll down and READ the fixed ones, which is half the point of
+        the screen. It just refuses to change them."""
+        nonlocal cursor
+        i = cursor
+        while 0 <= i + delta < len(rows):
+            i += delta
+            if rows[i][0] == "param":
+                cursor = i
+                return
+
+    def nudge(name, direction, coarse):
+        nonlocal status
+        if name in tuning.LOCKED:
+            status = t["tuning_status_locked"].format(name=name, why=tuning.LOCKED[name])
+            return
+        lo, hi = tuning.RANGES[name]
+        step = tuning.STEPS[name] * (10 if coarse else 1)
+        v = values[name] + direction * step
+        values[name] = max(lo, min(hi, round(v, 6)))
+        tuning.apply({name: values[name]})
+
+    while True:
+        if cursor < top + 1:
+            top = max(0, cursor - 1)
+        if cursor >= top + per_page:
+            top = cursor - per_page + 1
+
+        screen.fill(BG)
+        screen.blit(font.render(t["tuning_title"], True, (255, 255, 255)), (20, 16))
+        screen.blit(font.render(t["tuning_hint"], True, HUD_HINT), (20, 38))
+        screen.blit(font.render(t["tuning_hint2"], True, HUD_HINT), (20, 56))
+
+        y = 84
+        for i in range(top, min(len(rows), top + per_page)):
+            kind, item = rows[i]
+            if kind == "group":
+                screen.blit(font.render(item, True, HUD_ACCENT), (20, y))
+                y += 20
+                continue
+            name = item
+            locked = name in tuning.LOCKED
+            here = (i == cursor)
+            if here:
+                pygame.draw.rect(screen, (32, 40, 28), (16, y - 2, SCREEN_W - 32, 18))
+            builtin = tuning.BUILTIN[name]
+            value = values.get(name, builtin)
+            moved = not locked and abs(value - builtin) > 1e-12
+            pinned = name in saved
+            name_col = (90, 96, 86) if locked else \
+                       (255, 210, 120) if moved else TEXT_COLOR
+            screen.blit(font.render(("> " if here else "  ") + name, True, name_col), (20, y))
+            if locked:
+                shown = f"{builtin:g}"
+            else:
+                shown = f"{value:g}" if not tuning.is_int(name) else f"{int(value)}"
+            screen.blit(font.render(shown, True, name_col), (330, y))
+            # what it was born as, whenever that is not what it is now
+            if moved:
+                screen.blit(font.render(t["tuning_was"].format(v=f"{builtin:g}"),
+                                        True, (150, 120, 80)), (410, y))
+            if pinned:
+                screen.blit(font.render("*", True, (150, 220, 140)), (318, y))
+            note = tuning.LOCKED[name] if locked else tuning.DOCS.get(name, "")
+            if note:
+                screen.blit(font.render(note[:74], True,
+                                        (86, 92, 82) if locked else HUD_HINT), (530, y))
+            y += 20
+
+        n_moved = sum(1 for n in tuning.tunables()
+                      if abs(values[n] - tuning.BUILTIN[n]) > 1e-12)
+        n_params = sum(1 for kind, _ in rows if kind == "param")
+        foot = t["tuning_footer"].format(shown=n_params, moved=n_moved, pinned=len(saved))
+        screen.blit(font.render(foot, True, TEXT_COLOR), (20, SCREEN_H - 44))
+        if status:
+            screen.blit(font.render(status, True, (150, 220, 140)), (20, SCREEN_H - 24))
+        pygame.display.flip()
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type != pygame.KEYDOWN:
+                continue
+            key, mods = event.key, pygame.key.get_mods()
+            coarse = bool(mods & pygame.KMOD_SHIFT)
+            if key in (pygame.K_ESCAPE, pygame.K_p):
+                return
+            elif key == pygame.K_DOWN:
+                move(1)
+            elif key == pygame.K_UP:
+                move(-1)
+            elif key == pygame.K_PAGEDOWN:
+                for _ in range(per_page):
+                    move(1)
+            elif key == pygame.K_PAGEUP:
+                for _ in range(per_page):
+                    move(-1)
+            elif key in (pygame.K_RIGHT, pygame.K_EQUALS, pygame.K_PLUS):
+                nudge(rows[cursor][1], +1, coarse)
+            elif key in (pygame.K_LEFT, pygame.K_MINUS):
+                nudge(rows[cursor][1], -1, coarse)
+            elif key == pygame.K_BACKSPACE:      # this one back to built-in
+                name = rows[cursor][1]
+                if name in tuning.LOCKED:
+                    status = t["tuning_status_locked"].format(
+                        name=name, why=tuning.LOCKED[name])
+                    continue
+                values[name] = tuning.BUILTIN[name]
+                tuning.apply({name: values[name]})
+                status = t["tuning_status_one_reset"].format(name=name)
+            elif key == pygame.K_d:              # make these the defaults
+                n = tuning.save(values)
+                saved = tuning.load()
+                status = (t["tuning_status_saved"].format(n=n, file=tuning.PARAMS_FILE)
+                          if n else t["tuning_status_cleared"])
+            elif key == pygame.K_r:              # everything back to built-in
+                tuning.reset_to_builtin()
+                values = tuning.current()
+                status = t["tuning_status_reset"]
 
 
 def flash_message(screen, font, lang, text):
@@ -2081,7 +2263,14 @@ def main():
 
     world = None
     master_mode = False
-    start = choose_start(screen, font, lang, os.path.exists(DEFAULT_SAVE_FILE))
+    # a value pinned in the tuning screen is the default for this run, so it has
+    # to land before the first world is built
+    tuning.load_and_apply()
+    while True:
+        start = choose_start(screen, font, lang, os.path.exists(DEFAULT_SAVE_FILE))
+        if start != "tuning":
+            break
+        show_tuning(screen, font, lang)
     if start == "master":
         master_mode = True
     elif start == "resume":

@@ -3,4 +3,5 @@ __pycache__/
 *.pt
 language_model.json
 thronglets_save.json
+thronglets_params.json
 gl_poc.png

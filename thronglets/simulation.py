@@ -30,47 +30,47 @@ N_TOKENS = 6  # token 0 means "silent"
 
 SEE_RADIUS = 18.0    # a creature can directly spot food/mates within this range
 HEAR_RADIUS = 34.0   # but it can *hear* a signal from further away than it can see
-SPEED = 1.6
-WANDER_STRENGTH = 0.5
-DRIVE_STRENGTH = 1.2
-FLEE_STRENGTH = 1.8
-SIGNAL_STRENGTH = 0.9
-EDGE_MARGIN = 12.0
-EDGE_PUSH = 1.0
+SPEED = 1.6                   # how far a creature moves per tick at full effort
+WANDER_STRENGTH = 0.5         # how much aimless drift there is when nothing is pressing
+DRIVE_STRENGTH = 1.2          # the pull toward whatever it currently wants
+FLEE_STRENGTH = 1.8           # the shove away from a predator - deliberately the strongest urge
+SIGNAL_STRENGTH = 0.9         # how loudly a call is heard at its source
+EDGE_MARGIN = 12.0            # how close to the world's edge before it is nudged back
+EDGE_PUSH = 1.0               # how firmly that nudge acts
 
-PREDATOR_SPEED = 1.3
-PREDATOR_HUNT_RADIUS = 70.0
-PREDATOR_KILL_RADIUS = 3.0
+PREDATOR_SPEED = 1.3          # slower than a creature at full tilt - so fleeing can work
+PREDATOR_HUNT_RADIUS = 70.0   # how far a predator will look for prey
+PREDATOR_KILL_RADIUS = 3.0    # how close it must get to make the kill
 PREDATOR_SEPARATION_RADIUS = 20.0  # predators this close to each other push apart
-PREDATOR_SEPARATION_STRENGTH = 2.0
+PREDATOR_SEPARATION_STRENGTH = 2.0# how hard predators push apart, so they hunt spread out
 DANGER_RADIUS = 22.0  # how far a creature can spot a predator directly
 DEFAULT_PREDATOR_COUNT = 6  # used in automatic mode unless the caller picks another number
 MAX_PREDATORS = 30  # safety cap, for both the automatic count and manual placement
 
-METABOLISM = 0.06
+METABOLISM = 0.06             # energy burnt every tick just by being alive
 SIGNAL_COST = 0.025  # extra energy drain for emitting any non-silent token
-INIT_ENERGY = 60.0
-MAX_ENERGY = 120.0
-EAT_RADIUS = 4.0
-FOOD_VALUE = 30.0
+INIT_ENERGY = 60.0            # what a creature starts life with
+MAX_ENERGY = 120.0            # a full stomach - hunger is measured against this
+EAT_RADIUS = 4.0              # how close it must get to actually eat
+FOOD_VALUE = 30.0             # energy one piece of food restores
 DISTRESS_ENERGY = 20.0        # below this, with no food in sight, a creature is in distress
 DISTRESS_SEARCH_STRENGTH = 1.0  # a wider, more urgent search than plain idle wandering
 
-MATE_ENERGY = 75.0
-MIN_MATE_AGE = 60
-MATE_RADIUS = 5.0
-MATE_COST = 20.0
-BUD_ENERGY = 95.0
-BUD_COST = 40.0
+MATE_ENERGY = 75.0            # energy needed before it will consider pairing
+MIN_MATE_AGE = 60             # how old it must be to breed at all
+MATE_RADIUS = 5.0             # how close two creatures must be to pair
+MATE_COST = 20.0              # what pairing costs each parent
+BUD_ENERGY = 95.0             # energy needed to bud a clone alone, without a partner
+BUD_COST = 40.0               # what budding costs - dearer than pairing, so sex stays worth it
 
-MAX_AGE = 3200
-MAX_POPULATION = 220
+MAX_AGE = 3200                # ticks a creature can live before old age takes it
+MAX_POPULATION = 220          # the ceiling - past it, no more births
 FOOD_PATCH_SIZE = (4, 8)
-FOOD_SPAWN_INTERVAL = 20
-MAX_FOOD = 140
+FOOD_SPAWN_INTERVAL = 20      # ticks between fresh patches appearing
+MAX_FOOD = 140                # how much food the world will hold at once
 
-MUTATION_RATE = 0.12
-MUTATION_SCALE = 0.35
+MUTATION_RATE = 0.12          # chance a given inherited gene is nudged at all
+MUTATION_SCALE = 0.35         # how far it is nudged when it is
 
 VOCAB_HISTORY_INTERVAL = 20  # ticks between samples - unbounded, covers the whole run
 
@@ -134,13 +134,17 @@ F_SIGNAL = 8                  # signals for tokens 1..N_TOKENS-1 live at F_SIGNA
 # Hearing a call you have learned to dread is itself frightening - the word
 # moves you before the thing it warns of arrives. Scaled by how much worse the
 # voices make the moment look than silence would.
-SIGNAL_ALARM_DV = 0.5         # how far a dreaded call pushes valence down
-SIGNAL_ALARM_DA = 0.6         # and arousal up
+# These shift the resting mood while the voices last, so at full dread a
+# creature settles into fear (valence past -0.18, arousal past 0.5) and eases
+# back out when the calling stops.
+SIGNAL_ALARM_DV = 0.35        # how far a fully dreaded call pulls the resting valence down
+SIGNAL_ALARM_DA = 0.45        # and the resting arousal up
 # Below this a call means nothing in particular and is ignored. Set from what
 # creatures actually learn (meanings land around 0.05 at full volume, less at
 # realistic distances) - and safe to keep low because a naive mind values every
 # call at exactly 0.0, so early noise cannot trip it.
-SIGNAL_ALARM_MIN = 0.012
+SIGNAL_ALARM_MIN = 0.012      # below this a call means nothing in particular and is ignored
+SIGNAL_ALARM_FULL = 0.06      # an alarm this large is as frightening as it gets
 LEARN_HIDDEN = 10             # hidden units in the shared trunk
 N_ACTIONS = 3                 # the choices the actor picks between
 ACT_APPROACH, ACT_FLEE, ACT_IGNORE = 0, 1, 2
@@ -159,10 +163,10 @@ LOOKAHEAD = 0.35              # how much nearer/further a step is imagined to ge
 # corrects the whole run-up to it, faded by how long ago each moment was. This
 # is what lets a creature connect a blow to the approach that preceded it in
 # ONE experience instead of needing the sequence over and over.
-TD_LAMBDA = 0.9
+TD_LAMBDA = 0.9               # how far back through a run-up a correction reaches (0 = last step only)
 # a predator killing a neighbour is the world's own lesson, learned by whoever
 # was near enough to see it - the same way the player's cruelty is learned
-PREDATOR_TRAUMA_RATE = 0.16
+PREDATOR_TRAUMA_RATE = 0.16   # how deeply seeing a predator kill teaches the witnesses
 # Experience replay. Learning only in the moment wastes the rarest lessons: a
 # burning or a neighbour taken by a predator happens once, while the steady
 # drift of ordinary uneventful steps quietly erodes it (measured - the predator
@@ -250,6 +254,7 @@ MOOD_AROUSAL_REST = 0.18      # gently calm at rest
 # there to show, with deprivation shading it rather than deciding it.
 MOOD_GLOOM_ONSET = DISTRESS_ENERGY * 2.0   # 40: below this, deprivation starts to show
 MOOD_GLOOM_WEIGHT = 0.35                   # at its very worst, versus a 0.55 feeding
+MOOD_GLOOM_AROUSAL = 0.18                  # and how much it agitates (kept under the fear threshold)
 MOOD_FEED_DV, MOOD_FEED_DA = 0.55, 0.22   # being fed: happier, a little excited
 MOOD_HARM_DV, MOOD_HARM_DA = -0.95, 0.75  # being hurt: miserable and panicked
 MOOD_WITNESS = 0.35           # fraction of a jolt a neighbour feels just from watching
@@ -1024,10 +1029,21 @@ class World:
             # would, that IS alarm - it is frightened by the call before
             # whatever the call is about ever reaches it. A creature that has
             # not learned that colour yet hears nothing but noise and is unmoved.
+            #
+            # This shifts the resting BASELINE rather than delivering a jolt.
+            # Being called to is a condition that holds, not an event that
+            # happens: a jolt applied every step while the calling lasts
+            # accumulates without bound (feel() is for discrete events), and
+            # measurably swamped everything else - it accounted for 100% of the
+            # fear in an idle world and moved the median mood by +/-0.2 on its
+            # own. As a baseline it does what it should: dread builds while the
+            # voices keep up and drains away when they stop, at the same
+            # MOOD_DECAY pace as every other feeling, and it cannot run away.
+            dread = 0.0
             if heard.any():
                 alarm = c.mind.value(Mind._hushed(feat)) - c.mind.value(feat)
                 if abs(alarm) > SIGNAL_ALARM_MIN:
-                    c.mind.feel(-alarm * SIGNAL_ALARM_DV, alarm * SIGNAL_ALARM_DA)
+                    dread = max(-1.0, min(1.0, alarm / SIGNAL_ALARM_FULL))
             # let the persistent mood breathe: its resting baseline is set by
             # the body right now - a well-fed creature drifts toward calm
             # content, one heading for starvation toward miserable - and the
@@ -1040,7 +1056,10 @@ class World:
             gloom = min(1.0, max(0.0, (MOOD_GLOOM_ONSET - c.energy)
                                  / (MOOD_GLOOM_ONSET - DISTRESS_ENERGY)))
             valence_rest = MOOD_VALENCE_REST - gloom * MOOD_GLOOM_WEIGHT
-            arousal_rest = MOOD_AROUSAL_REST + gloom * 0.18
+            arousal_rest = MOOD_AROUSAL_REST + gloom * MOOD_GLOOM_AROUSAL
+            # and what it can hear right now, on the same footing as its body
+            valence_rest -= dread * SIGNAL_ALARM_DV
+            arousal_rest += dread * SIGNAL_ALARM_DA
             # a broken creature stays hollowed out: its resting mood is dragged
             # toward a numb, joyless floor in proportion to how broken it is, so
             # the emptiness lasts instead of quietly healing back to neutral.
