@@ -142,8 +142,25 @@ predator and they learn to flee it.** Creatures that trust you come from a
 good way off and gather loosely near the cursor, holding a respectful
 standoff rather than piling onto the exact point (so they no longer crowd it
 or set off the proximity chime by themselves). Over a session the flock comes to
-**trust or fear you**, and passes what it learned on to its offspring, so a
-kind or cruel run compounds across generations. When it's on, it's shown
+**trust or fear you**, and passes some of what it learned on to its offspring -
+but it does **not** compound across generations, and the honest number matters
+here. A newborn keeps `INHERIT_BLEND = 0.85` of its parents' learned weights, so
+every birth sheds 15%. Measured: teach a flock hard, then take your hand away
+forever, and **86%** of the lesson survives 2000 ticks, **18%** survives 4000, and
+by 6000 ticks - about eight generations of turnover - it is **gone**, oscillating
+around zero. The real decay runs faster than the blend arithmetic alone, because
+the living keep learning too: they don't merely forget you, they re-learn your
+absence.
+
+That is a deliberate design, not a defect, but its consequence is worth stating
+plainly: **this species cannot accumulate culture.** A creature learns from
+predators and from your hand, and inherits a damped copy at birth - but
+`OBSERVE_RATE` fires only inside `deliver_experience`, so nothing lets a creature
+that knows something teach one that doesn't. Real populations survive lossy
+inheritance because the living re-transmit knowledge to each other constantly;
+these creatures have no such channel, so the leak is never refilled. Over a long
+session, whatever you taught early is mathematically erased - which is exactly
+what a player who ran 300,000 ticks reported seeing, and they were right. When it's on, it's shown
 several ways: a colour-coded line on its own row under the HUD header (*"the
 flock trusts you (+76%)"* / *"…fears you"*). That line has a real **neutral
 band** — a flock nobody has touched reads *"doesn't know you yet"*, not
