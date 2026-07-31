@@ -20,9 +20,9 @@ you changed. Values outside a parameter's safe range, locked parameters and
 unknown names are all refused with the reason.
 
 It is not fast, because there is no shortcut: these numbers only exist by living
-the worlds out. Measured on one ordinary laptop, --quick took about 3 minutes and
-the standard sweep about 11; yours will differ. Progress prints to the terminal
-as it goes, so you can tell it apart from a hang.
+the worlds out. Timed on one ordinary laptop: --quick about 3 minutes, the
+standard sweep about 14. Yours will differ. Progress prints to the terminal as it
+goes, so you can tell it apart from a hang.
 
 The file it writes is meant to be *sent to someone*, so it is self-contained:
 it opens with the parameters actually in force (including any you pinned in the

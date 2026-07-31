@@ -448,7 +448,7 @@ about two values that are both essentially zero, which reads as the exact
 opposite of the claim.
 
 It is not fast - these numbers only exist by living the worlds out. On one
-ordinary laptop `--quick` took about 3 minutes and the standard sweep about 11.
+ordinary laptop `--quick` took about 3 minutes and the standard sweep about 14.
 Progress prints as it goes so you can tell it from a hang.
 
 ## Parameters: every number, in one place (`P` at startup)
