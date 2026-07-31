@@ -556,7 +556,16 @@ degrading gracefully; the flock's decisions accounting for the whole population,
 so a divided flock stays distinguishable from an indifferent one; and the flock
 still being alive at the end. With learning off, every learned readout must
 decline to answer rather than invent one. Every world is seeded, so two runs
-print the same numbers.
+print the same numbers **on the same machine** - but not across machines. Running
+the identical seeds on Linux (numpy 2.4.6) and Windows (numpy 2.5.1) produced
+visibly different worlds: 190 deaths against 198, and a flock that died out on
+one machine while surviving on the other. The random stream is the same;
+floating-point arithmetic is not, and this simulation is chaotic enough that a
+last-bit difference compounds into a different history. What crosses machines is
+the *effects*: the learned value of a predator agreed to within 0.003, the most
+dreaded call to within 0.004, and all five claims held on both. That is the
+better guarantee, and the reason `report.py` averages over seeds and prints
+spreads instead of quoting single worlds.
 
 ## Bonus: a *true* 3D proof-of-concept (`main_gl.py`)
 

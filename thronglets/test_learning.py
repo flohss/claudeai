@@ -14,9 +14,16 @@ learned flight response that drove the population extinct. None of them were
 visible in play.
 
 Runs in about five minutes; --quick does the instant half in seconds. Every
-world is seeded, so two runs of this file print the same numbers - and the
-thresholds sit well clear of those numbers. A failure here means something
-really changed, not that a run got unlucky.
+world is seeded, so two runs of this file ON THE SAME MACHINE print the same
+numbers - but not across machines. Measured: identical seeds on Linux/numpy
+2.4.6 and Windows/numpy 2.5.1 gave visibly different worlds (190 deaths versus
+198, and one scenario where a flock died out on one machine and survived on the
+other). The random stream is identical; floating-point arithmetic is not, and
+this simulation is chaotic enough that a last-bit difference grows into a
+different history. What DOES carry across is the measured effects - the learned
+value of a predator agreed to within 0.003. So the thresholds here are set
+against effects, not against particular worlds, and they sit well clear. A
+failure means something really changed, not that a run got unlucky.
 
     python3 test_learning.py            # everything
     python3 test_learning.py --quick    # skip the slow ecosystem checks
