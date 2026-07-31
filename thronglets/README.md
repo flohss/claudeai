@@ -408,7 +408,17 @@ file you can send to someone:
 python3 report.py                  # 3 seeds x 1500 ticks, six scenarios
 python3 report.py --quick          # 2 seeds x 600 ticks, a rough first look
 python3 report.py --seeds 5 --ticks 3000 --out long_run.txt
+
+# try a change without committing to it - your game is untouched
+python3 report.py --quick --out before.txt
+python3 report.py --quick --set SIGNAL_ALARM_DA=0.25 --out after.txt
 ```
+
+`--set` is the companion to the tuning screen: the screen is for *playing* with a
+value, this is for *measuring* one. Nothing is pinned, but the header records the
+change, so two runs make a comparable pair without you having to remember what
+you tried. Out-of-range values, locked parameters and unknown names are refused
+with the reason.
 
 It plays six scenarios - hunted and unhunted with nobody touching the game, a
 hand that only wanders, a hand that feeds, a hand that burns, and learning

@@ -9,6 +9,16 @@ command, a text file, every figure with its spread across seeds.
     python3 report.py --quick          # 2 seeds x 600 ticks, a rough first look
     python3 report.py --seeds 5 --ticks 3000 --out long_run.txt
 
+To try a parameter WITHOUT committing to it, --set changes it for that run only:
+
+    python3 report.py --quick --out before.txt
+    python3 report.py --quick --set SIGNAL_ALARM_DA=0.25 --out after.txt
+
+Nothing is pinned and your game is untouched, but the header records what was
+tried - so the two files are a comparable pair without having to remember what
+you changed. Values outside a parameter's safe range, locked parameters and
+unknown names are all refused with the reason.
+
 It is not fast, because there is no shortcut: these numbers only exist by living
 the worlds out. Measured on one ordinary laptop, --quick took about 3 minutes and
 the standard sweep about 11; yours will differ. Progress prints to the terminal
@@ -338,12 +348,34 @@ def main():
     ap.add_argument("--seeds", type=int, default=3, help="how many seeds per scenario")
     ap.add_argument("--ticks", type=int, default=1500, help="ticks per world")
     ap.add_argument("--out", default="thronglets_report.txt", help="file to write")
+    ap.add_argument("--set", action="append", default=[], metavar="NAME=VALUE",
+                    help="try a parameter without pinning it as your default, e.g. "
+                         "--set SIGNAL_ALARM_DA=0.25 . Repeatable. The header records "
+                         "it, so two runs make a comparable pair.")
     ap.add_argument("--quick", action="store_true",
                     help="2 seeds x 600 ticks - a rough first look, roughly a third "
                          "of the time")
     args = ap.parse_args()
     if args.quick:
         args.seeds, args.ticks = 2, 600
+
+    # --set lands AFTER any pinned defaults, so a value you are trying beats the
+    # one you have saved. Both show up in the header either way.
+    for item in args.set:
+        name, _, raw = item.partition("=")
+        name = name.strip()
+        if name not in T.BUILTIN:
+            ap.error(f"unknown parameter {name!r} - see the P screen for the list")
+        if name in T.LOCKED:
+            ap.error(f"{name} cannot be changed: {T.LOCKED[name]}")
+        try:
+            value = float(raw)
+        except ValueError:
+            ap.error(f"{name} needs a number, got {raw!r}")
+        lo, hi = T.RANGES[name]
+        if not lo <= value <= hi:
+            ap.error(f"{name}={value:g} is outside its safe range {lo:g}..{hi:g}")
+        T.apply({name: value})
 
     seeds = [5 + 4 * i for i in range(args.seeds)]
     lines = header(seeds, args.ticks)
