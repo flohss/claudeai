@@ -152,15 +152,46 @@ around zero. The real decay runs faster than the blend arithmetic alone, because
 the living keep learning too: they don't merely forget you, they re-learn your
 absence.
 
-That is a deliberate design, not a defect, but its consequence is worth stating
-plainly: **this species cannot accumulate culture.** A creature learns from
-predators and from your hand, and inherits a damped copy at birth - but
-`OBSERVE_RATE` fires only inside `deliver_experience`, so nothing lets a creature
-that knows something teach one that doesn't. Real populations survive lossy
-inheritance because the living re-transmit knowledge to each other constantly;
-these creatures have no such channel, so the leak is never refilled. Over a long
-session, whatever you taught early is mathematically erased - which is exactly
-what a player who ran 300,000 ticks reported seeing, and they were right. When it's on, it's shown
+Inheritance leaking is deliberate - it really is lossy in life. What was missing
+was the other half. Real populations tolerate lossy inheritance because **the
+living re-transmit knowledge to each other constantly**, and until recently these
+creatures had no such channel at all: `OBSERVE_RATE` fires only inside
+`deliver_experience`, so nothing let a creature that knew something teach one
+that didn't. The leak was never refilled.
+
+**They have a culture now.** Every step, a creature edges its appraisal of the
+moment it is living toward what its neighbours make of theirs (`CULTURE_RADIUS`,
+`CULTURE_RATE`) - standing close, they see much the same scene, so their
+judgement is evidence about it. This is learning from the demeanour of those
+around you, which is how a fear of something outlives everyone who ever met it.
+Measured against the same experiment: teaching a flock and then withdrawing your
+hand forever, culture **nearly tripled** how far the lesson reached (peak +0.054
+to +0.159) and more than doubled what remained 3000 ticks later (+0.017 to
++0.040).
+
+Three properties keep it from becoming an echo chamber, and getting them right
+took two failed attempts worth recording:
+
+- **It averages**, so it can never push a belief past the strongest neighbour. A
+  flock that was taught nothing stays at nothing - hearsay cannot manufacture
+  evidence, and a check asserts it.
+- **It is weighted by conviction.** Plain proximity-weighted averaging is
+  diffusion: when only a few have been taught, the many who have not drag them
+  back toward ignorance harder than they pull anyone forward. It measurably made
+  things *worse*. Weighting each neighbour by how pronounced its appraisal is
+  fixes the direction of flow - a creature with nothing to say says nothing.
+- **It never touches the replay buffer.** `teach()` normally files a moment as a
+  lesson worth re-living, but this fires every step for every creature and the
+  buffer holds only `REPLAY_SIZE` moments, so it was evicting the rare shocks
+  the buffer exists to preserve. That single side effect wrecked both the feature
+  *and* the control run measuring it, until the buffer became the suspect. Hence
+  `teach(..., keep=False)`.
+
+What culture does **not** do is defeat the decay, and that is the honest limit:
+diffusion spreads what exists, it cannot generate. Stop teaching and the 15%
+per-birth leak still drains the total to zero, just from a much larger starting
+pool and more slowly. To make a lesson genuinely permanent you would raise
+`INHERIT_BLEND` as well - both are in the `P` screen, so you can try it. When it's on, it's shown
 several ways: a colour-coded line on its own row under the HUD header (*"the
 flock trusts you (+76%)"* / *"…fears you"*). That line has a real **neutral
 band** — a flock nobody has touched reads *"doesn't know you yet"*, not

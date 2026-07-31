@@ -299,6 +299,47 @@ def check_dread_from_calls_is_bounded_and_lets_go():
     assert m.valence > settled + 0.05, "dread never let go once the calling stopped"
 
 
+def check_culture_spreads_but_never_invents():
+    """Cultural transmission must carry knowledge sideways between the living
+    without manufacturing any.
+
+    Two properties, both of which a first attempt got wrong:
+
+    - A flock where nobody knows anything must stay at nothing. Transmission is
+      a weighted average of what the neighbours already think, so it can never
+      push a belief past the strongest of them - hearsay cannot create evidence.
+    - It must not touch the replay buffer. teach() normally files the moment as
+      a lesson worth re-living, but this fires every step for every creature,
+      and REPLAY_SIZE is 8 - so it evicted the rare shocks the buffer exists to
+      preserve, which silently damaged learning AND the control run measuring
+      it. Hence keep=False."""
+    # disposition, not value(): the value of a whole situation legitimately
+    # moves as a creature learns about hunger and food. What must stay at zero
+    # is specifically its view of a player who has never touched it, which
+    # disposition() isolates by construction.
+    quiet = S.World(init_pop=40, seed=4, learning=True, manual_predators=True)
+    for _ in range(400):
+        quiet.step()
+    worst = max(abs(m.disposition()) for m in minds(quiet))
+    flock = quiet.disposition_summary()
+    print(f"  a flock the player never touched, after 400 ticks of talking: "
+          f"flock {flock:+.4f}, most opinionated individual {worst:.4f}")
+    assert abs(flock) < 0.05, "culture invented a flock-wide opinion nobody earned"
+    assert worst < 0.25, "culture talked one creature into a strong view of a player it never met"
+
+    # a routine cultural nudge must leave the memory of shocks alone
+    m = S.Mind()
+    feat = S.Mind.features(0.5, 0.2)
+    m.teach(-1.0, feat, S.LEARN_RATE)          # a real shock: this one is kept
+    kept = len([x for x in m.replay if x is not None]) if hasattr(m, "replay") else None
+    for _ in range(50):
+        m.teach(0.01, feat, S.CULTURE_RATE, keep=False)
+    after = len([x for x in m.replay if x is not None]) if hasattr(m, "replay") else None
+    if kept is not None:
+        print(f"  shocks remembered: {kept} before 50 cultural nudges, {after} after")
+        assert after == kept, "cultural transmission flooded the replay buffer"
+
+
 def check_the_flock_can_be_divided():
     """The averaged disposition cannot tell a split flock from an indifferent
     one, which is what choice_summary exists for. Both must be readable."""
@@ -348,6 +389,7 @@ def main():
             ("a mind survives being saved", check_a_mind_survives_being_saved),
             ("dread from a call is bounded and lets go",
              check_dread_from_calls_is_bounded_and_lets_go),
+            ("culture spreads but never invents", check_culture_spreads_but_never_invents),
             ("a flock can be divided, not just averaged", check_the_flock_can_be_divided),
             ("living out several whole lives", live_several_lives),
             ("re-living shocks deepens rare lessons",

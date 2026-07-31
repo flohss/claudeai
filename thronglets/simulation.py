@@ -298,6 +298,39 @@ MEM_INHERIT = 0.6             # how much of the parents' maps a newborn is born 
 MOOD_CONTAGION_RADIUS = 30.0  # world units within which moods rub off
 MOOD_CONTAGION = 0.09         # per step, fraction of the way toward neighbours' mood
 
+# --- culture: the living teach each other ------------------------------------
+# Inheritance leaks. A newborn keeps INHERIT_BLEND of what its parents learned,
+# so every birth sheds 15% and a lesson is mathematically gone within about
+# eight generations - measured, and reported by a player who ran 300,000 ticks
+# and found nothing had been retained. Real populations tolerate lossy
+# inheritance because the living re-transmit knowledge constantly; without such
+# a channel the leak is never refilled and no culture can accumulate.
+#
+# So: a creature nudges its appraisal of the moment it is living toward what its
+# neighbours make of theirs. Standing close, they see much the same scene, so
+# their judgement is evidence about it - this is learning from the demeanour of
+# those around you, which is how fear of a thing outlives everyone who met it.
+#
+# Three properties make this safe rather than an echo chamber:
+#   - it AVERAGES, so it can never push a belief past the strongest neighbour;
+#     a flock where nobody knows anything stays at nothing.
+#   - it is weighted by CONVICTION, which a first attempt got wrong and had to
+#     be measured to discover. Plain proximity-weighted averaging is diffusion:
+#     when only a few creatures have been taught, the many who have not drag
+#     them back toward ignorance far harder than they pull anyone forward. It
+#     measurably made things WORSE - the peak of a taught lesson fell from
+#     +0.166 to +0.094 and still vanished by 6000 ticks. Weighting each
+#     neighbour by how pronounced its appraisal is fixes the direction of flow:
+#     a creature with nothing to say says nothing, so knowledge spreads while
+#     ignorance does not.
+#   - it is far weaker than experience (a third of OBSERVE_RATE, an eighth of
+#     LEARN_RATE), so evidence always beats hearsay.
+#   - it teaches an appraisal of a SITUATION, never a genome or an action, so
+#     what spreads is "this kind of moment is dangerous", which the world can
+#     still contradict.
+CULTURE_RADIUS = 26.0         # world units within which knowledge passes between the living
+CULTURE_RATE = 0.006          # per step, how far toward the neighbours' appraisal
+
 
 def _mem_cell(pos):
     """Which affect-map cell (row, col) a world position falls in."""
@@ -708,7 +741,7 @@ class Mind:
         and from there TD carries it back through whatever led up to it."""
         self._pending += reward
 
-    def teach(self, reward, feat, rate):
+    def teach(self, reward, feat, rate, keep=True):
         """A lesson tied to a specific situation - the player acting on this
         creature, or this creature watching it happen to a neighbour. The
         prediction is pulled hard toward the truth of that moment; that is what
@@ -719,8 +752,14 @@ class Mind:
         surprise = reward - self.value(feat)
         self._apply(surprise, self._grad_value(feat), rate * 4.0)
         # a lesson this sharp is kept and gone over again long afterwards,
-        # which is what stops it being eroded by the quiet stretch that follows
-        self._keep(abs(surprise), feat, reward)
+        # which is what stops it being eroded by the quiet stretch that follows.
+        # keep=False is for lessons that arrive EVERY step rather than as rare
+        # events: the replay buffer holds only REPLAY_SIZE moments, so feeding
+        # it a routine one per step evicts the genuine shocks it exists to
+        # preserve. That mistake silently wrecked cultural transmission - and
+        # its control run - until the buffer was the suspect.
+        if keep:
+            self._keep(abs(surprise), feat, reward)
 
     def disposition(self):
         """How the flock has come to regard the hand, -1 (flees you) .. +1
@@ -928,6 +967,7 @@ class World:
         if self.learning:
             self._learn_sense()
             self._spread_mood()
+            self._spread_knowledge()
             if self.master_mode:
                 self._master_rebellion()
         self._move()
@@ -1074,6 +1114,51 @@ class World:
             c.mind.memory *= MEM_DECAY   # the map of good/bad places fades slowly
         # remember where the hand was, to measure its approach speed next step
         self._prev_hand_np = self._hand_np
+
+    def _spread_knowledge(self):
+        """Cultural transmission: each creature edges its appraisal of the
+        moment it is living toward what the creatures around it make of theirs.
+
+        Costs almost nothing: sense() already stored every mind's situation and
+        its verdict on it as `_last`, so this reads judgements that have just
+        been computed rather than running the networks again.
+
+        Read from a snapshot, like mood contagion, so knowledge travels as a
+        wave over many steps instead of racing around the flock inside one."""
+        if CULTURE_RATE <= 0.0:
+            return
+        c_ = self._cache
+        alive = c_["alive"]
+        if len(alive) < 2:
+            return
+        pair_d = c_["pair_d"]
+        # what each creature currently makes of its own moment
+        verdict = np.array([c.mind._last[1] if (c.mind is not None
+                                                and c.mind._last is not None) else np.nan
+                            for c in alive])
+        knows = ~np.isnan(verdict)
+        if knows.sum() < 2:
+            return
+        within = (pair_d < CULTURE_RADIUS) & knows
+        for k, c in enumerate(alive):
+            if c.mind is None or c.mind._last is None:
+                continue
+            neigh = np.where(within[k])[0]
+            if neigh.size == 0:
+                continue
+            # closeness AND conviction: a neighbour standing right here with a
+            # strong reading of the moment teaches; an indifferent one does not
+            w = (1.0 - pair_d[k, neigh] / CULTURE_RADIUS) * np.abs(verdict[neigh])
+            wsum = float(w.sum())
+            if wsum <= 1e-9:
+                continue
+            theirs = float(np.dot(verdict[neigh], w) / wsum)
+            feat, _mine = c.mind._last
+            # teach() pulls this creature's reading of THIS situation toward the
+            # reading its neighbours have of the moment they share with it
+            # keep=False: this arrives every step, and must not crowd the
+            # replay buffer that holds the flock's rare, sharp lessons
+            c.mind.teach(theirs, feat, CULTURE_RATE, keep=False)
 
     def _spread_mood(self):
         """Emotional contagion: nudge every mind's mood toward the closeness-
