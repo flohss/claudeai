@@ -28,6 +28,34 @@ The general lesson stands: a measured claim describes the code it was measured
 on. When the simulation changes inside a measured path, the figure is debt until
 it is re-run.
 
+## Why trust kills: deaths now carry a cause
+
+`deaths` was a single number, which cannot answer the one question worth asking
+when a population moves: predators, or hunger? It is now split four ways -
+`predator`, `starved`, `age`, `killed` (by your own hand) - reconciling exactly
+with the total, carried through a save, and reported by `report.py` as
+`died_predator` and friends. Hunger and old age had shared a single branch and
+so were indistinguishable; starving young and dying full of years are not the
+same event for a flock.
+
+The first thing it measured corrected the story this project had been telling.
+Feeding the flock does gather them into danger - **predator kills rise 61%**
+(55.0 alone against 88.8 when fed, over four seeds x 2000 ticks, higher in
+4/4). They pick "approach" far more often, they cluster around a wandering hand,
+and the predators eat well.
+
+But they also **starve less** (128.8 -> 114.8) and **breed more** (202.5 ->
+223.2), and the two effects cancel: final population 78.8 ± 6.2 alone against
+79.8 ± 7.3 fed. Feeding does not thin the flock here, it *changes what kills
+them* - trading famine for predation.
+
+Which means the earlier claim that kindness collapses populations was
+overstated. That figure (42.7 ± 26.8, with one world in eight dying out) came
+from `report.py`'s three-seed default, and its enormous spread was the warning:
+the collapse is a tail event, not the typical outcome. Four seeds at 2000 ticks
+produced no collapse at all. What is solid is the cause shift; what is not is
+the death toll.
+
 ## Run the measurements yourself (`report.py`)
 
 Every number this project claims came from running worlds headlessly and reading

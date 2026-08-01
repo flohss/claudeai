@@ -100,6 +100,9 @@ def measure(world):
     """Everything worth knowing about a world, as flat named numbers."""
     alive = [c for c in world.creatures if c.alive]
     out = {"population": len(alive), "births": world.births, "deaths": world.deaths}
+    # a bare death count cannot say whether a collapse was predation or hunger
+    for cause, n in getattr(world, "deaths_by", {}).items():
+        out[f"died_{cause}"] = float(n)
     if not alive:
         return out
 
