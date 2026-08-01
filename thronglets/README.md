@@ -190,8 +190,21 @@ took two failed attempts worth recording:
 What culture does **not** do is defeat the decay, and that is the honest limit:
 diffusion spreads what exists, it cannot generate. Stop teaching and the 15%
 per-birth leak still drains the total to zero, just from a much larger starting
-pool and more slowly. To make a lesson genuinely permanent you would raise
-`INHERIT_BLEND` as well - both are in the `P` screen, so you can try it. When it's on, it's shown
+pool and more slowly.
+
+The obvious next move - raise `INHERIT_BLEND` too - was tried and **does not
+survive measurement**, which is worth recording because the first run was so
+convincing. On one seed, 0.99 produced a lesson that kept *growing* after the
+hand withdrew (+0.071 at its peak, +0.109 six thousand ticks later) and still
+held +0.032 at 24,000 ticks where everything else sat at zero. On five seeds it
+falls apart: 0.99 beats 0.85 at +12,000 ticks on **three of five**, two of them
+end negative, and the mean gap of +0.013 is dwarfed by a spread of 0.030. By the
+standard this project applies everywhere else - an effect counts only if it
+clears twice its spread - that is **unproven**. What does hold across seeds is
+the shorter horizon: at +3000 and +6000 ticks 0.99 retains far more (+0.066 vs
++0.026, +0.060 vs +0.005). So `INHERIT_BLEND` is left at 0.85. Both constants
+are in the `P` screen if you want to explore further, but do it on several seeds:
+the single-seed result here was beautiful and wrong. When it's on, it's shown
 several ways: a colour-coded line on its own row under the HUD header (*"the
 flock trusts you (+76%)"* / *"…fears you"*). That line has a real **neutral
 band** — a flock nobody has touched reads *"doesn't know you yet"*, not
