@@ -590,9 +590,11 @@ actually followed that call. Each creature perceives how loudly every signal
 colour is being called nearby, and TD does the rest. A flock that has lived
 among predators comes to dread some of its own calls; **a flock that has never
 met one hears the very same words as noise.** Measured across three seeds, the
-most dreaded call lands at **-0.045** in a world with predators and **-0.002**
-in one without - a nineteenfold difference from experience alone, with the words
-themselves unchanged. Once a call *does* mean something, hearing it is
+most dreaded call lands at **-0.047** in a world with predators and **-0.004**
+in one without (eight seeds, re-measured after cultural transmission landed) -
+an elevenfold difference from experience alone, with the words themselves
+unchanged, and no overlap: the mildest hunted world still dreads its worst call
+more than the sharpest unhunted world dreads anything. Once a call *does* mean something, hearing it is
 frightening in itself: the word moves a creature before the thing it warns of
 ever arrives. A newborn values every call at exactly `0.0` - it has no opinions
 to begin with, only ones it earned.

@@ -8,12 +8,25 @@ kept deliberately - the hypotheses that turned out to be wrong.
 The [README](README.md) describes the game. This describes how we know what it
 does.
 
-**Measurement debt** (flagged by a fresh review pass): the dreaded-call figures
-(-0.045 / -0.002) and the runtimes quoted below were measured *before* cultural
-transmission landed in `simulation.py`. Culture adds a per-step pass inside the
-very path those measurements exercise, so both should be re-measured before
-being quoted as current. The cruelty-vs-kindness buffer figures postdate culture
-and stand.
+**Measurement debt, incurred and paid.** Cultural transmission landed inside the
+very path several published figures were measured on, so they were re-measured
+on the current code rather than assumed:
+
+- *Dreaded call*: means barely moved (-0.047 / -0.004 over eight seeds, was
+  -0.045 / -0.002 before culture) but the between-world spread roughly tripled
+  at small samples - culture amplifies whatever each world happened to learn.
+  Consequence: on a default 3-seed run, report.py's own claims section can now
+  flag this one as "unproven" purely from the sd estimate; at eight seeds it
+  clears the bar cleanly (gap 0.043 vs a 2-sigma bar of 0.033) with no overlap
+  between the sixteen worlds. If that claim matters to you, run --seeds 8.
+- *Kindness vs cruelty*: the gap GREW under culture (+0.43 vs +0.28) - culture
+  amplifies what you teach, in both directions.
+- *Runtimes*, machine alone on current code: --quick 3m13, standard sweep
+  12m39. The earlier "about 3 / about 14" were close but predate culture.
+
+The general lesson stands: a measured claim describes the code it was measured
+on. When the simulation changes inside a measured path, the figure is debt until
+it is re-run.
 
 ## Run the measurements yourself (`report.py`)
 

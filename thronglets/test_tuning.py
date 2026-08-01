@@ -13,9 +13,11 @@ is how HEAR_RADIUS was caught - it flows into a traits array that is divided by
 later, so its name never appears next to a slash and no amount of reading the
 source would have found it.
 
-    python3 test_tuning.py
+    python3 test_tuning.py            # everything, including the slow sweep
+    python3 test_tuning.py --quick    # skip the 214-extreme sweep
 """
 
+import argparse
 import contextlib
 import io
 import os
@@ -176,6 +178,11 @@ def check_locked_parameters_refuse_to_move():
 
 
 def main():
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--quick", action="store_true",
+                    help="skip the slow every-extreme sweep; the registry, "
+                         "divisor, lock and round-trip guards still run")
+    args = ap.parse_args()
     checks = [
         ("the registry covers the source", check_the_registry_covers_the_source),
         ("descriptions come from the source", check_descriptions_come_from_the_source),
@@ -186,6 +193,8 @@ def main():
          check_paired_parameters_cannot_divide_by_zero),
         ("every extreme is survivable", check_every_extreme_is_survivable),
     ]
+    if args.quick:
+        checks = [(t, f) for t, f in checks if f is not check_every_extreme_is_survivable]
     for title, fn in checks:
         print(f"{title}:")
         fn()
