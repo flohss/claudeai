@@ -152,91 +152,7 @@ around zero. The real decay runs faster than the blend arithmetic alone, because
 the living keep learning too: they don't merely forget you, they re-learn your
 absence.
 
-Inheritance leaking is deliberate - it really is lossy in life. What was missing
-was the other half. Real populations tolerate lossy inheritance because **the
-living re-transmit knowledge to each other constantly**, and until recently these
-creatures had no such channel at all: `OBSERVE_RATE` fires only inside
-`deliver_experience`, so nothing let a creature that knew something teach one
-that didn't. The leak was never refilled.
-
-**They have a culture now.** Every step, a creature edges its appraisal of the
-moment it is living toward what its neighbours make of theirs (`CULTURE_RADIUS`,
-`CULTURE_RATE`) - standing close, they see much the same scene, so their
-judgement is evidence about it. This is learning from the demeanour of those
-around you, which is how a fear of something outlives everyone who ever met it.
-Measured against the same experiment: teaching a flock and then withdrawing your
-hand forever, culture **nearly tripled** how far the lesson reached (peak +0.054
-to +0.159) and more than doubled what remained 3000 ticks later (+0.017 to
-+0.040).
-
-Three properties keep it from becoming an echo chamber, and getting them right
-took two failed attempts worth recording:
-
-- **It averages**, so it can never push a belief past the strongest neighbour. A
-  flock that was taught nothing stays at nothing - hearsay cannot manufacture
-  evidence, and a check asserts it.
-- **It is weighted by conviction.** Plain proximity-weighted averaging is
-  diffusion: when only a few have been taught, the many who have not drag them
-  back toward ignorance harder than they pull anyone forward. It measurably made
-  things *worse*. Weighting each neighbour by how pronounced its appraisal is
-  fixes the direction of flow - a creature with nothing to say says nothing.
-- **It never touches the replay buffer.** `teach()` normally files a moment as a
-  lesson worth re-living, but this fires every step for every creature and the
-  buffer holds only `REPLAY_SIZE` moments, so it was evicting the rare shocks
-  the buffer exists to preserve. That single side effect wrecked both the feature
-  *and* the control run measuring it, until the buffer became the suspect. Hence
-  `teach(..., keep=False)`.
-
-### Cruelty is fewer memories, and deeper
-
-A creature keeps only its `REPLAY_SIZE` most shocking moments and re-lives them.
-Look inside those buffers after a session and the asymmetry is stark - measured
-over five seeds, and it clears this project's own bar by six times the spread:
-
-| | memories that contain your hand | disposition reached |
-|---|---|---|
-| you burn them | **25.3% ± 5.2** | **-0.219 ± 0.032** |
-| you feed them | **66.5% ± 6.7** | +0.112 ± 0.028 |
-
-A fed flock holds **2.6x more** memories of you, yet a burned flock arrives at a
-feeling **twice as strong**. Per memory, cruelty is roughly **five times** as
-potent. Five seeds out of five, no exceptions.
-
-The reason is behavioural, and nobody wrote it: a fed creature *comes to you* (it
-picks "approach" 48% of the time against 33% at rest), so it accumulates
-experience of you. A burned one *flees*, and stops gathering evidence about you
-at all. **Cruelty teaches avoidance, and avoidance prevents you from ever
-learning that someone might mean you well.**
-
-This is also why fear is far more reproducible than trust - the spread on a
-burned flock's disposition is 0.032 against 0.071 for a fed one, and 7.5 against
-16.5 on how much survives 3000 ticks later. A handful of violent lessons all
-point the same way; trust depends on how much contact happened to accumulate,
-which is luck.
-
-Two hypotheses died on the way to this. The replay buffer is **not** inherited
-(`inherit()` returns a fresh one), so it cannot carry a trauma past the death of
-whoever lived it - and it turned out not to be preferentially filled by trauma
-either, but by kindness. The measurement inverted the guess in both directions.
-
-What culture does **not** do is defeat the decay, and that is the honest limit:
-diffusion spreads what exists, it cannot generate. Stop teaching and the 15%
-per-birth leak still drains the total to zero, just from a much larger starting
-pool and more slowly.
-
-The obvious next move - raise `INHERIT_BLEND` too - was tried and **does not
-survive measurement**, which is worth recording because the first run was so
-convincing. On one seed, 0.99 produced a lesson that kept *growing* after the
-hand withdrew (+0.071 at its peak, +0.109 six thousand ticks later) and still
-held +0.032 at 24,000 ticks where everything else sat at zero. On five seeds it
-falls apart: 0.99 beats 0.85 at +12,000 ticks on **three of five**, two of them
-end negative, and the mean gap of +0.013 is dwarfed by a spread of 0.030. By the
-standard this project applies everywhere else - an effect counts only if it
-clears twice its spread - that is **unproven**. What does hold across seeds is
-the shorter horizon: at +3000 and +6000 ticks 0.99 retains far more (+0.066 vs
-+0.026, +0.060 vs +0.005). So `INHERIT_BLEND` is left at 0.85. Both constants
-are in the `P` screen if you want to explore further, but do it on several seeds:
-the single-seed result here was beautiful and wrong. When it's on, it's shown
+When it's on, it's shown
 several ways: a colour-coded line on its own row under the HUD header (*"the
 flock trusts you (+76%)"* / *"…fears you"*). That line has a real **neutral
 band** — a flock nobody has touched reads *"doesn't know you yet"*, not
@@ -543,6 +459,95 @@ opposite of the claim.
 It is not fast - these numbers only exist by living the worlds out. On one
 ordinary laptop `--quick` took about 3 minutes and the standard sweep about 14.
 Progress prints as it goes so you can tell it from a hang.
+
+
+## How a lesson fades, and the culture that slows it
+
+Inheritance leaking is deliberate - it really is lossy in life. What was missing
+was the other half. Real populations tolerate lossy inheritance because **the
+living re-transmit knowledge to each other constantly**, and until recently these
+creatures had no such channel at all: `OBSERVE_RATE` fires only inside
+`deliver_experience`, so nothing let a creature that knew something teach one
+that didn't. The leak was never refilled.
+
+**They have a culture now.** Every step, a creature edges its appraisal of the
+moment it is living toward what its neighbours make of theirs (`CULTURE_RADIUS`,
+`CULTURE_RATE`) - standing close, they see much the same scene, so their
+judgement is evidence about it. This is learning from the demeanour of those
+around you, which is how a fear of something outlives everyone who ever met it.
+Measured against the same experiment: teaching a flock and then withdrawing your
+hand forever, culture **nearly tripled** how far the lesson reached (peak +0.054
+to +0.159) and more than doubled what remained 3000 ticks later (+0.017 to
++0.040).
+
+Three properties keep it from becoming an echo chamber, and getting them right
+took two failed attempts worth recording:
+
+- **It averages**, so it can never push a belief past the strongest neighbour. A
+  flock that was taught nothing stays at nothing - hearsay cannot manufacture
+  evidence, and a check asserts it.
+- **It is weighted by conviction.** Plain proximity-weighted averaging is
+  diffusion: when only a few have been taught, the many who have not drag them
+  back toward ignorance harder than they pull anyone forward. It measurably made
+  things *worse*. Weighting each neighbour by how pronounced its appraisal is
+  fixes the direction of flow - a creature with nothing to say says nothing.
+- **It never touches the replay buffer.** `teach()` normally files a moment as a
+  lesson worth re-living, but this fires every step for every creature and the
+  buffer holds only `REPLAY_SIZE` moments, so it was evicting the rare shocks
+  the buffer exists to preserve. That single side effect wrecked both the feature
+  *and* the control run measuring it, until the buffer became the suspect. Hence
+  `teach(..., keep=False)`.
+
+### Cruelty is fewer memories, and deeper
+
+A creature keeps only its `REPLAY_SIZE` most shocking moments and re-lives them.
+Look inside those buffers after a session and the asymmetry is stark - measured
+over five seeds, and it clears this project's own bar by six times the spread:
+
+| | memories that contain your hand | disposition reached |
+|---|---|---|
+| you burn them | **25.3% ± 5.2** | **-0.219 ± 0.032** |
+| you feed them | **66.5% ± 6.7** | +0.112 ± 0.028 |
+
+A fed flock holds **2.6x more** memories of you, yet a burned flock arrives at a
+feeling **twice as strong**. Per memory, cruelty is roughly **five times** as
+potent. Five seeds out of five, no exceptions.
+
+The reason is behavioural, and nobody wrote it: a fed creature *comes to you* (it
+picks "approach" 48% of the time against 33% at rest), so it accumulates
+experience of you. A burned one *flees*, and stops gathering evidence about you
+at all. **Cruelty teaches avoidance, and avoidance prevents you from ever
+learning that someone might mean you well.**
+
+This is also why fear is far more reproducible than trust - the spread on a
+burned flock's disposition is 0.032 against 0.071 for a fed one, and 7.5 against
+16.5 on how much survives 3000 ticks later. A handful of violent lessons all
+point the same way; trust depends on how much contact happened to accumulate,
+which is luck.
+
+Two hypotheses died on the way to this. The replay buffer is **not** inherited
+(`inherit()` returns a fresh one), so it cannot carry a trauma past the death of
+whoever lived it - and it turned out not to be preferentially filled by trauma
+either, but by kindness. The measurement inverted the guess in both directions.
+
+What culture does **not** do is defeat the decay, and that is the honest limit:
+diffusion spreads what exists, it cannot generate. Stop teaching and the 15%
+per-birth leak still drains the total to zero, just from a much larger starting
+pool and more slowly.
+
+The obvious next move - raise `INHERIT_BLEND` too - was tried and **does not
+survive measurement**, which is worth recording because the first run was so
+convincing. On one seed, 0.99 produced a lesson that kept *growing* after the
+hand withdrew (+0.071 at its peak, +0.109 six thousand ticks later) and still
+held +0.032 at 24,000 ticks where everything else sat at zero. On five seeds it
+falls apart: 0.99 beats 0.85 at +12,000 ticks on **three of five**, two of them
+end negative, and the mean gap of +0.013 is dwarfed by a spread of 0.030. By the
+standard this project applies everywhere else - an effect counts only if it
+clears twice its spread - that is **unproven**. What does hold across seeds is
+the shorter horizon: at +3000 and +6000 ticks 0.99 retains far more (+0.066 vs
++0.026, +0.060 vs +0.005). So `INHERIT_BLEND` is left at 0.85. Both constants
+are in the `P` screen if you want to explore further, but do it on several seeds:
+the single-seed result here was beautiful and wrong.
 
 ## Parameters: every number, in one place (`P` at startup)
 
