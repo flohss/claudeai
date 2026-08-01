@@ -83,6 +83,9 @@ GROUPS = [
         "SIGNAL_STRENGTH", "SIGNAL_ALARM_DV", "SIGNAL_ALARM_DA",
         "SIGNAL_ALARM_MIN", "SIGNAL_ALARM_FULL",
     ]),
+    ("culture", "Culture: the living teach each other", "Culture : les vivants s'enseignent", [
+        "CULTURE_RADIUS", "CULTURE_RATE",
+    ]),
     ("mood", "Mood: valence and arousal", "Humeur : valence et eveil", [
         "MOOD_DECAY", "MOOD_VALENCE_REST", "MOOD_AROUSAL_REST",
         "MOOD_GLOOM_WEIGHT", "MOOD_GLOOM_AROUSAL", "MOOD_GLOOM_ONSET",
@@ -159,7 +162,7 @@ DOCS = _harvest_docs()
 # The sweep is in test_tuning.py and runs with warnings promoted to errors, so a
 # divide that yields NaN instead of raising is caught too.
 DIVISORS = (
-    "CROWD_CAP", "DECIDE_TEMP", "FOOD_PERCEPTION", "FOOD_SPAWN_INTERVAL",
+    "CROWD_CAP", "CULTURE_RADIUS", "DECIDE_TEMP", "FOOD_PERCEPTION", "FOOD_SPAWN_INTERVAL",
     "HAND_APPROACH_SCALE", "HAND_PERCEPTION", "HAND_STANDOFF", "HEAR_RADIUS",
     "MAX_ENERGY", "MOOD_CONTAGION_RADIUS", "PREDATOR_PERCEPTION", "SEE_RADIUS",
     "SIGNAL_ALARM_FULL", "TRAUMA_PERCEPTION", "VOCAB_HISTORY_INTERVAL",

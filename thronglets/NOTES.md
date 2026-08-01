@@ -8,6 +8,13 @@ kept deliberately - the hypotheses that turned out to be wrong.
 The [README](README.md) describes the game. This describes how we know what it
 does.
 
+**Measurement debt** (flagged by a fresh review pass): the dreaded-call figures
+(-0.045 / -0.002) and the runtimes quoted below were measured *before* cultural
+transmission landed in `simulation.py`. Culture adds a per-step pass inside the
+very path those measurements exercise, so both should be re-measured before
+being quoted as current. The cruelty-vs-kindness buffer figures postdate culture
+and stand.
+
 ## Run the measurements yourself (`report.py`)
 
 Every number this project claims came from running worlds headlessly and reading
