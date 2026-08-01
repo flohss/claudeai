@@ -187,6 +187,38 @@ took two failed attempts worth recording:
   *and* the control run measuring it, until the buffer became the suspect. Hence
   `teach(..., keep=False)`.
 
+### Cruelty is fewer memories, and deeper
+
+A creature keeps only its `REPLAY_SIZE` most shocking moments and re-lives them.
+Look inside those buffers after a session and the asymmetry is stark - measured
+over five seeds, and it clears this project's own bar by six times the spread:
+
+| | memories that contain your hand | disposition reached |
+|---|---|---|
+| you burn them | **25.3% ± 5.2** | **-0.219 ± 0.032** |
+| you feed them | **66.5% ± 6.7** | +0.112 ± 0.028 |
+
+A fed flock holds **2.6x more** memories of you, yet a burned flock arrives at a
+feeling **twice as strong**. Per memory, cruelty is roughly **five times** as
+potent. Five seeds out of five, no exceptions.
+
+The reason is behavioural, and nobody wrote it: a fed creature *comes to you* (it
+picks "approach" 48% of the time against 33% at rest), so it accumulates
+experience of you. A burned one *flees*, and stops gathering evidence about you
+at all. **Cruelty teaches avoidance, and avoidance prevents you from ever
+learning that someone might mean you well.**
+
+This is also why fear is far more reproducible than trust - the spread on a
+burned flock's disposition is 0.032 against 0.071 for a fed one, and 7.5 against
+16.5 on how much survives 3000 ticks later. A handful of violent lessons all
+point the same way; trust depends on how much contact happened to accumulate,
+which is luck.
+
+Two hypotheses died on the way to this. The replay buffer is **not** inherited
+(`inherit()` returns a fresh one), so it cannot carry a trauma past the death of
+whoever lived it - and it turned out not to be preferentially filled by trauma
+either, but by kindness. The measurement inverted the guess in both directions.
+
 What culture does **not** do is defeat the decay, and that is the honest limit:
 diffusion spreads what exists, it cannot generate. Stop teaching and the 15%
 per-birth leak still drains the total to zero, just from a much larger starting
