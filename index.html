@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Synthé 8-Bit</title>
+<style>
+  :root {
+    --bg: #150d24;
+    --panel: #241640;
+    --panel-edge: #3b2566;
+    --accent: #00ff9c;
+    --accent2: #ff4fd8;
+    --accent3: #ffd23f;
+    --text: #e8e3ff;
+    --dim: #9b8ec4;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Courier New", Courier, monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px 12px 40px;
+    background-image:
+      repeating-linear-gradient(0deg, rgba(0,0,0,.15) 0 1px, transparent 1px 3px);
+  }
+  h1 {
+    font-size: clamp(20px, 4vw, 34px);
+    letter-spacing: .35em;
+    color: var(--accent);
+    text-shadow: 3px 3px 0 var(--accent2), 6px 6px 0 rgba(0,0,0,.4);
+    margin-bottom: 4px;
+    text-transform: uppercase;
+  }
+  .subtitle {
+    color: var(--dim);
+    font-size: 12px;
+    letter-spacing: .2em;
+    margin-bottom: 18px;
+    text-transform: uppercase;
+  }
+  .console {
+    width: 100%;
+    max-width: 980px;
+    background: var(--panel);
+    border: 3px solid var(--panel-edge);
+    box-shadow: 0 0 0 3px #000, 8px 8px 0 rgba(0,0,0,.5);
+    padding: 16px;
+  }
+  canvas#scope {
+    display: block;
+    width: 100%;
+    height: 110px;
+    background: #0a0614;
+    border: 2px solid var(--panel-edge);
+    image-rendering: pixelated;
+    margin-bottom: 16px;
+  }
+  .panels {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  fieldset {
+    border: 2px solid var(--panel-edge);
+    padding: 10px 12px 12px;
+    background: rgba(0,0,0,.18);
+  }
+  legend {
+    color: var(--accent3);
+    font-size: 11px;
+    letter-spacing: .2em;
+    padding: 0 6px;
+    text-transform: uppercase;
+  }
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+    font-size: 11px;
+  }
+  .row label {
+    flex: 0 0 74px;
+    color: var(--dim);
+    text-transform: uppercase;
+    letter-spacing: .05em;
+  }
+  .row output {
+    flex: 0 0 44px;
+    text-align: right;
+    color: var(--accent);
+  }
+  input[type=range] {
+    flex: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 6px;
+    background: #0a0614;
+    border: 1px solid var(--panel-edge);
+    outline: none;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px; height: 18px;
+    background: var(--accent);
+    border: 2px solid #000;
+    box-shadow: 2px 2px 0 rgba(0,0,0,.6);
+    cursor: pointer;
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 12px; height: 16px;
+    background: var(--accent);
+    border: 2px solid #000;
+    border-radius: 0;
+    cursor: pointer;
+  }
+  select {
+    flex: 1;
+    background: #0a0614;
+    color: var(--text);
+    border: 2px solid var(--panel-edge);
+    font-family: inherit;
+    font-size: 11px;
+    padding: 4px;
+    text-transform: uppercase;
+  }
+  .wave-buttons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  button {
+    font-family: inherit;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    background: #0a0614;
+    color: var(--text);
+    border: 2px solid var(--panel-edge);
+    padding: 7px 4px;
+    cursor: pointer;
+    box-shadow: 2px 2px 0 rgba(0,0,0,.6);
+  }
+  button:active { transform: translate(2px, 2px); box-shadow: none; }
+  button.selected {
+    background: var(--accent);
+    color: #000;
+    border-color: var(--accent);
+    font-weight: bold;
+  }
+  .octave-row { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+  .octave-row button { width: 40px; }
+  .octave-row .oct-value { color: var(--accent); font-size: 14px; min-width: 60px; text-align: center; }
+  .keyboard-wrap { position: relative; height: 170px; user-select: none; touch-action: none; }
+  .keyboard { position: relative; height: 100%; display: flex; }
+  .key {
+    position: relative;
+    flex: 1;
+    background: #e8e3ff;
+    border: 2px solid #000;
+    margin-right: -2px;
+    cursor: pointer;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding-bottom: 6px;
+    font-size: 9px;
+    color: #6a5f96;
+  }
+  .key.black {
+    position: absolute;
+    top: 0;
+    width: 4.2%;
+    height: 58%;
+    background: #14092b;
+    border: 2px solid #000;
+    z-index: 2;
+    color: transparent;
+  }
+  .key.active { background: var(--accent); color: #000; }
+  .key.black.active { background: var(--accent2); }
+  .hint {
+    margin-top: 10px;
+    font-size: 10px;
+    color: var(--dim);
+    letter-spacing: .05em;
+    line-height: 1.6;
+    text-align: center;
+  }
+  .hint b { color: var(--accent3); }
+</style>
+</head>
+<body>
+  <h1>Synthé 8-Bit</h1>
+  <div class="subtitle">Synthétiseur virtuel chiptune &mdash; Web Audio</div>
+
+  <div class="console">
+    <canvas id="scope" width="920" height="110"></canvas>
+
+    <div class="panels">
+      <fieldset>
+        <legend>Oscillateur</legend>
+        <div class="wave-buttons" id="waves">
+          <button data-wave="square" class="selected">Carré 50%</button>
+          <button data-wave="pulse25">Pulse 25%</button>
+          <button data-wave="pulse125">Pulse 12.5%</button>
+          <button data-wave="triangle">Triangle</button>
+          <button data-wave="sawtooth">Scie</button>
+          <button data-wave="noise">Bruit</button>
+        </div>
+        <div class="octave-row">
+          <button id="octDown">&minus;</button>
+          <span class="oct-value">Octave <span id="octValue">4</span></span>
+          <button id="octUp">+</button>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Enveloppe</legend>
+        <div class="row"><label>Attaque</label><input type="range" id="attack" min="0.001" max="1" step="0.001" value="0.01"><output id="attackOut">10ms</output></div>
+        <div class="row"><label>Déclin</label><input type="range" id="decay" min="0.001" max="1" step="0.001" value="0.1"><output id="decayOut">100ms</output></div>
+        <div class="row"><label>Maintien</label><input type="range" id="sustain" min="0" max="1" step="0.01" value="0.6"><output id="sustainOut">60%</output></div>
+        <div class="row"><label>Relâche</label><input type="range" id="release" min="0.01" max="2" step="0.01" value="0.15"><output id="releaseOut">150ms</output></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Effets</legend>
+        <div class="row"><label>Bits</label><input type="range" id="bits" min="2" max="8" step="1" value="8"><output id="bitsOut">8</output></div>
+        <div class="row"><label>Vib. vitesse</label><input type="range" id="vibRate" min="0.5" max="12" step="0.1" value="5"><output id="vibRateOut">5Hz</output></div>
+        <div class="row"><label>Vib. prof.</label><input type="range" id="vibDepth" min="0" max="100" step="1" value="0"><output id="vibDepthOut">0</output></div>
+        <div class="row"><label>Volume</label><input type="range" id="volume" min="0" max="1" step="0.01" value="0.5"><output id="volumeOut">50%</output></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Arpégiateur</legend>
+        <div class="row"><label>Mode</label>
+          <select id="arpMode">
+            <option value="off">Désactivé</option>
+            <option value="up">Montant</option>
+            <option value="down">Descendant</option>
+            <option value="updown">Aller-retour</option>
+            <option value="random">Aléatoire</option>
+          </select>
+        </div>
+        <div class="row"><label>Vitesse</label><input type="range" id="arpRate" min="2" max="16" step="0.5" value="8"><output id="arpRateOut">8Hz</output></div>
+        <div class="hint" style="text-align:left">Maintenez plusieurs notes pour lancer l'arpège.</div>
+      </fieldset>
+    </div>
+
+    <div class="keyboard-wrap">
+      <div class="keyboard" id="keyboard"></div>
+    </div>
+
+    <div class="hint">
+      Clavier d'ordinateur : <b>rangée du milieu</b> = touches blanches (Do, Ré, Mi&hellip;),
+      <b>rangée du haut</b> = touches noires. Cliquez ou touchez aussi les touches ci-dessus.
+    </div>
+  </div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ------- État -------
+  const params = {
+    wave: "square", attack: 0.01, decay: 0.1, sustain: 0.6, release: 0.15,
+    bits: 8, vibRate: 5, vibDepth: 0, volume: 0.5, octave: 4,
+    arpMode: "off", arpRate: 8
+  };
+  const NOTE_NAMES = ["Do", "Do#", "Ré", "Ré#", "Mi", "Fa", "Fa#", "Sol", "Sol#", "La", "La#", "Si"];
+  const KEY_COUNT = 25; // 2 octaves + Do final
+
+  let ctx = null, masterIn, shaper, analyser, masterGain, lfo, lfoGain;
+  let pulse25Wave, pulse125Wave, noiseBuffer;
+  const voices = new Map(); // midi -> { src, gain }
+
+  // ------- Audio -------
+  function midiToFreq(m) { return 440 * Math.pow(2, (m - 69) / 12); }
+
+  function crusherCurve(bits) {
+    const steps = Math.pow(2, bits) / 2;
+    const n = 2048, curve = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const x = (i / (n - 1)) * 2 - 1;
+      curve[i] = Math.round(x * steps) / steps;
+    }
+    return curve;
+  }
+
+  function makePulseWave(duty) {
+    const n = 32;
+    const real = new Float32Array(n), imag = new Float32Array(n);
+    for (let k = 1; k < n; k++) {
+      imag[k] = (2 / (k * Math.PI)) * Math.sin(k * Math.PI * duty);
+    }
+    return ctx.createPeriodicWave(real, imag);
+  }
+
+  function makeNoiseBuffer() {
+    // Bruit "puce" : valeurs aléatoires ±1 maintenues quelques échantillons
+    const len = ctx.sampleRate * 2;
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    const hold = 6;
+    let v = 0;
+    for (let i = 0; i < len; i++) {
+      if (i % hold === 0) v = Math.random() < 0.5 ? -1 : 1;
+      data[i] = v * 0.6;
+    }
+    return buf;
+  }
+
+  function initAudio() {
+    if (ctx) { if (ctx.state === "suspended") ctx.resume(); return; }
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+
+    masterIn = ctx.createGain();
+    shaper = ctx.createWaveShaper();
+    shaper.curve = crusherCurve(params.bits);
+    analyser = ctx.createAnalyser();
+    analyser.fftSize = 2048;
+    masterGain = ctx.createGain();
+    masterGain.gain.value = params.volume;
+
+    masterIn.connect(shaper);
+    shaper.connect(analyser);
+    analyser.connect(masterGain);
+    masterGain.connect(ctx.destination);
+
+    lfo = ctx.createOscillator();
+    lfo.type = "sine";
+    lfo.frequency.value = params.vibRate;
+    lfoGain = ctx.createGain();
+    lfoGain.gain.value = params.vibDepth; // en cents
+    lfo.connect(lfoGain);
+    lfo.start();
+
+    pulse25Wave = makePulseWave(0.25);
+    pulse125Wave = makePulseWave(0.125);
+    noiseBuffer = makeNoiseBuffer();
+
+    drawScope();
+  }
+
+  function noteOn(midi) {
+    initAudio();
+    if (voices.has(midi)) return;
+    const t = ctx.currentTime;
+    let src;
+    if (params.wave === "noise") {
+      src = ctx.createBufferSource();
+      src.buffer = noiseBuffer;
+      src.loop = true;
+      src.playbackRate.value = midiToFreq(midi) / 220;
+    } else {
+      src = ctx.createOscillator();
+      if (params.wave === "pulse25") src.setPeriodicWave(pulse25Wave);
+      else if (params.wave === "pulse125") src.setPeriodicWave(pulse125Wave);
+      else src.type = params.wave;
+      src.frequency.value = midiToFreq(midi);
+    }
+    lfoGain.connect(src.detune);
+
+    const gain = ctx.createGain();
+    const a = Math.max(0.001, params.attack);
+    const d = Math.max(0.001, params.decay);
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(0.9, t + a);
+    gain.gain.linearRampToValueAtTime(params.sustain * 0.9, t + a + d);
+
+    src.connect(gain);
+    gain.connect(masterIn);
+    src.start(t);
+    voices.set(midi, { src, gain });
+    setKeyVisual(midi, true);
+  }
+
+  function noteOff(midi) {
+    const v = voices.get(midi);
+    if (!v) return;
+    voices.delete(midi);
+    const t = ctx.currentTime;
+    const r = Math.max(0.01, params.release);
+    v.gain.gain.cancelScheduledValues(t);
+    v.gain.gain.setValueAtTime(v.gain.gain.value, t);
+    v.gain.gain.linearRampToValueAtTime(0.0001, t + r);
+    v.src.stop(t + r + 0.05);
+    setKeyVisual(midi, false);
+  }
+
+  function allNotesOff() {
+    [...voices.keys()].forEach(noteOff);
+  }
+
+  // ------- Arpégiateur -------
+  let held = [], arpTimer = null, arpIndex = 0, arpDir = 1;
+
+  function pressNote(midi) {
+    if (params.arpMode === "off") { noteOn(midi); return; }
+    initAudio();
+    if (!held.includes(midi)) held.push(midi);
+    setKeyVisual(midi, true);
+    startArp();
+  }
+
+  function releaseNote(midi) {
+    if (params.arpMode === "off") { noteOff(midi); return; }
+    held = held.filter(m => m !== midi);
+    setKeyVisual(midi, false);
+    if (held.length === 0) stopArp();
+  }
+
+  function startArp() {
+    if (arpTimer) return;
+    arpIndex = 0; arpDir = 1;
+    arpTimer = setInterval(arpTick, 1000 / params.arpRate);
+    arpTick();
+  }
+
+  function stopArp() {
+    if (arpTimer) { clearInterval(arpTimer); arpTimer = null; }
+  }
+
+  function restartArp() {
+    if (arpTimer) { stopArp(); startArp(); }
+  }
+
+  function arpTick() {
+    if (held.length === 0) return;
+    const notes = [...held].sort((x, y) => x - y);
+    let n;
+    if (params.arpMode === "up") {
+      n = notes[arpIndex % notes.length];
+      arpIndex++;
+    } else if (params.arpMode === "down") {
+      n = notes[notes.length - 1 - (arpIndex % notes.length)];
+      arpIndex++;
+    } else if (params.arpMode === "updown") {
+      if (notes.length === 1) { n = notes[0]; }
+      else {
+        if (arpIndex >= notes.length - 1) arpDir = -1;
+        if (arpIndex <= 0) arpDir = 1;
+        n = notes[Math.max(0, Math.min(arpIndex, notes.length - 1))];
+        arpIndex += arpDir;
+      }
+    } else { // random
+      n = notes[Math.floor(Math.random() * notes.length)];
+    }
+    const gate = Math.max(40, (1000 / params.arpRate) * 0.55);
+    noteOn(n);
+    setTimeout(() => noteOff(n), gate);
+  }
+
+  // ------- Clavier virtuel -------
+  const kbEl = document.getElementById("keyboard");
+  const keyEls = new Map(); // offset -> element
+  const BLACK = new Set([1, 3, 6, 8, 10]);
+
+  function baseMidi() { return 12 * (params.octave + 1); } // octave 4 -> Do4 = 60
+
+  function buildKeyboard() {
+    kbEl.innerHTML = "";
+    keyEls.clear();
+    const whiteWidth = 100 / 15; // 15 touches blanches
+    let whiteIndex = 0;
+    for (let i = 0; i < KEY_COUNT; i++) {
+      const semitone = i % 12;
+      const el = document.createElement("div");
+      el.dataset.offset = i;
+      if (BLACK.has(semitone)) {
+        el.className = "key black";
+        el.style.left = (whiteIndex * whiteWidth - 2.1) + "%";
+      } else {
+        el.className = "key";
+        el.textContent = NOTE_NAMES[semitone] + (semitone === 0 ? params.octave + Math.floor(i / 12) : "");
+        whiteIndex++;
+      }
+      kbEl.appendChild(el);
+      keyEls.set(i, el);
+    }
+    refreshKeyLabels();
+  }
+
+  function refreshKeyLabels() {
+    keyEls.forEach((el, i) => {
+      const semitone = i % 12;
+      if (!BLACK.has(semitone)) {
+        el.textContent = NOTE_NAMES[semitone] + (semitone === 0 ? params.octave + Math.floor(i / 12) : "");
+      }
+    });
+  }
+
+  function setKeyVisual(midi, on) {
+    const offset = midi - baseMidi();
+    const el = keyEls.get(offset);
+    if (el) el.classList.toggle("active", on);
+  }
+
+  // Pointeur (souris / tactile) avec glissando
+  let pointerDown = false, pointerNote = null;
+
+  function keyFromEvent(e) {
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    if (el && el.classList.contains("key")) return baseMidi() + Number(el.dataset.offset);
+    return null;
+  }
+
+  kbEl.addEventListener("pointerdown", e => {
+    e.preventDefault();
+    pointerDown = true;
+    const n = keyFromEvent(e);
+    if (n !== null) { pointerNote = n; pressNote(n); }
+  });
+  window.addEventListener("pointermove", e => {
+    if (!pointerDown) return;
+    const n = keyFromEvent(e);
+    if (n !== pointerNote) {
+      if (pointerNote !== null) releaseNote(pointerNote);
+      pointerNote = n;
+      if (n !== null) pressNote(n);
+    }
+  });
+  window.addEventListener("pointerup", () => {
+    pointerDown = false;
+    if (pointerNote !== null) { releaseNote(pointerNote); pointerNote = null; }
+  });
+
+  // Clavier physique (positions des touches : compatible AZERTY/QWERTY)
+  const KEYMAP = {
+    KeyA: 0, KeyW: 1, KeyS: 2, KeyE: 3, KeyD: 4, KeyF: 5, KeyT: 6,
+    KeyG: 7, KeyY: 8, KeyH: 9, KeyU: 10, KeyJ: 11, KeyK: 12, KeyO: 13,
+    KeyL: 14, KeyP: 15, Semicolon: 16, Quote: 17, Enter: 19
+  };
+  const downKeys = new Set();
+
+  window.addEventListener("keydown", e => {
+    if (e.repeat) return;
+    if (e.code in KEYMAP && !downKeys.has(e.code)) {
+      e.preventDefault();
+      downKeys.add(e.code);
+      pressNote(baseMidi() + KEYMAP[e.code]);
+    } else if (e.code === "KeyZ") { shiftOctave(-1); }
+    else if (e.code === "KeyX") { shiftOctave(1); }
+  });
+  window.addEventListener("keyup", e => {
+    if (e.code in KEYMAP && downKeys.has(e.code)) {
+      downKeys.delete(e.code);
+      releaseNote(baseMidi() + KEYMAP[e.code]);
+    }
+  });
+  window.addEventListener("blur", () => { downKeys.clear(); held = []; stopArp(); allNotesOff(); });
+
+  // ------- Contrôles -------
+  function bindSlider(id, fmt, apply) {
+    const input = document.getElementById(id);
+    const out = document.getElementById(id + "Out");
+    const update = () => {
+      const v = Number(input.value);
+      out.textContent = fmt(v);
+      apply(v);
+    };
+    input.addEventListener("input", update);
+    update();
+  }
+
+  const ms = v => v < 1 ? Math.round(v * 1000) + "ms" : v.toFixed(2) + "s";
+  const pct = v => Math.round(v * 100) + "%";
+
+  bindSlider("attack", ms, v => params.attack = v);
+  bindSlider("decay", ms, v => params.decay = v);
+  bindSlider("sustain", pct, v => params.sustain = v);
+  bindSlider("release", ms, v => params.release = v);
+  bindSlider("bits", v => String(v), v => {
+    params.bits = v;
+    if (shaper) shaper.curve = crusherCurve(v);
+  });
+  bindSlider("vibRate", v => v.toFixed(1) + "Hz", v => {
+    params.vibRate = v;
+    if (lfo) lfo.frequency.setValueAtTime(v, ctx.currentTime);
+  });
+  bindSlider("vibDepth", v => String(v), v => {
+    params.vibDepth = v;
+    if (lfoGain) lfoGain.gain.setValueAtTime(v, ctx.currentTime);
+  });
+  bindSlider("volume", pct, v => {
+    params.volume = v;
+    if (masterGain) masterGain.gain.setValueAtTime(v, ctx.currentTime);
+  });
+  bindSlider("arpRate", v => v + "Hz", v => { params.arpRate = v; restartArp(); });
+
+  document.getElementById("arpMode").addEventListener("change", e => {
+    params.arpMode = e.target.value;
+    held = []; stopArp(); allNotesOff();
+  });
+
+  document.getElementById("waves").addEventListener("click", e => {
+    const btn = e.target.closest("button[data-wave]");
+    if (!btn) return;
+    params.wave = btn.dataset.wave;
+    document.querySelectorAll("#waves button").forEach(b => b.classList.toggle("selected", b === btn));
+  });
+
+  function shiftOctave(delta) {
+    const next = Math.min(7, Math.max(1, params.octave + delta));
+    if (next === params.octave) return;
+    allNotesOff(); held = []; stopArp();
+    params.octave = next;
+    document.getElementById("octValue").textContent = next;
+    refreshKeyLabels();
+  }
+  document.getElementById("octDown").addEventListener("click", () => shiftOctave(-1));
+  document.getElementById("octUp").addEventListener("click", () => shiftOctave(1));
+
+  // ------- Oscilloscope -------
+  const scope = document.getElementById("scope");
+  const sctx = scope.getContext("2d");
+
+  function drawIdleScope() {
+    sctx.fillStyle = "#0a0614";
+    sctx.fillRect(0, 0, scope.width, scope.height);
+    sctx.strokeStyle = "#1f8a5c";
+    sctx.lineWidth = 2;
+    sctx.beginPath();
+    sctx.moveTo(0, scope.height / 2);
+    sctx.lineTo(scope.width, scope.height / 2);
+    sctx.stroke();
+  }
+
+  function drawScope() {
+    const data = new Uint8Array(analyser.fftSize);
+    (function frame() {
+      requestAnimationFrame(frame);
+      analyser.getByteTimeDomainData(data);
+      sctx.fillStyle = "#0a0614";
+      sctx.fillRect(0, 0, scope.width, scope.height);
+      sctx.strokeStyle = "#00ff9c";
+      sctx.lineWidth = 2;
+      sctx.beginPath();
+      const step = data.length / scope.width;
+      for (let x = 0; x < scope.width; x++) {
+        const v = data[Math.floor(x * step)] / 255;
+        const y = v * scope.height;
+        if (x === 0) sctx.moveTo(x, y); else sctx.lineTo(x, y);
+      }
+      sctx.stroke();
+    })();
+  }
+
+  buildKeyboard();
+  drawIdleScope();
+  window.addEventListener("pointerdown", initAudio, { once: false });
+})();
+</script>
+</body>
+</html>
