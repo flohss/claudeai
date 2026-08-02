@@ -654,6 +654,31 @@ with replay on (−0.05 → −0.40), and the dread of a closing hand doubles.
 Memories are *not* inherited and *not* saved with the world - only what they
 taught is.
 
+**Each memory is named for the event in it, not for the loudest thing in
+view** - and getting that wrong is what made the game look like it hated food.
+The perception radii are not comparable: food is noticed from 60 world units,
+your hand from 48, a predator only from 26. Naming a memory after the strongest
+perception therefore blamed food for almost everything, because food is the
+loudest single thing in view in **47%** of living moments. A predator closing
+on a creature with a bush 20 units away produced a memory that read *"food
+−0.58"*. Measured across 5 seeds: 1186 memories carried the food label, **489
+of them with a predator in sight**, and within that group the value tracked how
+close the *predator* was (−0.52) and not the food (+0.04). A perceptible
+predator now outranks the hand, the hand outranks food, and food claims a
+moment only when it is strongly there and nothing else is.
+
+**And a meal is now worth something.** It was worth `REWARD_EAT × (1 − γ)` =
+**+0.012** against a predator memory at **−0.48** - one fortieth of being
+hunted - which measured as `V(food here) − V(nothing)` = −0.002 ± 0.023: food
+was never *negative*, but it was never anything either. Swept over 5 seeds ×
+2500 ticks, `REWARD_EAT = 4.0` is the lowest setting whose reading clears this
+project's bar (**+0.067 ± 0.021**, positive in 5/5 seeds; 1.5 gave +0.028 and
+did not clear it) while leaving behaviour alone - the share of the flock
+choosing to flee stayed at 0.34 and your standing with them stayed at −0.01.
+The visible result is that **43% of food memories are now green**, against 3%
+of predator ones: the panel can finally show a creature something good
+happened to it.
+
 **And you are not the only teacher - the world teaches too.** A predator taking
 a neighbour is no longer a silent event: every creature near enough to see it
 learns from it, exactly as they learn from your cruelty. The lesson attaches to

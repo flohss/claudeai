@@ -92,6 +92,58 @@ running costs energy, so starvation ticks up, and the inherited speed trait
 drifts upward - selection appears to be favouring runners, which is the kind of
 feedback loop that needs a much longer run before anyone calls it evolution.
 
+## "Food is still read negatively" - two answers, only one of them a bug
+
+Reported from play, four times over. Each earlier answer was a story built on
+one measurement; this one separates two things that were being confused.
+
+**What the creature learned.** `V(food right here) - V(nothing)` measured
+**-0.0015 +/- 0.0230** over 5 seeds x 2500 ticks. Zero. Food was never read
+negatively - the learned value simply had no opinion.
+
+**What the game displayed.** Memories labelled "food" sat at **-0.26** and were
+**43% of everything a creature ruminates on**. That is what a player actually
+sees, so the report was right even though the premise was not.
+
+The label was picking the strongest perception, and the perception radii are
+not comparable - food 60 world units, hand 48, predator 26. Food is the loudest
+thing in view in 47% of living moments, so it collected the blame:
+
+| | old rule | new rule |
+|---|---|---|
+| memories labelled food | 42.8% | 21.2% |
+| ...with a predator in sight | 35.1% | **0.0%** |
+| their average target | -0.261 | -0.193 |
+
+Inside the old food group the value tracked predator proximity at **-0.52** and
+food proximity at **+0.04**. The food was scenery. A memory is now named for the
+event: perceptible predator > hand > food, and food only when nothing else is
+there.
+
+That alone left food at -0.193 against -0.204 for memories about nothing at all
+- no worse than an empty moment, but still nothing to like. The cause was a
+reward scale nobody had checked: a meal moved the estimate by `REWARD_EAT x
+(1 - GAMMA)` = **+0.012**, a predator by **-0.48**. Eating was one fortieth of
+being hunted. Swept:
+
+| REWARD_EAT | V(food) | population | eaten | starved | flee share |
+|---|---|---|---|---|---|
+| 0.4 | -0.002 ± 0.023 | 89.4 ± 7.4 | 44.0 ± 6.8 | 182.2 ± 5.2 | 0.341 |
+| 1.5 | +0.028 ± 0.019 | 91.0 ± 8.0 | 40.8 ± 9.1 | 185.6 ± 9.7 | 0.326 |
+| **4.0** | **+0.067 ± 0.021** | 95.0 ± 7.5 | 51.8 ± 16.6 | 171.8 ± 10.2 | 0.340 |
+
+4.0 is the lowest value tried whose reading clears the bar (gap +0.069 against
+2x the largest spread, 0.046); 1.5 does not. Nothing else moved demonstrably -
+population, kills and starvation all stayed inside their spreads, the flee share
+did not budge, and the hand's standing stayed at -0.01, so this did not buy
+warmth toward the player by the back door. Kills drifted up (44.0 -> 51.8) with
+a spread far too wide to call, which is the direction to watch: a flock that
+values food more may cluster on it more.
+
+With both changes, food memories sit at **-0.062** and **43% of them are
+positive**, against 3% of predator memories. The panel can finally show a
+creature that something good happened to it.
+
 ## Run the measurements yourself (`report.py`)
 
 Every number this project claims came from running worlds headlessly and reading

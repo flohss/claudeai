@@ -213,7 +213,16 @@ OBSERVE_RATE = 0.02           # weaker step for learning by watching a neighbour
 TRAUMA_PERCEPTION = 85.0      # world units a violent death is witnessed from
 TRAUMA_RATE = 0.11            # how deeply witnessing harm teaches fear of the hand
 VALENCE_CLIP = 1.5            # bound on every learned weight (stops runaway)
-REWARD_EAT = 0.4              # mild reward for finding food while the hand is near
+# A meal has to be able to outweigh SOMETHING. At 0.4 it moved the creature's
+# estimate by REWARD_EAT * (1 - GAMMA) = +0.012, against -0.48 for a predator:
+# one fortieth of being hunted, which measured as V(food here) - V(nothing) =
+# -0.002 +/- 0.023, i.e. exactly zero. Food was never negative, but it was never
+# anything. Swept over 5 seeds x 2500 ticks, 4.0 is the lowest value tried whose
+# reading clears this project's bar (+0.067 +/- 0.021, gap +0.069 against a bar
+# of 0.046; 1.5 gave +0.028 and did not clear it) while leaving the flock's
+# behaviour alone - the share choosing to flee stayed at 0.34 and the hand's
+# standing stayed at -0.01.
+REWARD_EAT = 4.0              # what eating is worth: a quarter of what a hunter costs
 HAND_MOVE_STRENGTH = 1.3      # how hard the learned feeling pulls toward/away the hand
 HAND_STANDOFF = 14.0          # trusting creatures gather around the hand at this distance, not on it
 HAND_CALL_RANGE = 80.0        # how far off a trusting creature will come to gather near the hand
