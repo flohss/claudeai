@@ -45,7 +45,7 @@ La barre **Morceaux** charge un titre complet — motifs, chaîne, instruments, 
 
 ### Écrire son propre morceau
 
-La bibliothèque est un simple tableau `SONGS` dans [`index.html`](index.html), lisible et modifiable à la main. Un motif s'écrit sur 16 caractères, un par pas, dans la même notation que les liens partagés :
+La bibliothèque est un simple tableau `SONGS` dans [`chiptune.html`](chiptune.html), lisible et modifiable à la main. Un motif s'écrit sur 16 caractères, un par pas, dans la même notation que les liens partagés :
 
 ```js
 {
