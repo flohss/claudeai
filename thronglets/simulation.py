@@ -34,6 +34,17 @@ SPEED = 1.6                   # how far a creature moves per tick at full effort
 WANDER_STRENGTH = 0.5         # how much aimless drift there is when nothing is pressing
 DRIVE_STRENGTH = 1.2          # the pull toward whatever it currently wants
 FLEE_STRENGTH = 1.8           # the shove away from a predator - deliberately the strongest urge
+# How much a creature's OWN understanding of predators can add to that shove.
+#
+# Gating flight on the learned estimate was tried and failed badly (see the
+# comment at the flee site): a creature that must learn to run is eaten during
+# the lesson. This is the other arrangement - innate flight is the FLOOR and can
+# never be reduced, so an ignorant creature runs exactly as hard as it always
+# did, and understanding only ever adds. Nothing can be worse off for not having
+# learned yet, which is precisely what killed the earlier attempt.
+KNOWLEDGE_FLEE_GAIN = 0.6     # at most +60% flight for a creature that fully grasps the danger
+KNOWLEDGE_FLEE_FULL = 0.25    # the dread at which that maximum is reached
+KNOWLEDGE_REFRESH = 60        # ticks between recomputing a creature's dread (it moves slowly)
 SIGNAL_STRENGTH = 0.9         # how loudly a call is heard at its source
 EDGE_MARGIN = 12.0            # how close to the world's edge before it is nudged back
 EDGE_PUSH = 1.0               # how firmly that nudge acts
@@ -520,7 +531,7 @@ class Mind:
     predictions carry across generations."""
 
     __slots__ = ("p", "trace", "replay", "valence", "arousal", "memory", "obedience",
-                 "act", "confidence", "surprise", "_last", "_pending", "_hold")
+                 "act", "confidence", "surprise", "dread", "_last", "_pending", "_hold")
 
     def __init__(self, params=None, valence=MOOD_VALENCE_REST, arousal=MOOD_AROUSAL_REST,
                  memory=None, obedience=0.0):
@@ -548,6 +559,10 @@ class Mind:
         # what it has decided to do about the hand, how sure it is, and how
         # badly its last expectation was violated (its surprise)
         self.act = ACT_IGNORE
+        # how much worse this creature expects a moment to be with a predator on
+        # it than without - its own understanding, refreshed occasionally
+        # because it changes far more slowly than anything else here
+        self.dread = 0.0
         self.confidence = 1.0 / N_ACTIONS
         self.surprise = 0.0
         self._last = None       # (features, action) of the step just lived
@@ -1072,6 +1087,14 @@ class World:
             feat = Mind.features(prox, hunger, crowd, hand_speed,
                                  pred_prox, food_prox, c.mind.arousal, heard)
             c.mind.sense(feat, self.rng)
+            # what this creature has come to understand about predators. Two
+            # extra forward passes, so it is refreshed on a slow cycle and
+            # staggered by id - a lifetime's understanding does not need
+            # recomputing sixty times a second.
+            if (self.tick + c.id) % KNOWLEDGE_REFRESH == 0:
+                with_pred = c.mind.value(Mind.features(0, hunger, 0, 0, predator=1.0))
+                without = c.mind.value(Mind.features(0, hunger, 0, 0, predator=0.0))
+                c.mind.dread = max(0.0, float(without - with_pred))
             # the voices themselves move it, once it has learned what they mean:
             # if what it is hearing makes the moment look worse than silence
             # would, that IS alarm - it is frightened by the call before
@@ -1604,7 +1627,16 @@ class World:
                 # behaviour is gated on a lagging estimate the whole ecosystem
                 # oscillates - at one setting the learned urge even inverted.
                 # Prey animals are born knowing this for the same reason.
-                move += -_toward(c.pos, predator) * FLEE_STRENGTH
+                #
+                # What a creature has LEARNED can still add to that innate
+                # shove, never take from it: the floor below is exactly the
+                # behaviour of a flock with learning switched off, so no
+                # creature is ever punished for not having understood yet.
+                urge = FLEE_STRENGTH
+                if c.mind is not None and c.mind.dread > 0.0:
+                    grasp = min(1.0, c.mind.dread / KNOWLEDGE_FLEE_FULL)
+                    urge *= 1.0 + KNOWLEDGE_FLEE_GAIN * grasp
+                move += -_toward(c.pos, predator) * urge
             elif c.state == FOOD:
                 move += _toward(c.pos, c_["food_pos"][c_["nearest_food_i"][i]]) * DRIVE_STRENGTH
             elif c.state == DISTRESS:

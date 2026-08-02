@@ -664,15 +664,39 @@ headless run: after a life among predators, `V(predator on me)` sits well below
 leaves an **emotional and spatial scar** - fear ripples out through the flock by
 contagion, and the ground where it happened is marked as somewhere to shun.
 
-**Flight from a predator, though, stays innate - and that is a finding, not an
-oversight.** Making it learned was implemented and measured, and it fails for a
-real reason: a creature that must learn to run is eaten *during the lesson*
-(the flock collapsed to a single survivor within 500 ticks). Worse, gating a
-lethal behaviour on a lagging estimate makes the ecosystem oscillate - at one
-setting the learned urge inverted, which would have had creatures walking into
-predators. Real prey animals are born with anti-predator reflexes for exactly
-this reason. So the reflex is innate; what experience adds is *meaning*, mood
-and memory.
+**Flight from a predator is innate, and understanding it makes that flight
+harder.** Making the reflex itself learned was implemented and measured, and it
+fails for a real reason: a creature that must learn to run is eaten *during the
+lesson* (the flock collapsed to a single survivor within 500 ticks). Worse,
+gating a lethal behaviour on a lagging estimate makes the ecosystem oscillate -
+at one setting the learned urge inverted, which would have had creatures walking
+into predators. Real prey animals are born with anti-predator reflexes for
+exactly this reason.
+
+So the reflex stays innate as an **unmovable floor**, and knowledge is only ever
+allowed to *add* to it. Every 60 ticks a creature compares what its own mind
+says a world with a predator on it is worth against a world with none — the gap
+is its **dread**, a number it worked out itself rather than one handed to it —
+and a creature that fully grasps the danger pushes away up to **60% harder**
+than one that has never understood it. An ignorant creature still runs exactly
+as hard as it always did; nothing is ever taken away.
+
+That connection is measured, over 5 seeds of 2500 ticks, with and without the
+gain:
+
+| | flight gain 0.0 | flight gain 0.6 | gap | bar (2× the largest spread) |
+|---|---|---|---|---|
+| population alive | 78.4 ± 8.1 | **95.4 ± 6.1** | +17.0 | 16.3 → **shown** |
+| eaten by predators | 81.2 ± 19.0 | 50.0 ± 12.3 | −31.2 | 38.0 → not shown |
+| starved | 155.2 | 160.6 | +5.4 | — |
+
+Understanding a hunter therefore buys a measurably larger flock. Fewer creatures
+were eaten in **all five** seeds, but the seed-to-seed spread on kills is wide
+enough that the drop does not clear this project's bar, so it is reported as a
+consistent direction rather than a demonstrated effect. Running harder is not
+free — the flock starves slightly more — and the innate reflex means a naive
+newborn is never worse off than before. What experience adds beyond this is
+*meaning*, mood and memory.
 
 **Each creature carries a persistent inner mood** - a real affective state,
 not a value recomputed each frame. Following the circumplex model of

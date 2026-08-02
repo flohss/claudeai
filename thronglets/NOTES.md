@@ -56,6 +56,42 @@ the collapse is a tail event, not the typical outcome. Four seeds at 2000 ticks
 produced no collapse at all. What is solid is the cause shift; what is not is
 the death toll.
 
+## Knowledge that pays: dread now makes flight harder
+
+Until now, everything a creature learned went into what it *felt* - mood, the
+colour of its body, which call it answered - and none of it into whether it
+lived. A flock could understand predators perfectly and die at exactly the rate
+of a flock that understood nothing. That is a real gap in an artificial-life
+game: knowing is supposed to be worth something.
+
+Wiring it up naively had already been tried, and the source still carries the
+warning: *"a creature that must learn to run is eaten during the lesson"* - the
+flock fell to one survivor in 500 ticks. The failure was in **replacing** the
+innate reflex with a learned one, so this arrangement never touches it.
+`FLEE_STRENGTH` is a floor. A creature reads its own value head twice - once for
+a world with a predator on it, once without - and the gap is its `dread`. That
+dread scales a *bonus*: `KNOWLEDGE_FLEE_GAIN = 0.6` at `KNOWLEDGE_FLEE_FULL =
+0.25` of dread, refreshed every `KNOWLEDGE_REFRESH = 60` ticks and staggered by
+creature id so the whole flock never recomputes on the same tick. An ignorant
+creature is bit-for-bit as fast as it was; there is no lesson to survive.
+
+Five seeds x 2500 ticks, gain 0.0 against 0.6:
+
+| | 0.0 | 0.6 | gap | 2x largest spread |
+|---|---|---|---|---|
+| population | 78.4 ± 8.1 | 95.4 ± 6.1 | **+17.0** | 16.3 → shown |
+| died_predator | 81.2 ± 19.0 | 50.0 ± 12.3 | −31.2 | 38.0 → not shown |
+| died_starved | 155.2 | 160.6 | +5.4 | — |
+| speed trait | 1.759 | 1.857 | +0.098 | — |
+
+The flock is bigger, and that clears the bar. The obvious *mechanism* - fewer
+creatures eaten - does not, even though it fell in 5/5 seeds, because kills
+scatter far more between worlds than population does. Reporting the direction
+without the claim is the honest version. Two side effects worth watching: harder
+running costs energy, so starvation ticks up, and the inherited speed trait
+drifts upward - selection appears to be favouring runners, which is the kind of
+feedback loop that needs a much longer run before anyone calls it evolution.
+
 ## Run the measurements yourself (`report.py`)
 
 Every number this project claims came from running worlds headlessly and reading
