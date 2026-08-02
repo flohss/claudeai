@@ -671,6 +671,18 @@ close the *predator* was (−0.52) and not the food (+0.04). A perceptible
 predator now outranks the hand, the hand outranks food, and food claims a
 moment only when it is strongly there and nothing else is.
 
+The sign matters too. A meal is credited to the state the creature was in, and
+**14.4%** of meals are taken with a hunter within perception — so the reward
+lands partly on the predator, and the panel would print *"a predator, +0.28"*
+in green. A hunter can never *make* a moment good (the only lesson predators
+hand out is negative, and they give no reward at all), so a moment that turned
+out better than expected with one in frame was driven by something else in it.
+Those read **"despite a hunter"** now, and no line saying "a predator" is ever
+green again. The underlying learning was checked rather than assumed: over 5
+seeds, `V(predator)` and the flock's dread were both unmoved by the bigger food
+reward — neither gap came close to its bar — so the leak was only ever in the
+wording.
+
 **And a meal is now worth something.** It was worth `REWARD_EAT × (1 − γ)` =
 **+0.012** against a predator memory at **−0.48** - one fortieth of being
 hunted - which measured as `V(food here) − V(nothing)` = −0.002 ± 0.023: food

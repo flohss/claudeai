@@ -144,6 +144,53 @@ With both changes, food memories sit at **-0.062** and **43% of them are
 positive**, against 3% of predator memories. The panel can finally show a
 creature that something good happened to it.
 
+## The predicted side effect: "a predator, +0.28" in green
+
+Reported straight after the reward change, and correctly anticipated as a
+consequence of it. A meal is banked with `reinforce()` and paid into the NEXT
+step's TD error, which corrects the value of the state the creature was IN. If
+a hunter was within perception at that moment, `F_PREDATOR` was lit in that
+same state, so the credit spreads across everything that was on. There is no
+way to separate them inside one perception vector.
+
+**14.4%** of meals are taken with a hunter within perception (measured by
+hooking the eater itself - a first attempt measured whether *anyone* was near a
+predator on a tick where *any* food was eaten, which is ~1 by construction and
+means nothing), and **32.7%** of kept food memories have a hunter in them too.
+
+The first question was whether this is cosmetic or whether it had eaten into
+the flock's dread - which since two commits earlier drives how hard they run,
+so a poisoned `V(predator)` costs lives. It has not, over 5 seeds x 2500 ticks:
+
+| | REWARD_EAT 0.4 | REWARD_EAT 4.0 | gap | bar |
+|---|---|---|---|---|
+| V(predator) | -0.2779 ± 0.0157 | -0.2976 ± 0.0368 | -0.020 | 0.074 → not shown |
+| mean dread | 0.2611 ± 0.0207 | 0.2822 ± 0.0338 | +0.021 | 0.068 → not shown |
+| avg predator memory | -0.4764 | -0.4782 | — | — |
+| **positive predator memories** | **1.1%** | **3.6%** | — | — |
+| most positive one | +0.285 | +0.276 | — | — |
+
+So the learning is intact, and if anything a shade more afraid. What tripled is
+purely how often the panel prints a green line next to "a predator" - and the
+worst offender is the same size as it always was. The leak predates the reward
+change; the bigger reward only made it visible.
+
+The fix is therefore in the wording, not the simulation. A hunter can never
+*make* a moment good: the only lesson predators hand out is `teach(-prox, ...)`
+and they give no reward at all, so a moment that turned out better than
+expected with a hunter in frame was driven by something else in it. Those
+moments now read **"despite a hunter"** instead of "a predator". Afterwards:
+
+| the panel shows | n | share | mean | green |
+|---|---|---|---|---|
+| a predator | 1254 | 39.7% | -0.502 | **0.0%** |
+| food | 967 | 30.6% | -0.062 | 43.2% |
+| a moment | 894 | 28.3% | -0.190 | 20.2% |
+| despite a hunter | 42 | 1.3% | +0.119 | 100% |
+
+Which is also more informative than the alternative of hiding it: a meal
+snatched under a hunter's nose is a real thing that happened, and now it says so.
+
 ## Run the measurements yourself (`report.py`)
 
 Every number this project claims came from running worlds headlessly and reading

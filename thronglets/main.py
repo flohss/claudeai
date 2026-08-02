@@ -306,6 +306,7 @@ TEXT = {
         "mem_predator": "a predator",
         "mem_food": "food",
         "mem_other": "a moment",
+        "mem_despite": "despite a hunter",
 
         "translator_title": "Translator - what each color currently means",
         "translator_unused": "unused / ambiguous",
@@ -566,6 +567,7 @@ TEXT = {
         "mem_predator": "un predateur",
         "mem_food": "la nourriture",
         "mem_other": "un instant",
+        "mem_despite": "malgre un chasseur",
 
         "translator_title": "Traducteur - ce que signifie chaque couleur en ce moment",
         "translator_unused": "inutilisee / ambigue",
@@ -1226,7 +1228,7 @@ def _signed_bar(screen, x, y, w, h, value, good=(120, 210, 100), bad=(225, 85, 7
     pygame.draw.line(screen, HUD_SEP, (mid, y - 1), (mid, y + h))
 
 
-def _memory_label(t, feat):
+def _memory_label(t, feat, target):
     """Name what a remembered moment was ABOUT: the rarest thing present, not
     the loudest.
 
@@ -1242,9 +1244,19 @@ def _memory_label(t, feat):
 
     So a memory is named for the EVENT in it. A predator perceptible at all
     outranks the hand, the hand outranks food, and food only claims a moment
-    when it is strongly there and nothing else is."""
+    when it is strongly there and nothing else is.
+
+    The sign matters too. A hunter can never MAKE a moment good: the only
+    lesson predators hand out is teach(-prox, ...), and they give no reward at
+    all - so a moment that turned out better than expected with a hunter in
+    frame was driven by something else in it, usually a meal reached anyway
+    (14.4% of meals are taken with a hunter within perception). Reporting that
+    as "a predator, +0.28" in green reads as though the creature enjoys them.
+    It is 3.6% of predator-labelled memories, up from 1.1% before eating became
+    worth something - the leak was always there, the bigger reward just made it
+    visible."""
     if feat[F_PREDATOR] >= 0.1:
-        return t["mem_predator"]
+        return t["mem_predator"] if target <= 0.0 else t["mem_despite"]
     if feat[F_HAND] >= 0.2:
         return t["mem_hand"]
     if feat[F_FOOD] >= 0.4:
@@ -1277,7 +1289,7 @@ def _mind_panel_width(font, t):
     widest = max(widest, font.size(t["mind_dread"])[0] + 8 + 40)
     # a memory row is bar, then label at +66, then a right-aligned value
     widest = max(widest, 66 + 8 + 34 + max(
-        font.size(t[k])[0] for k in ("mem_hand", "mem_predator", "mem_food", "mem_other")))
+        font.size(t[k])[0] for k in ("mem_hand", "mem_predator", "mem_food", "mem_other", "mem_despite")))
     return min(max(300, widest + 2 * pad), max(320, SCREEN_W - 40))
 
 
@@ -1370,7 +1382,7 @@ def draw_mind_panel(screen, font, mind, t):
         bar = int(min(1.0, shock / 0.6) * 60)
         col = (120, 210, 100) if target > 0 else (225, 85, 75)
         pygame.draw.rect(screen, col, (x + pad, cy + 4, max(1, bar), 6))
-        screen.blit(font.render(_memory_label(t, feat), True, HUD_HINT), (x + pad + 66, cy))
+        screen.blit(font.render(_memory_label(t, feat, target), True, HUD_HINT), (x + pad + 66, cy))
         screen.blit(font.render(f"{target:+.2f}", True, col), (x + w - pad - 34, cy))
         cy += 15
 
