@@ -14,6 +14,9 @@
     --accent3: #ffd23f;
     --text: #e8e3ff;
     --dim: #9b8ec4;
+    --t0: #00ff9c;
+    --t1: #ff4fd8;
+    --t2: #ffd23f;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -60,30 +63,11 @@
     image-rendering: pixelated;
     margin-bottom: 12px;
   }
-  .preset-bar {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    align-items: center;
-    margin-bottom: 12px;
-  }
-  .preset-bar .tag {
-    color: var(--accent3);
-    font-size: 11px;
-    letter-spacing: .2em;
-    text-transform: uppercase;
-    margin-right: 4px;
-  }
-  .panels {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-    gap: 12px;
-    margin-bottom: 16px;
-  }
   fieldset {
     border: 2px solid var(--panel-edge);
     padding: 10px 12px 12px;
     background: rgba(0,0,0,.18);
+    min-width: 0;   /* sinon le contenu élargit la colonne de grille et déborde */
   }
   legend {
     color: var(--accent3);
@@ -92,23 +76,29 @@
     padding: 0 6px;
     text-transform: uppercase;
   }
+  legend .edit-target { color: var(--tc, var(--accent)); }
+  /* colonnes fixes : le libellé ne peut jamais chevaucher la valeur */
   .row {
-    display: flex;
+    display: grid;
+    grid-template-columns: 70px minmax(30px, 1fr) 44px;
     align-items: center;
     gap: 8px;
     margin-top: 8px;
     font-size: 11px;
   }
   .row label {
-    flex: 0 0 74px;
     color: var(--dim);
     text-transform: uppercase;
-    letter-spacing: .05em;
+    letter-spacing: .02em;
+    font-size: 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .row output {
-    flex: 0 0 44px;
     text-align: right;
     color: var(--accent);
+    font-variant-numeric: tabular-nums;
   }
   input[type=range] {
     flex: 1;
@@ -136,6 +126,7 @@
     border-radius: 0;
     cursor: pointer;
   }
+  input[type=range]:focus-visible { outline: 2px solid var(--accent3); outline-offset: 2px; }
   select {
     flex: 1;
     background: #0a0614;
@@ -145,12 +136,6 @@
     font-size: 11px;
     padding: 4px;
     text-transform: uppercase;
-  }
-  .wave-buttons {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 6px;
-    margin-top: 8px;
   }
   button {
     font-family: inherit;
@@ -165,6 +150,7 @@
     box-shadow: 2px 2px 0 rgba(0,0,0,.6);
   }
   button:active { transform: translate(2px, 2px); box-shadow: none; }
+  button:focus-visible { outline: 2px solid var(--accent3); outline-offset: 2px; }
   button.selected {
     background: var(--accent);
     color: #000;
@@ -181,6 +167,63 @@
   @media (prefers-reduced-motion: reduce) {
     button.rec-on { animation: none; }
   }
+
+  /* --- Pistes --- */
+  .mixer { margin-bottom: 12px; }
+  .track-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+    font-size: 11px;
+  }
+  .track-pick {
+    flex: 0 0 108px;
+    text-align: left;
+    border-left: 6px solid var(--tc);
+    text-transform: uppercase;
+  }
+  .track-row.sel .track-pick {
+    background: var(--tc);
+    color: #000;
+    border-color: var(--tc);
+    border-left-width: 6px;
+    font-weight: bold;
+  }
+  .track-row.silent .track-pick { opacity: .45; }
+  .track-row .mini-btn { flex: 0 0 34px; padding: 6px 0; text-align: center; }
+  .track-row .mini-btn.on { background: var(--accent3); color: #000; border-color: var(--accent3); font-weight: bold; }
+  .track-row .patch-name {
+    flex: 0 0 auto;
+    color: var(--dim);
+    font-size: 10px;
+    min-width: 78px;
+  }
+  .track-row input[type=range] { max-width: 130px; }
+  @media (max-width: 560px) {
+    /* le nom du patch cède la place au curseur de volume */
+    .track-row .patch-name { display: none; }
+  }
+
+  .panels {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(224px, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .wave-buttons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .preset-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .preset-row button { flex: 1 1 auto; }
   .octave-row { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
   .octave-row button { width: 40px; }
   .octave-row .oct-value { color: var(--accent); font-size: 14px; min-width: 60px; text-align: center; }
@@ -195,12 +238,28 @@
     margin-top: 8px;
   }
   .seq-transport .row { margin-top: 0; flex: 1; min-width: 180px; }
-  .seq-grid-wrap { overflow-x: auto; margin-top: 10px; }
-  .seq-grid {
+  .grid-scroll { overflow-x: auto; margin-top: 10px; }
+  .grid-inner { min-width: 520px; }
+  .ov-grid, .seq-grid {
     display: grid;
-    grid-template-columns: 42px repeat(16, minmax(26px, 1fr));
+    grid-template-columns: 60px repeat(16, minmax(24px, 1fr));
     gap: 2px;
-    min-width: 520px;
+  }
+  .ov-grid { margin-bottom: 8px; }
+  .ov-cell {
+    height: 14px;
+    background: #0a0614;
+    border: 1px solid var(--panel-edge);
+  }
+  .ov-cell.beat { background: #120a22; border-color: #4a3180; }
+  .ov-cell.on { background: var(--tc); border-color: var(--tc); }
+  .ov-row-label {
+    font-size: 9px;
+    color: var(--tc);
+    display: flex;
+    align-items: center;
+    text-transform: uppercase;
+    overflow: hidden;
   }
   .seq-label {
     font-size: 9px;
@@ -218,9 +277,9 @@
     cursor: pointer;
   }
   .seq-cell.beat { background: #120a22; border-color: #4a3180; }
-  .seq-cell.on { background: var(--accent2); border-color: var(--accent2); }
-  .seq-cell.playhead { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
-  .seq-cell.on.playhead { background: var(--accent); border-color: var(--accent); }
+  .seq-cell.on { background: var(--tc); border-color: var(--tc); }
+  .seq-cell.ghost { background: rgba(155, 142, 196, .22); }
+  .playhead { box-shadow: inset 0 0 0 2px #fff; }
 
   .keyboard-wrap { position: relative; height: 170px; user-select: none; touch-action: none; }
   .keyboard { position: relative; height: 100%; display: flex; }
@@ -248,8 +307,8 @@
     z-index: 2;
     color: transparent;
   }
-  .key.active { background: var(--accent); color: #000; }
-  .key.black.active { background: var(--accent2); }
+  .key.active { background: var(--tc); color: #000; }
+  .key.black.active { background: var(--tc); filter: brightness(.8); }
   .hint {
     margin-top: 10px;
     font-size: 10px;
@@ -268,20 +327,20 @@
   <div class="console">
     <canvas id="scope" width="920" height="110"></canvas>
 
-    <div class="preset-bar" id="presets">
-      <span class="tag">Presets</span>
-      <button data-preset="leadgb">Lead GB</button>
-      <button data-preset="basse">Basse</button>
-      <button data-preset="cristal">Cristal</button>
-      <button data-preset="percu">Percu</button>
-      <button data-preset="sirene">Sirène</button>
-    </div>
+    <fieldset class="mixer">
+      <legend>Pistes</legend>
+      <div id="mixer"></div>
+      <div class="hint" style="text-align:left; margin-top:8px">
+        Cliquez sur un nom de piste pour l'éditer et la jouer au clavier
+        (raccourcis <b>1</b>, <b>2</b>, <b>3</b>). <b>M</b> = muet, <b>S</b> = solo.
+      </div>
+    </fieldset>
 
     <div class="panels">
       <fieldset>
-        <legend>Oscillateur</legend>
+        <legend>Oscillateur &mdash; <span class="edit-target" id="target1">Mélodie</span></legend>
         <div class="wave-buttons" id="waves">
-          <button data-wave="square" class="selected">Carré 50%</button>
+          <button data-wave="square">Carré 50%</button>
           <button data-wave="pulse25">Pulse 25%</button>
           <button data-wave="pulse125">Pulse 12.5%</button>
           <button data-wave="triangle">Triangle</button>
@@ -296,7 +355,7 @@
       </fieldset>
 
       <fieldset>
-        <legend>Enveloppe</legend>
+        <legend>Enveloppe &mdash; <span class="edit-target" id="target2">Mélodie</span></legend>
         <div class="row"><label>Attaque</label><input type="range" id="attack" min="0.001" max="1" step="0.001" value="0.01"><output id="attackOut">10ms</output></div>
         <div class="row"><label>Déclin</label><input type="range" id="decay" min="0.001" max="1" step="0.001" value="0.1"><output id="decayOut">100ms</output></div>
         <div class="row"><label>Maintien</label><input type="range" id="sustain" min="0" max="1" step="0.01" value="0.6"><output id="sustainOut">60%</output></div>
@@ -304,18 +363,25 @@
       </fieldset>
 
       <fieldset>
-        <legend>Effets</legend>
+        <legend>Timbre &mdash; <span class="edit-target" id="target3">Mélodie</span></legend>
         <div class="row"><label>Bits</label><input type="range" id="bits" min="2" max="8" step="1" value="8"><output id="bitsOut">8</output></div>
-        <div class="row"><label>Vib. vitesse</label><input type="range" id="vibRate" min="0.5" max="12" step="0.1" value="5"><output id="vibRateOut">5Hz</output></div>
+        <div class="row"><label>Vib. vit.</label><input type="range" id="vibRate" min="0.5" max="12" step="0.1" value="5"><output id="vibRateOut">5Hz</output></div>
         <div class="row"><label>Vib. prof.</label><input type="range" id="vibDepth" min="0" max="600" step="5" value="0"><output id="vibDepthOut">0</output></div>
-        <div class="row"><label>Volume</label><input type="range" id="volume" min="0" max="1" step="0.01" value="0.5"><output id="volumeOut">50%</output></div>
+        <div class="preset-row" id="presets">
+          <button data-preset="leadgb">Lead GB</button>
+          <button data-preset="basse">Basse</button>
+          <button data-preset="cristal">Cristal</button>
+          <button data-preset="percu">Percu</button>
+          <button data-preset="sirene">Sirène</button>
+        </div>
       </fieldset>
 
       <fieldset>
-        <legend>Écho</legend>
-        <div class="row"><label>Mix</label><input type="range" id="echoMix" min="0" max="0.8" step="0.01" value="0"><output id="echoMixOut">0%</output></div>
-        <div class="row"><label>Temps</label><input type="range" id="echoTime" min="0.05" max="0.6" step="0.01" value="0.22"><output id="echoTimeOut">220ms</output></div>
-        <div class="row"><label>Retour</label><input type="range" id="echoFb" min="0" max="0.8" step="0.01" value="0.35"><output id="echoFbOut">35%</output></div>
+        <legend>Master &amp; écho</legend>
+        <div class="row"><label>Volume</label><input type="range" id="volume" min="0" max="1" step="0.01" value="0.5"><output id="volumeOut">50%</output></div>
+        <div class="row"><label>Écho mix</label><input type="range" id="echoMix" min="0" max="0.8" step="0.01" value="0.12"><output id="echoMixOut">12%</output></div>
+        <div class="row"><label>Écho temps</label><input type="range" id="echoTime" min="0.05" max="0.6" step="0.01" value="0.22"><output id="echoTimeOut">220ms</output></div>
+        <div class="row"><label>Écho retour</label><input type="range" id="echoFb" min="0" max="0.8" step="0.01" value="0.35"><output id="echoFbOut">35%</output></div>
       </fieldset>
 
       <fieldset>
@@ -335,16 +401,23 @@
     </div>
 
     <fieldset class="seq">
-      <legend>Séquenceur &mdash; 16 pas</legend>
+      <legend>Séquenceur &mdash; 16 pas &mdash; <span class="edit-target" id="target4">Mélodie</span></legend>
       <div class="seq-transport">
         <button id="seqPlay">&#9654; Lecture</button>
-        <button id="seqClear">Effacer</button>
+        <button id="seqClear">Effacer piste</button>
         <button id="recBtn">&#9679; Enregistrer</button>
         <div class="row"><label>Tempo</label><input type="range" id="bpm" min="60" max="240" step="1" value="120"><output id="bpmOut">120</output></div>
       </div>
-      <div class="seq-grid-wrap"><div class="seq-grid" id="seqGrid"></div></div>
+      <div class="grid-scroll">
+        <div class="grid-inner">
+          <div class="ov-grid" id="ovGrid"></div>
+          <div class="seq-grid" id="seqGrid"></div>
+        </div>
+      </div>
       <div class="hint" style="text-align:left; margin-top:6px">
-        Cliquez sur la grille pour placer les notes (une par pas). Le sélecteur d'octave transpose la séquence.
+        La bande du haut résume les trois pistes ; la grille détaille la piste
+        sélectionnée (les autres apparaissent en gris clair). Une note par pas.
+        <b>Espace</b> lance ou arrête la lecture.
       </div>
     </fieldset>
 
@@ -363,22 +436,57 @@
 (function () {
   "use strict";
 
-  // ------- État -------
-  const params = {
-    wave: "square", attack: 0.01, decay: 0.1, sustain: 0.6, release: 0.15,
-    bits: 8, vibRate: 5, vibDepth: 0, volume: 0.5, octave: 4,
-    arpMode: "off", arpRate: 8,
-    echoMix: 0, echoTime: 0.22, echoFb: 0.35, bpm: 120
-  };
   const NOTE_NAMES = ["Do", "Do#", "Ré", "Ré#", "Mi", "Fa", "Fa#", "Sol", "Sol#", "La", "La#", "Si"];
-  const KEY_COUNT = 25; // 2 octaves + Do final
+  const KEY_COUNT = 25;   // clavier : 2 octaves + Do final
+  const STEPS = 16;
+  const ROWS = 13;        // piano-roll : Do -> Do
+  const TRACK_COLORS = ["var(--t0)", "var(--t1)", "var(--t2)"];
 
-  let ctx = null, masterIn, shaper, analyser, masterGain, lfo, lfoGain;
-  let delayNode, delayFb, delayWet, recDest;
-  let pulse25Wave, pulse125Wave, noiseBuffer;
-  const voices = new Map(); // midi -> { src, gain }
+  // ------- Presets -------
+  const PRESETS = {
+    leadgb:  { label: "Lead GB", wave: "pulse125", octave: 4, attack: 0.005, decay: 0.08,
+               sustain: 0.5, release: 0.12, bits: 4, vibRate: 6, vibDepth: 15 },
+    basse:   { label: "Basse", wave: "square", octave: 2, attack: 0.005, decay: 0.15,
+               sustain: 0.7, release: 0.1, bits: 6, vibRate: 5, vibDepth: 0 },
+    cristal: { label: "Cristal", wave: "triangle", octave: 6, attack: 0.01, decay: 0.3,
+               sustain: 0.3, release: 0.5, bits: 8, vibRate: 5, vibDepth: 0 },
+    percu:   { label: "Percu", wave: "noise", octave: 3, attack: 0.001, decay: 0.09,
+               sustain: 0, release: 0.06, bits: 3, vibRate: 5, vibDepth: 0 },
+    sirene:  { label: "Sirène", wave: "square", octave: 5, attack: 0.05, decay: 0.1,
+               sustain: 1, release: 0.3, bits: 5, vibRate: 1, vibDepth: 600 }
+  };
+
+  const PATCH_KEYS = ["wave", "octave", "attack", "decay", "sustain", "release",
+                      "bits", "vibRate", "vibDepth"];
+
+  function patchFrom(presetName) {
+    const p = PRESETS[presetName], out = { preset: presetName };
+    PATCH_KEYS.forEach(k => out[k] = p[k]);
+    return out;
+  }
+
+  const _ = null; // pas vide, pour lire les motifs de démo
+
+  // ------- Pistes -------
+  const tracks = [
+    { name: "Mélodie", patch: patchFrom("leadgb"), vol: 0.8, mute: false, solo: false,
+      data: [0, 4, 7, 12, 0, 4, 7, 12, 9, 5, 9, 12, 7, 4, 2, 0] },
+    { name: "Basse", patch: patchFrom("basse"), vol: 0.9, mute: false, solo: false,
+      data: [0, _, _, 0, 5, _, _, 5, 9, _, _, 9, 7, _, 7, _] },
+    { name: "Percu", patch: patchFrom("percu"), vol: 0.7, mute: false, solo: false,
+      data: [0, _, 12, _, 0, _, 12, 12, 0, _, 12, _, 0, 12, 12, _] }
+  ];
+  let currentTrack = 0;
+
+  const master = { volume: 0.5, echoMix: 0.12, echoTime: 0.22, echoFb: 0.35,
+                   bpm: 120, arpMode: "off", arpRate: 8 };
 
   // ------- Audio -------
+  let ctx = null, busIn, analyser, masterGain, delayNode, delayFb, delayWet, recDest;
+  let pulse25Wave, pulse125Wave, noiseBuffer;
+  const trackNodes = [];              // { shaper, gain, lfo, lfoGain }
+  const voices = new Map();           // midi -> { src, gain }  (clavier live)
+
   function midiToFreq(m) { return 440 * Math.pow(2, (m - 69) / 12); }
 
   function crusherCurve(bits) {
@@ -418,24 +526,22 @@
     if (ctx) { if (ctx.state === "suspended") ctx.resume(); return; }
     ctx = new (window.AudioContext || window.webkitAudioContext)();
 
-    masterIn = ctx.createGain();
-    shaper = ctx.createWaveShaper();
-    shaper.curve = crusherCurve(params.bits);
+    busIn = ctx.createGain();
     analyser = ctx.createAnalyser();
     analyser.fftSize = 2048;
     masterGain = ctx.createGain();
-    masterGain.gain.value = params.volume;
+    masterGain.gain.value = master.volume;
 
-    // Chaîne : voix -> bitcrusher -> (direct + écho) -> analyseur -> volume -> sortie
-    masterIn.connect(shaper);
-    shaper.connect(analyser);
     delayNode = ctx.createDelay(1);
-    delayNode.delayTime.value = params.echoTime;
+    delayNode.delayTime.value = master.echoTime;
     delayFb = ctx.createGain();
-    delayFb.gain.value = params.echoFb;
+    delayFb.gain.value = master.echoFb;
     delayWet = ctx.createGain();
-    delayWet.gain.value = params.echoMix;
-    shaper.connect(delayNode);
+    delayWet.gain.value = master.echoMix;
+
+    // pistes (chacune crushée séparément) -> bus -> [direct + écho] -> analyseur -> master
+    busIn.connect(analyser);
+    busIn.connect(delayNode);
     delayNode.connect(delayFb);
     delayFb.connect(delayNode);
     delayNode.connect(delayWet);
@@ -446,54 +552,89 @@
     recDest = ctx.createMediaStreamDestination();
     masterGain.connect(recDest);
 
-    lfo = ctx.createOscillator();
-    lfo.type = "sine";
-    lfo.frequency.value = params.vibRate;
-    lfoGain = ctx.createGain();
-    lfoGain.gain.value = params.vibDepth; // en cents
-    lfo.connect(lfoGain);
-    lfo.start();
-
     pulse25Wave = makePulseWave(0.25);
     pulse125Wave = makePulseWave(0.125);
     noiseBuffer = makeNoiseBuffer();
 
+    tracks.forEach((tr, i) => {
+      const shaper = ctx.createWaveShaper();
+      shaper.curve = crusherCurve(tr.patch.bits);
+      const gain = ctx.createGain();
+      gain.gain.value = audibleVol(i);
+      shaper.connect(gain);
+      gain.connect(busIn);
+
+      const lfo = ctx.createOscillator();
+      lfo.type = "sine";
+      lfo.frequency.value = tr.patch.vibRate;
+      const lfoGain = ctx.createGain();
+      lfoGain.gain.value = tr.patch.vibDepth;
+      lfo.connect(lfoGain);
+      lfo.start();
+
+      trackNodes[i] = { shaper, gain, lfo, lfoGain };
+    });
+
     drawScope();
   }
 
-  function makeSource(midi) {
+  function anySolo() { return tracks.some(t => t.solo); }
+
+  function audibleVol(i) {
+    const tr = tracks[i];
+    if (tr.mute) return 0;
+    if (anySolo() && !tr.solo) return 0;
+    return tr.vol * 0.55;   // marge pour éviter la saturation à 3 pistes
+  }
+
+  function refreshTrackGains() {
+    if (!ctx) return;
+    tracks.forEach((tr, i) =>
+      trackNodes[i].gain.gain.setTargetAtTime(audibleVol(i), ctx.currentTime, 0.01));
+  }
+
+  function applyPatchToNodes(i) {
+    if (!ctx) return;
+    const p = tracks[i].patch, n = trackNodes[i];
+    n.shaper.curve = crusherCurve(p.bits);
+    n.lfo.frequency.setValueAtTime(p.vibRate, ctx.currentTime);
+    n.lfoGain.gain.setValueAtTime(p.vibDepth, ctx.currentTime);
+  }
+
+  function makeSource(i, midi) {
+    const p = tracks[i].patch;
     let src;
-    if (params.wave === "noise") {
+    if (p.wave === "noise") {
       src = ctx.createBufferSource();
       src.buffer = noiseBuffer;
       src.loop = true;
       src.playbackRate.value = midiToFreq(midi) / 220;
     } else {
       src = ctx.createOscillator();
-      if (params.wave === "pulse25") src.setPeriodicWave(pulse25Wave);
-      else if (params.wave === "pulse125") src.setPeriodicWave(pulse125Wave);
-      else src.type = params.wave;
+      if (p.wave === "pulse25") src.setPeriodicWave(pulse25Wave);
+      else if (p.wave === "pulse125") src.setPeriodicWave(pulse125Wave);
+      else src.type = p.wave;
       src.frequency.value = midiToFreq(midi);
     }
-    lfoGain.connect(src.detune);
+    trackNodes[i].lfoGain.connect(src.detune);
     return src;
   }
 
+  // Note tenue (clavier / arpège) sur la piste sélectionnée
   function noteOn(midi) {
     initAudio();
     if (voices.has(midi)) return;
-    const t = ctx.currentTime;
-    const src = makeSource(midi);
+    const i = currentTrack, p = tracks[i].patch, t = ctx.currentTime;
+    const src = makeSource(i, midi);
     const gain = ctx.createGain();
-    const a = Math.max(0.001, params.attack);
-    const d = Math.max(0.001, params.decay);
+    const a = Math.max(0.001, p.attack), d = Math.max(0.001, p.decay);
     gain.gain.setValueAtTime(0, t);
-    gain.gain.linearRampToValueAtTime(0.9, t + a);
-    gain.gain.linearRampToValueAtTime(params.sustain * 0.9, t + a + d);
+    gain.gain.linearRampToValueAtTime(0.85, t + a);
+    gain.gain.linearRampToValueAtTime(p.sustain * 0.85, t + a + d);
     src.connect(gain);
-    gain.connect(masterIn);
+    gain.connect(trackNodes[i].shaper);
     src.start(t);
-    voices.set(midi, { src, gain });
+    voices.set(midi, { src, gain, track: i });
     setKeyVisual(midi, true);
   }
 
@@ -501,8 +642,8 @@
     const v = voices.get(midi);
     if (!v) return;
     voices.delete(midi);
-    const t = ctx.currentTime;
-    const r = Math.max(0.01, params.release);
+    const p = tracks[v.track].patch, t = ctx.currentTime;
+    const r = Math.max(0.01, p.release);
     v.gain.gain.cancelScheduledValues(t);
     v.gain.gain.setValueAtTime(v.gain.gain.value, t);
     v.gain.gain.linearRampToValueAtTime(0.0001, t + r);
@@ -510,35 +651,33 @@
     setKeyVisual(midi, false);
   }
 
-  // Note planifiée (séquenceur) : indépendante des voix tenues au clavier
-  function playNote(midi, when, dur) {
-    const src = makeSource(midi);
-    const gain = ctx.createGain();
-    const a = Math.max(0.001, params.attack);
-    const d = Math.max(0.001, params.decay);
-    const r = Math.max(0.01, params.release);
-    const susT = when + a + d;
-    const end = when + Math.max(dur, a + 0.01);
-    gain.gain.setValueAtTime(0, when);
-    gain.gain.linearRampToValueAtTime(0.9, when + a);
-    gain.gain.linearRampToValueAtTime(params.sustain * 0.9, susT);
-    if (end > susT) gain.gain.setValueAtTime(params.sustain * 0.9, end);
-    gain.gain.linearRampToValueAtTime(0.0001, Math.max(end, susT) + r);
-    src.connect(gain);
-    gain.connect(masterIn);
-    src.start(when);
-    src.stop(Math.max(end, susT) + r + 0.05);
-  }
+  function allNotesOff() { [...voices.keys()].forEach(noteOff); }
 
-  function allNotesOff() {
-    [...voices.keys()].forEach(noteOff);
+  // Note planifiée (séquenceur) : indépendante des voix tenues
+  function playNote(i, midi, when, dur) {
+    const p = tracks[i].patch;
+    const src = makeSource(i, midi);
+    const gain = ctx.createGain();
+    const a = Math.max(0.001, p.attack), d = Math.max(0.001, p.decay);
+    const r = Math.max(0.01, p.release);
+    const susT = when + a + d;
+    const end = Math.max(when + Math.max(dur, a + 0.01), susT);
+    gain.gain.setValueAtTime(0, when);
+    gain.gain.linearRampToValueAtTime(0.85, when + a);
+    gain.gain.linearRampToValueAtTime(p.sustain * 0.85, susT);
+    if (end > susT) gain.gain.setValueAtTime(p.sustain * 0.85, end);
+    gain.gain.linearRampToValueAtTime(0.0001, end + r);
+    src.connect(gain);
+    gain.connect(trackNodes[i].shaper);
+    src.start(when);
+    src.stop(end + r + 0.05);
   }
 
   // ------- Arpégiateur -------
   let held = [], arpTimer = null, arpIndex = 0, arpDir = 1;
 
   function pressNote(midi) {
-    if (params.arpMode === "off") { noteOn(midi); return; }
+    if (master.arpMode === "off") { noteOn(midi); return; }
     initAudio();
     if (!held.includes(midi)) held.push(midi);
     setKeyVisual(midi, true);
@@ -546,7 +685,7 @@
   }
 
   function releaseNote(midi) {
-    if (params.arpMode === "off") { noteOff(midi); return; }
+    if (master.arpMode === "off") { noteOff(midi); return; }
     held = held.filter(m => m !== midi);
     setKeyVisual(midi, false);
     if (held.length === 0) stopArp();
@@ -555,7 +694,7 @@
   function startArp() {
     if (arpTimer) return;
     arpIndex = 0; arpDir = 1;
-    arpTimer = setInterval(arpTick, 1000 / params.arpRate);
+    arpTimer = setInterval(arpTick, 1000 / master.arpRate);
     arpTick();
   }
 
@@ -563,49 +702,155 @@
     if (arpTimer) { clearInterval(arpTimer); arpTimer = null; }
   }
 
-  function restartArp() {
-    if (arpTimer) { stopArp(); startArp(); }
-  }
+  function restartArp() { if (arpTimer) { stopArp(); startArp(); } }
 
   function arpTick() {
     if (held.length === 0) return;
     const notes = [...held].sort((x, y) => x - y);
     let n;
-    if (params.arpMode === "up") {
-      n = notes[arpIndex % notes.length];
-      arpIndex++;
-    } else if (params.arpMode === "down") {
-      n = notes[notes.length - 1 - (arpIndex % notes.length)];
-      arpIndex++;
-    } else if (params.arpMode === "updown") {
-      if (notes.length === 1) { n = notes[0]; }
+    if (master.arpMode === "up") {
+      n = notes[arpIndex % notes.length]; arpIndex++;
+    } else if (master.arpMode === "down") {
+      n = notes[notes.length - 1 - (arpIndex % notes.length)]; arpIndex++;
+    } else if (master.arpMode === "updown") {
+      if (notes.length === 1) n = notes[0];
       else {
         if (arpIndex >= notes.length - 1) arpDir = -1;
         if (arpIndex <= 0) arpDir = 1;
         n = notes[Math.max(0, Math.min(arpIndex, notes.length - 1))];
         arpIndex += arpDir;
       }
-    } else { // random
+    } else {
       n = notes[Math.floor(Math.random() * notes.length)];
     }
-    const gate = Math.max(40, (1000 / params.arpRate) * 0.55);
+    const gate = Math.max(40, (1000 / master.arpRate) * 0.55);
     noteOn(n);
     setTimeout(() => noteOff(n), gate);
   }
 
-  // ------- Séquenceur 16 pas -------
-  const STEPS = 16, ROWS = 13; // Do -> Do (une octave)
-  // Motif de démo : arpège Do majeur puis descente
-  const seqData = [0, 4, 7, 12, 0, 4, 7, 12, 9, 5, 9, 12, 7, 4, 2, 0];
+  // ------- Table de mixage -------
+  const mixerEl = document.getElementById("mixer");
+  const trackRows = [];
+
+  function buildMixer() {
+    mixerEl.innerHTML = "";
+    tracks.forEach((tr, i) => {
+      const row = document.createElement("div");
+      row.className = "track-row";
+      row.style.setProperty("--tc", TRACK_COLORS[i]);
+
+      const pick = document.createElement("button");
+      pick.className = "track-pick";
+      pick.textContent = (i + 1) + ". " + tr.name;
+      pick.addEventListener("click", () => selectTrack(i));
+
+      const mute = document.createElement("button");
+      mute.className = "mini-btn";
+      mute.textContent = "M";
+      mute.title = "Muet";
+      mute.addEventListener("click", () => {
+        tr.mute = !tr.mute;
+        refreshMixer(); refreshOverview(); refreshTrackGains();
+      });
+
+      const solo = document.createElement("button");
+      solo.className = "mini-btn";
+      solo.textContent = "S";
+      solo.title = "Solo";
+      solo.addEventListener("click", () => {
+        tr.solo = !tr.solo;
+        refreshMixer(); refreshOverview(); refreshTrackGains();
+      });
+
+      const patchName = document.createElement("span");
+      patchName.className = "patch-name";
+
+      const vol = document.createElement("input");
+      vol.type = "range";
+      vol.min = 0; vol.max = 1; vol.step = 0.01; vol.value = tr.vol;
+      vol.title = "Volume de la piste";
+      vol.addEventListener("input", () => {
+        tr.vol = Number(vol.value);
+        refreshTrackGains();
+      });
+
+      row.append(pick, mute, solo, patchName, vol);
+      mixerEl.appendChild(row);
+      trackRows[i] = { row, mute, solo, patchName };
+    });
+    refreshMixer();
+  }
+
+  function refreshMixer() {
+    const solos = anySolo();
+    tracks.forEach((tr, i) => {
+      const r = trackRows[i];
+      r.row.classList.toggle("sel", i === currentTrack);
+      r.row.classList.toggle("silent", tr.mute || (solos && !tr.solo));
+      r.mute.classList.toggle("on", tr.mute);
+      r.solo.classList.toggle("on", tr.solo);
+      const preset = PRESETS[tr.patch.preset];
+      r.patchName.textContent = preset ? preset.label : "Perso";
+    });
+  }
+
+  function selectTrack(i) {
+    if (i === currentTrack) return;
+    allNotesOff(); held = []; stopArp();
+    currentTrack = i;
+    document.documentElement.style.setProperty("--tc", TRACK_COLORS[i]);
+    document.querySelectorAll(".edit-target").forEach(el => el.textContent = tracks[i].name);
+    loadPatchIntoControls();
+    refreshMixer();
+    refreshSeqGrid();
+    refreshKeyLabels();
+  }
+
+  // ------- Séquenceur -------
   let seqPlaying = false, seqStep = 0, nextStepTime = 0, seqTimer = null;
   let stepQueue = [], playheadStep = -1;
   const seqGridEl = document.getElementById("seqGrid");
-  const seqCells = []; // [step][row] -> element
+  const ovGridEl = document.getElementById("ovGrid");
+  const seqCells = [];  // [step][row]
+  const ovCells = [];   // [track][step]
+
+  function buildOverview() {
+    ovGridEl.innerHTML = "";
+    tracks.forEach((tr, i) => {
+      const label = document.createElement("div");
+      label.className = "ov-row-label";
+      label.style.setProperty("--tc", TRACK_COLORS[i]);
+      label.textContent = tr.name;
+      ovGridEl.appendChild(label);
+      ovCells[i] = [];
+      for (let s = 0; s < STEPS; s++) {
+        const cell = document.createElement("div");
+        cell.className = "ov-cell" + (s % 4 === 0 ? " beat" : "");
+        cell.style.setProperty("--tc", TRACK_COLORS[i]);
+        ovGridEl.appendChild(cell);
+        ovCells[i][s] = cell;
+      }
+    });
+    // les libellés et les cellules d'une même piste partagent la classe de ligne
+    refreshOverview();
+  }
+
+  function refreshOverview() {
+    const solos = anySolo();
+    tracks.forEach((tr, i) => {
+      const silent = tr.mute || (solos && !tr.solo);
+      for (let s = 0; s < STEPS; s++) {
+        const c = ovCells[i][s];
+        c.classList.toggle("on", tr.data[s] !== null && tr.data[s] !== undefined);
+        c.style.opacity = silent ? ".3" : "1";
+      }
+    });
+  }
 
   function buildSeqGrid() {
     seqGridEl.innerHTML = "";
     for (let r = 0; r < ROWS; r++) {
-      const off = ROWS - 1 - r; // rangée du haut = Do aigu
+      const off = ROWS - 1 - r;   // aigu en haut
       const label = document.createElement("div");
       label.className = "seq-label";
       label.textContent = NOTE_NAMES[off % 12] + (off === 12 ? "+" : "");
@@ -623,29 +868,54 @@
   }
 
   function refreshSeqGrid() {
+    const data = tracks[currentTrack].data;
     for (let s = 0; s < STEPS; s++) {
+      // notes des autres pistes en repère discret
+      const ghosts = new Set();
+      tracks.forEach((tr, i) => {
+        if (i !== currentTrack && tr.data[s] !== null && tr.data[s] !== undefined) ghosts.add(tr.data[s]);
+      });
       for (let o = 0; o < ROWS; o++) {
-        seqCells[s][o].classList.toggle("on", seqData[s] === o);
+        const cell = seqCells[s][o];
+        const on = data[s] === o;
+        cell.classList.toggle("on", on);
+        cell.classList.toggle("ghost", !on && ghosts.has(o));
       }
     }
+    refreshOverview();
   }
 
   seqGridEl.addEventListener("click", e => {
     const cell = e.target.closest(".seq-cell");
     if (!cell) return;
     const s = Number(cell.dataset.step), o = Number(cell.dataset.off);
-    seqData[s] = (seqData[s] === o) ? null : o;
+    const tr = tracks[currentTrack];
+    tr.data[s] = (tr.data[s] === o) ? null : o;
     refreshSeqGrid();
+    if (!seqPlaying && tr.data[s] !== null) {
+      initAudio();
+      playNote(currentTrack, trackBase(currentTrack) + o, ctx.currentTime + 0.01, 0.12);
+    }
   });
 
-  function stepDur() { return 60 / params.bpm / 4; } // double-croche
+  ovGridEl.addEventListener("click", e => {
+    const idx = [...ovGridEl.children].indexOf(e.target);
+    if (idx < 0) return;
+    selectTrack(Math.floor(idx / (STEPS + 1)));
+  });
+
+  function trackBase(i) { return 12 * (tracks[i].patch.octave + 1); }
+  function stepDur() { return 60 / master.bpm / 4; }  // double-croche
 
   function seqScheduler() {
     while (nextStepTime < ctx.currentTime + 0.12) {
-      const off = seqData[seqStep];
-      if (off !== null && off !== undefined) {
-        playNote(baseMidi() + off, nextStepTime, stepDur() * 0.6);
-      }
+      const solos = anySolo();
+      tracks.forEach((tr, i) => {
+        const off = tr.data[seqStep];
+        if (off === null || off === undefined) return;
+        if (tr.mute || (solos && !tr.solo)) return;
+        playNote(i, trackBase(i) + off, nextStepTime, stepDur() * 0.6);
+      });
       stepQueue.push({ step: seqStep, time: nextStepTime });
       nextStepTime += stepDur();
       seqStep = (seqStep + 1) % STEPS;
@@ -656,10 +926,12 @@
     if (step === playheadStep) return;
     if (playheadStep >= 0) {
       for (let o = 0; o < ROWS; o++) seqCells[playheadStep][o].classList.remove("playhead");
+      for (let i = 0; i < tracks.length; i++) ovCells[i][playheadStep].classList.remove("playhead");
     }
     playheadStep = step;
     if (step >= 0) {
       for (let o = 0; o < ROWS; o++) seqCells[step][o].classList.add("playhead");
+      for (let i = 0; i < tracks.length; i++) ovCells[i][step].classList.add("playhead");
     }
   }
 
@@ -688,7 +960,7 @@
 
   seqPlayBtn.addEventListener("click", () => seqPlaying ? seqStop() : seqStart());
   document.getElementById("seqClear").addEventListener("click", () => {
-    seqData.fill(null);
+    tracks[currentTrack].data.fill(null);
     refreshSeqGrid();
   });
 
@@ -698,14 +970,8 @@
 
   recBtn.addEventListener("click", () => {
     initAudio();
-    if (recorder && recorder.state === "recording") {
-      recorder.stop();
-      return;
-    }
-    if (typeof MediaRecorder === "undefined") {
-      recBtn.textContent = "Non supporté";
-      return;
-    }
+    if (recorder && recorder.state === "recording") { recorder.stop(); return; }
+    if (typeof MediaRecorder === "undefined") { recBtn.textContent = "Non supporté"; return; }
     recChunks = [];
     recorder = new MediaRecorder(recDest.stream);
     recorder.ondataavailable = e => { if (e.data.size) recChunks.push(e.data); };
@@ -727,15 +993,15 @@
 
   // ------- Clavier virtuel -------
   const kbEl = document.getElementById("keyboard");
-  const keyEls = new Map(); // offset -> element
+  const keyEls = new Map();
   const BLACK = new Set([1, 3, 6, 8, 10]);
 
-  function baseMidi() { return 12 * (params.octave + 1); } // octave 4 -> Do4 = 60
+  function baseMidi() { return trackBase(currentTrack); }
 
   function buildKeyboard() {
     kbEl.innerHTML = "";
     keyEls.clear();
-    const whiteWidth = 100 / 15; // 15 touches blanches
+    const whiteWidth = 100 / 15;
     let whiteIndex = 0;
     for (let i = 0; i < KEY_COUNT; i++) {
       const semitone = i % 12;
@@ -755,21 +1021,20 @@
   }
 
   function refreshKeyLabels() {
+    const oct = tracks[currentTrack].patch.octave;
     keyEls.forEach((el, i) => {
       const semitone = i % 12;
       if (!BLACK.has(semitone)) {
-        el.textContent = NOTE_NAMES[semitone] + (semitone === 0 ? params.octave + Math.floor(i / 12) : "");
+        el.textContent = NOTE_NAMES[semitone] + (semitone === 0 ? oct + Math.floor(i / 12) : "");
       }
     });
   }
 
   function setKeyVisual(midi, on) {
-    const offset = midi - baseMidi();
-    const el = keyEls.get(offset);
+    const el = keyEls.get(midi - baseMidi());
     if (el) el.classList.toggle("active", on);
   }
 
-  // Pointeur (souris / tactile) avec glissando
   let pointerDown = false, pointerNote = null;
 
   function keyFromEvent(e) {
@@ -798,7 +1063,7 @@
     if (pointerNote !== null) { releaseNote(pointerNote); pointerNote = null; }
   });
 
-  // Clavier physique (positions des touches : compatible AZERTY/QWERTY)
+  // Clavier physique (positions : compatible AZERTY/QWERTY)
   const KEYMAP = {
     KeyA: 0, KeyW: 1, KeyS: 2, KeyE: 3, KeyD: 4, KeyF: 5, KeyT: 6,
     KeyG: 7, KeyY: 8, KeyH: 9, KeyU: 10, KeyJ: 11, KeyK: 12, KeyO: 13,
@@ -808,12 +1073,18 @@
 
   window.addEventListener("keydown", e => {
     if (e.repeat) return;
+    const tag = e.target.tagName;
+    if (tag === "INPUT" || tag === "SELECT") return;
     if (e.code in KEYMAP && !downKeys.has(e.code)) {
       e.preventDefault();
       downKeys.add(e.code);
       pressNote(baseMidi() + KEYMAP[e.code]);
-    } else if (e.code === "KeyZ") { shiftOctave(-1); }
-    else if (e.code === "KeyX") { shiftOctave(1); }
+    } else if (e.code === "KeyZ") shiftOctave(-1);
+    else if (e.code === "KeyX") shiftOctave(1);
+    else if (e.code === "Space") { e.preventDefault(); seqPlaying ? seqStop() : seqStart(); }
+    else if (e.code === "Digit1" || e.code === "Numpad1") selectTrack(0);
+    else if (e.code === "Digit2" || e.code === "Numpad2") selectTrack(1);
+    else if (e.code === "Digit3" || e.code === "Numpad3") selectTrack(2);
   });
   window.addEventListener("keyup", e => {
     if (e.code in KEYMAP && downKeys.has(e.code)) {
@@ -825,6 +1096,11 @@
 
   // ------- Contrôles -------
   const sliders = {};
+  // Vrai pendant qu'on recopie un patch dans les contrôles : les curseurs ne
+  // doivent alors pas réécrire dans le patch ni le marquer comme personnalisé.
+  // Reste vrai jusqu'au premier loadPatchIntoControls() pour que les valeurs
+  // par défaut du HTML n'écrasent pas le patch de la piste 1.
+  let loadingPatch = true;
 
   function bindSlider(id, fmt, apply) {
     const input = document.getElementById(id);
@@ -847,50 +1123,60 @@
   const ms = v => v < 1 ? Math.round(v * 1000) + "ms" : v.toFixed(2) + "s";
   const pct = v => Math.round(v * 100) + "%";
 
-  bindSlider("attack", ms, v => params.attack = v);
-  bindSlider("decay", ms, v => params.decay = v);
-  bindSlider("sustain", pct, v => params.sustain = v);
-  bindSlider("release", ms, v => params.release = v);
-  bindSlider("bits", v => String(v), v => {
-    params.bits = v;
-    if (shaper) shaper.curve = crusherCurve(v);
-  });
-  bindSlider("vibRate", v => v.toFixed(1) + "Hz", v => {
-    params.vibRate = v;
-    if (lfo) lfo.frequency.setValueAtTime(v, ctx.currentTime);
-  });
-  bindSlider("vibDepth", v => String(v), v => {
-    params.vibDepth = v;
-    if (lfoGain) lfoGain.gain.setValueAtTime(v, ctx.currentTime);
-  });
+  // Paramètres de piste : écrivent dans le patch de la piste sélectionnée
+  function patchSlider(id, fmt, key, afterApply) {
+    bindSlider(id, fmt, v => {
+      if (loadingPatch) return;
+      tracks[currentTrack].patch[key] = v;
+      markCustom();
+      if (afterApply) afterApply();
+    });
+  }
+
+  function markCustom() {
+    tracks[currentTrack].patch.preset = null;
+    refreshMixer();
+    document.querySelectorAll("#presets button").forEach(b => b.classList.remove("selected"));
+  }
+
+  patchSlider("attack", ms, "attack");
+  patchSlider("decay", ms, "decay");
+  patchSlider("sustain", pct, "sustain");
+  patchSlider("release", ms, "release");
+  patchSlider("bits", v => String(v), "bits", () => applyPatchToNodes(currentTrack));
+  patchSlider("vibRate", v => v.toFixed(1) + "Hz", "vibRate", () => applyPatchToNodes(currentTrack));
+  patchSlider("vibDepth", v => String(v), "vibDepth", () => applyPatchToNodes(currentTrack));
+
+  // Paramètres globaux
   bindSlider("volume", pct, v => {
-    params.volume = v;
+    master.volume = v;
     if (masterGain) masterGain.gain.setValueAtTime(v, ctx.currentTime);
   });
   bindSlider("echoMix", pct, v => {
-    params.echoMix = v;
+    master.echoMix = v;
     if (delayWet) delayWet.gain.setValueAtTime(v, ctx.currentTime);
   });
   bindSlider("echoTime", ms, v => {
-    params.echoTime = v;
+    master.echoTime = v;
     if (delayNode) delayNode.delayTime.setValueAtTime(v, ctx.currentTime);
   });
   bindSlider("echoFb", pct, v => {
-    params.echoFb = v;
+    master.echoFb = v;
     if (delayFb) delayFb.gain.setValueAtTime(v, ctx.currentTime);
   });
-  bindSlider("arpRate", v => v + "Hz", v => { params.arpRate = v; restartArp(); });
-  bindSlider("bpm", v => String(v), v => { params.bpm = v; });
+  bindSlider("arpRate", v => v + "Hz", v => { master.arpRate = v; restartArp(); });
+  bindSlider("bpm", v => String(v), v => { master.bpm = v; });
 
   document.getElementById("arpMode").addEventListener("change", e => {
-    params.arpMode = e.target.value;
+    master.arpMode = e.target.value;
     held = []; stopArp(); allNotesOff();
   });
 
-  function selectWave(wave) {
-    params.wave = wave;
+  function selectWave(wave, silent) {
+    tracks[currentTrack].patch.wave = wave;
     document.querySelectorAll("#waves button").forEach(b =>
       b.classList.toggle("selected", b.dataset.wave === wave));
+    if (!silent) markCustom();
   }
 
   document.getElementById("waves").addEventListener("click", e => {
@@ -898,45 +1184,44 @@
     if (btn) selectWave(btn.dataset.wave);
   });
 
-  function setOctave(oct) {
-    const next = Math.min(7, Math.max(1, oct));
-    if (next === params.octave) return;
+  function setOctave(oct, silent) {
+    const next = Math.min(7, Math.max(0, oct));
+    const patch = tracks[currentTrack].patch;
+    if (next === patch.octave) return;
     allNotesOff(); held = []; stopArp();
-    params.octave = next;
+    patch.octave = next;
     document.getElementById("octValue").textContent = next;
     refreshKeyLabels();
+    if (!silent) markCustom();
   }
-  function shiftOctave(delta) { setOctave(params.octave + delta); }
+  function shiftOctave(delta) { setOctave(tracks[currentTrack].patch.octave + delta); }
   document.getElementById("octDown").addEventListener("click", () => shiftOctave(-1));
   document.getElementById("octUp").addEventListener("click", () => shiftOctave(1));
 
-  // ------- Presets -------
-  const PRESETS = {
-    leadgb:  { wave: "pulse125", octave: 4, attack: 0.005, decay: 0.08, sustain: 0.5, release: 0.12,
-               bits: 4, vibRate: 6, vibDepth: 15, echoMix: 0.15, echoTime: 0.18, echoFb: 0.3 },
-    basse:   { wave: "square", octave: 2, attack: 0.005, decay: 0.15, sustain: 0.7, release: 0.1,
-               bits: 6, vibRate: 5, vibDepth: 0, echoMix: 0, echoTime: 0.22, echoFb: 0.35 },
-    cristal: { wave: "triangle", octave: 6, attack: 0.01, decay: 0.3, sustain: 0.3, release: 0.5,
-               bits: 8, vibRate: 5, vibDepth: 0, echoMix: 0.35, echoTime: 0.26, echoFb: 0.45 },
-    percu:   { wave: "noise", octave: 4, attack: 0.001, decay: 0.1, sustain: 0, release: 0.08,
-               bits: 3, vibRate: 5, vibDepth: 0, echoMix: 0.1, echoTime: 0.12, echoFb: 0.2 },
-    sirene:  { wave: "square", octave: 5, attack: 0.05, decay: 0.1, sustain: 1, release: 0.3,
-               bits: 5, vibRate: 1, vibDepth: 600, echoMix: 0.25, echoTime: 0.3, echoFb: 0.4 }
-  };
+  // Recharge les contrôles depuis le patch de la piste courante
+  function loadPatchIntoControls() {
+    const patch = tracks[currentTrack].patch;
+    loadingPatch = true;
+    selectWave(patch.wave, true);
+    document.getElementById("octValue").textContent = patch.octave;
+    ["attack", "decay", "sustain", "release", "bits", "vibRate", "vibDepth"]
+      .forEach(k => setSlider(k, patch[k]));
+    document.querySelectorAll("#presets button").forEach(b =>
+      b.classList.toggle("selected", b.dataset.preset === patch.preset));
+    loadingPatch = false;
+    applyPatchToNodes(currentTrack);
+  }
 
   document.getElementById("presets").addEventListener("click", e => {
     const btn = e.target.closest("button[data-preset]");
     if (!btn) return;
-    const p = PRESETS[btn.dataset.preset];
-    selectWave(p.wave);
-    setOctave(p.octave);
-    ["attack", "decay", "sustain", "release", "bits", "vibRate", "vibDepth",
-     "echoMix", "echoTime", "echoFb"].forEach(k => setSlider(k, p[k]));
-    document.querySelectorAll("#presets button").forEach(b =>
-      b.classList.toggle("selected", b === btn));
+    tracks[currentTrack].patch = patchFrom(btn.dataset.preset);
+    loadPatchIntoControls();
+    refreshMixer();
+    refreshKeyLabels();
   });
 
-  // ------- Oscilloscope + tête de lecture -------
+  // ------- Oscilloscope -------
   const scope = document.getElementById("scope");
   const sctx = scope.getContext("2d");
 
@@ -958,7 +1243,8 @@
       analyser.getByteTimeDomainData(data);
       sctx.fillStyle = "#0a0614";
       sctx.fillRect(0, 0, scope.width, scope.height);
-      sctx.strokeStyle = "#00ff9c";
+      sctx.strokeStyle = getComputedStyle(document.documentElement)
+        .getPropertyValue("--t" + currentTrack).trim() || "#00ff9c";
       sctx.lineWidth = 2;
       sctx.beginPath();
       const step = data.length / scope.width;
@@ -969,7 +1255,6 @@
       }
       sctx.stroke();
 
-      // Tête de lecture du séquenceur
       if (seqPlaying) {
         while (stepQueue.length && stepQueue[0].time <= ctx.currentTime) {
           setPlayhead(stepQueue.shift().step);
@@ -978,8 +1263,13 @@
     })();
   }
 
+  // ------- Démarrage -------
+  document.documentElement.style.setProperty("--tc", TRACK_COLORS[0]);
+  buildMixer();
+  buildOverview();
   buildKeyboard();
   buildSeqGrid();
+  loadPatchIntoControls();
   drawIdleScope();
   window.addEventListener("pointerdown", initAudio, { once: false });
 })();
