@@ -657,7 +657,10 @@ expectation was violated**, and finally **the moments it cannot stop going
 over**: its replay buffer, worst first, each named by whatever it was about
 (your hand, a predator, food) and coloured by whether it turned out good or
 bad. A creature that has been mostly fed and twice burned reads as six green
-memories of your hand and two red ones. A row of colour swatches shows **what
+memories of your hand and two red ones. All three renderers show this same panel — the 2D and 3D by
+hovering or selecting a creature, the browser by hovering, which is the same
+gesture and costs nothing extra since the cursor is already reaching the
+simulation as the hand. A row of colour swatches shows **what
 the flock's calls have come to mean to this one** - the swatch is the evolved,
 inherited word, the bar beside it the meaning it learned for itself. The spatial memory is still painted on
 the ground at the same time, so you get the map and the mind together.

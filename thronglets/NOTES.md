@@ -195,6 +195,34 @@ stay four words. The 42 displaced memories land where they belong anyway - on
 the meal that drove them, or on "a moment", which has always been what this
 panel says when the flock cannot credit a shock to anything it can name.
 
+## Closing the parity gap that kept reopening
+
+Asked whether the game was complete, the honest check was to look rather than
+answer, and it turned up the panel a player actually reads - the creature's
+inner life, "cannot stop going over" and all - existing in **one renderer out
+of three**. The 3D showed mood, feeling and call meanings but no memories; the
+browser had no per-creature readout at all. Everything built over a whole
+session had gone into the 2D only.
+
+The rule for naming a memory now lives in `i18n.py`, next to the disposition
+wording and for the same reason: its MEANING has to be identical everywhere,
+and it took two measurements to get right. Three copies of that is two wrong
+copies eventually. The 2D lost its local version and reads exactly the same
+after the move - verified by re-rendering the same creature and diffing the
+eight lines.
+
+The browser reads a mind by **hovering**, the same gesture as the 2D rather
+than a new one, and it costs nothing extra: the cursor position is already
+reaching the server continuously, because the cursor *is* the hand the flock
+learns about.
+
+One bug worth keeping. The web panel filled in correctly and stayed invisible:
+its `display:none` was in the stylesheet, and showing it did `style.display =
+''`, which removes the inline style and falls back to the stylesheet's `none`.
+The other HUD rows get away with the same line because their `display:none` is
+an inline attribute. Content correct, panel hidden - which reads exactly like a
+feature that was never wired up. It sets `'block'` now.
+
 ## Run the measurements yourself (`report.py`)
 
 Every number this project claims came from running worlds headlessly and reading

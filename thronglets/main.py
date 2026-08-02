@@ -66,7 +66,7 @@ import report
 import simulation
 import test_all
 import tuning
-from i18n import STATE_LABELS, TRAIT_LABELS, disposition_label
+from i18n import MEMORY_LABELS, STATE_LABELS, TRAIT_LABELS, disposition_label, memory_label
 from simulation import (DANGER, DISTRESS, FOOD, Genome, HAND_PERCEPTION, HEIGHT, IDLE, MATE, MAX_POPULATION, N_TOKENS,
                          load_bundled_genome,
                          N_TRAITS, World, WIDTH, compare_seeds, load_seed_genome, load_world, save_world, top3_and_other,
@@ -363,10 +363,6 @@ TEXT = {
         "act_approach": "come to you",
         "act_flee": "get away",
         "act_ignore": "ignore you",
-        "mem_hand": "your hand",
-        "mem_predator": "a predator",
-        "mem_food": "food",
-        "mem_other": "a moment",
 
         "translator_title": "Translator - what each color currently means",
         "translator_unused": "unused / ambiguous",
@@ -670,10 +666,6 @@ TEXT = {
         "act_approach": "venir vers toi",
         "act_flee": "s'eloigner",
         "act_ignore": "t'ignorer",
-        "mem_hand": "ta main",
-        "mem_predator": "un predateur",
-        "mem_food": "la nourriture",
-        "mem_other": "un instant",
 
         "translator_title": "Traducteur - ce que signifie chaque couleur en ce moment",
         "translator_unused": "inutilisee / ambigue",
@@ -1334,47 +1326,7 @@ def _signed_bar(screen, x, y, w, h, value, good=(120, 210, 100), bad=(225, 85, 7
     pygame.draw.line(screen, HUD_SEP, (mid, y - 1), (mid, y + h))
 
 
-def _memory_label(t, feat, target):
-    """Name what a remembered moment was ABOUT: the rarest thing present, not
-    the loudest.
-
-    This used to take whichever perception was strongest, which quietly blamed
-    food for almost everything. Food is noticed from 60 world units and a
-    predator only from 26, so food is the strongest single perception nearly
-    half the time - measured across 5 seeds, 47% of living moments have
-    food_prox above 0.2. The result was that 1186 of 2773 kept memories were
-    labelled "food", 489 of them with a predator in sight, and the panel showed
-    a player line after line of "food -0.35". Inside those memories the target
-    correlated -0.52 with how close the predator was and +0.04 with how close
-    the food was: the food was scenery, not the cause.
-
-    So a memory is named for the EVENT in it. A predator perceptible at all
-    outranks the hand, the hand outranks food, and food only claims a moment
-    when it is strongly there and nothing else is.
-
-    The sign matters too. A hunter can never MAKE a moment good: the only
-    lesson predators hand out is teach(-prox, ...), and they give no reward at
-    all. But a meal is credited to the state the creature was in, and 14.4% of
-    meals are taken with a hunter within perception, so the credit lands partly
-    on the predator and the panel printed "a predator, +0.28" in green - which
-    reads as though the creature enjoys them. It is 3.6% of predator-labelled
-    memories, up from 1.1% before eating became worth something: the leak was
-    always there, the bigger reward only made it visible.
-
-    So a good surprise never gets the predator's name. It falls through to
-    whatever else was in the frame - the meal that actually drove it, or
-    nothing in particular. No new wording: a moment the flock cannot credit to
-    anything it can name has always been just "a moment"."""
-    if feat[F_PREDATOR] >= 0.1 and target <= 0.0:
-        return t["mem_predator"]
-    if feat[F_HAND] >= 0.2:
-        return t["mem_hand"]
-    if feat[F_FOOD] >= 0.4:
-        return t["mem_food"]
-    return t["mem_other"]
-
-
-def _mind_panel_width(font, t):
+def _mind_panel_width(font, t, lang):
     """How wide the creature panel has to be, measured rather than guessed.
 
     It was a flat 300px, which was set by eye against the English wording and
@@ -1399,16 +1351,16 @@ def _mind_panel_width(font, t):
     widest = max(widest, font.size(t["mind_dread"])[0] + 8 + 40)
     # a memory row is bar, then label at +66, then a right-aligned value
     widest = max(widest, 66 + 8 + 34 + max(
-        font.size(t[k])[0] for k in ("mem_hand", "mem_predator", "mem_food", "mem_other")))
+        font.size(v)[0] for v in MEMORY_LABELS.get(lang, MEMORY_LABELS["en"]).values()))
     return min(max(300, widest + 2 * pad), max(320, SCREEN_W - 40))
 
 
-def draw_mind_panel(screen, font, mind, t):
+def draw_mind_panel(screen, font, mind, t, lang):
     """What the hovered creature predicts, what it has decided, and which
     moments it cannot let go of - the learned inner life, which until now ran
     entirely unseen. Drawn bottom-left over the field, out of the HUD's way."""
     pad = 10
-    w = _mind_panel_width(font, t)
+    w = _mind_panel_width(font, t, lang)
     rows = max(1, len(mind.replay))
     h = 216 + rows * 15
     x = 10
@@ -1492,7 +1444,7 @@ def draw_mind_panel(screen, font, mind, t):
         bar = int(min(1.0, shock / 0.6) * 60)
         col = (120, 210, 100) if target > 0 else (225, 85, 75)
         pygame.draw.rect(screen, col, (x + pad, cy + 4, max(1, bar), 6))
-        screen.blit(font.render(_memory_label(t, feat, target), True, HUD_HINT), (x + pad + 66, cy))
+        screen.blit(font.render(memory_label(feat, target, lang), True, HUD_HINT), (x + pad + 66, cy))
         screen.blit(font.render(f"{target:+.2f}", True, col), (x + w - pad - 34, cy))
         cy += 15
 
@@ -1540,7 +1492,7 @@ def draw(screen, font, world, paused, speed, mode, lang, expanded, trained=False
 
     # what that one creature predicts, decided and cannot stop going over
     if hov is not None:
-        draw_mind_panel(screen, font, hov.mind, TEXT[lang])
+        draw_mind_panel(screen, font, hov.mind, TEXT[lang], lang)
 
     draw_hud(screen, font, world, paused, speed, mode, lang, expanded, trained, muted)
 

@@ -68,10 +68,10 @@ import numpy as np
 
 import simulation
 import tuning
-from i18n import disposition_label
+from i18n import disposition_label, memory_label
 from simulation import (ACT_APPROACH, ACT_FLEE, ACT_IGNORE, N_TOKENS,
                         WIDTH, HEIGHT, MAX_ENERGY, World,
-                        MEM_ROWS, MEM_COLS, MEM_CLIP, _mem_cell_center)
+                        MEM_ROWS, MEM_COLS, MEM_CLIP, REPLAY_SIZE, _mem_cell_center)
 
 # The same 6-token palette as every other renderer, as 0..1 floats so a
 # creature's colour means the same thing here as in every other renderer.
@@ -1522,7 +1522,7 @@ def build_hud(size, world, env, phase, selected_id, font, small, menu=None):
         c = next((c for c in world.creatures if c.id == selected_id and c.alive), None)
         if c is not None:
             has_mind = c.mind is not None
-            ph = 172 if has_mind else 78
+            ph = (196 + max(1, len(c.mind.replay)) * 15) if has_mind else 78
             # One line per fact, rather than two facts sharing a line. The
             # feeling line used to sit beside energy and ran clean off the
             # panel as soon as the wording gained its neutral band ("doesn't
@@ -1566,6 +1566,25 @@ def build_hud(size, world, env, phase, selected_id, font, small, menu=None):
                 else:
                     text("hunters mean nothing to it yet", px + 10, py + 146,
                          (140, 146, 132), small)
+                # The moments it cannot let go of - the one readout the 2D had
+                # and this did not, which is the panel a player actually reads.
+                # Worst first, the order the creature prioritises them by.
+                ry = py + 168
+                pygame.draw.line(surf, (60, 72, 60), (px + 10, ry - 8),
+                                 (px + pw - 10, ry - 8))
+                text("cannot stop going over (%d/%d):" % (len(c.mind.replay), REPLAY_SIZE),
+                     px + 10, ry, (150, 200, 130), small)
+                ry += 18
+                if not c.mind.replay:
+                    text("nothing has shocked it yet", px + 10, ry, (140, 146, 132), small)
+                else:
+                    for shock, feat, target in sorted(c.mind.replay, key=lambda m: -m[0]):
+                        bar = int(min(1.0, shock / 0.6) * 52)
+                        col = (150, 220, 140) if target > 0 else (225, 110, 110)
+                        pygame.draw.rect(surf, col, (px + 10, ry + 4, max(1, bar), 5))
+                        text(memory_label(feat, target), px + 68, ry, (170, 176, 166), small)
+                        text("%+.2f" % target, px + pw - 46, ry, col, small)
+                        ry += 15
 
     text("L-drag orbit   scroll zoom   click: select   right-click creature: care/harm   "
          "right-click ground: lay an egg   S/W season/weather   T fast-time",

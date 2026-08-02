@@ -29,9 +29,9 @@ import numpy as np
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import simulation
-from i18n import disposition_label
+from i18n import disposition_label, memory_label
 from simulation import (ACT_APPROACH, ACT_FLEE, ACT_IGNORE, DANGER, DISTRESS, FOOD, HEIGHT, IDLE, MATE,
-                         MAX_POPULATION, N_TOKENS, N_TRAITS, TRAIT_HEARING,
+                         MAX_POPULATION, N_TOKENS, N_TRAITS, REPLAY_SIZE, TRAIT_HEARING,
                          TRAIT_METABOLISM, TRAIT_SPEED, TRAIT_VISION, World, WIDTH,
                          compare_seeds, load_bundled_genome, load_seed_genome, load_world, save_world)
 
@@ -168,6 +168,7 @@ def snapshot(state):
         "choices": _choices_payload(w),
         "signal_meanings": _meanings_payload(w),
         "dread": _dread_payload(w),
+        "hovered": _hovered_mind_payload(w),
         "disposition_history": [float(v) for v in getattr(w, "disposition_history", [])],
     }
 
@@ -215,6 +216,51 @@ def _dread_payload(w):
             "mean_dread": sum(m.dread for m in minds) / len(minds),
             "mean_bonus": sum(bonus) / len(bonus),
             "max_bonus": max(bonus)}
+
+
+HOVER_RADIUS = 9.0        # world units: how near the cursor has to be to read a mind
+
+
+def _hovered_mind_payload(w):
+    """The inner life of whatever the cursor is over.
+
+    The 2D shows this by hovering, and the browser had no per-creature readout
+    at all - the one panel a player actually reads while playing existed in one
+    renderer out of three. Hovering is the same gesture here rather than a new
+    one, and the cursor position is already reaching the server continuously,
+    because the cursor IS the hand the flock learns about."""
+    pos = getattr(w, "hand_pos", None)
+    if pos is None or not w.learning:
+        return None
+    minds = [c for c in w.creatures if c.alive and c.mind is not None]
+    if not minds:
+        return None
+    pos = np.asarray(pos, dtype=float)
+    near = min(minds, key=lambda c: float(np.linalg.norm(np.asarray(c.pos) - pos)))
+    if float(np.linalg.norm(np.asarray(near.pos) - pos)) > HOVER_RADIUS:
+        return None
+    m = near.mind
+    now = m.situation()
+    full = max(1e-9, simulation.KNOWLEDGE_FLEE_FULL)
+    return {
+        "id": int(near.id),
+        "value": float(m.value(now)),
+        "act": ACT_IDS[m.act],
+        "confidence": float(m.policy(now)[m.act]),
+        "surprise": float(m.surprise),
+        "emotion": m.emotion(),
+        "dread": float(m.dread),
+        "flee_bonus": float(simulation.KNOWLEDGE_FLEE_GAIN
+                            * min(1.0, m.dread / full)) if m.dread > 0 else 0.0,
+        "meanings": [float(m.signal_meaning(tok)) for tok in range(1, N_TOKENS)],
+        # worst first - the order the creature itself prioritises them by
+        "memories": [{"target": float(target),
+                      "shock": float(shock),
+                      "label_en": memory_label(feat, target, "en"),
+                      "label_fr": memory_label(feat, target, "fr")}
+                     for shock, feat, target in sorted(m.replay, key=lambda x: -x[0])],
+        "replay_size": REPLAY_SIZE,
+    }
 
 
 def _family_payload(state):
@@ -474,11 +520,23 @@ INDEX_HTML = """<!doctype html>
     padding: 12px; gap: 10px;
   }
   #hud { width: 100%; max-width: 900px; font-size: 13px; line-height: 1.6; }
+  #field { position:relative; display:inline-block; line-height:0; }
   .gauge { display:inline-block; position:relative; width:150px; height:9px;
            background:#1c2218; border:1px solid #464e3e; vertical-align:middle; }
   .gauge-fill { position:absolute; top:0; bottom:0; }
   .gauge-mid { position:absolute; left:50%; top:-2px; bottom:-2px; width:1px; background:#969e8c; }
   .gauge-seg { display:inline-block; height:100%; vertical-align:top; }
+  /* over the field, bottom-left, exactly where the pygame one sits */
+  #mind-panel { position:absolute; left:10px; bottom:10px; width:330px;
+                background:rgba(16,20,14,0.93); border:1px solid #2c342a;
+                padding:8px 10px; font-size:12px; line-height:1.45;
+                pointer-events:none; display:none; }
+  #mind-panel .t { color:#96c882; }
+  #mind-panel .d { color:#8c9284; }
+  #mind-panel table { width:100%; border-collapse:collapse; }
+  #mind-panel td { padding:0; white-space:nowrap; }
+  #mind-panel td.v { text-align:right; }
+  #mind-panel .bar { display:inline-block; height:5px; vertical-align:middle; }
   .row { white-space: nowrap; overflow-x: auto; }
   #header { cursor: pointer; }
   .swatch {
@@ -671,7 +729,10 @@ INDEX_HTML = """<!doctype html>
       <button id="predLess" data-i18n="predLessText"></button>
       <button id="predMore" data-i18n="predMoreText"></button>
     </div>
-    <canvas id="world" width="900" height="630"></canvas>
+    <div id="field">
+      <canvas id="world" width="900" height="630"></canvas>
+      <div id="mind-panel"></div>
+    </div>
     <div id="hint" data-i18n="hint"></div>
   </div>
 
@@ -917,6 +978,17 @@ const STRINGS = {
     choiceFlee: "fleeing",
     choiceIgnore: "ignoring you",
     dreadNone: "none of them has understood a hunter yet",
+    mindTitle: "INSIDE THIS ONE",
+    mindExpects: "expects of this moment",
+    mindDecided: "has decided to",
+    mindSurprise: "surprise",
+    mindDread: "what a hunter means to it",
+    mindDreadNone: "has not understood hunters yet",
+    mindDreadRuns: "runs {pct}% harder for it",
+    mindWords: "what the flock's calls mean to it",
+    mindDwells: "cannot stop going over",
+    mindDwellsNone: "nothing has shocked it yet",
+    mindHint: "hover a creature to read its mind",
     dreadSome: "{pct}% understand a hunter, and run {gain}% harder for it (up to {max}%)",
     translatorDreaded: "dreaded",
     translatorWelcomed: "welcomed",
@@ -1024,6 +1096,17 @@ const STRINGS = {
     choiceFlee: "fuient",
     choiceIgnore: "t'ignorent",
     dreadNone: "aucune n'a encore compris ce qu'est un chasseur",
+    mindTitle: "DANS SA TETE",
+    mindExpects: "ce qu'elle attend de cet instant",
+    mindDecided: "elle a decide de",
+    mindSurprise: "surprise",
+    mindDread: "un chasseur, pour elle",
+    mindDreadNone: "les chasseurs ne lui disent rien",
+    mindDreadRuns: "elle fuit {pct}% plus fort",
+    mindWords: "ce que les cris du groupe veulent dire pour elle",
+    mindDwells: "ce qu'elle ressasse",
+    mindDwellsNone: "rien ne l'a encore choquee",
+    mindHint: "survole une creature pour lire dans sa tete",
     dreadSome: "{pct}% ont compris un chasseur, et fuient {gain}% plus fort (jusqu'a {max}%)",
     translatorDreaded: "redoute",
     translatorWelcomed: "bienvenu",
@@ -1227,6 +1310,7 @@ function render(state) {
   applyHudExpanded();
 
   renderLearned(state);
+  renderMind(state);
 
   renderVocabRow('vocab-danger', t.labelDanger, state.vocabulary['danger']);
   renderVocabRow('vocab-food', t.labelFood, state.vocabulary['food']);
@@ -1640,6 +1724,67 @@ function renderLearned(state) {
     `<span style="color:#dc5f5a">${Math.round(ch.flee * 100)}% ${t.choiceFlee}</span>   ` +
     `<span style="color:#9aa090">${Math.round(ch.ignore * 100)}% ${t.choiceIgnore}</span>`;
   choiceRow.style.display = '';
+}
+
+function renderMind(state) {
+  const t = STRINGS[uiLang];
+  const box = document.getElementById('mind-panel');
+  const m = state.hovered;
+  if (!m) { box.style.display = 'none'; return; }
+  const actName = m.act === 'approach' ? t.choiceApproach
+                : m.act === 'flee' ? t.choiceFlee : t.choiceIgnore;
+  const actCol = m.act === 'approach' ? '#78c86e' : m.act === 'flee' ? '#dc5f5a' : '#9aa090';
+  const signed = (v, w) => {                      // a bar growing from the middle
+    const half = Math.min(1, Math.abs(v)) * (w / 2);
+    return `<span style="display:inline-block;width:${w}px;height:6px;background:#1e241a;` +
+      `position:relative;vertical-align:middle"><span class="bar" style="position:absolute;` +
+      `left:${v >= 0 ? w / 2 : w / 2 - half}px;width:${half}px;background:` +
+      `${v >= 0 ? '#78c86e' : '#dc5f5a'}"></span></span>`;
+  };
+  let html = `<div class="t">${t.mindTitle} #${m.id}</div>`;
+  html += `<div class="d">${t.mindExpects}</div>`;
+  html += `<div>${signed(m.value, 200)} ${m.value >= 0 ? '+' : ''}${m.value.toFixed(2)}</div>`;
+  html += `<div style="color:${actCol}">${t.mindDecided} ${actName} ` +
+          `(${Math.round(m.confidence * 100)}%)</div>`;
+  html += `<div class="d">${t.mindSurprise} ${m.surprise.toFixed(3)}</div>`;
+  if (m.dread > 0) {
+    html += `<div class="d">${t.mindDread} ${m.dread.toFixed(3)}</div>`;
+    html += `<div style="color:#e16e6e">` +
+            t.mindDreadRuns.replace('{pct}', '+' + Math.round(m.flee_bonus * 100)) + `</div>`;
+  } else {
+    html += `<div class="d">${t.mindDreadNone}</div>`;
+  }
+  html += `<div class="d" style="margin-top:4px">${t.mindWords}</div><div>`;
+  m.meanings.forEach((v, i) => {
+    const span = Math.min(1, Math.abs(v) / 0.08) * 12;
+    html += `<span style="display:inline-block;width:10px;height:10px;border-radius:5px;` +
+            `background:${TOKEN_COLORS[i + 1]};vertical-align:middle"></span>` +
+            `<span class="bar" style="width:4px;height:${Math.max(2, span)}px;` +
+            `background:${v > 0 ? '#78c86e' : '#dc5f5a'};margin:0 10px 0 3px"></span>`;
+  });
+  html += `</div>`;
+  html += `<div class="t" style="margin-top:4px">${t.mindDwells} ` +
+          `(${m.memories.length}/${m.replay_size})</div>`;
+  if (!m.memories.length) {
+    html += `<div class="d">${t.mindDwellsNone}</div>`;
+  } else {
+    html += '<table>';
+    for (const mem of m.memories) {
+      const col = mem.target > 0 ? '#78c86e' : '#dc5f5a';
+      const w = Math.max(1, Math.min(1, mem.shock / 0.6) * 46);
+      const label = uiLang === 'fr' ? mem.label_fr : mem.label_en;
+      html += `<tr><td style="width:52px"><span class="bar" style="width:${w}px;` +
+              `background:${col}"></span></td><td>${label}</td>` +
+              `<td class="v" style="color:${col}">${mem.target >= 0 ? '+' : ''}` +
+              `${mem.target.toFixed(2)}</td></tr>`;
+    }
+    html += '</table>';
+  }
+  box.innerHTML = html;
+  // 'block', not '': the stylesheet rule for #mind-panel is display:none, so
+  // clearing the inline style falls back to it and the panel stays hidden with
+  // its content correctly filled in - which reads exactly like a dead feature.
+  box.style.display = 'block';
 }
 
 function renderTranslator(translator, meanings) {
