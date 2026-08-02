@@ -24,13 +24,24 @@ import json
 import os
 import threading
 import time
+
+import numpy as np
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from simulation import (DANGER, DISTRESS, FOOD, HEIGHT, IDLE, MATE, MAX_POPULATION, N_TOKENS, N_TRAITS, TRAIT_HEARING,
+from i18n import disposition_label
+from simulation import (ACT_APPROACH, ACT_FLEE, ACT_IGNORE, DANGER, DISTRESS, FOOD, HEIGHT, IDLE, MATE,
+                         MAX_POPULATION, N_TOKENS, N_TRAITS, TRAIT_HEARING,
                          TRAIT_METABOLISM, TRAIT_SPEED, TRAIT_VISION, World, WIDTH,
                          compare_seeds, load_bundled_genome, load_seed_genome, load_world, save_world)
 
 DEFAULT_PORT = 8765
+# The player's two acts, on the same scale the other renderers use, so a lesson
+# taught through the browser weighs exactly what it weighs in pygame.
+LEARN_FOOD_REWARD = 1.0
+LEARN_PREDATOR_REWARD = -1.0
+FEED_RADIUS = 12.0            # world units: who counts as fed by a dropped patch
+BURN_RADIUS = 6.0             # world units: who the fire tool catches
+ACT_IDS = {ACT_APPROACH: "approach", ACT_FLEE: "flee", ACT_IGNORE: "ignore"}
 STEP_INTERVAL = 0.05
 DEFAULT_INIT_POP = 100
 DEFAULT_LANGUAGE_FILE = "language_model.json"
@@ -41,12 +52,13 @@ STATE_IDS = {IDLE: "idle", FOOD: "food", MATE: "mate", DANGER: "danger", DISTRES
 COMPARE_DEPTHS = {"quick": (4, 8000), "thorough": (8, 40000), "expert": (16, 60000)}
 
 
-def _new_world(mode, predator_count, init_pop=DEFAULT_INIT_POP, seed_genome=None, adaptive_traits=False):
+def _new_world(mode, predator_count, init_pop=DEFAULT_INIT_POP, seed_genome=None,
+               adaptive_traits=False, learning=False):
     if mode == "manual":
         return World(init_pop=init_pop, manual_food=True, manual_predators=True, seed_genome=seed_genome,
-                     adaptive_traits=adaptive_traits)
+                     adaptive_traits=adaptive_traits, learning=learning)
     return World(init_pop=init_pop, predator_count=predator_count, seed_genome=seed_genome,
-                 adaptive_traits=adaptive_traits)
+                 adaptive_traits=adaptive_traits, learning=learning)
 
 
 class SimState:
@@ -60,6 +72,10 @@ class SimState:
         self.cli_seed_genome = seed_genome
         self.active_seed_genome = None
         self.adaptive_traits = False
+        self.learning = False
+        # the fire tool is armed/disarmed like the pygame one: a left click
+        # burns instead of dropping food while it is on
+        self.fire_armed = False
         self.family_focus_id = None
         self.lock = threading.Lock()
 
@@ -119,9 +135,14 @@ def snapshot(state):
         "food": [[float(x), float(y)] for x, y in w.food],
         "predators": [[float(p.pos[0]), float(p.pos[1])] for p in w.predators],
         "creatures": [
-            {"x": float(c.pos[0]), "y": float(c.pos[1]), "token": c.token}
+            # "mood" is the creature's own feeling, not its opinion of you -
+            # None when learning is off, so the client draws the plain body
+            {"x": float(c.pos[0]), "y": float(c.pos[1]), "token": c.token,
+             "mood": c.mind.emotion() if c.mind is not None else None}
             for c in w.creatures if c.alive
         ],
+        "learning": bool(getattr(w, "learning", False)),
+        "deaths_by": dict(getattr(w, "deaths_by", {})),
         "vocabulary": {
             STATE_IDS[s]: [[int(t), float(f)] for t, f in breakdown[s]]
             for s in (DANGER, FOOD, DISTRESS, MATE, IDLE)
@@ -138,7 +159,43 @@ def snapshot(state):
             str(token): [[STATE_IDS[s], float(frac)] for s, frac in claims]
             for token, claims in w.translator().items()
         },
+        # --- what the flock has learned, all None when learning is off -------
+        # disposition_label lives in i18n.py so the browser gets exactly the
+        # wording pygame shows, neutral band and all - a flock nobody has
+        # touched must read "doesn't know you yet" here too.
+        "disposition": _disposition_payload(w),
+        "choices": _choices_payload(w),
+        "signal_meanings": _meanings_payload(w),
+        "disposition_history": [float(v) for v in getattr(w, "disposition_history", [])],
     }
+
+
+def _disposition_payload(w):
+    disp = w.disposition_summary()
+    if disp is None:
+        return None
+    return {"value": float(disp),
+            "label_en": disposition_label(disp, "en"),
+            "label_fr": disposition_label(disp, "fr")}
+
+
+def _choices_payload(w):
+    """What the flock has decided to do about you right now. The average above
+    cannot show a split: half coming and half fleeing averages to the same
+    number as everyone indifferent."""
+    choices = w.choice_summary()
+    if choices is None:
+        return None
+    return {ACT_IDS[a]: float(f) for a, f in choices.items()}
+
+
+def _meanings_payload(w):
+    """What living with each call taught them it foretells - the other half of
+    a word, next to the evolved colour->state mapping the translator shows."""
+    meanings = w.signal_meanings()
+    if meanings is None:
+        return None
+    return {str(token): float(v) for token, v in meanings.items()}
 
 
 def _family_payload(state):
@@ -242,6 +299,7 @@ class Handler(BaseHTTPRequestHandler):
                     state.init_pop = state.world.population()
                     state.active_seed_genome = None
                     state.adaptive_traits = state.world.adaptive_traits
+                    state.learning = getattr(state.world, "learning", False)
                     state.family_focus_id = None
                     state.started = True
                 except (OSError, ValueError, KeyError):
@@ -254,6 +312,7 @@ class Handler(BaseHTTPRequestHandler):
                     init_pop = DEFAULT_INIT_POP
                 state.init_pop = max(1, min(MAX_POPULATION, init_pop))
                 state.adaptive_traits = bool(body.get("adaptive_traits"))
+                state.learning = bool(body.get("learning"))
 
                 if state.cli_seed_genome is not None:
                     state.active_seed_genome = state.cli_seed_genome
@@ -270,7 +329,7 @@ class Handler(BaseHTTPRequestHandler):
                     state.active_seed_genome = None
 
                 state.world = _new_world(state.mode, 6, state.init_pop, state.active_seed_genome,
-                                          state.adaptive_traits)
+                                          state.adaptive_traits, state.learning)
                 state.family_focus_id = None
                 state.started = True
             elif not state.started:
@@ -283,7 +342,8 @@ class Handler(BaseHTTPRequestHandler):
                 save_world(state.world, DEFAULT_SAVE_FILE)
             elif action == "reset":
                 state.world = _new_world(state.mode, len(state.world.predators), state.init_pop,
-                                          state.active_seed_genome, state.adaptive_traits)
+                                          state.active_seed_genome, state.adaptive_traits,
+                                          state.learning)
                 state.family_focus_id = None
                 state.paused = False
             elif action == "speed":
@@ -293,12 +353,41 @@ class Handler(BaseHTTPRequestHandler):
                     state.world.add_random_predator()
                 else:
                     state.world.remove_predator()
+            elif action == "hand":
+                # the cursor IS the hand the creatures learn about, so it has to
+                # reach the simulation continuously - not only when you click.
+                # None when the pointer leaves the field: an absent hand is a
+                # real state, not position (0, 0).
+                if state.learning:
+                    hx, hy = body.get("x"), body.get("y")
+                    state.world.hand_pos = (None if hx is None or hy is None
+                                            else np.array([float(hx), float(hy)]))
+            elif action == "fire_tool":
+                state.fire_armed = bool(body.get("armed"))
             elif action == "click":
                 x, y = float(body.get("x", 0)), float(body.get("y", 0))
                 if body.get("button") == "right":
                     state.world.add_predator(x, y)
+                elif state.fire_armed:
+                    # burning is the cruel half of the hand: whoever is close
+                    # enough learns it directly, and witnesses learn by watching
+                    burned = 0
+                    for c in list(state.world.creatures):
+                        if c.alive and float(np.hypot(c.pos[0] - x, c.pos[1] - y)) < BURN_RADIUS:
+                            if state.learning:
+                                state.world.deliver_experience(c, LEARN_PREDATOR_REWARD)
+                            state.world.kill_creature(c)
+                            burned += 1
+                    if not burned:
+                        state.world.add_food(x, y)
                 else:
                     state.world.add_food(x, y)
+                    if state.learning:
+                        # food from your hand is kindness, and the flock learns
+                        # it the same way the other renderers teach it
+                        for c in state.world.creatures:
+                            if c.alive and float(np.hypot(c.pos[0] - x, c.pos[1] - y)) < FEED_RADIUS:
+                                state.world.deliver_experience(c, LEARN_FOOD_REWARD)
             elif action == "quick_place":
                 if body.get("kind") == "predator":
                     state.world.add_random_predator()
