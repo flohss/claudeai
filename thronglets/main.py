@@ -306,7 +306,6 @@ TEXT = {
         "mem_predator": "a predator",
         "mem_food": "food",
         "mem_other": "a moment",
-        "mem_despite": "despite a hunter",
 
         "translator_title": "Translator - what each color currently means",
         "translator_unused": "unused / ambiguous",
@@ -567,7 +566,6 @@ TEXT = {
         "mem_predator": "un predateur",
         "mem_food": "la nourriture",
         "mem_other": "un instant",
-        "mem_despite": "malgre un chasseur",
 
         "translator_title": "Traducteur - ce que signifie chaque couleur en ce moment",
         "translator_unused": "inutilisee / ambigue",
@@ -1248,15 +1246,19 @@ def _memory_label(t, feat, target):
 
     The sign matters too. A hunter can never MAKE a moment good: the only
     lesson predators hand out is teach(-prox, ...), and they give no reward at
-    all - so a moment that turned out better than expected with a hunter in
-    frame was driven by something else in it, usually a meal reached anyway
-    (14.4% of meals are taken with a hunter within perception). Reporting that
-    as "a predator, +0.28" in green reads as though the creature enjoys them.
-    It is 3.6% of predator-labelled memories, up from 1.1% before eating became
-    worth something - the leak was always there, the bigger reward just made it
-    visible."""
-    if feat[F_PREDATOR] >= 0.1:
-        return t["mem_predator"] if target <= 0.0 else t["mem_despite"]
+    all. But a meal is credited to the state the creature was in, and 14.4% of
+    meals are taken with a hunter within perception, so the credit lands partly
+    on the predator and the panel printed "a predator, +0.28" in green - which
+    reads as though the creature enjoys them. It is 3.6% of predator-labelled
+    memories, up from 1.1% before eating became worth something: the leak was
+    always there, the bigger reward only made it visible.
+
+    So a good surprise never gets the predator's name. It falls through to
+    whatever else was in the frame - the meal that actually drove it, or
+    nothing in particular. No new wording: a moment the flock cannot credit to
+    anything it can name has always been just "a moment"."""
+    if feat[F_PREDATOR] >= 0.1 and target <= 0.0:
+        return t["mem_predator"]
     if feat[F_HAND] >= 0.2:
         return t["mem_hand"]
     if feat[F_FOOD] >= 0.4:
@@ -1289,7 +1291,7 @@ def _mind_panel_width(font, t):
     widest = max(widest, font.size(t["mind_dread"])[0] + 8 + 40)
     # a memory row is bar, then label at +66, then a right-aligned value
     widest = max(widest, 66 + 8 + 34 + max(
-        font.size(t[k])[0] for k in ("mem_hand", "mem_predator", "mem_food", "mem_other", "mem_despite")))
+        font.size(t[k])[0] for k in ("mem_hand", "mem_predator", "mem_food", "mem_other")))
     return min(max(300, widest + 2 * pad), max(320, SCREEN_W - 40))
 
 

@@ -178,18 +178,22 @@ change; the bigger reward only made it visible.
 The fix is therefore in the wording, not the simulation. A hunter can never
 *make* a moment good: the only lesson predators hand out is `teach(-prox, ...)`
 and they give no reward at all, so a moment that turned out better than
-expected with a hunter in frame was driven by something else in it. Those
-moments now read **"despite a hunter"** instead of "a predator". Afterwards:
+expected with a hunter in frame was driven by something else in it. **A good
+surprise therefore never gets the predator's name** - it falls through to
+whatever else was in the frame. Afterwards:
 
 | the panel shows | n | share | mean | green |
 |---|---|---|---|---|
 | a predator | 1254 | 39.7% | -0.502 | **0.0%** |
-| food | 967 | 30.6% | -0.062 | 43.2% |
-| a moment | 894 | 28.3% | -0.190 | 20.2% |
-| despite a hunter | 42 | 1.3% | +0.119 | 100% |
+| food | 992 | 31.4% | -0.056 | 44.7% |
+| a moment | 911 | 28.9% | -0.186 | 21.7% |
 
-Which is also more informative than the alternative of hiding it: a meal
-snatched under a hunter's nose is a real thing that happened, and now it says so.
+A first attempt gave those moments their own label, "despite a hunter", on the
+grounds that a meal snatched under a hunter's nose is a real thing worth
+naming. That was rejected: the panel's vocabulary is four words and it should
+stay four words. The 42 displaced memories land where they belong anyway - on
+the meal that drove them, or on "a moment", which has always been what this
+panel says when the flock cannot credit a shock to anything it can name.
 
 ## Run the measurements yourself (`report.py`)
 
