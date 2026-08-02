@@ -1096,14 +1096,29 @@ def _signed_bar(screen, x, y, w, h, value, good=(120, 210, 100), bad=(225, 85, 7
 
 
 def _memory_label(t, feat):
-    """Name what a remembered moment was ABOUT: whichever of the things it can
-    perceive stood out most when it happened, read straight out of the stored
-    perceptions. A shock with nothing in particular going on stays unnamed."""
-    candidates = ((feat[F_HAND], t["mem_hand"]),
-                  (feat[F_PREDATOR], t["mem_predator"]),
-                  (feat[F_FOOD], t["mem_food"]))
-    strength, label = max(candidates, key=lambda c: c[0])
-    return label if strength >= 0.2 else t["mem_other"]
+    """Name what a remembered moment was ABOUT: the rarest thing present, not
+    the loudest.
+
+    This used to take whichever perception was strongest, which quietly blamed
+    food for almost everything. Food is noticed from 60 world units and a
+    predator only from 26, so food is the strongest single perception nearly
+    half the time - measured across 5 seeds, 47% of living moments have
+    food_prox above 0.2. The result was that 1186 of 2773 kept memories were
+    labelled "food", 489 of them with a predator in sight, and the panel showed
+    a player line after line of "food -0.35". Inside those memories the target
+    correlated -0.52 with how close the predator was and +0.04 with how close
+    the food was: the food was scenery, not the cause.
+
+    So a memory is named for the EVENT in it. A predator perceptible at all
+    outranks the hand, the hand outranks food, and food only claims a moment
+    when it is strongly there and nothing else is."""
+    if feat[F_PREDATOR] >= 0.1:
+        return t["mem_predator"]
+    if feat[F_HAND] >= 0.2:
+        return t["mem_hand"]
+    if feat[F_FOOD] >= 0.4:
+        return t["mem_food"]
+    return t["mem_other"]
 
 
 def draw_mind_panel(screen, font, mind, t):
