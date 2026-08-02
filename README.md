@@ -17,8 +17,12 @@ python3 -m http.server
 - **6 formes d'onde chiptune** : carré 50 %, impulsion 25 %, impulsion 12,5 % (les classiques de la NES/Game Boy), triangle, dents de scie et bruit style console 8-bit.
 - **Enveloppe ADSR** complète : attaque, déclin, maintien, relâche.
 - **Bitcrusher** : réduction de la résolution de 8 à 2 bits pour un grain rétro.
-- **Vibrato** : LFO avec vitesse et profondeur réglables.
+- **Vibrato** : LFO avec vitesse et profondeur réglables (jusqu'à 6 demi-tons, effet sirène).
+- **Écho rétro** : delay avec mix, temps et feedback réglables (l'écho passe dans le bitcrusher).
 - **Arpégiateur** : modes montant, descendant, aller-retour et aléatoire, vitesse réglable — maintenez plusieurs notes pour lancer l'arpège.
+- **Séquenceur 16 pas** : piano-roll d'une octave, tempo 60–240 BPM, horloge audio précise (lookahead), motif de démo préchargé — le sélecteur d'octave transpose la séquence en direct.
+- **5 presets** : Lead GB, Basse, Cristal, Percu, Sirène.
+- **Enregistrement** : capture la sortie audio et exporte un fichier `.webm`/`.ogg` en un clic.
 - **Oscilloscope** temps réel.
 - **Clavier virtuel de 2 octaves** (souris et tactile, avec glissando) + sélecteur d'octave (1 à 7).
 - **Polyphonie** illimitée.

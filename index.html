@@ -58,7 +58,21 @@
     background: #0a0614;
     border: 2px solid var(--panel-edge);
     image-rendering: pixelated;
-    margin-bottom: 16px;
+    margin-bottom: 12px;
+  }
+  .preset-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  .preset-bar .tag {
+    color: var(--accent3);
+    font-size: 11px;
+    letter-spacing: .2em;
+    text-transform: uppercase;
+    margin-right: 4px;
   }
   .panels {
     display: grid;
@@ -104,6 +118,7 @@
     background: #0a0614;
     border: 1px solid var(--panel-edge);
     outline: none;
+    min-width: 40px;
   }
   input[type=range]::-webkit-slider-thumb {
     -webkit-appearance: none;
@@ -145,7 +160,7 @@
     background: #0a0614;
     color: var(--text);
     border: 2px solid var(--panel-edge);
-    padding: 7px 4px;
+    padding: 7px 8px;
     cursor: pointer;
     box-shadow: 2px 2px 0 rgba(0,0,0,.6);
   }
@@ -156,9 +171,57 @@
     border-color: var(--accent);
     font-weight: bold;
   }
+  button.rec-on {
+    background: #d92b2b;
+    color: #fff;
+    border-color: #d92b2b;
+    animation: blink 1s steps(2) infinite;
+  }
+  @keyframes blink { 50% { opacity: .55; } }
+  @media (prefers-reduced-motion: reduce) {
+    button.rec-on { animation: none; }
+  }
   .octave-row { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
   .octave-row button { width: 40px; }
   .octave-row .oct-value { color: var(--accent); font-size: 14px; min-width: 60px; text-align: center; }
+
+  /* --- Séquenceur --- */
+  .seq { margin-bottom: 16px; }
+  .seq-transport {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin-top: 8px;
+  }
+  .seq-transport .row { margin-top: 0; flex: 1; min-width: 180px; }
+  .seq-grid-wrap { overflow-x: auto; margin-top: 10px; }
+  .seq-grid {
+    display: grid;
+    grid-template-columns: 42px repeat(16, minmax(26px, 1fr));
+    gap: 2px;
+    min-width: 520px;
+  }
+  .seq-label {
+    font-size: 9px;
+    color: var(--dim);
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 6px;
+    text-transform: uppercase;
+  }
+  .seq-cell {
+    aspect-ratio: 1 / 1;
+    background: #0a0614;
+    border: 1px solid var(--panel-edge);
+    cursor: pointer;
+  }
+  .seq-cell.beat { background: #120a22; border-color: #4a3180; }
+  .seq-cell.on { background: var(--accent2); border-color: var(--accent2); }
+  .seq-cell.playhead { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  .seq-cell.on.playhead { background: var(--accent); border-color: var(--accent); }
+
   .keyboard-wrap { position: relative; height: 170px; user-select: none; touch-action: none; }
   .keyboard { position: relative; height: 100%; display: flex; }
   .key {
@@ -205,6 +268,15 @@
   <div class="console">
     <canvas id="scope" width="920" height="110"></canvas>
 
+    <div class="preset-bar" id="presets">
+      <span class="tag">Presets</span>
+      <button data-preset="leadgb">Lead GB</button>
+      <button data-preset="basse">Basse</button>
+      <button data-preset="cristal">Cristal</button>
+      <button data-preset="percu">Percu</button>
+      <button data-preset="sirene">Sirène</button>
+    </div>
+
     <div class="panels">
       <fieldset>
         <legend>Oscillateur</legend>
@@ -235,8 +307,15 @@
         <legend>Effets</legend>
         <div class="row"><label>Bits</label><input type="range" id="bits" min="2" max="8" step="1" value="8"><output id="bitsOut">8</output></div>
         <div class="row"><label>Vib. vitesse</label><input type="range" id="vibRate" min="0.5" max="12" step="0.1" value="5"><output id="vibRateOut">5Hz</output></div>
-        <div class="row"><label>Vib. prof.</label><input type="range" id="vibDepth" min="0" max="100" step="1" value="0"><output id="vibDepthOut">0</output></div>
+        <div class="row"><label>Vib. prof.</label><input type="range" id="vibDepth" min="0" max="600" step="5" value="0"><output id="vibDepthOut">0</output></div>
         <div class="row"><label>Volume</label><input type="range" id="volume" min="0" max="1" step="0.01" value="0.5"><output id="volumeOut">50%</output></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Écho</legend>
+        <div class="row"><label>Mix</label><input type="range" id="echoMix" min="0" max="0.8" step="0.01" value="0"><output id="echoMixOut">0%</output></div>
+        <div class="row"><label>Temps</label><input type="range" id="echoTime" min="0.05" max="0.6" step="0.01" value="0.22"><output id="echoTimeOut">220ms</output></div>
+        <div class="row"><label>Retour</label><input type="range" id="echoFb" min="0" max="0.8" step="0.01" value="0.35"><output id="echoFbOut">35%</output></div>
       </fieldset>
 
       <fieldset>
@@ -255,13 +334,28 @@
       </fieldset>
     </div>
 
+    <fieldset class="seq">
+      <legend>Séquenceur &mdash; 16 pas</legend>
+      <div class="seq-transport">
+        <button id="seqPlay">&#9654; Lecture</button>
+        <button id="seqClear">Effacer</button>
+        <button id="recBtn">&#9679; Enregistrer</button>
+        <div class="row"><label>Tempo</label><input type="range" id="bpm" min="60" max="240" step="1" value="120"><output id="bpmOut">120</output></div>
+      </div>
+      <div class="seq-grid-wrap"><div class="seq-grid" id="seqGrid"></div></div>
+      <div class="hint" style="text-align:left; margin-top:6px">
+        Cliquez sur la grille pour placer les notes (une par pas). Le sélecteur d'octave transpose la séquence.
+      </div>
+    </fieldset>
+
     <div class="keyboard-wrap">
       <div class="keyboard" id="keyboard"></div>
     </div>
 
     <div class="hint">
       Clavier d'ordinateur : <b>rangée du milieu</b> = touches blanches (Do, Ré, Mi&hellip;),
-      <b>rangée du haut</b> = touches noires. Cliquez ou touchez aussi les touches ci-dessus.
+      <b>rangée du haut</b> = touches noires, <b>W / X</b> (AZERTY) = octave &minus;/+.
+      Cliquez ou touchez aussi les touches ci-dessus.
     </div>
   </div>
 
@@ -273,12 +367,14 @@
   const params = {
     wave: "square", attack: 0.01, decay: 0.1, sustain: 0.6, release: 0.15,
     bits: 8, vibRate: 5, vibDepth: 0, volume: 0.5, octave: 4,
-    arpMode: "off", arpRate: 8
+    arpMode: "off", arpRate: 8,
+    echoMix: 0, echoTime: 0.22, echoFb: 0.35, bpm: 120
   };
   const NOTE_NAMES = ["Do", "Do#", "Ré", "Ré#", "Mi", "Fa", "Fa#", "Sol", "Sol#", "La", "La#", "Si"];
   const KEY_COUNT = 25; // 2 octaves + Do final
 
   let ctx = null, masterIn, shaper, analyser, masterGain, lfo, lfoGain;
+  let delayNode, delayFb, delayWet, recDest;
   let pulse25Wave, pulse125Wave, noiseBuffer;
   const voices = new Map(); // midi -> { src, gain }
 
@@ -330,10 +426,25 @@
     masterGain = ctx.createGain();
     masterGain.gain.value = params.volume;
 
+    // Chaîne : voix -> bitcrusher -> (direct + écho) -> analyseur -> volume -> sortie
     masterIn.connect(shaper);
     shaper.connect(analyser);
+    delayNode = ctx.createDelay(1);
+    delayNode.delayTime.value = params.echoTime;
+    delayFb = ctx.createGain();
+    delayFb.gain.value = params.echoFb;
+    delayWet = ctx.createGain();
+    delayWet.gain.value = params.echoMix;
+    shaper.connect(delayNode);
+    delayNode.connect(delayFb);
+    delayFb.connect(delayNode);
+    delayNode.connect(delayWet);
+    delayWet.connect(analyser);
     analyser.connect(masterGain);
     masterGain.connect(ctx.destination);
+
+    recDest = ctx.createMediaStreamDestination();
+    masterGain.connect(recDest);
 
     lfo = ctx.createOscillator();
     lfo.type = "sine";
@@ -350,10 +461,7 @@
     drawScope();
   }
 
-  function noteOn(midi) {
-    initAudio();
-    if (voices.has(midi)) return;
-    const t = ctx.currentTime;
+  function makeSource(midi) {
     let src;
     if (params.wave === "noise") {
       src = ctx.createBufferSource();
@@ -368,14 +476,20 @@
       src.frequency.value = midiToFreq(midi);
     }
     lfoGain.connect(src.detune);
+    return src;
+  }
 
+  function noteOn(midi) {
+    initAudio();
+    if (voices.has(midi)) return;
+    const t = ctx.currentTime;
+    const src = makeSource(midi);
     const gain = ctx.createGain();
     const a = Math.max(0.001, params.attack);
     const d = Math.max(0.001, params.decay);
     gain.gain.setValueAtTime(0, t);
     gain.gain.linearRampToValueAtTime(0.9, t + a);
     gain.gain.linearRampToValueAtTime(params.sustain * 0.9, t + a + d);
-
     src.connect(gain);
     gain.connect(masterIn);
     src.start(t);
@@ -394,6 +508,26 @@
     v.gain.gain.linearRampToValueAtTime(0.0001, t + r);
     v.src.stop(t + r + 0.05);
     setKeyVisual(midi, false);
+  }
+
+  // Note planifiée (séquenceur) : indépendante des voix tenues au clavier
+  function playNote(midi, when, dur) {
+    const src = makeSource(midi);
+    const gain = ctx.createGain();
+    const a = Math.max(0.001, params.attack);
+    const d = Math.max(0.001, params.decay);
+    const r = Math.max(0.01, params.release);
+    const susT = when + a + d;
+    const end = when + Math.max(dur, a + 0.01);
+    gain.gain.setValueAtTime(0, when);
+    gain.gain.linearRampToValueAtTime(0.9, when + a);
+    gain.gain.linearRampToValueAtTime(params.sustain * 0.9, susT);
+    if (end > susT) gain.gain.setValueAtTime(params.sustain * 0.9, end);
+    gain.gain.linearRampToValueAtTime(0.0001, Math.max(end, susT) + r);
+    src.connect(gain);
+    gain.connect(masterIn);
+    src.start(when);
+    src.stop(Math.max(end, susT) + r + 0.05);
   }
 
   function allNotesOff() {
@@ -459,6 +593,138 @@
     setTimeout(() => noteOff(n), gate);
   }
 
+  // ------- Séquenceur 16 pas -------
+  const STEPS = 16, ROWS = 13; // Do -> Do (une octave)
+  // Motif de démo : arpège Do majeur puis descente
+  const seqData = [0, 4, 7, 12, 0, 4, 7, 12, 9, 5, 9, 12, 7, 4, 2, 0];
+  let seqPlaying = false, seqStep = 0, nextStepTime = 0, seqTimer = null;
+  let stepQueue = [], playheadStep = -1;
+  const seqGridEl = document.getElementById("seqGrid");
+  const seqCells = []; // [step][row] -> element
+
+  function buildSeqGrid() {
+    seqGridEl.innerHTML = "";
+    for (let r = 0; r < ROWS; r++) {
+      const off = ROWS - 1 - r; // rangée du haut = Do aigu
+      const label = document.createElement("div");
+      label.className = "seq-label";
+      label.textContent = NOTE_NAMES[off % 12] + (off === 12 ? "+" : "");
+      seqGridEl.appendChild(label);
+      for (let s = 0; s < STEPS; s++) {
+        const cell = document.createElement("div");
+        cell.className = "seq-cell" + (s % 4 === 0 ? " beat" : "");
+        cell.dataset.step = s;
+        cell.dataset.off = off;
+        seqGridEl.appendChild(cell);
+        (seqCells[s] = seqCells[s] || [])[off] = cell;
+      }
+    }
+    refreshSeqGrid();
+  }
+
+  function refreshSeqGrid() {
+    for (let s = 0; s < STEPS; s++) {
+      for (let o = 0; o < ROWS; o++) {
+        seqCells[s][o].classList.toggle("on", seqData[s] === o);
+      }
+    }
+  }
+
+  seqGridEl.addEventListener("click", e => {
+    const cell = e.target.closest(".seq-cell");
+    if (!cell) return;
+    const s = Number(cell.dataset.step), o = Number(cell.dataset.off);
+    seqData[s] = (seqData[s] === o) ? null : o;
+    refreshSeqGrid();
+  });
+
+  function stepDur() { return 60 / params.bpm / 4; } // double-croche
+
+  function seqScheduler() {
+    while (nextStepTime < ctx.currentTime + 0.12) {
+      const off = seqData[seqStep];
+      if (off !== null && off !== undefined) {
+        playNote(baseMidi() + off, nextStepTime, stepDur() * 0.6);
+      }
+      stepQueue.push({ step: seqStep, time: nextStepTime });
+      nextStepTime += stepDur();
+      seqStep = (seqStep + 1) % STEPS;
+    }
+  }
+
+  function setPlayhead(step) {
+    if (step === playheadStep) return;
+    if (playheadStep >= 0) {
+      for (let o = 0; o < ROWS; o++) seqCells[playheadStep][o].classList.remove("playhead");
+    }
+    playheadStep = step;
+    if (step >= 0) {
+      for (let o = 0; o < ROWS; o++) seqCells[step][o].classList.add("playhead");
+    }
+  }
+
+  const seqPlayBtn = document.getElementById("seqPlay");
+
+  function seqStart() {
+    initAudio();
+    seqPlaying = true;
+    seqStep = 0;
+    nextStepTime = ctx.currentTime + 0.05;
+    stepQueue = [];
+    seqTimer = setInterval(seqScheduler, 25);
+    seqScheduler();
+    seqPlayBtn.innerHTML = "&#9632; Stop";
+    seqPlayBtn.classList.add("selected");
+  }
+
+  function seqStop() {
+    seqPlaying = false;
+    if (seqTimer) { clearInterval(seqTimer); seqTimer = null; }
+    stepQueue = [];
+    setPlayhead(-1);
+    seqPlayBtn.innerHTML = "&#9654; Lecture";
+    seqPlayBtn.classList.remove("selected");
+  }
+
+  seqPlayBtn.addEventListener("click", () => seqPlaying ? seqStop() : seqStart());
+  document.getElementById("seqClear").addEventListener("click", () => {
+    seqData.fill(null);
+    refreshSeqGrid();
+  });
+
+  // ------- Enregistrement -------
+  let recorder = null, recChunks = [];
+  const recBtn = document.getElementById("recBtn");
+
+  recBtn.addEventListener("click", () => {
+    initAudio();
+    if (recorder && recorder.state === "recording") {
+      recorder.stop();
+      return;
+    }
+    if (typeof MediaRecorder === "undefined") {
+      recBtn.textContent = "Non supporté";
+      return;
+    }
+    recChunks = [];
+    recorder = new MediaRecorder(recDest.stream);
+    recorder.ondataavailable = e => { if (e.data.size) recChunks.push(e.data); };
+    recorder.onstop = () => {
+      const blob = new Blob(recChunks, { type: recorder.mimeType || "audio/webm" });
+      const ext = (recorder.mimeType || "").includes("ogg") ? "ogg" : "webm";
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "synthe-8bit." + ext;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      recBtn.innerHTML = "&#9679; Enregistrer";
+      recBtn.classList.remove("rec-on");
+    };
+    recorder.start();
+    recBtn.innerHTML = "&#9632; Stop + export";
+    recBtn.classList.add("rec-on");
+  });
+
   // ------- Clavier virtuel -------
   const kbEl = document.getElementById("keyboard");
   const keyEls = new Map(); // offset -> element
@@ -480,7 +746,6 @@
         el.style.left = (whiteIndex * whiteWidth - 2.1) + "%";
       } else {
         el.className = "key";
-        el.textContent = NOTE_NAMES[semitone] + (semitone === 0 ? params.octave + Math.floor(i / 12) : "");
         whiteIndex++;
       }
       kbEl.appendChild(el);
@@ -537,7 +802,7 @@
   const KEYMAP = {
     KeyA: 0, KeyW: 1, KeyS: 2, KeyE: 3, KeyD: 4, KeyF: 5, KeyT: 6,
     KeyG: 7, KeyY: 8, KeyH: 9, KeyU: 10, KeyJ: 11, KeyK: 12, KeyO: 13,
-    KeyL: 14, KeyP: 15, Semicolon: 16, Quote: 17, Enter: 19
+    KeyL: 14, KeyP: 15, Semicolon: 16, Quote: 17
   };
   const downKeys = new Set();
 
@@ -559,9 +824,12 @@
   window.addEventListener("blur", () => { downKeys.clear(); held = []; stopArp(); allNotesOff(); });
 
   // ------- Contrôles -------
+  const sliders = {};
+
   function bindSlider(id, fmt, apply) {
     const input = document.getElementById(id);
     const out = document.getElementById(id + "Out");
+    sliders[id] = input;
     const update = () => {
       const v = Number(input.value);
       out.textContent = fmt(v);
@@ -569,6 +837,11 @@
     };
     input.addEventListener("input", update);
     update();
+  }
+
+  function setSlider(id, value) {
+    sliders[id].value = value;
+    sliders[id].dispatchEvent(new Event("input"));
   }
 
   const ms = v => v < 1 ? Math.round(v * 1000) + "ms" : v.toFixed(2) + "s";
@@ -594,32 +867,76 @@
     params.volume = v;
     if (masterGain) masterGain.gain.setValueAtTime(v, ctx.currentTime);
   });
+  bindSlider("echoMix", pct, v => {
+    params.echoMix = v;
+    if (delayWet) delayWet.gain.setValueAtTime(v, ctx.currentTime);
+  });
+  bindSlider("echoTime", ms, v => {
+    params.echoTime = v;
+    if (delayNode) delayNode.delayTime.setValueAtTime(v, ctx.currentTime);
+  });
+  bindSlider("echoFb", pct, v => {
+    params.echoFb = v;
+    if (delayFb) delayFb.gain.setValueAtTime(v, ctx.currentTime);
+  });
   bindSlider("arpRate", v => v + "Hz", v => { params.arpRate = v; restartArp(); });
+  bindSlider("bpm", v => String(v), v => { params.bpm = v; });
 
   document.getElementById("arpMode").addEventListener("change", e => {
     params.arpMode = e.target.value;
     held = []; stopArp(); allNotesOff();
   });
 
+  function selectWave(wave) {
+    params.wave = wave;
+    document.querySelectorAll("#waves button").forEach(b =>
+      b.classList.toggle("selected", b.dataset.wave === wave));
+  }
+
   document.getElementById("waves").addEventListener("click", e => {
     const btn = e.target.closest("button[data-wave]");
-    if (!btn) return;
-    params.wave = btn.dataset.wave;
-    document.querySelectorAll("#waves button").forEach(b => b.classList.toggle("selected", b === btn));
+    if (btn) selectWave(btn.dataset.wave);
   });
 
-  function shiftOctave(delta) {
-    const next = Math.min(7, Math.max(1, params.octave + delta));
+  function setOctave(oct) {
+    const next = Math.min(7, Math.max(1, oct));
     if (next === params.octave) return;
     allNotesOff(); held = []; stopArp();
     params.octave = next;
     document.getElementById("octValue").textContent = next;
     refreshKeyLabels();
   }
+  function shiftOctave(delta) { setOctave(params.octave + delta); }
   document.getElementById("octDown").addEventListener("click", () => shiftOctave(-1));
   document.getElementById("octUp").addEventListener("click", () => shiftOctave(1));
 
-  // ------- Oscilloscope -------
+  // ------- Presets -------
+  const PRESETS = {
+    leadgb:  { wave: "pulse125", octave: 4, attack: 0.005, decay: 0.08, sustain: 0.5, release: 0.12,
+               bits: 4, vibRate: 6, vibDepth: 15, echoMix: 0.15, echoTime: 0.18, echoFb: 0.3 },
+    basse:   { wave: "square", octave: 2, attack: 0.005, decay: 0.15, sustain: 0.7, release: 0.1,
+               bits: 6, vibRate: 5, vibDepth: 0, echoMix: 0, echoTime: 0.22, echoFb: 0.35 },
+    cristal: { wave: "triangle", octave: 6, attack: 0.01, decay: 0.3, sustain: 0.3, release: 0.5,
+               bits: 8, vibRate: 5, vibDepth: 0, echoMix: 0.35, echoTime: 0.26, echoFb: 0.45 },
+    percu:   { wave: "noise", octave: 4, attack: 0.001, decay: 0.1, sustain: 0, release: 0.08,
+               bits: 3, vibRate: 5, vibDepth: 0, echoMix: 0.1, echoTime: 0.12, echoFb: 0.2 },
+    sirene:  { wave: "square", octave: 5, attack: 0.05, decay: 0.1, sustain: 1, release: 0.3,
+               bits: 5, vibRate: 1, vibDepth: 600, echoMix: 0.25, echoTime: 0.3, echoFb: 0.4 }
+  };
+
+  document.getElementById("presets").addEventListener("click", e => {
+    const btn = e.target.closest("button[data-preset]");
+    if (!btn) return;
+    const p = PRESETS[btn.dataset.preset];
+    selectWave(p.wave);
+    setOctave(p.octave);
+    ["attack", "decay", "sustain", "release", "bits", "vibRate", "vibDepth",
+     "echoMix", "echoTime", "echoFb"].forEach(k => setSlider(k, p[k]));
+    document.querySelectorAll("#presets button").forEach(b =>
+      b.classList.toggle("selected", b === btn));
+  });
+
+  // ------- Oscilloscope + tête de lecture -------
   const scope = document.getElementById("scope");
   const sctx = scope.getContext("2d");
 
@@ -651,10 +968,18 @@
         if (x === 0) sctx.moveTo(x, y); else sctx.lineTo(x, y);
       }
       sctx.stroke();
+
+      // Tête de lecture du séquenceur
+      if (seqPlaying) {
+        while (stepQueue.length && stepQueue[0].time <= ctx.currentTime) {
+          setPlayhead(stepQueue.shift().step);
+        }
+      }
     })();
   }
 
   buildKeyboard();
+  buildSeqGrid();
   drawIdleScope();
   window.addEventListener("pointerdown", initAudio, { once: false });
 })();
