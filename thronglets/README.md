@@ -73,9 +73,13 @@ pip install -r requirements.txt
 python main.py
 ```
 
-The window opens fullscreen at the desktop's own resolution, stretching
-the world to fill the screen exactly (no letterbox bars, whatever the
-screen's aspect ratio) — `ESC` quits back to the desktop.
+The window opens **maximised**, not fullscreen — this is a thing you leave
+running beside other windows, and seizing the whole display was a hostile
+default. Drag it to any size you like: the world is stretched per-axis to
+fill exactly whatever it is given, so there are no letterbox bars at any
+window shape, and the HUD and every screen follow along live. `F11` (or
+`Alt+Enter`, from any screen, menus included) takes the full display and
+gives it back, landing on the exact window you left. `ESC` quits.
 
 On launch you're asked to press `E`/`F` for English or French, `ENTER`
 defaulting to French. If a save from a previous run exists

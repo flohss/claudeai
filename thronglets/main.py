@@ -34,6 +34,8 @@ Controls:
   V            show/hide the full HUD (or click the top HUD strip)
   M            mute the proximity-listening sound
   H            in-game notice/help screen
+  F11          fullscreen on/off (Alt+Enter too) - the window starts maximised,
+               not fullscreen, and can be resized freely at any time
   ESC          quit
 """
 
@@ -114,8 +116,10 @@ DEFAULT_SAVE_FILE = "thronglets_save.json"
 EXPANDED_HUD_H = 304
 MINIMAL_HUD_H = 76
 HUD_H = MINIMAL_HUD_H  # the HUD starts collapsed; V or a click on it expands it
-# Placeholder sizes - main() overwrites these with the real screen resolution
-# so the world fills the whole display with no letterboxing on either axis.
+# Placeholder sizes - open_window() overwrites these with the real window size,
+# and sync_screen() keeps them there as the player resizes. The world is
+# stretched per-axis to exactly fill whatever it is given, so there is no fixed
+# aspect ratio and no letterboxing on either axis at any window shape.
 SCREEN_W, SCREEN_H = int(WIDTH * 5), int(HEIGHT * 5) + HUD_H
 SCALE_X, SCALE_Y = 5.0, 5.0
 
@@ -258,7 +262,7 @@ TEXT = {
         "hud_muted_tag": "[sound muted]",
         "hud_header": "tick {tick:>6}   pop {pop:>4}   births {births:>5}   deaths {deaths:>5}   {status}",
         "hud_controls_hint1": "(space=pause  up/down=speed  r=reset  s=save  g=graph",
-        "hud_controls_hint2": " t=family  c=compare  d=translator  ?=faq  h=help  m=mute)",
+        "hud_controls_hint2": " t=family  c=compare  d=translator  ?=faq  h=help  m=mute  F11=fullscreen)",
         "hud_controls_hint3": "n/click = food   p/right-click = predator   f = fire tool",
         "hud_fire_armed": "FIRE - left-click or drag to burn   (F to stop)",
         "hud_expand_hint": "V or click here = show full HUD",
@@ -518,7 +522,7 @@ TEXT = {
         "hud_muted_tag": "[son coupe]",
         "hud_header": "tick {tick:>6}   pop {pop:>4}   naissances {births:>5}   morts {deaths:>5}   {status}",
         "hud_controls_hint1": "(espace=pause  haut/bas=vitesse  r=reset  s=sauver  g=graphique",
-        "hud_controls_hint2": " t=famille  c=comparer  d=traducteur  ?=faq  h=aide  m=silence)",
+        "hud_controls_hint2": " t=famille  c=comparer  d=traducteur  ?=faq  h=aide  m=silence  F11=plein ecran)",
         "hud_controls_hint3": "n/clic = nourriture   p/clic droit = predateur   f = outil feu",
         "hud_fire_armed": "FEU - clic gauche ou glisser pour bruler   (F pour arreter)",
         "hud_expand_hint": "V ou clique ici = HUD complet",
@@ -706,6 +710,133 @@ TEXT = {
 }
 
 
+# =========================================================================
+# the window
+#
+# The game used to seize the whole display: set_mode((0, 0), FULLSCREEN). That
+# is a hostile default for something you leave running for hours next to other
+# windows, so it now opens MAXIMISED and resizable, and fullscreen is a key you
+# press rather than a state you are put in.
+#
+# Two facts about pygame 2 / SDL2 make this cheap, both verified rather than
+# assumed. A resizable window's display Surface is resized IN PLACE - the same
+# object, so the `screen` reference held by all 23 event loops in this file
+# stays valid and nothing has to be threaded back through them. And the
+# _sdl2 Window can maximise and go fullscreen without re-creating the window,
+# which pygame.display.toggle_fullscreen() does do (it warns, and it loses the
+# maximised state on the way back). So only the scaling globals need keeping in
+# step, which is what sync_screen() and events() below are for.
+# =========================================================================
+
+_window = None          # the SDL2 window, or None where _sdl2 is unavailable
+_fullscreen = False
+_restore_geometry = None   # size/position to come back to when leaving fullscreen
+
+
+def open_window():
+    """Open the game window maximised, and return its surface.
+
+    Falls back all the way down: no _sdl2 module -> size the window to the
+    desktop by hand; no desktop size either -> a fixed sensible window. A
+    player on an odd build gets a slightly wrong window, not a crash."""
+    global _window
+    try:
+        sizes = pygame.display.get_desktop_sizes()
+        dw, dh = sizes[0]
+    except (pygame.error, IndexError, AttributeError):
+        dw, dh = 1280, 800
+    # a first size for the window in case maximising is not honoured (no window
+    # manager, some remote sessions): most of the desktop, but not all of it
+    screen = pygame.display.set_mode((int(dw * 0.9), int(dh * 0.88)), pygame.RESIZABLE)
+    try:
+        from pygame._sdl2.video import Window
+        _window = Window.from_display_module()
+        _window.maximize()
+    except (ImportError, AttributeError, pygame.error):
+        _window = None
+    sync_screen()
+    return screen
+
+
+def toggle_fullscreen():
+    """Fullscreen on and off, keeping the windowed geometry across the trip.
+
+    set_windowed() restores the size the window was FIRST opened at, not the
+    maximised one, so leaving fullscreen would silently un-maximise the game.
+    Remembering the geometry ourselves is what makes the round trip land where
+    it started."""
+    global _fullscreen, _restore_geometry
+    if _window is None:
+        pygame.display.toggle_fullscreen()   # coarser, but better than nothing
+        _fullscreen = not _fullscreen
+        sync_screen()
+        return
+    if not _fullscreen:
+        _restore_geometry = (_window.size, _window.position)
+        _window.set_fullscreen(desktop=True)
+    else:
+        _window.set_windowed()
+        if _restore_geometry is not None:
+            size, position = _restore_geometry
+            # A window that filled the desktop goes back to being MAXIMISED, not
+            # to a loose window that merely happens to be that size: restoring
+            # the geometry by hand left it a couple of pixels off and no longer
+            # maximised in the window manager's eyes, so double-clicking the
+            # title bar afterwards did the wrong thing.
+            if _fills_desktop(size):
+                _window.maximize()
+            else:
+                _window.size, _window.position = size, position
+    _fullscreen = not _fullscreen
+    sync_screen()
+
+
+def _fills_desktop(size):
+    """Was this window effectively maximised? A maximised window is a little
+    smaller than the desktop - the title bar and any taskbar come out of it -
+    so this asks whether it was close, not whether it matched."""
+    try:
+        dw, dh = pygame.display.get_desktop_sizes()[0]
+    except (pygame.error, IndexError, AttributeError):
+        return False
+    return size[0] >= dw * 0.95 and size[1] >= dh * 0.90
+
+
+def sync_screen():
+    """Keep the scaling globals matching the window the player actually has."""
+    global SCREEN_W, SCREEN_H, SCALE_X, SCALE_Y
+    surface = pygame.display.get_surface()
+    if surface is None:
+        return
+    w, h = surface.get_size()
+    if (w, h) == (SCREEN_W, SCREEN_H):
+        return
+    SCREEN_W, SCREEN_H = w, h
+    SCALE_X = SCREEN_W / WIDTH
+    SCALE_Y = max(1.0, SCREEN_H - HUD_H) / HEIGHT
+
+
+def events():
+    """Every event loop in this file pumps through here.
+
+    Two things must hold on every screen and not just the main one: the scaling
+    globals have to follow the window, and F11 has to toggle fullscreen. Doing
+    it in one place rather than in each of the 23 loops means a screen added
+    later cannot forget to, and a player cannot get stuck fullscreen inside a
+    menu. Alt+Enter works too, because half the world reaches for that one."""
+    out = []
+    for event in pygame.event.get():          # the one raw pump in this file
+        if event.type == pygame.KEYDOWN and (
+                event.key == pygame.K_F11
+                or (event.key in (pygame.K_RETURN, pygame.K_KP_ENTER)
+                    and event.mod & pygame.KMOD_ALT)):
+            toggle_fullscreen()
+            continue          # swallowed: Enter must not also confirm a menu
+        out.append(event)
+    sync_screen()             # after pumping, so this frame draws at the new size
+    return out
+
+
 def show_help(screen, font, lang):
     t = TEXT[lang]
     lines = t["help_lines"]
@@ -724,7 +855,7 @@ def show_help(screen, font, lang):
                 screen.blit(font.render(line, True, color), (20, top + i * line_h))
             screen.blit(font.render(footer, True, (150, 155, 145)), (20, top + len(page) * line_h + 14))
             pygame.display.flip()
-            for event in pygame.event.get():
+            for event in events():
                 if event.type == pygame.QUIT:
                     pygame.quit()
                     sys.exit()
@@ -752,7 +883,7 @@ def show_faq(screen, font, lang):
                 screen.blit(font.render(line, True, color), (20, top + i * line_h))
             screen.blit(font.render(footer, True, (150, 155, 145)), (20, top + len(page) * line_h + 14))
             pygame.display.flip()
-            for event in pygame.event.get():
+            for event in events():
                 if event.type == pygame.QUIT:
                     pygame.quit()
                     sys.exit()
@@ -813,7 +944,7 @@ def show_graph(screen, font, world, lang):
 
         screen.blit(font.render(t["graph_dismiss"], True, (150, 155, 145)), (20, y))
         pygame.display.flip()
-        for event in pygame.event.get():
+        for event in events():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
@@ -881,7 +1012,7 @@ def show_translator(screen, font, world, lang):
             y += 24
         screen.blit(font.render(t["graph_dismiss"], True, (150, 155, 145)), (20, y + 16))
         pygame.display.flip()
-        for event in pygame.event.get():
+        for event in events():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
@@ -912,7 +1043,7 @@ def show_family(screen, font, world, lang):
             screen.blit(font.render(t["family_none"], True, (255, 255, 255)), (20, 20))
             screen.blit(font.render(t["graph_dismiss"], True, (150, 155, 145)), (20, 60))
             pygame.display.flip()
-            for event in pygame.event.get():
+            for event in events():
                 if event.type == pygame.QUIT:
                     pygame.quit()
                     sys.exit()
@@ -974,7 +1105,7 @@ def show_family(screen, font, world, lang):
         event_key = None
         waiting = True
         while waiting:
-            for event in pygame.event.get():
+            for event in events():
                 if event.type == pygame.QUIT:
                     pygame.quit()
                     sys.exit()
@@ -1530,7 +1661,7 @@ def choose_language(screen, font):
         for i, line in enumerate(lines):
             screen.blit(font.render(line, True, TEXT_COLOR), (20, 20 + i * 26))
         pygame.display.flip()
-        for event in pygame.event.get():
+        for event in events():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
@@ -1557,7 +1688,7 @@ def choose_mode(screen, font, lang):
         for i, line in enumerate(lines):
             screen.blit(font.render(line, True, TEXT_COLOR), (20, 20 + i * 26))
         pygame.display.flip()
-        for event in pygame.event.get():
+        for event in events():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
@@ -1585,7 +1716,7 @@ def choose_population(screen, font, lang):
         for i, line in enumerate(lines):
             screen.blit(font.render(line, True, TEXT_COLOR), (20, 20 + i * 26))
         pygame.display.flip()
-        for event in pygame.event.get():
+        for event in events():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
@@ -1620,7 +1751,7 @@ def choose_adaptive_traits(screen, font, lang):
         for i, line in enumerate(lines):
             screen.blit(font.render(line, True, TEXT_COLOR), (20, 20 + i * 26))
         pygame.display.flip()
-        for event in pygame.event.get():
+        for event in events():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
@@ -1655,7 +1786,7 @@ def choose_learning(screen, font, lang):
         for i, line in enumerate(lines):
             screen.blit(font.render(line, True, TEXT_COLOR), (20, 20 + i * 26))
         pygame.display.flip()
-        for event in pygame.event.get():
+        for event in events():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
@@ -1686,7 +1817,7 @@ def choose_ai(screen, font, lang):
         for i, line in enumerate(lines):
             screen.blit(font.render(line, True, TEXT_COLOR), (20, 20 + i * 26))
         pygame.display.flip()
-        for event in pygame.event.get():
+        for event in events():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
@@ -1718,7 +1849,7 @@ def choose_resume(screen, font, lang):
         for i, line in enumerate(lines):
             screen.blit(font.render(line, True, TEXT_COLOR), (20, 20 + i * 26))
         pygame.display.flip()
-        for event in pygame.event.get():
+        for event in events():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
@@ -1747,7 +1878,7 @@ def choose_start(screen, font, lang, has_save):
             col = (235, 150, 90) if line is t.get("choose_start_master") else TEXT_COLOR
             screen.blit(font.render(line, True, col), (20, 20 + i * 26))
         pygame.display.flip()
-        for event in pygame.event.get():
+        for event in events():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
@@ -1867,7 +1998,7 @@ def show_tuning(screen, font, lang):
             screen.blit(font.render(status, True, (150, 220, 140)), (20, SCREEN_H - 24))
         pygame.display.flip()
 
-        for event in pygame.event.get():
+        for event in events():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
@@ -1920,7 +2051,7 @@ def flash_message(screen, font, lang, text):
             screen.blit(font.render(line, True, (235, 90, 90)), (20, 20 + i * 24))
         screen.blit(font.render(TEXT[lang]["flash_hint"], True, TEXT_COLOR), (20, 20 + len(lines) * 24 + 20))
         pygame.display.flip()
-        for event in pygame.event.get():
+        for event in events():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
@@ -1988,7 +2119,7 @@ def run_training_ui(screen, font, lang):
 
         cancelled = False
         while thread.is_alive():
-            for event in pygame.event.get():
+            for event in events():
                 if event.type == pygame.QUIT:
                     pygame.quit()
                     sys.exit()
@@ -2077,7 +2208,7 @@ def run_training_ui(screen, font, lang):
                 y += 24
             screen.blit(font.render(footer_line, True, TEXT_COLOR), (20, y + 20))
             pygame.display.flip()
-            for event in pygame.event.get():
+            for event in events():
                 if event.type == pygame.QUIT:
                     pygame.quit()
                     sys.exit()
@@ -2119,7 +2250,7 @@ def choose_compare_mode(screen, font, lang, traits_available):
         for i, line in enumerate(lines):
             screen.blit(font.render(line, True, TEXT_COLOR), (20, 20 + i * 26))
         pygame.display.flip()
-        for event in pygame.event.get():
+        for event in events():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
@@ -2149,7 +2280,7 @@ def choose_compare_depth(screen, font, lang):
         for i, line in enumerate(lines):
             screen.blit(font.render(line, True, TEXT_COLOR), (20, 20 + i * 26))
         pygame.display.flip()
-        for event in pygame.event.get():
+        for event in events():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
@@ -2201,7 +2332,7 @@ def run_compare_ui(screen, font, world, lang, init_pop, seed_genome):
 
     cancelled = False
     while thread.is_alive():
-        for event in pygame.event.get():
+        for event in events():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
@@ -2274,7 +2405,7 @@ def run_compare_ui(screen, font, world, lang, init_pop, seed_genome):
 
         screen.blit(font.render(t["compare_dismiss"], True, (150, 155, 145)), (20, y + 14))
         pygame.display.flip()
-        for event in pygame.event.get():
+        for event in events():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
@@ -2292,14 +2423,11 @@ def main():
     pygame.init()
     tones, sound_channel = init_sound()
     pygame.display.set_caption("Thronglets - a tiny language is being born")
-    # (0, 0) + FULLSCREEN asks SDL for the desktop's own resolution, then the
-    # world is stretched per-axis to exactly fill it - no fixed aspect ratio,
-    # so no letterboxing bars on wide/narrow screens.
-    screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
     global SCREEN_W, SCREEN_H, SCALE_X, SCALE_Y, HUD_H, MINIMAL_HUD_H, EXPANDED_HUD_H
-    SCREEN_W, SCREEN_H = screen.get_size()
-    SCALE_X = SCREEN_W / WIDTH
-    SCALE_Y = (SCREEN_H - HUD_H) / HEIGHT
+    # maximised and resizable, not fullscreen: this is a thing you leave running
+    # beside other windows. F11 (or Alt+Enter) takes the whole screen when you
+    # want it, from any screen in the game.
+    screen = open_window()
     clock = pygame.time.Clock()
     font = pygame.font.SysFont("consolas", 16)
 
@@ -2391,7 +2519,7 @@ def main():
         # Capped so returning from a blocking screen (help, save confirmation)
         # resumes at normal pace instead of fast-forwarding through a huge backlog.
         dt = min(clock.tick(60) / 1000.0, 0.25)
-        for event in pygame.event.get():
+        for event in events():
             if event.type == pygame.QUIT:
                 running = False
             elif event.type == pygame.KEYDOWN:
