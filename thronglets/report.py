@@ -59,7 +59,8 @@ ACT_NAMES = {S.ACT_APPROACH: "approach", S.ACT_FLEE: "flee", S.ACT_IGNORE: "igno
 # --- running one world ------------------------------------------------------
 
 def play(seed, ticks, hand="none", act=None, hunted=True, learning=True,
-         adaptive=True, per_step=2, master=False, break_every=0):
+         adaptive=True, per_step=2, master=False, break_every=0,
+         should_stop=None):
     """One life, played a particular way.
 
     `hand` is how the cursor behaves: "none" (you never touch the game),
@@ -74,7 +75,15 @@ def play(seed, ticks, hand="none", act=None, hunted=True, learning=True,
     world.master_mode = master
     rng = np.random.default_rng(seed)
     pos = np.array([S.WIDTH * 0.5, S.HEIGHT * 0.5])
-    for _ in range(ticks):
+    for n in range(ticks):
+        # Abandon inside the world, not just between worlds. Checked between
+        # worlds only, cancelling a 200000-tick run meant waiting out the world
+        # in flight - over an hour on an ordinary machine, after pressing stop.
+        # Every 100 ticks: often enough that stopping feels immediate (about
+        # two seconds at the rate an ordinary machine runs), rare enough that
+        # the check itself costs nothing across millions of ticks.
+        if should_stop is not None and n % 100 == 0 and should_stop():
+            return None
         if hand != "none":
             if hand == "wander":
                 pos = np.clip(pos + rng.normal(0, 1.6, 2), [0, 0], [S.WIDTH, S.HEIGHT])
@@ -346,6 +355,105 @@ def stays_within(claim, sides, key, band, band_name):
     return lines
 
 
+def build_report(seed_count, ticks, titles=None, progress=None, should_stop=None):
+    """Run the sweep and return the finished report as one string.
+
+    Split out of main() so the in-game Measure screen and the command line run
+    the SAME code. Two screens computing the same numbers by two routes is how
+    they end up disagreeing, and the one you would trust is whichever you
+    happened to look at last.
+
+    titles     which scenarios to run, by their SCENARIOS title; None = all.
+    progress   called as progress(done, total, title, seed) before each world.
+    should_stop() returning True aborts; build_report then returns None.
+
+    A subset means some claims cannot be checked, because a claim is a
+    COMPARISON and needs both its sides. Those are named as skipped rather than
+    quietly dropped - a report that silently checks fewer claims than it
+    appears to is worse than one that says so.
+    """
+    wanted = [(title, kw) for title, kw in SCENARIOS
+              if titles is None or title in titles]
+    seeds = [5 + 4 * i for i in range(seed_count)]
+    lines = header(seeds, ticks)
+    collected = {}
+
+    total = len(wanted) * len(seeds)
+    done = 0
+    for title, kwargs in wanted:
+        runs = []
+        for seed in seeds:
+            if should_stop is not None and should_stop():
+                return None
+            done += 1
+            if progress is not None:
+                progress(done, total, title, seed)
+            world = play(seed, ticks, should_stop=should_stop, **kwargs)
+            if world is None:            # abandoned mid-world
+                return None
+            runs.append(measure(world))
+        stats = across(runs)
+        collected[title] = stats
+        lines += ["", "-" * 78, title.upper(), "-" * 78]
+        lines += table(stats, len(seeds))
+
+    lines += ["", "=" * 78, "CLAIMS THIS PROJECT MAKES, RE-MEASURED", "=" * 78]
+    skipped = []
+    for needs, make in CLAIMS:
+        if all(n in collected for n in needs):
+            lines += make(collected)
+        else:
+            skipped.append((needs, make))
+    if skipped:
+        lines += ["", "NOT CHECKED - these claims compare scenarios this run "
+                  "did not include:"]
+        for needs, _make in skipped:
+            missing = [n for n in needs if n not in collected]
+            lines.append(f"  needs: {', '.join(missing)}")
+
+    lines += ["", "=" * 78,
+              "Send this file along with what you were asking about.",
+              "=" * 78]
+    return "\n".join(lines) + "\n"
+
+
+# Each claim names the scenarios it needs, so a partial run can say which ones
+# it could not check instead of appearing to have checked them all.
+CLAIMS = [
+    (("hunted, you never touch it", "unhunted, you never touch it"),
+     lambda c: differs(
+         "a call means something only where there was something to learn",
+         "with predators", c["hunted, you never touch it"],
+         "without predators", c["unhunted, you never touch it"],
+         "call_most_dreaded")),
+    (("hunted, hand feeds", "hunted, hand burns"),
+     lambda c: differs(
+         "kindness and cruelty teach opposite things",
+         "after being fed", c["hunted, hand feeds"],
+         "after being burned", c["hunted, hand burns"],
+         "disposition")),
+    (("hunted, hand wanders (no acts)", "hunted, you never touch it"),
+     lambda c: stays_within(
+         "a hand that only moves is not blamed for anything",
+         [("hand wanders, never acts", c["hunted, hand wanders (no acts)"]),
+          ("you never touch it at all", c["hunted, you never touch it"])],
+         "disposition", 0.05, "the HUD's own neutral band")),
+    (("hunted, hand burns",),
+     lambda c: two_metrics(
+         "dread reaches a hand that is only closing in, before it lands",
+         c["hunted, hand burns"],
+         "a still hand is worth", "hand_still_worth",
+         "the same hand lunging", "hand_lunging_worth", "anticipation_gap",
+         "measured on the burned flock - one that was never hurt has no reason "
+         "to dread either")),
+    (("unhunted, you never touch it",),
+     lambda c: stays_within(
+         "an unhunted flock is not afraid of anything",
+         [("unhunted, you never touch it", c["unhunted, you never touch it"])],
+         "felt_fear", 0.05, "a twentieth of the flock")),
+]
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--seeds", type=int, default=3, help="how many seeds per scenario")
@@ -380,56 +488,10 @@ def main():
             ap.error(f"{name}={value:g} is outside its safe range {lo:g}..{hi:g}")
         T.apply({name: value})
 
-    seeds = [5 + 4 * i for i in range(args.seeds)]
-    lines = header(seeds, args.ticks)
-    collected = {}
+    def shout(done, total, title, seed):
+        print(f"[{done}/{total}] {title}  seed {seed}", file=sys.stderr, flush=True)
 
-    total = len(SCENARIOS) * len(seeds)
-    done = 0
-    for title, kwargs in SCENARIOS:
-        runs = []
-        for seed in seeds:
-            done += 1
-            print(f"[{done}/{total}] {title}  seed {seed}", file=sys.stderr, flush=True)
-            runs.append(measure(play(seed, args.ticks, **kwargs)))
-        stats = across(runs)
-        collected[title] = stats
-        lines += ["", "-" * 78, title.upper(), "-" * 78]
-        lines += table(stats, len(seeds))
-
-    lines += ["", "=" * 78, "CLAIMS THIS PROJECT MAKES, RE-MEASURED", "=" * 78]
-    lines += differs(
-        "a call means something only where there was something to learn",
-        "with predators", collected["hunted, you never touch it"],
-        "without predators", collected["unhunted, you never touch it"],
-        "call_most_dreaded")
-    lines += differs(
-        "kindness and cruelty teach opposite things",
-        "after being fed", collected["hunted, hand feeds"],
-        "after being burned", collected["hunted, hand burns"],
-        "disposition")
-    lines += stays_within(
-        "a hand that only moves is not blamed for anything",
-        [("hand wanders, never acts", collected["hunted, hand wanders (no acts)"]),
-         ("you never touch it at all", collected["hunted, you never touch it"])],
-        "disposition", 0.05, "the HUD's own neutral band")
-    lines += two_metrics(
-        "dread reaches a hand that is only closing in, before it lands",
-        collected["hunted, hand burns"],
-        "a still hand is worth", "hand_still_worth",
-        "the same hand lunging", "hand_lunging_worth", "anticipation_gap",
-        "measured on the burned flock - one that was never hurt has no reason "
-        "to dread either")
-    lines += stays_within(
-        "an unhunted flock is not afraid of anything",
-        [("unhunted, you never touch it", collected["unhunted, you never touch it"])],
-        "felt_fear", 0.05, "a twentieth of the flock")
-
-    lines += ["", "=" * 78,
-              "Send this file along with what you were asking about.",
-              "=" * 78]
-
-    text = "\n".join(lines) + "\n"
+    text = build_report(args.seeds, args.ticks, progress=shout)
     with open(args.out, "w", encoding="utf-8") as fh:
         fh.write(text)
     print(text)

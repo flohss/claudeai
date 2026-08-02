@@ -217,6 +217,33 @@ change, so two runs make a comparable pair without you having to remember what
 you tried. Out-of-range values, locked parameters and unknown names are refused
 with the reason.
 
+### The same thing without the terminal: press T at startup
+
+The Measure screen runs `report.build_report` - *the same function* the command
+line calls, not a second copy of it, because two screens computing the same
+numbers by two routes end up disagreeing and you cannot tell which to believe.
+You pick which of the seven tests to run, the seeds and the ticks, and it writes
+`thronglets_report_<date>.txt` beside the game.
+
+What it adds over the command line is the part the command line cannot give you:
+**what the run will cost, before you start it.** While you are still choosing, a
+background thread is timing a real world built the way the report builds them -
+same starting population, learning on, predators in - and the screen shows this
+machine's actual rate and the estimate that follows from it. Over an hour it
+turns orange and says so.
+
+That exists because of a specific near-miss. Asked for "the biggest test
+possible", the answer that came back was `--seeds 16 --ticks 200000`, which
+nobody had multiplied out: 7 x 16 x 200000 is **22.4 million ticks**, and at the
+43 ticks/second measured on the machine it was suggested from, **146 hours**.
+Six days. The arithmetic is trivial and invisible, and a terminal will start
+that run without a word.
+
+Picking a subset means some claims cannot be checked - a claim is a comparison
+and needs both its sides. The report lists those under `NOT CHECKED` with the
+scenarios that were missing, rather than quietly checking fewer claims than it
+appears to.
+
 It plays six scenarios - hunted and unhunted with nobody touching the game, a
 hand that only wanders, a hand that feeds, a hand that burns, and learning
 switched off as a control - and reports **every metric as mean ± standard

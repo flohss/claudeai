@@ -81,6 +81,17 @@ window shape, and the HUD and every screen follow along live. `F11` (or
 `Alt+Enter`, from any screen, menus included) takes the full display and
 gives it back, landing on the exact window you left. `ESC` quits.
 
+At the start menu, `P` opens the parameter screen and **`T` opens Measure** —
+the report from `report.py`, run from inside the game. Tick which of the seven
+tests you want, set the seeds and the ticks, and it writes
+`thronglets_report_<date>.txt` beside the game. It calls the *same function* the
+command line calls, so the two cannot disagree; verified by diffing a run from
+each, which came out byte-for-byte identical. What it adds is the thing the
+command line cannot give you: while you are choosing, it times a real world on
+**your** machine and shows what the run will cost — because `7 × 16 × 200000` is
+22.4 million ticks and *six days*, and a terminal will start that without a
+word. `ESC` stops a run within a second or two, mid-world.
+
 On launch you're asked to press `E`/`F` for English or French, `ENTER`
 defaulting to French. If a save from a previous run exists
 (`thronglets_save.json`), you're then asked whether to resume it — say yes

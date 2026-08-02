@@ -37,6 +37,12 @@ Controls:
   F11          fullscreen on/off (Alt+Enter too) - the window starts maximised,
                not fullscreen, and can be resized freely at any time
   ESC          quit
+
+At the start menu, T opens the Measure screen: pick which of the report's seven
+tests to run, how many seeds and how many ticks, and it writes the same file
+report.py writes - running the same function, so the two cannot disagree. It
+times this machine while you choose and shows what the run will cost before you
+start it, which the command line cannot.
 """
 
 import argparse
@@ -50,6 +56,7 @@ import time
 import numpy as np
 import pygame
 
+import report
 import simulation
 import tuning
 from i18n import STATE_LABELS, TRAIT_LABELS, disposition_label
@@ -246,7 +253,34 @@ TEXT = {
         "tuning_status_reset": "everything back to the built-in values",
         "tuning_status_one_reset": "{name} back to its built-in value",
         "tuning_status_locked": "{name} cannot be changed: {why}",
-        "choose_start_hint": "Press R, N, M or P   (ENTER = new game).",
+        "choose_start_measure": "  T = measure - run the report on this machine and get a file",
+        "choose_start_hint": "Press R, N, M, P or T   (ENTER = new game).",
+        "meas_title": "MEASURE - run the report on this machine",
+        "meas_hint": "up/down = move   SPACE = include/exclude a test   left/right = change a number (shift = x10)",
+        "meas_hint2": "A = all   Z = none   ENTER = run   ESC = back",
+        "meas_scenarios": "WHICH TESTS TO RUN",
+        "meas_size": "HOW BIG",
+        "meas_seeds": "seeds per test",
+        "meas_seeds_doc": "different worlds per test - more seeds narrows the spread, which is what decides a close call",
+        "meas_ticks": "ticks per world",
+        "meas_ticks_doc": "how long each world lives - long worlds are what reveal drift over generations",
+        "meas_budget": "THE BILL",
+        "meas_total": "{tests} tests x {seeds} seeds x {ticks} ticks = {total} ticks to live through",
+        "meas_rate_measuring": "measuring this machine's speed... ({n} ticks timed so far)",
+        "meas_rate": "this machine: {rate:.0f} ticks/second, measured here just now",
+        "meas_eta": "estimated: {eta}",
+        "meas_eta_warn": "estimated: {eta}   <- that is a long time. Fewer seeds or fewer ticks.",
+        "meas_none": "no test selected - press SPACE on one, or A for all",
+        "meas_running": "RUNNING - {done}/{total} worlds   {title}  seed {seed}",
+        "meas_elapsed": "elapsed {el}   left about {left}",
+        "meas_cancel": "ESC = stop (nothing is written)",
+        "meas_stopping": "stopping...",
+        "meas_written": "written to {file}",
+        "meas_written2": "send me that file",
+        "meas_cancelled": "stopped - nothing written",
+        "meas_failed": "the run failed: {err}",
+        "meas_pinned": "your {n} pinned parameter(s) are in force and are recorded in the file",
+        "meas_builtin": "no pinned parameters - measuring the game as shipped",
         "master_banner": "MASTER MODE - hold I to break  |  left-click feeds  |  right-click births  |  F to kill",
         "master_obedience": "obedience of the flock: {pct:.0%}",
         "master_readout": "obedience {ob:.0%}    unrest {unrest:.0%}",
@@ -506,7 +540,34 @@ TEXT = {
         "tuning_status_reset": "tout est revenu aux valeurs d'origine",
         "tuning_status_one_reset": "{name} revenu a sa valeur d'origine",
         "tuning_status_locked": "{name} non modifiable : {why}",
-        "choose_start_hint": "Appuie sur R, N, M ou P   (ENTREE = nouvelle partie).",
+        "choose_start_measure": "  T = tester - lancer le rapport sur cette machine et obtenir un fichier",
+        "choose_start_hint": "Appuie sur R, N, M, P ou T   (ENTREE = nouvelle partie).",
+        "meas_title": "TESTER - lancer le rapport sur cette machine",
+        "meas_hint": "haut/bas = deplacer   ESPACE = inclure/exclure un test   gauche/droite = changer un nombre (maj = x10)",
+        "meas_hint2": "A = tout   Z = rien   ENTREE = lancer   ECHAP = retour",
+        "meas_scenarios": "QUELS TESTS LANCER",
+        "meas_size": "QUELLE TAILLE",
+        "meas_seeds": "graines par test",
+        "meas_seeds_doc": "mondes differents par test - plus de graines resserre la dispersion, c'est elle qui tranche un cas serre",
+        "meas_ticks": "ticks par monde",
+        "meas_ticks_doc": "duree de vie de chaque monde - ce sont les mondes longs qui revelent une derive sur des generations",
+        "meas_budget": "LA FACTURE",
+        "meas_total": "{tests} tests x {seeds} graines x {ticks} ticks = {total} ticks a vivre",
+        "meas_rate_measuring": "mesure de la vitesse de cette machine... ({n} ticks chronometres)",
+        "meas_rate": "cette machine : {rate:.0f} ticks/seconde, mesure ici a l'instant",
+        "meas_eta": "estimation : {eta}",
+        "meas_eta_warn": "estimation : {eta}   <- c'est long. Moins de graines ou moins de ticks.",
+        "meas_none": "aucun test selectionne - ESPACE sur l'un d'eux, ou A pour tout",
+        "meas_running": "EN COURS - {done}/{total} mondes   {title}  graine {seed}",
+        "meas_elapsed": "ecoule {el}   reste environ {left}",
+        "meas_cancel": "ECHAP = arreter (rien ne sera ecrit)",
+        "meas_stopping": "arret en cours...",
+        "meas_written": "ecrit dans {file}",
+        "meas_written2": "envoie-moi ce fichier",
+        "meas_cancelled": "arrete - rien n'a ete ecrit",
+        "meas_failed": "le run a echoue : {err}",
+        "meas_pinned": "tes {n} parametre(s) epingles sont actifs et sont notes dans le fichier",
+        "meas_builtin": "aucun parametre epingle - mesure du jeu tel qu'il est livre",
         "master_banner": "MODE MAITRE - maintiens I pour briser  |  clic gauche nourrit  |  clic droit cree  |  F pour tuer",
         "master_obedience": "obeissance du groupe : {pct:.0%}",
         "master_readout": "obeissance {ob:.0%}    agitation {unrest:.0%}",
@@ -1914,7 +1975,8 @@ def choose_start(screen, font, lang, has_save):
     lines = ["Thronglets", "", t["choose_start_prompt"], ""]
     if has_save:
         lines.append(t["choose_start_resume"])
-    lines += [t["choose_start_new"], t["choose_start_master"], t["choose_start_tuning"]]
+    lines += [t["choose_start_new"], t["choose_start_master"], t["choose_start_tuning"],
+              t["choose_start_measure"]]
     pinned = len(tuning.load())
     if pinned:
         lines.append(t["choose_start_pinned"].format(n=pinned))
@@ -1932,12 +1994,323 @@ def choose_start(screen, font, lang, has_save):
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_p:
                     return "tuning"
+                if event.key == pygame.K_t:
+                    return "measure"
                 if event.key == pygame.K_m:
                     return "master"
                 if event.key == pygame.K_r and has_save:
                     return "resume"
                 if event.key in (pygame.K_n, pygame.K_RETURN):
                     return "new"
+
+
+# The report's scenario titles are English because the FILE is English - it is
+# meant to be sent to someone. Only the on-screen name is translated, keyed by
+# the English title so the two can never fall out of step: a title that gains
+# no translation shows its English name rather than vanishing.
+SCENARIO_FR = {
+    "hunted, you never touch it": "avec predateurs, tu n'y touches jamais",
+    "unhunted, you never touch it": "sans predateurs, tu n'y touches jamais",
+    "hunted, hand wanders (no acts)": "avec predateurs, la main se promene (sans agir)",
+    "hunted, hand feeds": "avec predateurs, la main nourrit",
+    "hunted, hand burns": "avec predateurs, la main brule",
+    "hunted, learning OFF (control)": "avec predateurs, apprentissage COUPE (temoin)",
+    "MASTER MODE, breaking wills": "MODE MAITRE, briser les volontes",
+}
+
+
+def scenario_name(title, lang):
+    return SCENARIO_FR.get(title, title) if lang == "fr" else title
+
+
+def _hms(seconds):
+    """A duration a person can act on. Hours matter more than seconds once a
+    run is long enough to be a decision rather than a wait."""
+    seconds = int(max(0, seconds))
+    h, m, s = seconds // 3600, (seconds % 3600) // 60, seconds % 60
+    if h:
+        return f"{h}h{m:02d}"
+    if m:
+        return f"{m}m{s:02d}"
+    return f"{s}s"
+
+
+class _Speedometer:
+    """How fast worlds actually run ON THIS MACHINE, measured while the player
+    is still choosing what to run.
+
+    The alternative was quoting a number from the machine this was written on,
+    which is worthless: the estimate is the whole point of the screen, because
+    the arithmetic is brutal and invisible. 7 tests x 16 seeds x 200000 ticks
+    is 22.4 million ticks, which reads like nothing and is days.
+
+    It times a real world built the way report.py builds them - same init_pop,
+    learning on, predators in - rather than a synthetic loop, so the number is
+    of the thing being estimated. Only a short warm-up is discarded, enough to
+    get past cold caches; a report world starts at 60 and settles near 70, so
+    it is at working size almost immediately and there is no cheap early
+    stretch to flatter the estimate.
+
+    It is an approximation across scenarios all the same: the learning-off
+    control runs much faster than the rest, and an unhunted world has no
+    predators to move. The screen says "estimated" and means it."""
+
+    WARMUP = 40
+
+    def __init__(self):
+        self.rate = None
+        self.timed = 0
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def _run(self):
+        world = World(init_pop=60, seed=7, learning=True)
+        n, t0 = 0, None
+        while not self._stop.is_set():
+            world.step()
+            n += 1
+            if n == self.WARMUP:
+                t0 = time.time()
+            elif n > self.WARMUP and n % 20 == 0:
+                self.timed = n - self.WARMUP
+                self.rate = self.timed / max(1e-6, time.time() - t0)
+
+    def stop(self):
+        self._stop.set()
+
+
+def show_measure(screen, font, lang):
+    """Run report.py's sweep from inside the game, choosing what to run.
+
+    The same code as the command line - report.build_report - so the two cannot
+    drift apart. What this screen adds is the part the command line cannot: it
+    tells you what a run will COST before you start it, having just measured
+    this machine, and it lets you cut the run down to the question you actually
+    have instead of paying for all seven tests."""
+    t = TEXT[lang]
+    titles = [title for title, _kw in report.SCENARIOS]
+    chosen = {title: True for title in titles}
+    seeds, ticks = 3, 1500
+
+    rows = ([("head", t["meas_scenarios"])]
+            + [("test", title) for title in titles]
+            + [("head", t["meas_size"]), ("seeds", None), ("ticks", None)])
+    cursor = 1
+    speedo = _Speedometer()
+    # ONE clock. A Clock built inside the loop has no previous frame to measure
+    # against, so tick() returns instantly and limits nothing - the draw loop
+    # would spin flat out and starve the thread doing the actual work.
+    clock = pygame.time.Clock()
+
+    # run state, written by the worker thread and only read by the drawing loop
+    state = {"done": 0, "total": 0, "title": "", "seed": 0,
+             "text": None, "error": None, "started": None}
+    stop = threading.Event()
+    worker = None
+    status = ""
+
+    def move(delta):
+        nonlocal cursor
+        i = cursor
+        while 0 <= i + delta < len(rows):
+            i += delta
+            if rows[i][0] != "head":
+                cursor = i
+                return
+
+    def nudge(direction, coarse):
+        nonlocal seeds, ticks
+        kind = rows[cursor][0]
+        if kind == "seeds":
+            seeds = max(1, min(64, seeds + direction * (10 if coarse else 1)))
+        elif kind == "ticks":
+            ticks = max(100, min(500000, ticks + direction * (10000 if coarse else 500)))
+        elif kind == "test":
+            chosen[rows[cursor][1]] = direction > 0
+
+    def launch():
+        nonlocal worker, status
+        picked = [x for x in titles if chosen[x]]
+        if not picked:
+            status = t["meas_none"]
+            return
+        speedo.stop()
+        stop.clear()
+        state.update(done=0, total=len(picked) * seeds, text=None, error=None,
+                     started=time.time(), title="", seed=0)
+
+        def progress(done, total, title, seed):
+            state.update(done=done, total=total, title=title, seed=seed)
+
+        def run():
+            try:
+                state["text"] = report.build_report(
+                    seeds, ticks, titles=picked,
+                    progress=progress, should_stop=stop.is_set)
+            except Exception as exc:              # a failed run must not take
+                state["error"] = f"{type(exc).__name__}: {exc}"   # the game down
+        worker = threading.Thread(target=run, daemon=True)
+        worker.start()
+
+    while True:
+        running = worker is not None and worker.is_alive()
+        screen.fill(BG)
+        screen.blit(font.render(t["meas_title"], True, (255, 255, 255)), (20, 16))
+
+        if running or state["text"] is not None or state["error"] is not None:
+            _draw_measure_run(screen, font, t, lang, state, running, stop.is_set())
+        else:
+            screen.blit(font.render(t["meas_hint"], True, HUD_HINT), (20, 38))
+            screen.blit(font.render(t["meas_hint2"], True, HUD_HINT), (20, 56))
+            y = 88
+            for i, (kind, item) in enumerate(rows):
+                here = (i == cursor)
+                if kind == "head":
+                    screen.blit(font.render(item, True, HUD_ACCENT), (20, y))
+                    y += 22
+                    continue
+                if here:
+                    pygame.draw.rect(screen, (32, 40, 28), (16, y - 2, SCREEN_W - 32, 18))
+                if kind == "test":
+                    on = chosen[item]
+                    mark = "[x]" if on else "[ ]"
+                    col = TEXT_COLOR if on else (96, 102, 92)
+                    screen.blit(font.render(("> " if here else "  ") + mark + " "
+                                            + scenario_name(item, lang),
+                                            True, col), (20, y))
+                else:
+                    label = t["meas_seeds"] if kind == "seeds" else t["meas_ticks"]
+                    value = seeds if kind == "seeds" else ticks
+                    doc = t["meas_seeds_doc"] if kind == "seeds" else t["meas_ticks_doc"]
+                    screen.blit(font.render(("> " if here else "  ") + label,
+                                            True, TEXT_COLOR), (20, y))
+                    screen.blit(font.render(f"{value}", True, (255, 210, 120)), (240, y))
+                    screen.blit(font.render(doc, True, HUD_HINT), (320, y))
+                y += 20
+
+            n_tests = sum(1 for x in titles if chosen[x])
+            total_ticks = n_tests * seeds * ticks
+            y += 14
+            screen.blit(font.render(t["meas_budget"], True, HUD_ACCENT), (20, y)); y += 22
+            screen.blit(font.render(t["meas_total"].format(
+                tests=n_tests, seeds=seeds, ticks=f"{ticks:,}".replace(",", " "),
+                total=f"{total_ticks:,}".replace(",", " ")), True, TEXT_COLOR), (20, y))
+            y += 20
+            if speedo.rate is None:
+                screen.blit(font.render(t["meas_rate_measuring"].format(n=speedo.timed),
+                                        True, HUD_HINT), (20, y)); y += 20
+            else:
+                screen.blit(font.render(t["meas_rate"].format(rate=speedo.rate),
+                                        True, HUD_HINT), (20, y)); y += 20
+                eta = total_ticks / speedo.rate
+                long_run = eta > 3600
+                key = "meas_eta_warn" if long_run else "meas_eta"
+                screen.blit(font.render(key and t[key].format(eta=_hms(eta)), True,
+                                        (235, 150, 90) if long_run else (150, 220, 140)),
+                            (20, y))
+                y += 20
+            pinned = len(tuning.load())
+            y += 6
+            screen.blit(font.render(t["meas_pinned"].format(n=pinned) if pinned
+                                    else t["meas_builtin"], True, HUD_HINT), (20, y))
+            if status:
+                screen.blit(font.render(status, True, (235, 150, 90)), (20, SCREEN_H - 30))
+
+        pygame.display.flip()
+
+        for event in events():
+            if event.type == pygame.QUIT:
+                speedo.stop(); stop.set()
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.KEYDOWN:
+                coarse = bool(event.mod & pygame.KMOD_SHIFT)
+                if event.key == pygame.K_ESCAPE:
+                    if running:
+                        stop.set()          # let it notice between worlds
+                        continue
+                    speedo.stop()
+                    return
+                if running:
+                    continue
+                if state["text"] is not None or state["error"] is not None:
+                    # a finished run: any key clears the result and comes back
+                    state.update(text=None, error=None)
+                    speedo = _Speedometer()
+                    continue
+                if event.key == pygame.K_UP:
+                    move(-1)
+                elif event.key == pygame.K_DOWN:
+                    move(1)
+                elif event.key == pygame.K_LEFT:
+                    nudge(-1, coarse)
+                elif event.key == pygame.K_RIGHT:
+                    nudge(+1, coarse)
+                elif event.key == pygame.K_SPACE and rows[cursor][0] == "test":
+                    chosen[rows[cursor][1]] = not chosen[rows[cursor][1]]
+                elif event.key == pygame.K_a:
+                    for x in titles:
+                        chosen[x] = True
+                elif event.key == pygame.K_z:
+                    for x in titles:
+                        chosen[x] = False
+                elif event.key == pygame.K_RETURN:
+                    launch()
+
+        # a run holds the GIL hard; drawing at 10fps leaves it room to work
+        clock.tick(10 if running else 30)
+
+
+def _draw_measure_run(screen, font, t, lang, state, running, cancelling):
+    """The progress face of the Measure screen: what it is doing now, how long
+    it has taken, and how long is left - estimated from THIS run's own pace
+    rather than the speedometer, which stopped when the run started."""
+    y = 48
+    if running:
+        screen.blit(font.render(t["meas_running"].format(
+            done=state["done"], total=state["total"],
+            title=scenario_name(state["title"], lang),
+            seed=state["seed"]), True, TEXT_COLOR), (20, y))
+        y += 26
+        done, total = state["done"], max(1, state["total"])
+        bar_w = min(SCREEN_W - 40, 700)
+        pygame.draw.rect(screen, HUD_SEP, (20, y, bar_w, 14), width=1)
+        pygame.draw.rect(screen, (120, 210, 100),
+                         (21, y + 1, int((bar_w - 2) * done / total), 12))
+        y += 26
+        elapsed = time.time() - state["started"]
+        # the first world has no pace to extrapolate from yet
+        left = elapsed / done * (total - done) if done else None
+        screen.blit(font.render(t["meas_elapsed"].format(
+            el=_hms(elapsed), left=_hms(left) if left is not None else "?"),
+            True, HUD_HINT), (20, y))
+        y += 26
+        screen.blit(font.render(t["meas_stopping"] if cancelling else t["meas_cancel"],
+                                True, (235, 150, 90) if cancelling else HUD_HINT), (20, y))
+        return
+
+    if state["error"] is not None:
+        screen.blit(font.render(t["meas_failed"].format(err=state["error"][:90]),
+                                True, (225, 85, 75)), (20, y))
+        return
+    if state["text"] is None:
+        screen.blit(font.render(t["meas_cancelled"], True, (235, 150, 90)), (20, y))
+        return
+
+    name = f"thronglets_report_{time.strftime('%Y%m%d_%H%M%S')}.txt"
+    if not state.get("saved"):
+        with open(name, "w", encoding="utf-8") as fh:
+            fh.write(state["text"])
+        state["saved"] = os.path.abspath(name)
+    screen.blit(font.render(t["meas_written"].format(file=state["saved"]),
+                            True, (150, 220, 140)), (20, y)); y += 22
+    screen.blit(font.render(t["meas_written2"], True, HUD_HINT), (20, y)); y += 26
+    # the tail of the report on screen, so a run tells you something without
+    # having to go and open the file
+    for line in state["text"].splitlines()[-((SCREEN_H - y) // 18):]:
+        screen.blit(font.render(line[:110], True, TEXT_COLOR), (20, y))
+        y += 18
 
 
 def show_tuning(screen, font, lang):
@@ -2487,9 +2860,12 @@ def main():
     tuning.load_and_apply()
     while True:
         start = choose_start(screen, font, lang, os.path.exists(DEFAULT_SAVE_FILE))
-        if start != "tuning":
+        if start == "tuning":
+            show_tuning(screen, font, lang)
+        elif start == "measure":
+            show_measure(screen, font, lang)
+        else:
             break
-        show_tuning(screen, font, lang)
     if start == "master":
         master_mode = True
     elif start == "resume":
