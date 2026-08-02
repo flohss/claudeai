@@ -238,6 +238,48 @@
     margin-top: 8px;
   }
   .seq-transport .row { margin-top: 0; flex: 1; min-width: 180px; }
+  .seq-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    margin-top: 8px;
+  }
+  .seq-row .tag {
+    color: var(--accent3);
+    font-size: 10px;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+  }
+  .seq-row .sep { flex: 0 0 10px; }
+  .pat-btns { display: flex; gap: 4px; }
+  .pat-btn { width: 34px; text-align: center; font-weight: bold; }
+  .pat-btn.vide { color: var(--dim); border-style: dashed; }
+  /* motif en cours de lecture : liseré, distinct de la sélection d'édition */
+  .pat-btn.live { box-shadow: inset 0 0 0 2px var(--accent3), 2px 2px 0 rgba(0,0,0,.6); }
+  .pat-add { width: 34px; text-align: center; padding: 6px 0; }
+  button[disabled] { opacity: .4; cursor: not-allowed; }
+  button[disabled].selected { background: var(--panel-edge); color: var(--dim); border-color: var(--panel-edge); }
+  .chain {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: center;
+    min-height: 28px;
+    flex: 1 1 200px;
+    padding: 2px 4px;
+    background: rgba(0,0,0,.3);
+    border: 1px solid var(--panel-edge);
+  }
+  .chain-empty { color: var(--dim); font-size: 10px; text-transform: uppercase; letter-spacing: .1em; }
+  .chain-chip {
+    width: 26px;
+    padding: 4px 0;
+    text-align: center;
+    font-weight: bold;
+    box-shadow: none;
+  }
+  .chain-chip.now { background: var(--accent3); color: #000; border-color: var(--accent3); }
   .grid-scroll { overflow-x: auto; margin-top: 10px; }
   .grid-inner { min-width: 520px; }
   .ov-grid, .seq-grid {
@@ -401,7 +443,28 @@
     </div>
 
     <fieldset class="seq">
-      <legend>Séquenceur &mdash; 16 pas &mdash; <span class="edit-target" id="target4">Mélodie</span></legend>
+      <legend>Séquenceur &mdash; motif <span class="pattern-target">A</span> &mdash;
+        <span class="edit-target" id="target4">Mélodie</span></legend>
+
+      <div class="seq-row">
+        <span class="tag">Motif</span>
+        <div class="pat-btns" id="patternBtns"></div>
+        <button id="dupBtn" title="Copier ce motif dans un emplacement libre">Dupliquer</button>
+        <span class="sep"></span>
+        <span class="tag">Lecture</span>
+        <button id="modeLoop" class="selected">Boucle</button>
+        <button id="modeSong">Morceau</button>
+        <button id="followBtn" class="selected" title="La grille suit le motif joué" disabled>Suivre</button>
+      </div>
+
+      <div class="seq-row">
+        <span class="tag">Chaîne</span>
+        <div class="chain" id="chain"></div>
+        <span class="sep"></span>
+        <div class="pat-btns" id="chainAdd"></div>
+        <button id="chainClear">Vider</button>
+      </div>
+
       <div class="seq-transport">
         <button id="seqPlay">&#9654; Lecture</button>
         <button id="seqClear">Effacer piste</button>
@@ -409,6 +472,7 @@
         <button id="shareBtn">&#128279; Partager</button>
         <div class="row"><label>Tempo</label><input type="range" id="bpm" min="60" max="240" step="1" value="120"><output id="bpmOut">120</output></div>
       </div>
+
       <div class="grid-scroll">
         <div class="grid-inner">
           <div class="ov-grid" id="ovGrid"></div>
@@ -416,10 +480,11 @@
         </div>
       </div>
       <div class="hint" style="text-align:left; margin-top:6px">
-        La bande du haut résume les trois pistes ; la grille détaille la piste
-        sélectionnée (les autres apparaissent en gris clair). Une note par pas.
-        <b>Espace</b> lance ou arrête la lecture. L'adresse de la page conserve
-        tout votre morceau : <b>Partager</b> copie le lien.
+        Quatre motifs de 16 pas, <b>A</b> à <b>D</b> : les pistes gardent leurs
+        instruments, seul le contenu des pas change. En <b>Boucle</b>, le motif
+        affiché tourne en rond ; en <b>Morceau</b>, la chaîne se déroule puis
+        reprend. Cliquez un maillon pour le retirer. <b>Espace</b> lance ou
+        arrête la lecture, et <b>Partager</b> copie un lien qui contient tout.
       </div>
     </fieldset>
 
@@ -470,15 +535,48 @@
   const _ = null; // pas vide, pour lire les motifs de démo
 
   // ------- Pistes -------
+  // L'instrument appartient à la piste, les notes appartiennent au motif :
+  // changer de motif change ce qui est joué, jamais le son des pistes.
   const tracks = [
-    { name: "Mélodie", patch: patchFrom("leadgb"), vol: 0.8, mute: false, solo: false,
-      data: [0, 4, 7, 12, 0, 4, 7, 12, 9, 5, 9, 12, 7, 4, 2, 0] },
-    { name: "Basse", patch: patchFrom("basse"), vol: 0.9, mute: false, solo: false,
-      data: [0, _, _, 0, 5, _, _, 5, 9, _, _, 9, 7, _, 7, _] },
-    { name: "Percu", patch: patchFrom("percu"), vol: 0.7, mute: false, solo: false,
-      data: [0, _, 12, _, 0, _, 12, 12, 0, _, 12, _, 0, 12, 12, _] }
+    { name: "Mélodie", patch: patchFrom("leadgb"), vol: 0.8, mute: false, solo: false },
+    { name: "Basse", patch: patchFrom("basse"), vol: 0.9, mute: false, solo: false },
+    { name: "Percu", patch: patchFrom("percu"), vol: 0.7, mute: false, solo: false }
   ];
   let currentTrack = 0;
+
+  // ------- Motifs -------
+  const PATTERN_NAMES = ["A", "B", "C", "D"];
+  const PATTERN_COUNT = PATTERN_NAMES.length;
+  const CHAIN_MAX = 32;
+  const empty16 = () => new Array(STEPS).fill(null);
+
+  // patterns[motif][piste] = 16 pas. Morceau de démo sur A, B et C.
+  const patterns = [
+    [ [0, 4, 7, 12, 0, 4, 7, 12, 9, 5, 9, 12, 7, 4, 2, 0],
+      [0, _, _, 0, 5, _, _, 5, 9, _, _, 9, 7, _, 7, _],
+      [0, _, 12, _, 0, _, 12, 12, 0, _, 12, _, 0, 12, 12, _] ],
+    [ [12, 11, 9, 7, 5, 7, 9, 11, 12, _, 11, _, 9, _, 7, _],
+      [5, _, 5, _, 5, _, _, 5, 9, _, 9, _, 7, _, 7, 7],
+      [0, 12, 12, _, 0, _, 12, 12, 0, 12, 12, _, 0, 12, 0, 12] ],
+    [ [7, _, _, _, 5, _, _, _, 4, _, _, _, 2, _, _, _],
+      [0, _, _, _, _, _, _, _, 7, _, _, _, _, _, _, _],
+      [_, _, _, _, 0, _, _, _, _, _, _, _, 0, _, _, 12] ],
+    [ empty16(), empty16(), empty16() ]
+  ];
+
+  let editPattern = 0;        // motif affiché dans la grille
+  let chain = [0, 0, 1, 2];   // enchaînement en mode morceau : A A B C
+  let songMode = false;       // false = boucle le motif édité
+  let followPlayback = true;  // en mode morceau, la grille suit la lecture
+  let chainPos = 0;
+
+  // Motif effectivement joué à cet instant
+  function livePattern() {
+    return (songMode && chain.length) ? chain[chainPos % chain.length] : editPattern;
+  }
+
+  // Notes de la piste i dans le motif affiché
+  function editData(i) { return patterns[editPattern][i]; }
 
   const master = { volume: 0.5, echoMix: 0.12, echoTime: 0.22, echoFb: 0.35,
                    bpm: 120, arpMode: "off", arpRate: 8 };
@@ -848,9 +946,10 @@
     const solos = anySolo();
     tracks.forEach((tr, i) => {
       const silent = tr.mute || (solos && !tr.solo);
+      const data = editData(i);
       for (let s = 0; s < STEPS; s++) {
         const c = ovCells[i][s];
-        c.classList.toggle("on", tr.data[s] !== null && tr.data[s] !== undefined);
+        c.classList.toggle("on", data[s] !== null && data[s] !== undefined);
         c.style.opacity = silent ? ".3" : "1";
       }
     });
@@ -877,12 +976,14 @@
   }
 
   function refreshSeqGrid() {
-    const data = tracks[currentTrack].data;
+    const data = editData(currentTrack);
     for (let s = 0; s < STEPS; s++) {
       // notes des autres pistes en repère discret
       const ghosts = new Set();
       tracks.forEach((tr, i) => {
-        if (i !== currentTrack && tr.data[s] !== null && tr.data[s] !== undefined) ghosts.add(tr.data[s]);
+        if (i === currentTrack) return;
+        const v = editData(i)[s];
+        if (v !== null && v !== undefined) ghosts.add(v);
       });
       for (let o = 0; o < ROWS; o++) {
         const cell = seqCells[s][o];
@@ -892,17 +993,18 @@
       }
     }
     refreshOverview();
+    refreshPatternButtons();   // le marqueur "motif vide" suit les éditions
   }
 
   seqGridEl.addEventListener("click", e => {
     const cell = e.target.closest(".seq-cell");
     if (!cell) return;
     const s = Number(cell.dataset.step), o = Number(cell.dataset.off);
-    const tr = tracks[currentTrack];
-    tr.data[s] = (tr.data[s] === o) ? null : o;
+    const data = editData(currentTrack);
+    data[s] = (data[s] === o) ? null : o;
     refreshSeqGrid();
     markDirty();
-    if (!seqPlaying && tr.data[s] !== null) {
+    if (!seqPlaying && data[s] !== null) {
       initAudio();
       playNote(currentTrack, trackBase(currentTrack) + o, ctx.currentTime + 0.01, 0.12);
     }
@@ -920,15 +1022,22 @@
   function seqScheduler() {
     while (nextStepTime < ctx.currentTime + 0.12) {
       const solos = anySolo();
+      const pat = livePattern();
       tracks.forEach((tr, i) => {
-        const off = tr.data[seqStep];
+        const off = patterns[pat][i][seqStep];
         if (off === null || off === undefined) return;
         if (tr.mute || (solos && !tr.solo)) return;
         playNote(i, trackBase(i) + off, nextStepTime, stepDur() * 0.6);
       });
-      stepQueue.push({ step: seqStep, time: nextStepTime });
+      // le motif et la position dans la chaîne voyagent avec le pas : l'affichage
+      // les rejouera au bon moment, en retard sur la planification
+      stepQueue.push({ step: seqStep, time: nextStepTime, pattern: pat, pos: chainPos });
       nextStepTime += stepDur();
-      seqStep = (seqStep + 1) % STEPS;
+      seqStep++;
+      if (seqStep >= STEPS) {
+        seqStep = 0;
+        if (songMode && chain.length) chainPos = (chainPos + 1) % chain.length;
+      }
     }
   }
 
@@ -951,6 +1060,7 @@
     initAudio();
     seqPlaying = true;
     seqStep = 0;
+    chainPos = 0;
     nextStepTime = ctx.currentTime + 0.05;
     stepQueue = [];
     seqTimer = setInterval(seqScheduler, 25);
@@ -964,15 +1074,135 @@
     if (seqTimer) { clearInterval(seqTimer); seqTimer = null; }
     stepQueue = [];
     setPlayhead(-1);
+    livePat = -1;
+    refreshChain();
+    refreshPatternButtons();
     seqPlayBtn.innerHTML = "&#9654; Lecture";
     seqPlayBtn.classList.remove("selected");
   }
 
   seqPlayBtn.addEventListener("click", () => seqPlaying ? seqStop() : seqStart());
   document.getElementById("seqClear").addEventListener("click", () => {
-    tracks[currentTrack].data.fill(null);
+    editData(currentTrack).fill(null);
     refreshSeqGrid();
     markDirty();
+  });
+
+  // ------- Motifs et chaîne -------
+  let livePat = -1, livePos = -1;   // ce qui sort des haut-parleurs à l'instant
+  const patBtnsEl = document.getElementById("patternBtns");
+  const chainEl = document.getElementById("chain");
+  const chainAddEl = document.getElementById("chainAdd");
+  const modeLoopBtn = document.getElementById("modeLoop");
+  const modeSongBtn = document.getElementById("modeSong");
+  const followBtn = document.getElementById("followBtn");
+  const dupBtn = document.getElementById("dupBtn");
+  const patLabels = document.querySelectorAll(".pattern-target");
+
+  const patternIsEmpty = p => patterns[p].every(d => d.every(v => v === null || v === undefined));
+
+  function buildPatternBar() {
+    patBtnsEl.innerHTML = "";
+    chainAddEl.innerHTML = "";
+    PATTERN_NAMES.forEach((name, p) => {
+      const b = document.createElement("button");
+      b.className = "pat-btn";
+      b.textContent = name;
+      b.title = "Éditer le motif " + name;
+      b.addEventListener("click", () => selectPattern(p));
+      patBtnsEl.appendChild(b);
+
+      const add = document.createElement("button");
+      add.className = "pat-add";
+      add.textContent = "+" + name;
+      add.title = "Ajouter " + name + " à la chaîne";
+      add.addEventListener("click", () => {
+        if (chain.length >= CHAIN_MAX) return;
+        chain.push(p);
+        refreshChain();
+        markDirty();
+      });
+      chainAddEl.appendChild(add);
+    });
+    refreshPatternButtons();
+  }
+
+  function refreshPatternButtons() {
+    [...patBtnsEl.children].forEach((b, p) => {
+      b.classList.toggle("selected", p === editPattern);
+      b.classList.toggle("vide", patternIsEmpty(p));
+      b.classList.toggle("live", seqPlaying && p === livePat);
+    });
+    patLabels.forEach(el => el.textContent = PATTERN_NAMES[editPattern]);
+  }
+
+  function selectPattern(p, fromPlayback) {
+    if (p === editPattern) return;
+    editPattern = p;
+    refreshPatternButtons();
+    refreshSeqGrid();
+    // l'auto-suivi n'est pas une intention de l'utilisateur : il ne réécrit pas l'URL
+    if (!fromPlayback) markDirty();
+  }
+
+  function refreshChain() {
+    chainEl.innerHTML = "";
+    if (!chain.length) {
+      const vide = document.createElement("span");
+      vide.className = "chain-empty";
+      vide.textContent = "vide — ajoutez des motifs";
+      chainEl.appendChild(vide);
+      return;
+    }
+    chain.forEach((p, i) => {
+      const chip = document.createElement("button");
+      chip.className = "chain-chip";
+      chip.textContent = PATTERN_NAMES[p];
+      chip.title = "Retirer de la chaîne";
+      chip.classList.toggle("now", seqPlaying && songMode && i === livePos);
+      chip.addEventListener("click", () => {
+        chain.splice(i, 1);
+        refreshChain();
+        markDirty();
+      });
+      chainEl.appendChild(chip);
+    });
+  }
+
+  function setSongMode(on) {
+    songMode = on;
+    modeLoopBtn.classList.toggle("selected", !on);
+    modeSongBtn.classList.toggle("selected", on);
+    followBtn.disabled = !on;
+    if (seqPlaying) { chainPos = 0; }
+    refreshChain();
+    markDirty();
+  }
+
+  modeLoopBtn.addEventListener("click", () => setSongMode(false));
+  modeSongBtn.addEventListener("click", () => setSongMode(true));
+
+  followBtn.addEventListener("click", () => {
+    followPlayback = !followPlayback;
+    followBtn.classList.toggle("selected", followPlayback);
+  });
+
+  document.getElementById("chainClear").addEventListener("click", () => {
+    chain = [];
+    refreshChain();
+    markDirty();
+  });
+
+  // Duplique le motif courant dans le premier emplacement libre
+  dupBtn.addEventListener("click", () => {
+    const target = PATTERN_NAMES.findIndex((n, p) => p !== editPattern && patternIsEmpty(p));
+    if (target < 0) {
+      dupBtn.textContent = "Aucun libre";
+      setTimeout(() => dupBtn.textContent = "Dupliquer", 1600);
+      return;
+    }
+    patterns[target] = patterns[editPattern].map(d => d.slice());
+    selectPattern(target);
   });
 
   // ------- Enregistrement -------
@@ -1240,10 +1470,13 @@
   });
 
   // ------- Partage par URL -------
-  // Tout l'état tient dans le fragment, en base 36 : une section master, puis
-  // une section par piste terminée par ses 16 pas. Format :
-  //   #p=<ver>.<bpm>.<vol>.<mix>.<temps>.<retour>.<piste>.<arp>.<arpVit>~<piste0>~<piste1>~<piste2>
-  const URL_VERSION = 1;
+  // Tout l'état tient dans le fragment, en base 36 :
+  //   #p=2.<bpm>.<vol>.<mix>.<temps>.<retour>.<piste>.<arp>.<arpVit>.<motif>.<mode>
+  //     ~<chaîne>~<piste0>~<piste1>~<piste2>
+  // Une section de piste = ses réglages, puis les 4 motifs concaténés (4 x 16 pas).
+  // La version 1 (une seule grille de 16 pas, pas de chaîne) reste lisible : son
+  // contenu atterrit dans le motif A.
+  const URL_VERSION = 2;
   const WAVES = ["square", "pulse25", "pulse125", "triangle", "sawtooth", "noise"];
   const ARP_MODES = ["off", "up", "down", "updown", "random"];
   const NOTE_CHARS = "0123456789abc";   // un caractère par hauteur, "-" pour un pas vide
@@ -1269,16 +1502,25 @@
       set: (t, n) => { t.mute = !!(n & 1); t.solo = !!(n & 2); } }
   ];
 
+  const encodeSteps = data =>
+    data.map(v => (v === null || v === undefined) ? "-" : NOTE_CHARS[v]).join("");
+
+  const decodeSteps = str => Array.from({ length: STEPS }, (_, s) => {
+    const idx = NOTE_CHARS.indexOf((str || "")[s]);
+    return idx >= 0 ? idx : null;
+  });
+
   function encodeState() {
     const head = [URL_VERSION, master.bpm, master.volume * 100, master.echoMix * 100,
                   master.echoTime * 100, master.echoFb * 100, currentTrack,
-                  Math.max(0, ARP_MODES.indexOf(master.arpMode)), master.arpRate * 2].map(b36).join(".");
-    const body = tracks.map(tr => {
+                  Math.max(0, ARP_MODES.indexOf(master.arpMode)), master.arpRate * 2,
+                  editPattern, songMode ? 1 : 0].map(b36).join(".");
+    const body = tracks.map((tr, i) => {
       const nums = TRACK_FIELDS.map(f => b36(f.get(tr))).join(".");
-      const pat = tr.data.map(v => (v === null || v === undefined) ? "-" : NOTE_CHARS[v]).join("");
-      return nums + "." + pat;
+      const blob = patterns.map(pat => encodeSteps(pat[i])).join("");
+      return nums + "." + blob;
     });
-    return "p=" + head + "~" + body.join("~");
+    return "p=" + head + "~" + chain.join("") + "~" + body.join("~");
   }
 
   // Retrouve le nom du preset si le patch n'a pas été modifié depuis
@@ -1294,9 +1536,13 @@
   function decodeState(str) {
     if (!str || str.slice(0, 2) !== "p=") return false;
     const parts = str.slice(2).split("~");
-    if (parts.length < tracks.length + 1) return false;
     const h = parts[0].split(".");
-    if (p36(h[0], -1) !== URL_VERSION) return false;
+    const ver = p36(h[0], -1);
+    if (ver !== 1 && ver !== 2) return false;
+
+    // en v1 les pistes suivent directement l'en-tête, en v2 la chaîne s'intercale
+    const trackParts = parts.slice(ver === 1 ? 1 : 2);
+    if (trackParts.length < tracks.length) return false;
 
     master.bpm = clamp(p36(h[1], 120), 60, 240);
     master.volume = clamp(p36(h[2], 50), 0, 100) / 100;
@@ -1307,18 +1553,32 @@
     master.arpMode = ARP_MODES[clamp(p36(h[7], 0), 0, ARP_MODES.length - 1)];
     master.arpRate = clamp(p36(h[8], 16), 4, 32) / 2;
 
+    if (ver === 2) {
+      editPattern = clamp(p36(h[9], 0), 0, PATTERN_COUNT - 1);
+      songMode = p36(h[10], 0) === 1;
+      chain = (parts[1] || "").split("")
+        .map(c => parseInt(c, 10))
+        .filter(n => Number.isInteger(n) && n >= 0 && n < PATTERN_COUNT)
+        .slice(0, CHAIN_MAX);
+    } else {
+      editPattern = 0;
+      songMode = false;
+      chain = [0];
+    }
+
     tracks.forEach((tr, i) => {
-      const f = parts[i + 1].split(".");
+      const f = trackParts[i].split(".");
       if (f.length < TRACK_FIELDS.length + 1) return;
       TRACK_FIELDS.forEach((field, k) => {
         const n = p36(f[k], NaN);
         if (Number.isFinite(n)) field.set(tr, n);
       });
-      const pat = f[TRACK_FIELDS.length];
-      tr.data = Array.from({ length: STEPS }, (_, s) => {
-        const idx = NOTE_CHARS.indexOf(pat[s]);
-        return idx >= 0 ? idx : null;
-      });
+      const blob = f[TRACK_FIELDS.length] || "";
+      for (let p = 0; p < PATTERN_COUNT; p++) {
+        // en v1 le seul motif présent devient A, les autres restent vides
+        const slice = (ver === 1 && p > 0) ? "" : blob.slice(p * STEPS, (p + 1) * STEPS);
+        patterns[p][i] = decodeSteps(slice);
+      }
       tr.patch.preset = matchPreset(tr.patch);
     });
     return true;
@@ -1409,7 +1669,15 @@
 
       if (seqPlaying) {
         while (stepQueue.length && stepQueue[0].time <= ctx.currentTime) {
-          setPlayhead(stepQueue.shift().step);
+          const ev = stepQueue.shift();
+          setPlayhead(ev.step);
+          if (ev.pattern !== livePat || ev.pos !== livePos) {
+            livePat = ev.pattern;
+            livePos = ev.pos;
+            if (songMode && followPlayback) selectPattern(livePat, true);
+            refreshPatternButtons();
+            refreshChain();
+          }
         }
       }
     })();
@@ -1429,7 +1697,11 @@
   buildMixer();
   buildOverview();
   buildKeyboard();
+  buildPatternBar();
   buildSeqGrid();
+  refreshChain();
+  setSongMode(songMode);
+  followBtn.classList.toggle("selected", followPlayback);
   loadPatchIntoControls();
   drawIdleScope();
   window.addEventListener("pointerdown", initAudio, { once: false });
