@@ -455,6 +455,11 @@ INDEX_HTML = """<!doctype html>
     padding: 12px; gap: 10px;
   }
   #hud { width: 100%; max-width: 900px; font-size: 13px; line-height: 1.6; }
+  .gauge { display:inline-block; position:relative; width:150px; height:9px;
+           background:#1c2218; border:1px solid #464e3e; vertical-align:middle; }
+  .gauge-fill { position:absolute; top:0; bottom:0; }
+  .gauge-mid { position:absolute; left:50%; top:-2px; bottom:-2px; width:1px; background:#969e8c; }
+  .gauge-seg { display:inline-block; height:100%; vertical-align:top; }
   .row { white-space: nowrap; overflow-x: auto; }
   #header { cursor: pointer; }
   .swatch {
@@ -605,6 +610,7 @@ INDEX_HTML = """<!doctype html>
     </label>
     <label><input type="checkbox" id="useAi"> <span data-i18n="useAiLabel"></span></label>
     <label><input type="checkbox" id="adaptiveTraits" checked> <span data-i18n="adaptiveTraitsLabel"></span></label>
+    <label><input type="checkbox" id="learning"> <span data-i18n="learningLabel"></span></label>
     <p data-i18n="adaptiveTraitsExplain" style="font-size:12px; opacity:0.65; margin-top:-8px;"></p>
     <button id="startAuto" data-i18n="startAuto"></button>
     <button id="startManual" data-i18n="startManual"></button>
@@ -617,6 +623,8 @@ INDEX_HTML = """<!doctype html>
       <div class="row" id="hud-summary" style="display:none"></div>
       <div id="hud-details">
         <div class="row" id="settings"></div>
+        <div class="row" id="hud-disposition" style="display:none"></div>
+        <div class="row" id="hud-choices" style="display:none"></div>
         <div class="row" id="vocab-danger"></div>
         <div class="row" id="vocab-food"></div>
         <div class="row" id="vocab-distress"></div>
@@ -630,6 +638,7 @@ INDEX_HTML = """<!doctype html>
       <button id="slower" data-i18n="slowerText"></button>
       <button id="faster" data-i18n="fasterText"></button>
       <button id="save" data-i18n="saveText"></button>
+      <button id="fire"></button>
       <button id="openGraph" data-i18n="graphText"></button>
       <button id="openFamily" data-i18n="familyText"></button>
       <button id="openCompare" data-i18n="compareText"></button>
@@ -711,6 +720,10 @@ INDEX_HTML = """<!doctype html>
       <div class="graph-row">
         <div class="graph-label"><span data-i18n="stateDistress"></span><span id="graph-cur-distress"></span></div>
         <canvas id="graph-distress" width="560" height="88"></canvas>
+      </div>
+      <div class="graph-row" id="graph-disp-row" style="display:none">
+        <div class="graph-label"><span data-i18n="graphDispLabel"></span><span id="graph-cur-disp"></span></div>
+        <canvas id="graph-disp" width="560" height="88"></canvas>
       </div>
       <div class="graph-row">
         <div class="graph-label"><span data-i18n="stateMate"></span><span id="graph-cur-mate"></span></div>
@@ -797,6 +810,9 @@ INDEX_HTML = """<!doctype html>
 
 <script>
 const TOKEN_COLORS = ["#a0a0a0", "#eb4646", "#4682eb", "#f5c83c", "#c85ae6", "#46e1d2"];
+// A creature's own feeling, not its opinion of you - the same four fills the
+// pygame view uses, so a mood reads the same colour wherever you watch it.
+const MOOD_COLORS = {joy: "#78d264", neutral: "#96968c", sad: "#5a82d7", fear: "#e1554b"};
 // A pentatonic scale (C4 D4 E4 G4 A4) so any combination of tokens sounds
 // pleasant together - index 0 (silence) is never looked up, no tone assigned.
 const TOKEN_FREQS = [0, 261.63, 293.66, 329.63, 392.00, 440.00];
@@ -875,6 +891,16 @@ const STRINGS = {
     predLessText: "- predators", predMoreText: "+ predators",
     hint: "n = food   p = predator   left-click = food   right-click = predator   move the mouse near a creature to hear it (m = mute)",
     hudExpandHint: "   (V or click here = show full HUD)",
+    graphDispLabel: "how the flock feels about you",
+    learningPrefix: "learning:",
+    choiceApproach: "coming",
+    choiceFlee: "fleeing",
+    choiceIgnore: "ignoring you",
+    translatorDreaded: "dreaded",
+    translatorWelcomed: "welcomed",
+    translatorNoise: "still just noise",
+    learningLabel: "Learn from you (the flock comes to trust or fear you)",
+    fireText: "Fire tool",
     muteText: "Mute sound", unmuteText: "Unmute sound",
     closeText: "Close",
     errorResumeFailed: (file) => `'${file}' could not be read - start a fresh game instead.`,
@@ -970,6 +996,16 @@ const STRINGS = {
     predLessText: "- predateurs", predMoreText: "+ predateurs",
     hint: "n = nourriture   p = predateur   clic gauche = nourriture   clic droit = predateur   approche la souris d'une creature pour l'entendre (m = muet)",
     hudExpandHint: "   (V ou clique ici = HUD complet)",
+    graphDispLabel: "ce que le groupe ressent pour toi",
+    learningPrefix: "apprentissage :",
+    choiceApproach: "viennent",
+    choiceFlee: "fuient",
+    choiceIgnore: "t'ignorent",
+    translatorDreaded: "redoute",
+    translatorWelcomed: "bienvenu",
+    translatorNoise: "encore du bruit",
+    learningLabel: "Apprendre de toi (le groupe vient a te faire confiance ou a te craindre)",
+    fireText: "Outil feu",
     muteText: "Couper le son", unmuteText: "Activer le son",
     closeText: "Fermer",
     errorResumeFailed: (file) => `'${file}' illisible - nouvelle partie a la place.`,
@@ -1141,10 +1177,21 @@ function render(state) {
   }
 
   for (const c of state.creatures) {
-    ctx.fillStyle = TOKEN_COLORS[c.token] || TOKEN_COLORS[0];
+    const token = TOKEN_COLORS[c.token] || TOKEN_COLORS[0];
     ctx.beginPath();
     ctx.arc(c.x * scale, c.y * scale, 4, 0, Math.PI * 2);
-    ctx.fill();
+    if (c.mood) {
+      // the ring is what it is SAYING, the fill is how it FEELS - two
+      // independent things, so neither hides the other
+      ctx.fillStyle = MOOD_COLORS[c.mood] || MOOD_COLORS.neutral;
+      ctx.fill();
+      ctx.strokeStyle = token;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = token;
+      ctx.fill();
+    }
   }
 
   document.getElementById('header').textContent =
@@ -1154,6 +1201,8 @@ function render(state) {
     (state.adaptive_traits ? t.traitsTag : "") +
     (hudExpanded ? "" : t.hudExpandHint);
   applyHudExpanded();
+
+  renderLearned(state);
 
   renderVocabRow('vocab-danger', t.labelDanger, state.vocabulary['danger']);
   renderVocabRow('vocab-food', t.labelFood, state.vocabulary['food']);
@@ -1171,7 +1220,7 @@ function render(state) {
 
   if (graphOverlay.style.display === 'flex') renderGraphOverlay(state);
   if (compareOverlay.style.display === 'flex') renderCompare(state);
-  if (translatorOverlay.style.display === 'flex') renderTranslator(state.translator);
+  if (translatorOverlay.style.display === 'flex') renderTranslator(state.translator, state.signal_meanings);
 }
 
 function top3AndOther(pairs) {
@@ -1250,6 +1299,18 @@ function renderSparkline(canvas, history) {
 }
 
 function renderGraphOverlay(state) {
+  // the arc of how the flock came to feel about you, saved with the world so
+  // resuming a game no longer loses the story while keeping the minds
+  const arc = state.disposition_history || [];
+  const dispRow = document.getElementById('graph-disp-row');
+  dispRow.style.display = state.disposition ? '' : 'none';
+  if (state.disposition) {
+    // stored in its own -1..1 units; map onto the 0..1 the sparkline plots
+    renderSparkline(document.getElementById('graph-disp'), arc.map(v => (v + 1) / 2));
+    const last = arc.length ? arc[arc.length - 1] : 0;
+    document.getElementById('graph-cur-disp').textContent =
+      (last >= 0 ? '+' : '') + Math.round(last * 100) + '%';
+  }
   for (const key of ['danger', 'food', 'distress', 'mate', 'idle']) {
     const history = state.vocab_history[key];
     renderSparkline(document.getElementById('graph-' + key), history);
@@ -1295,7 +1356,8 @@ function startingInitPop() {
 async function startGame(mode) {
   const useAi = document.getElementById('useAi').checked;
   const adaptiveTraits = document.getElementById('adaptiveTraits').checked;
-  const res = await post('start', {mode, init_pop: startingInitPop(), use_ai: useAi, adaptive_traits: adaptiveTraits});
+  const learning = document.getElementById('learning').checked;
+  const res = await post('start', {mode, init_pop: startingInitPop(), use_ai: useAi, adaptive_traits: adaptiveTraits, learning});
   if (res.error === 'ai_missing') alert(STRINGS[uiLang].errorAiMissing(res.file));
 }
 async function resumeGame() {
@@ -1500,7 +1562,42 @@ compareOverlay.addEventListener('click', (ev) => {
 const translatorOverlay = document.getElementById('translator-overlay');
 const translatorContent = document.getElementById('translator-content');
 
-function renderTranslator(translator) {
+function renderLearned(state) {
+  const t = STRINGS[uiLang];
+  const dispRow = document.getElementById('hud-disposition');
+  const choiceRow = document.getElementById('hud-choices');
+  if (!state.disposition) {                 // learning off: show nothing at all
+    dispRow.style.display = 'none';
+    choiceRow.style.display = 'none';
+    return;
+  }
+  const d = state.disposition.value;
+  const label = uiLang === 'fr' ? state.disposition.label_fr : state.disposition.label_en;
+  // the same +/-0.05 dead zone the wording uses, so colour and words can never
+  // contradict each other
+  const col = d > 0.05 ? '#96dc8c' : d < -0.05 ? '#e16e6e' : '#c8c8be';
+  const pct = (d >= 0 ? '+' : '') + Math.round(d * 100) + '%';
+  const fill = Math.min(1, Math.abs(d)) * 50;
+  const bar = `<span class="gauge"><span class="gauge-mid"></span>` +
+    `<span class="gauge-fill" style="left:${d >= 0 ? 50 : 50 - fill}%;width:${fill}%;` +
+    `background:${d >= 0 ? '#78c86e' : '#dc5f5a'}"></span></span>`;
+  dispRow.innerHTML = `${bar} <span style="color:${col}">${t.learningPrefix} ${label} (${pct})</span>`;
+  dispRow.style.display = '';
+
+  const ch = state.choices;
+  if (!ch) { choiceRow.style.display = 'none'; return; }
+  // what the average cannot show: a flock split between coming and fleeing
+  // averages to the same number as one that is uniformly indifferent
+  const seg = (frac, colour) => `<span class="gauge-seg" style="width:${frac * 100}%;background:${colour}"></span>`;
+  choiceRow.innerHTML =
+    `<span class="gauge">${seg(ch.approach, '#78c86e')}${seg(ch.flee, '#dc5f5a')}${seg(ch.ignore, '#787e70')}</span> ` +
+    `<span style="color:#78c86e">${Math.round(ch.approach * 100)}% ${t.choiceApproach}</span>   ` +
+    `<span style="color:#dc5f5a">${Math.round(ch.flee * 100)}% ${t.choiceFlee}</span>   ` +
+    `<span style="color:#9aa090">${Math.round(ch.ignore * 100)}% ${t.choiceIgnore}</span>`;
+  choiceRow.style.display = '';
+}
+
+function renderTranslator(translator, meanings) {
   const t = STRINGS[uiLang];
   const stateLabels = {danger: t.labelDanger, food: t.labelFood, distress: t.labelDistress,
                         mate: t.labelMate, idle: t.labelIdle};
@@ -1513,7 +1610,20 @@ function renderTranslator(translator) {
     const text = claims.length
       ? claims.map(([s, frac]) => `${stateLabels[s]} (${Math.round(frac * 100)}%)`).join(' / ')
       : t.translatorUnused;
-    html += `<div class="translator-row"><span class="swatch" style="${style}"></span><span>${text}</span></div>`;
+    // the other half of a word: which colour means which state is inherited,
+    // what it came to foretell is learned within a lifetime
+    let learned = '';
+    const m = meanings && meanings[String(token)];
+    if (m !== undefined && token > 0) {
+      const word = m < -0.02 ? t.translatorDreaded : m > 0.02 ? t.translatorWelcomed : t.translatorNoise;
+      const mc = m < -0.02 ? '#e16e6e' : m > 0.02 ? '#96dc8c' : '#8c9284';
+      const span = Math.min(1, Math.abs(m) / 0.08) * 50;
+      learned = `<span class="gauge" style="margin-left:12px"><span class="gauge-mid"></span>` +
+        `<span class="gauge-fill" style="left:${m >= 0 ? 50 : 50 - span}%;width:${span}%;` +
+        `background:${m >= 0 ? '#78c86e' : '#dc5f5a'}"></span></span>` +
+        `<span style="color:${mc}"> ${m >= 0 ? '+' : ''}${m.toFixed(3)} ${word}</span>`;
+    }
+    html += `<div class="translator-row"><span class="swatch" style="${style}"></span><span>${text}</span>${learned}</div>`;
     if (claims.length > 1) html += `<div class="translator-homonym">${t.translatorHomonym}</div>`;
   }
   translatorContent.innerHTML = html;
@@ -1540,15 +1650,40 @@ canvas.addEventListener('contextmenu', (ev) => {
   const scale = canvas.width / worldW;
   post('click', {x: px / scale, y: py / scale, button: 'right'});
 });
+let fireArmed = false;
+let lastHandSent = 0;
 canvas.addEventListener('mousemove', (ev) => {
   const rect = canvas.getBoundingClientRect();
   const px = (ev.clientX - rect.left) * (canvas.width / rect.width);
   const py = (ev.clientY - rect.top) * (canvas.height / rect.height);
   updateListening(px, py);
+  // The cursor is the hand the creatures learn about, so it must reach the
+  // simulation continuously - but a POST per mouse event would flood a server
+  // that is also stepping the world, so it is throttled to ~20/s. That is far
+  // finer than the flock's ACTION_HOLD, so nothing is missed that matters.
+  const now = performance.now();
+  if (now - lastHandSent > 50) {
+    lastHandSent = now;
+    const scale = canvas.width / worldW;
+    post('hand', {x: px / scale, y: py / scale});
+  }
 });
 canvas.addEventListener('mouseleave', () => {
   if (gainNode) gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.05);
+  post('hand', {x: null, y: null});   // an absent hand is a real state
 });
+
+function updateFireButton() {
+  const btn = document.getElementById('fire');
+  btn.textContent = (fireArmed ? '* ' : '') + STRINGS[uiLang].fireText;
+  btn.style.color = fireArmed ? '#ff9664' : '';
+}
+document.getElementById('fire').onclick = () => {
+  fireArmed = !fireArmed;
+  updateFireButton();
+  post('fire_tool', {armed: fireArmed});
+};
+updateFireButton();
 
 document.getElementById('muteSound').onclick = () => {
   soundMuted = !soundMuted;
