@@ -1252,14 +1252,47 @@ def _memory_label(t, feat):
     return t["mem_other"]
 
 
+def _mind_panel_width(font, t):
+    """How wide the creature panel has to be, measured rather than guessed.
+
+    It was a flat 300px, which was set by eye against the English wording and
+    then quietly outgrown: "ce que les cris du groupe veulent dire pour elle"
+    renders about 390px and ran straight off the edge, and every label added
+    since made it worse. Measuring every line the panel can draw - in whichever
+    language is loaded - means new wording cannot silently overflow again.
+    Capped against the window, so a narrow window gets a panel that fits it."""
+    pad = 10
+    lines = [
+        t["mind_title"], t["mind_expects"], t["mind_words"],
+        f"{t['mind_surprise']}  0.000",
+        f"{t['mind_dwells']} ({REPLAY_SIZE}/{REPLAY_SIZE})",
+        t["mind_dwells_none"], t["mind_dread_none"],
+        t["mind_dread_runs"].format(pct=100),
+    ]
+    # the "decided to" line takes whichever choice reads longest
+    lines += [f"{t['mind_decided']} {t[k]} (100%)"
+              for k in ("act_approach", "act_flee", "act_ignore")]
+    widest = max(font.size(s)[0] for s in lines)
+    # the dread label shares its line with a right-aligned number
+    widest = max(widest, font.size(t["mind_dread"])[0] + 8 + 40)
+    # a memory row is bar, then label at +66, then a right-aligned value
+    widest = max(widest, 66 + 8 + 34 + max(
+        font.size(t[k])[0] for k in ("mem_hand", "mem_predator", "mem_food", "mem_other")))
+    return min(max(300, widest + 2 * pad), max(320, SCREEN_W - 40))
+
+
 def draw_mind_panel(screen, font, mind, t):
     """What the hovered creature predicts, what it has decided, and which
     moments it cannot let go of - the learned inner life, which until now ran
     entirely unseen. Drawn bottom-left over the field, out of the HUD's way."""
-    pad, w = 10, 300
+    pad = 10
+    w = _mind_panel_width(font, t)
     rows = max(1, len(mind.replay))
     h = 216 + rows * 15
-    x, y = 10, SCREEN_H - h - 10
+    x = 10
+    # never let it climb over the HUD on a short window, even if that means
+    # the bottom is clipped - the top of this panel is the part that names it
+    y = max(HUD_H + 4, SCREEN_H - h - 10)
     panel = pygame.Surface((w, h), pygame.SRCALPHA)
     panel.fill((16, 20, 14, 232))
     screen.blit(panel, (x, y))
