@@ -206,6 +206,12 @@
     min-width: 78px;
   }
   .track-row input[type=range] { max-width: 130px; }
+  .track-row .len-pick {
+    flex: 0 0 52px;
+    padding: 5px 2px;
+    font-size: 10px;
+    text-align: center;
+  }
   @media (max-width: 560px) {
     /* le nom du patch cède la place au curseur de volume */
     .track-row .patch-name { display: none; }
@@ -301,6 +307,8 @@
   }
   .ov-cell.beat { background: #120a22; border-color: #4a3180; }
   .ov-cell.on { background: var(--tc); border-color: var(--tc); }
+  .ov-cell.on.accent { box-shadow: inset 0 0 0 2px #fff; }
+  .ov-cell.hors { opacity: .25; }
   .ov-row-label {
     font-size: 9px;
     color: var(--tc);
@@ -326,8 +334,19 @@
   }
   .seq-cell.beat { background: #120a22; border-color: #4a3180; }
   .seq-cell.on { background: var(--tc); border-color: var(--tc); }
+  /* accent : la note porte un liseré clair et un point central */
+  .seq-cell.on.accent {
+    background:
+      radial-gradient(circle at 50% 50%, #fff 0 22%, transparent 22%),
+      var(--tc);
+    box-shadow: inset 0 0 0 2px rgba(255,255,255,.85);
+  }
   .seq-cell.ghost { background: rgba(155, 142, 196, .22); }
+  /* pas situé au-delà de la longueur de boucle de la piste : jamais joué */
+  .seq-cell.hors { opacity: .3; }
+  .seq-cell.hors.on { opacity: .45; }
   .playhead { box-shadow: inset 0 0 0 2px #fff; }
+  .seq-cell.on.accent.playhead { box-shadow: inset 0 0 0 3px #fff; }
 
   .keyboard-wrap { position: relative; height: 170px; user-select: none; touch-action: none; }
   .keyboard { position: relative; height: 100%; display: flex; }
@@ -379,7 +398,7 @@
       <legend>Morceaux</legend>
       <div class="song-bar" id="songs"></div>
       <div class="hint" style="text-align:left; margin-top:8px">
-        Six morceaux prêts à jouer : chargez-en un, appuyez sur <b>Lecture</b>,
+        Sept morceaux prêts à jouer : chargez-en un, appuyez sur <b>Lecture</b>,
         puis triturez tout ce que vous voulez. <b>Vierge</b> repart de zéro, et
         le bouton <b>Retour</b> du navigateur annule un chargement.
       </div>
@@ -391,6 +410,8 @@
       <div class="hint" style="text-align:left; margin-top:8px">
         Cliquez sur un nom de piste pour l'éditer et la jouer au clavier
         (raccourcis <b>1</b>, <b>2</b>, <b>3</b>). <b>M</b> = muet, <b>S</b> = solo.
+        Le nombre est la <b>longueur de boucle</b> : donnez-en une différente à
+        chaque piste et elles se décalent, mesure après mesure.
       </div>
     </fieldset>
 
@@ -425,6 +446,7 @@
         <div class="row"><label>Bits</label><input type="range" id="bits" min="2" max="8" step="1" value="8"><output id="bitsOut">8</output></div>
         <div class="row"><label>Vib. vit.</label><input type="range" id="vibRate" min="0.5" max="12" step="0.1" value="5"><output id="vibRateOut">5Hz</output></div>
         <div class="row"><label>Vib. prof.</label><input type="range" id="vibDepth" min="0" max="600" step="5" value="0"><output id="vibDepthOut">0</output></div>
+        <div class="row"><label>Balayage</label><input type="range" id="sweep" min="-24" max="24" step="1" value="0"><output id="sweepOut">0</output></div>
         <div class="preset-row" id="presets">
           <button data-preset="leadgb">Lead GB</button>
           <button data-preset="basse">Basse</button>
@@ -487,6 +509,7 @@
         <button id="recBtn">&#9679; Enregistrer</button>
         <button id="shareBtn">&#128279; Partager</button>
         <div class="row"><label>Tempo</label><input type="range" id="bpm" min="60" max="240" step="1" value="120"><output id="bpmOut">120</output></div>
+        <div class="row"><label>Swing</label><input type="range" id="swing" min="0" max="0.5" step="0.01" value="0"><output id="swingOut">0%</output></div>
       </div>
 
       <div class="grid-scroll">
@@ -497,10 +520,12 @@
       </div>
       <div class="hint" style="text-align:left; margin-top:6px">
         Quatre motifs de 16 pas, <b>A</b> à <b>D</b> : les pistes gardent leurs
-        instruments, seul le contenu des pas change. En <b>Boucle</b>, le motif
-        affiché tourne en rond ; en <b>Morceau</b>, la chaîne se déroule puis
-        reprend. Cliquez un maillon pour le retirer. <b>Espace</b> lance ou
-        arrête la lecture, et <b>Partager</b> copie un lien qui contient tout.
+        instruments, seul le contenu des pas change. Cliquez une case pour poser
+        une note, une deuxième fois pour l'<b>accentuer</b>, une troisième pour
+        l'effacer. En <b>Boucle</b>, le motif affiché tourne en rond ; en
+        <b>Morceau</b>, la chaîne se déroule puis reprend — cliquez un maillon
+        pour le retirer. <b>Espace</b> lance ou arrête la lecture, et
+        <b>Partager</b> copie un lien qui contient tout.
       </div>
     </fieldset>
 
@@ -528,19 +553,19 @@
   // ------- Presets -------
   const PRESETS = {
     leadgb:  { label: "Lead GB", wave: "pulse125", octave: 4, attack: 0.005, decay: 0.08,
-               sustain: 0.5, release: 0.12, bits: 4, vibRate: 6, vibDepth: 15 },
+               sustain: 0.5, release: 0.12, bits: 4, vibRate: 6, vibDepth: 15, sweep: 0 },
     basse:   { label: "Basse", wave: "square", octave: 2, attack: 0.005, decay: 0.15,
-               sustain: 0.7, release: 0.1, bits: 6, vibRate: 5, vibDepth: 0 },
+               sustain: 0.7, release: 0.1, bits: 6, vibRate: 5, vibDepth: 0, sweep: 0 },
     cristal: { label: "Cristal", wave: "triangle", octave: 6, attack: 0.01, decay: 0.3,
-               sustain: 0.3, release: 0.5, bits: 8, vibRate: 5, vibDepth: 0 },
+               sustain: 0.3, release: 0.5, bits: 8, vibRate: 5, vibDepth: 0, sweep: 0 },
     percu:   { label: "Percu", wave: "noise", octave: 3, attack: 0.001, decay: 0.09,
-               sustain: 0, release: 0.06, bits: 3, vibRate: 5, vibDepth: 0 },
+               sustain: 0, release: 0.06, bits: 3, vibRate: 5, vibDepth: 0, sweep: -12 },
     sirene:  { label: "Sirène", wave: "square", octave: 5, attack: 0.05, decay: 0.1,
-               sustain: 1, release: 0.3, bits: 5, vibRate: 1, vibDepth: 600 }
+               sustain: 1, release: 0.3, bits: 5, vibRate: 1, vibDepth: 600, sweep: 0 }
   };
 
   const PATCH_KEYS = ["wave", "octave", "attack", "decay", "sustain", "release",
-                      "bits", "vibRate", "vibDepth"];
+                      "bits", "vibRate", "vibDepth", "sweep"];
 
   function patchFrom(presetName) {
     const p = PRESETS[presetName], out = { preset: presetName };
@@ -554,6 +579,12 @@
   const CHAIN_MAX = 32;
   const empty16 = () => new Array(STEPS).fill(null);
 
+  // Un pas vaut null, une hauteur 0..12, ou la même hauteur + 13 si elle est
+  // accentuée : une seule valeur par pas, donc rien à changer ailleurs.
+  const ACCENT = 13;
+  const noteOf = v => v % ACCENT;
+  const isAccent = v => v >= ACCENT;
+
   // ------- Bibliothèque de morceaux -------
   // Un motif s'écrit comme dans les liens partagés : 16 caractères, un par pas.
   // 0123456789abc = Do Do# Ré Ré# Mi Fa Fa# Sol Sol# La La# Si Do+, "-" = silence.
@@ -561,25 +592,25 @@
   // echo = [mix, temps, retour] ; chain = l'ordre des motifs en mode morceau.
   const SONGS = [
     {
-      name: "Balade", bpm: 120, echo: [0.12, 0.22, 0.35], chain: "0012",
+      name: "Balade", bpm: 120, echo: [0.12, 0.22, 0.35], swing: 0.12, chain: "0012",
       tracks: [
         { preset: "leadgb", octave: 4, vol: 0.8, pats: [
           "047c047c959c7420", "cb97579bc-b-9-7-", "7---5---4---2---", ""] },
         { preset: "basse", octave: 2, vol: 0.9, pats: [
           "0--05--59--97-7-", "5-5-5--59-9-7-77", "0-------7-------", ""] },
         { preset: "percu", octave: 3, vol: 0.7, pats: [
-          "0-c-0-cc0-c-0cc-", "0cc-0-cc0cc-0c0c", "----0-------0--c", ""] }
+          "A-c-0-ccA-c-0cc-", "Acc-0-ccAcc-0c0c", "----A-------0--c", ""] }
       ]
     },
     {
-      name: "Aventure", bpm: 138, echo: [0.16, 0.18, 0.3], chain: "001102",
+      name: "Aventure", bpm: 138, echo: [0.16, 0.18, 0.3], swing: 0.16, chain: "001102",
       tracks: [
         { preset: "leadgb", octave: 5, vol: 0.8, pats: [
           "0-4-7-c-b-9-7-4-", "579bc-b97-579---", "9--7--5-4--2--0-", ""] },
         { preset: "basse", octave: 2, vol: 0.9, pats: [
           "0--07--79--95--5", "0-0-7-7-9-9-5-5-", "0-------7-------", ""] },
         { preset: "percu", octave: 3, vol: 0.7, pats: [
-          "0-c-0-cc0-c-0-c-", "0-cc0-cc0-cc0ccc", "0-------0-----c-", ""] }
+          "A-c-0-ccA-c-0-c-", "A-cc0-ccA-cc0ccc", "A-------0-----c-", ""] }
       ]
     },
     {
@@ -601,18 +632,18 @@
         { preset: "basse", octave: 2, vol: 0.95, pats: [
           "0-0-0-0-5-5-7-7-", "9-9-9-9-5-5-7-7-", "0---------------", ""] },
         { preset: "percu", octave: 3, vol: 0.65, pats: [
-          "0c0c0c0c0c0c0c0c", "0ccc0ccc0ccc0ccc", "0---0---0---0---", ""] }
+          "Ac0cAc0cAc0cAc0c", "Accc0cccAccc0ccc", "A---0---A---0---", ""] }
       ]
     },
     {
       name: "Boss", bpm: 152, echo: [0.14, 0.15, 0.3], chain: "001122",
       tracks: [
-        { preset: "leadgb", octave: 4, vol: 0.85, bits: 3, pats: [
+        { preset: "leadgb", octave: 4, vol: 0.85, bits: 3, sweep: -3, pats: [
           "0-1-0-1-3-2-3-2-", "7-8-7-8-a-8-7-5-", "c-b-a-8-7-5-3-0-", ""] },
         { preset: "basse", octave: 1, vol: 1, bits: 4, pats: [
           "0-0-0-0-1-1-0-0-", "5-5-5-5-3-3-0-0-", "0-0-0-0-0-0-0-0-", ""] },
         { preset: "percu", octave: 3, vol: 0.75, pats: [
-          "0c0c0-cc0c0c0ccc", "0c0c0-cc0ccc0ccc", "0-0-0-0-0-0-0000", ""] }
+          "A0c0-ccAc0c0Cccc", "A0c0-ccAcccAcccc", "A-0-A-0-A-0-A000", ""] }
       ]
     },
     {
@@ -623,6 +654,19 @@
         { preset: "basse", octave: 3, vol: 0.6, wave: "triangle", pats: [
           "0-------5-------", "9-------5-------", "0-------7-------", ""] },
         { preset: "percu", octave: 3, vol: 0.5, pats: ["", "", "", ""] }
+      ]
+    },
+    {
+      // longueurs 16 / 12 / 10 : les trois pistes ne se réalignent qu'au bout
+      // de 240 pas, soit 15 mesures
+      name: "Engrenage", bpm: 128, echo: [0.22, 0.2, 0.4], chain: "0011",
+      tracks: [
+        { preset: "cristal", octave: 5, vol: 0.7, len: 16, pats: [
+          "0--4--7--4--0---", "7--9--c--9--7---", "", ""] },
+        { preset: "basse", octave: 2, vol: 0.9, len: 12, pats: [
+          "A--0--5--7--", "A--0--9--7--", "", ""] },
+        { preset: "percu", octave: 3, vol: 0.65, len: 10, sweep: -18, pats: [
+          "A-c-0-c-c-", "A-ccA-c-c-", "", ""] }
       ]
     },
     {
@@ -638,10 +682,12 @@
   // ------- Pistes -------
   // L'instrument appartient à la piste, les notes appartiennent au motif :
   // changer de motif change ce qui est joué, jamais le son des pistes.
+  // len = nombre de pas avant de reboucler ; des longueurs inégales décalent les
+  // pistes les unes par rapport aux autres et produisent des polyrythmies.
   const tracks = [
-    { name: "Mélodie", patch: patchFrom("leadgb"), vol: 0.8, mute: false, solo: false },
-    { name: "Basse", patch: patchFrom("basse"), vol: 0.9, mute: false, solo: false },
-    { name: "Percu", patch: patchFrom("percu"), vol: 0.7, mute: false, solo: false }
+    { name: "Mélodie", patch: patchFrom("leadgb"), vol: 0.8, mute: false, solo: false, len: STEPS },
+    { name: "Basse", patch: patchFrom("basse"), vol: 0.9, mute: false, solo: false, len: STEPS },
+    { name: "Percu", patch: patchFrom("percu"), vol: 0.7, mute: false, solo: false, len: STEPS }
   ];
   let currentTrack = 0;
 
@@ -664,13 +710,16 @@
   function editData(i) { return patterns[editPattern][i]; }
 
   const master = { volume: 0.5, echoMix: 0.12, echoTime: 0.22, echoFb: 0.35,
-                   bpm: 120, arpMode: "off", arpRate: 8 };
+                   bpm: 120, arpMode: "off", arpRate: 8, swing: 0 };
 
   // ------- Audio -------
   let ctx = null, busIn, analyser, masterGain, delayNode, delayFb, delayWet, recDest;
   let pulse25Wave, pulse125Wave, noiseBuffer;
   const trackNodes = [];              // { shaper, gain, lfo, lfoGain }
   const voices = new Map();           // midi -> { src, gain }  (clavier live)
+
+  const PEAK = 0.68;          // niveau d'une note ordinaire
+  const ACCENT_PEAK = 0.98;   // niveau d'une note accentuée
 
   function midiToFreq(m) { return 440 * Math.pow(2, (m - 69) / 12); }
 
@@ -805,6 +854,14 @@
     return src;
   }
 
+  // Glissando de hauteur sur la durée de la note : le "pew" des consoles 8-bit.
+  // detune reçoit déjà le vibrato par connexion ; l'automation s'y ajoute.
+  function applySweep(src, patch, when, dur) {
+    if (!patch.sweep) return;
+    src.detune.setValueAtTime(0, when);
+    src.detune.linearRampToValueAtTime(patch.sweep * 100, when + Math.min(0.4, dur));
+  }
+
   // Note tenue (clavier / arpège) sur la piste sélectionnée
   function noteOn(midi) {
     initAudio();
@@ -814,8 +871,9 @@
     const gain = ctx.createGain();
     const a = Math.max(0.001, p.attack), d = Math.max(0.001, p.decay);
     gain.gain.setValueAtTime(0, t);
-    gain.gain.linearRampToValueAtTime(0.85, t + a);
-    gain.gain.linearRampToValueAtTime(p.sustain * 0.85, t + a + d);
+    gain.gain.linearRampToValueAtTime(PEAK, t + a);
+    gain.gain.linearRampToValueAtTime(p.sustain * PEAK, t + a + d);
+    applySweep(src, p, t, 0.3);
     src.connect(gain);
     gain.connect(trackNodes[i].shaper);
     src.start(t);
@@ -839,19 +897,21 @@
   function allNotesOff() { [...voices.keys()].forEach(noteOff); }
 
   // Note planifiée (séquenceur) : indépendante des voix tenues
-  function playNote(i, midi, when, dur) {
+  function playNote(i, midi, when, dur, accent) {
     const p = tracks[i].patch;
     const src = makeSource(i, midi);
     const gain = ctx.createGain();
+    const peak = accent ? ACCENT_PEAK : PEAK;
     const a = Math.max(0.001, p.attack), d = Math.max(0.001, p.decay);
     const r = Math.max(0.01, p.release);
     const susT = when + a + d;
     const end = Math.max(when + Math.max(dur, a + 0.01), susT);
     gain.gain.setValueAtTime(0, when);
-    gain.gain.linearRampToValueAtTime(0.85, when + a);
-    gain.gain.linearRampToValueAtTime(p.sustain * 0.85, susT);
-    if (end > susT) gain.gain.setValueAtTime(p.sustain * 0.85, end);
+    gain.gain.linearRampToValueAtTime(peak, when + a);
+    gain.gain.linearRampToValueAtTime(p.sustain * peak, susT);
+    if (end > susT) gain.gain.setValueAtTime(p.sustain * peak, end);
     gain.gain.linearRampToValueAtTime(0.0001, end + r);
+    applySweep(src, p, when, dur);
     src.connect(gain);
     gain.connect(trackNodes[i].shaper);
     src.start(when);
@@ -950,6 +1010,23 @@
       const patchName = document.createElement("span");
       patchName.className = "patch-name";
 
+      // longueur de boucle : en dessous de 16 pas, la piste se décale
+      const len = document.createElement("select");
+      len.className = "len-pick";
+      len.title = "Longueur de la boucle, en pas";
+      for (let n = 1; n <= STEPS; n++) {
+        const o = document.createElement("option");
+        o.value = n;
+        o.textContent = n;
+        len.appendChild(o);
+      }
+      len.value = tr.len;
+      len.addEventListener("change", () => {
+        tr.len = Number(len.value);
+        refreshSeqGrid();
+        markDirty();
+      });
+
       const vol = document.createElement("input");
       vol.type = "range";
       vol.min = 0; vol.max = 1; vol.step = 0.01; vol.value = tr.vol;
@@ -959,9 +1036,9 @@
         refreshTrackGains(); markDirty();
       });
 
-      row.append(pick, mute, solo, patchName, vol);
+      row.append(pick, mute, solo, patchName, len, vol);
       mixerEl.appendChild(row);
-      trackRows[i] = { row, mute, solo, patchName };
+      trackRows[i] = { row, mute, solo, patchName, len };
     });
     refreshMixer();
   }
@@ -976,6 +1053,7 @@
       r.solo.classList.toggle("on", tr.solo);
       const preset = PRESETS[tr.patch.preset];
       r.patchName.textContent = preset ? preset.label : "Perso";
+      r.len.value = tr.len;
     });
   }
 
@@ -1034,7 +1112,11 @@
       const data = editData(i);
       for (let s = 0; s < STEPS; s++) {
         const c = ovCells[i][s];
-        c.classList.toggle("on", data[s] !== null && data[s] !== undefined);
+        const v = data[s];
+        const on = v !== null && v !== undefined;
+        c.classList.toggle("on", on);
+        c.classList.toggle("accent", on && isAccent(v));
+        c.classList.toggle("hors", s >= tr.len);
         c.style.opacity = silent ? ".3" : "1";
       }
     });
@@ -1062,19 +1144,24 @@
 
   function refreshSeqGrid() {
     const data = editData(currentTrack);
+    const len = tracks[currentTrack].len;
     for (let s = 0; s < STEPS; s++) {
       // notes des autres pistes en repère discret
       const ghosts = new Set();
       tracks.forEach((tr, i) => {
         if (i === currentTrack) return;
-        const v = editData(i)[s];
-        if (v !== null && v !== undefined) ghosts.add(v);
+        const v = editData(i)[s % tr.len];
+        if (v !== null && v !== undefined) ghosts.add(noteOf(v));
       });
+      const v = data[s];
+      const note = (v === null || v === undefined) ? -1 : noteOf(v);
       for (let o = 0; o < ROWS; o++) {
         const cell = seqCells[s][o];
-        const on = data[s] === o;
+        const on = note === o;
         cell.classList.toggle("on", on);
+        cell.classList.toggle("accent", on && isAccent(v));
         cell.classList.toggle("ghost", !on && ghosts.has(o));
+        cell.classList.toggle("hors", s >= len);
       }
     }
     refreshOverview();
@@ -1086,12 +1173,16 @@
     if (!cell) return;
     const s = Number(cell.dataset.step), o = Number(cell.dataset.off);
     const data = editData(currentTrack);
-    data[s] = (data[s] === o) ? null : o;
+    // trois états successifs sous le doigt : rien, note, note accentuée
+    if (data[s] === o) data[s] = o + ACCENT;
+    else if (data[s] === o + ACCENT) data[s] = null;
+    else data[s] = o;
     refreshSeqGrid();
     markDirty();
     if (!seqPlaying && data[s] !== null) {
       initAudio();
-      playNote(currentTrack, trackBase(currentTrack) + o, ctx.currentTime + 0.01, 0.12);
+      playNote(currentTrack, trackBase(currentTrack) + o, ctx.currentTime + 0.01, 0.12,
+               isAccent(data[s]));
     }
   });
 
@@ -1108,35 +1199,41 @@
     while (nextStepTime < ctx.currentTime + 0.12) {
       const solos = anySolo();
       const pat = livePattern();
+      const sd = stepDur();
+      // swing : un pas sur deux glisse vers l'arrière, sans dériver l'horloge
+      const when = nextStepTime + (seqStep % 2 ? master.swing * sd : 0);
       tracks.forEach((tr, i) => {
-        const off = patterns[pat][i][seqStep];
-        if (off === null || off === undefined) return;
+        const v = patterns[pat][i][seqStep % tr.len];
+        if (v === null || v === undefined) return;
         if (tr.mute || (solos && !tr.solo)) return;
-        playNote(i, trackBase(i) + off, nextStepTime, stepDur() * 0.6);
+        playNote(i, trackBase(i) + noteOf(v), when, sd * 0.6, isAccent(v));
       });
       // le motif et la position dans la chaîne voyagent avec le pas : l'affichage
       // les rejouera au bon moment, en retard sur la planification
-      stepQueue.push({ step: seqStep, time: nextStepTime, pattern: pat, pos: chainPos });
-      nextStepTime += stepDur();
+      stepQueue.push({ step: seqStep, time: when, pattern: pat, pos: chainPos });
+      nextStepTime += sd;
+      // seqStep ne se remet jamais à zéro : c'est lui qui décale les pistes de
+      // longueurs différentes d'une mesure à l'autre
       seqStep++;
-      if (seqStep >= STEPS) {
-        seqStep = 0;
-        if (songMode && chain.length) chainPos = (chainPos + 1) % chain.length;
+      if (seqStep % STEPS === 0 && songMode && chain.length) {
+        chainPos = (chainPos + 1) % chain.length;
       }
     }
   }
 
+  // Chaque piste avance à son propre rythme quand les longueurs diffèrent :
+  // la bande de résumé montre donc une tête de lecture par piste, et la grille
+  // détaillée celle de la piste affichée.
   function setPlayhead(step) {
     if (step === playheadStep) return;
-    if (playheadStep >= 0) {
-      for (let o = 0; o < ROWS; o++) seqCells[playheadStep][o].classList.remove("playhead");
-      for (let i = 0; i < tracks.length; i++) ovCells[i][playheadStep].classList.remove("playhead");
-    }
     playheadStep = step;
-    if (step >= 0) {
-      for (let o = 0; o < ROWS; o++) seqCells[step][o].classList.add("playhead");
-      for (let i = 0; i < tracks.length; i++) ovCells[i][step].classList.add("playhead");
+    document.querySelectorAll(".playhead").forEach(el => el.classList.remove("playhead"));
+    if (step < 0) return;
+    for (let i = 0; i < tracks.length; i++) {
+      ovCells[i][step % tracks[i].len].classList.add("playhead");
     }
+    const col = step % tracks[currentTrack].len;
+    for (let o = 0; o < ROWS; o++) seqCells[col][o].classList.add("playhead");
   }
 
   const seqPlayBtn = document.getElementById("seqPlay");
@@ -1299,6 +1396,7 @@
       master.echoFb = song.echo[2];
     }
     master.arpMode = "off";
+    master.swing = song.swing || 0;
     song.tracks.forEach((t, i) => {
       const patch = patchFrom(t.preset);
       // tout réglage nommé explicitement dans le morceau corrige le preset
@@ -1306,6 +1404,7 @@
       patch.preset = matchPreset(patch);
       tracks[i].patch = patch;
       if (t.vol !== undefined) tracks[i].vol = t.vol;
+      tracks[i].len = t.len || STEPS;
       tracks[i].mute = false;
       tracks[i].solo = false;
       for (let p = 0; p < PATTERN_COUNT; p++) patterns[p][i] = decodeSteps(t.pats[p]);
@@ -1322,7 +1421,7 @@
 
   // Remet toute l'interface en phase avec l'état, après un chargement complet
   function refreshAllFromState() {
-    ["volume", "echoMix", "echoTime", "echoFb", "bpm", "arpRate"]
+    ["volume", "echoMix", "echoTime", "echoFb", "bpm", "arpRate", "swing"]
       .forEach(k => setSlider(k, master[k]));
     document.getElementById("arpMode").value = master.arpMode;
     applyTrackSelectionUI();
@@ -1553,6 +1652,7 @@
   patchSlider("bits", v => String(v), "bits", () => applyPatchToNodes(currentTrack));
   patchSlider("vibRate", v => v.toFixed(1) + "Hz", "vibRate", () => applyPatchToNodes(currentTrack));
   patchSlider("vibDepth", v => String(v), "vibDepth", () => applyPatchToNodes(currentTrack));
+  patchSlider("sweep", v => (v > 0 ? "+" : "") + v, "sweep");
 
   // Paramètres globaux
   bindSlider("volume", pct, v => {
@@ -1577,6 +1677,7 @@
   });
   bindSlider("arpRate", v => v + "Hz", v => { master.arpRate = v; restartArp(); markDirty(); });
   bindSlider("bpm", v => String(v), v => { master.bpm = v; markDirty(); });
+  bindSlider("swing", v => Math.round(v * 100) + "%", v => { master.swing = v; markDirty(); });
 
   document.getElementById("arpMode").addEventListener("change", e => {
     master.arpMode = e.target.value;
@@ -1616,7 +1717,7 @@
     loadingPatch = true;
     selectWave(patch.wave, true);
     document.getElementById("octValue").textContent = patch.octave;
-    ["attack", "decay", "sustain", "release", "bits", "vibRate", "vibDepth"]
+    ["attack", "decay", "sustain", "release", "bits", "vibRate", "vibDepth", "sweep"]
       .forEach(k => setSlider(k, patch[k]));
     document.querySelectorAll("#presets button").forEach(b =>
       b.classList.toggle("selected", b.dataset.preset === patch.preset));
@@ -1641,14 +1742,26 @@
   // Une section de piste = ses réglages, puis les 4 motifs concaténés (4 x 16 pas).
   // La version 1 (une seule grille de 16 pas, pas de chaîne) reste lisible : son
   // contenu atterrit dans le motif A.
-  const URL_VERSION = 2;
+  const URL_VERSION = 3;
+  // Nombre de champs numériques par piste selon la version : les nouveaux champs
+  // s'ajoutent en fin de liste, donc décoder une ancienne URL revient à s'arrêter
+  // plus tôt et à lire le bloc de motifs à l'index correspondant.
+  const TRACK_FIELDS_BEFORE_V3 = 11;
   const WAVES = ["square", "pulse25", "pulse125", "triangle", "sawtooth", "noise"];
   const ARP_MODES = ["off", "up", "down", "updown", "random"];
-  const NOTE_CHARS = "0123456789abc";   // un caractère par hauteur, "-" pour un pas vide
+  // 13 minuscules pour les hauteurs, 13 majuscules pour les mêmes accentuées,
+  // "-" pour un pas vide. 'b' est un Si, 'B' un Do# accentué : jamais ambigu.
+  const NOTE_CHARS = "0123456789abc" + "ABCDEFGHIJKLM";
 
   const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
   const b36 = n => Math.round(n).toString(36);
-  const p36 = (s, def) => { const n = parseInt(s, 36); return Number.isFinite(n) ? n : def; };
+  // Le champ absent doit rendre la valeur par défaut : sans le garde-fou,
+  // parseInt(undefined, 36) lit la chaîne "undefined" comme un nombre valide.
+  const p36 = (s, def) => {
+    if (typeof s !== "string" || s === "") return def;
+    const n = parseInt(s, 36);
+    return Number.isFinite(n) ? n : def;
+  };
 
   // Chaque champ de piste : quantification vers l'entier, puis retour
   const TRACK_FIELDS = [
@@ -1664,7 +1777,10 @@
     { get: (t) => t.patch.vibDepth / 5,    set: (t, n) => t.patch.vibDepth = clamp(n, 0, 120) * 5 },
     { get: (t) => t.vol * 100,             set: (t, n) => t.vol = clamp(n, 0, 100) / 100 },
     { get: (t) => (t.mute ? 1 : 0) | (t.solo ? 2 : 0),
-      set: (t, n) => { t.mute = !!(n & 1); t.solo = !!(n & 2); } }
+      set: (t, n) => { t.mute = !!(n & 1); t.solo = !!(n & 2); } },
+    // ---- ajoutés en v3 ----
+    { get: (t) => t.len,                   set: (t, n) => t.len = clamp(n, 1, STEPS) },
+    { get: (t) => t.patch.sweep + 24,      set: (t, n) => t.patch.sweep = clamp(n, 0, 48) - 24 }
   ];
 
   const encodeSteps = data =>
@@ -1679,7 +1795,7 @@
     const head = [URL_VERSION, master.bpm, master.volume * 100, master.echoMix * 100,
                   master.echoTime * 100, master.echoFb * 100, currentTrack,
                   Math.max(0, ARP_MODES.indexOf(master.arpMode)), master.arpRate * 2,
-                  editPattern, songMode ? 1 : 0].map(b36).join(".");
+                  editPattern, songMode ? 1 : 0, master.swing * 100].map(b36).join(".");
     const body = tracks.map((tr, i) => {
       const nums = TRACK_FIELDS.map(f => b36(f.get(tr))).join(".");
       const blob = patterns.map(pat => encodeSteps(pat[i])).join("");
@@ -1703,10 +1819,11 @@
     const parts = str.slice(2).split("~");
     const h = parts[0].split(".");
     const ver = p36(h[0], -1);
-    if (ver !== 1 && ver !== 2) return false;
+    if (ver < 1 || ver > URL_VERSION) return false;
 
-    // en v1 les pistes suivent directement l'en-tête, en v2 la chaîne s'intercale
+    // en v1 les pistes suivent directement l'en-tête, ensuite la chaîne s'intercale
     const trackParts = parts.slice(ver === 1 ? 1 : 2);
+    const nFields = ver >= 3 ? TRACK_FIELDS.length : TRACK_FIELDS_BEFORE_V3;
     if (trackParts.length < tracks.length) return false;
 
     master.bpm = clamp(p36(h[1], 120), 60, 240);
@@ -1718,7 +1835,9 @@
     master.arpMode = ARP_MODES[clamp(p36(h[7], 0), 0, ARP_MODES.length - 1)];
     master.arpRate = clamp(p36(h[8], 16), 4, 32) / 2;
 
-    if (ver === 2) {
+    master.swing = clamp(p36(h[11], 0), 0, 50) / 100;
+
+    if (ver >= 2) {
       editPattern = clamp(p36(h[9], 0), 0, PATTERN_COUNT - 1);
       songMode = p36(h[10], 0) === 1;
       chain = (parts[1] || "").split("")
@@ -1733,12 +1852,12 @@
 
     tracks.forEach((tr, i) => {
       const f = trackParts[i].split(".");
-      if (f.length < TRACK_FIELDS.length + 1) return;
-      TRACK_FIELDS.forEach((field, k) => {
+      if (f.length < nFields + 1) return;
+      TRACK_FIELDS.slice(0, nFields).forEach((field, k) => {
         const n = p36(f[k], NaN);
         if (Number.isFinite(n)) field.set(tr, n);
       });
-      const blob = f[TRACK_FIELDS.length] || "";
+      const blob = f[nFields] || "";
       for (let p = 0; p < PATTERN_COUNT; p++) {
         // en v1 le seul motif présent devient A, les autres restent vides
         const slice = (ver === 1 && p > 0) ? "" : blob.slice(p * STEPS, (p + 1) * STEPS);
@@ -1855,7 +1974,7 @@
   applySong(SONGS[0]);
   decodeState(decodeURIComponent(location.hash.slice(1)));
 
-  ["volume", "echoMix", "echoTime", "echoFb", "bpm", "arpRate"]
+  ["volume", "echoMix", "echoTime", "echoFb", "bpm", "arpRate", "swing"]
     .forEach(k => setSlider(k, master[k]));
   document.getElementById("arpMode").value = master.arpMode;
 
