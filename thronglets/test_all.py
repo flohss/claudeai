@@ -19,9 +19,17 @@ that failed. Exit code is 0 only if every suite passed.
 """
 
 import argparse
+import os
 import subprocess
 import sys
 import time
+
+# Suites live beside this file, and are run from there. Resolving them against
+# the current directory instead meant `python3 thronglets/test_all.py` from the
+# repo root reported all three suites FAILED with exit code 2 - file not found -
+# which reads exactly like a real failure. A runner that cries wolf when invoked
+# from the wrong directory is worse than no runner.
+HERE = os.path.dirname(os.path.abspath(__file__))
 
 SUITES = [
     ("smoke", ["test_smoke.py"], ["test_smoke.py"]),
@@ -38,10 +46,11 @@ def main():
 
     results = []
     for name, full, quick in SUITES:
-        cmd = [sys.executable, "-u"] + (quick if args.quick else full)
+        cmd = [sys.executable, "-u"] + [os.path.join(HERE, a) if a.endswith(".py") else a
+                                        for a in (quick if args.quick else full)]
         print(f"\n{'=' * 74}\n{name}: {' '.join(cmd[1:])}\n{'=' * 74}", flush=True)
         t0 = time.time()
-        code = subprocess.run(cmd).returncode
+        code = subprocess.run(cmd, cwd=HERE).returncode
         results.append((name, code, time.time() - t0))
 
     print(f"\n{'=' * 74}")
