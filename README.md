@@ -2,18 +2,18 @@
 
 Deux synthétiseurs jouables dans le navigateur, écrits en HTML/CSS/JavaScript pur avec l'API Web Audio — aucune dépendance, aucun build.
 
-Deux instruments, deux mondes sonores :
+[`index.html`](index.html) est un **écran d'accueil** qui mène aux deux studios :
 
 | Page | Genre | Moteur |
 | --- | --- | --- |
-| [`index.html`](index.html) | **Chiptune 8-bit** | Oscillateurs carré/pulse/triangle, bitcrusher, vibrato |
+| [`chiptune.html`](chiptune.html) | **Chiptune 8-bit** | Oscillateurs carré/pulse/triangle, bitcrusher, vibrato |
 | [`trance.html`](trance.html) | **Trance** | Supersaw, filtre résonant à enveloppe, sidechain, réverbération, boîte à rythmes |
 
-Les deux partagent la même architecture — séquenceur à motifs enchaînables, bibliothèque de morceaux, partage par URL, annuler/rétablir, export WAV — mais rien de leur synthèse.
+Les deux partagent la même architecture — séquenceur à motifs enchaînables, bibliothèque de morceaux, partage par URL, annuler/rétablir, export WAV — mais rien de leur synthèse. Chaque studio ramène au menu par un lien en haut de page.
 
 ## Utilisation
 
-Ouvrez simplement `index.html` ou `trance.html` dans un navigateur moderne (Chrome, Firefox, Edge, Safari), ou servez le dossier :
+Ouvrez `index.html` dans un navigateur moderne (Chrome, Firefox, Edge, Safari), ou servez le dossier :
 
 ```bash
 npx serve .
@@ -23,7 +23,7 @@ python3 -m http.server
 
 ## Trois pistes indépendantes
 
-Le séquenceur pilote **trois pistes** (Mélodie, Basse, Percu) qui jouent simultanément. Chaque piste possède son propre instrument complet — forme d'onde, octave, enveloppe ADSR, bitcrusher et vibrato — ainsi que son volume, son bouton muet et son solo.
+Dans le studio 8-bit, le séquenceur pilote **trois pistes** (Mélodie, Basse, Percu) qui jouent simultanément. Chaque piste possède son propre instrument complet — forme d'onde, octave, enveloppe ADSR, bitcrusher et vibrato — ainsi que son volume, son bouton muet et son solo.
 
 Cliquer sur le nom d'une piste la sélectionne : les panneaux de réglage l'éditent alors, et le clavier la joue. Toucher un réglage bascule la piste en mode « Perso » sans altérer les autres.
 
@@ -161,4 +161,10 @@ Le mappage utilise la position physique des touches, donc il fonctionne aussi bi
 
 ## Structure
 
-Deux fichiers autonomes, sans dépendance ni build : [`index.html`](index.html) pour le chiptune, [`trance.html`](trance.html) pour la trance. Chacun contient son interface, ses styles et son moteur audio.
+Trois fichiers autonomes, sans dépendance ni build :
+
+- [`index.html`](index.html) — l'accueil, avec une vignette animée par studio (onde carrée crantée d'un côté, dents de scie désaccordées de l'autre).
+- [`chiptune.html`](chiptune.html) — le synthé 8-bit.
+- [`trance.html`](trance.html) — le studio trance.
+
+Chaque studio est un document séparé : leurs identifiants, leurs styles, leurs raccourcis clavier et leur contexte audio ne se marchent jamais dessus.

@@ -3,2289 +3,261 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Synthé 8-Bit</title>
+<title>Deux studios</title>
 <style>
   :root {
-    --bg: #150d24;
-    --panel: #241640;
-    --panel-edge: #3b2566;
-    --accent: #00ff9c;
-    --accent2: #ff4fd8;
-    --accent3: #ffd23f;
-    --text: #e8e3ff;
-    --dim: #9b8ec4;
-    --t0: #00ff9c;
-    --t1: #ff4fd8;
-    --t2: #ffd23f;
+    --ink: #eef1ff;
+    --dim: #8b93b8;
+    --chip: #00ff9c;
+    --chip2: #ff4fd8;
+    --tr: #4fd6ff;
+    --tr2: #a56bff;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: "Courier New", Courier, monospace;
     min-height: 100vh;
+    background:
+      radial-gradient(70% 55% at 18% 8%, rgba(0,255,156,.10) 0%, transparent 55%),
+      radial-gradient(70% 55% at 82% 92%, rgba(165,107,255,.14) 0%, transparent 55%),
+      #06070d;
+    color: var(--ink);
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 20px 12px 40px;
-    background-image:
-      repeating-linear-gradient(0deg, rgba(0,0,0,.15) 0 1px, transparent 1px 3px);
+    justify-content: center;
+    padding: 40px 18px;
+    gap: 34px;
   }
-  h1 {
-    font-size: clamp(20px, 4vw, 34px);
-    letter-spacing: .35em;
-    color: var(--accent);
-    text-shadow: 3px 3px 0 var(--accent2), 6px 6px 0 rgba(0,0,0,.4);
-    margin-bottom: 4px;
+
+  header { text-align: center; }
+  .eyebrow {
+    font-size: 10px;
+    letter-spacing: .45em;
     text-transform: uppercase;
-  }
-  .subtitle {
     color: var(--dim);
-    font-size: 12px;
-    letter-spacing: .2em;
-    margin-bottom: 18px;
-    text-transform: uppercase;
-  }
-  .console {
-    width: 100%;
-    max-width: 980px;
-    background: var(--panel);
-    border: 3px solid var(--panel-edge);
-    box-shadow: 0 0 0 3px #000, 8px 8px 0 rgba(0,0,0,.5);
-    padding: 16px;
-  }
-  canvas#scope {
-    display: block;
-    width: 100%;
-    height: 110px;
-    background: #0a0614;
-    border: 2px solid var(--panel-edge);
-    image-rendering: pixelated;
     margin-bottom: 12px;
   }
-  fieldset {
-    border: 2px solid var(--panel-edge);
-    padding: 10px 12px 12px;
-    background: rgba(0,0,0,.18);
-    min-width: 0;   /* sinon le contenu élargit la colonne de grille et déborde */
+  h1 {
+    font-size: clamp(28px, 6vw, 52px);
+    font-weight: 200;
+    letter-spacing: .04em;
+    line-height: 1.15;
   }
-  legend {
-    color: var(--accent3);
-    font-size: 11px;
-    letter-spacing: .2em;
-    padding: 0 6px;
-    text-transform: uppercase;
-  }
-  legend .edit-target { color: var(--tc, var(--accent)); }
-  /* colonnes fixes : le libellé ne peut jamais chevaucher la valeur */
-  .row {
-    display: grid;
-    grid-template-columns: 70px minmax(30px, 1fr) 44px;
-    align-items: center;
-    gap: 8px;
-    margin-top: 8px;
-    font-size: 11px;
-  }
-  .row label {
-    color: var(--dim);
-    text-transform: uppercase;
-    letter-spacing: .02em;
-    font-size: 10px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .row output {
-    text-align: right;
-    color: var(--accent);
-    font-variant-numeric: tabular-nums;
-  }
-  input[type=range] {
-    flex: 1;
-    -webkit-appearance: none;
-    appearance: none;
-    height: 6px;
-    background: #0a0614;
-    border: 1px solid var(--panel-edge);
-    outline: none;
-    min-width: 40px;
-  }
-  input[type=range]::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 14px; height: 18px;
-    background: var(--accent);
-    border: 2px solid #000;
-    box-shadow: 2px 2px 0 rgba(0,0,0,.6);
-    cursor: pointer;
-  }
-  input[type=range]::-moz-range-thumb {
-    width: 12px; height: 16px;
-    background: var(--accent);
-    border: 2px solid #000;
-    border-radius: 0;
-    cursor: pointer;
-  }
-  input[type=range]:focus-visible { outline: 2px solid var(--accent3); outline-offset: 2px; }
-  select {
-    flex: 1;
-    background: #0a0614;
-    color: var(--text);
-    border: 2px solid var(--panel-edge);
-    font-family: inherit;
-    font-size: 11px;
-    padding: 4px;
-    text-transform: uppercase;
-  }
-  button {
-    font-family: inherit;
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: .05em;
-    background: #0a0614;
-    color: var(--text);
-    border: 2px solid var(--panel-edge);
-    padding: 7px 8px;
-    cursor: pointer;
-    box-shadow: 2px 2px 0 rgba(0,0,0,.6);
-  }
-  button:active { transform: translate(2px, 2px); box-shadow: none; }
-  button:focus-visible { outline: 2px solid var(--accent3); outline-offset: 2px; }
-  button.selected {
-    background: var(--accent);
-    color: #000;
-    border-color: var(--accent);
-    font-weight: bold;
-  }
-  button.rec-on {
-    background: #d92b2b;
-    color: #fff;
-    border-color: #d92b2b;
-    animation: blink 1s steps(2) infinite;
-  }
-  @keyframes blink { 50% { opacity: .55; } }
-  @media (prefers-reduced-motion: reduce) {
-    button.rec-on { animation: none; }
-  }
-
-  /* --- Bibliothèque --- */
-  .songs { margin-bottom: 12px; }
-  .song-bar { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-  .song-bar button { flex: 1 1 auto; min-width: 84px; }
-  .song-bar button:last-child { color: var(--dim); border-style: dashed; }
-
-  /* --- Pistes --- */
-  .mixer { margin-bottom: 12px; }
-  .track-row {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin-top: 6px;
-    font-size: 11px;
-  }
-  .track-pick {
-    flex: 0 0 108px;
-    text-align: left;
-    border-left: 6px solid var(--tc);
-    text-transform: uppercase;
-  }
-  .track-row.sel .track-pick {
-    background: var(--tc);
-    color: #000;
-    border-color: var(--tc);
-    border-left-width: 6px;
-    font-weight: bold;
-  }
-  .track-row.silent .track-pick { opacity: .45; }
-  .track-row .mini-btn { flex: 0 0 34px; padding: 6px 0; text-align: center; }
-  .track-row .mini-btn.on { background: var(--accent3); color: #000; border-color: var(--accent3); font-weight: bold; }
-  .track-row .patch-name {
-    flex: 0 0 auto;
-    color: var(--dim);
-    font-size: 10px;
-    min-width: 78px;
-  }
-  .track-row input[type=range] { max-width: 130px; }
-  .track-row .len-pick {
-    flex: 0 0 52px;
-    padding: 5px 2px;
-    font-size: 10px;
-    text-align: center;
-  }
-  @media (max-width: 560px) {
-    /* le nom du patch cède la place au curseur de volume */
-    .track-row .patch-name { display: none; }
-  }
-
-  .panels {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(224px, 1fr));
-    gap: 12px;
-    margin-bottom: 16px;
-  }
-  .wave-buttons {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 6px;
-    margin-top: 8px;
-  }
-  .preset-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-top: 8px;
-  }
-  .preset-row button { flex: 1 1 auto; }
-  .octave-row { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
-  .octave-row button { width: 40px; }
-  .octave-row .oct-value { color: var(--accent); font-size: 14px; min-width: 60px; text-align: center; }
-
-  /* --- Séquenceur --- */
-  .seq { margin-bottom: 16px; }
-  .seq-transport {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    align-items: center;
-    margin-top: 8px;
-  }
-  .seq-transport .row { margin-top: 0; flex: 1; min-width: 180px; }
-  .seq-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    align-items: center;
-    margin-top: 8px;
-  }
-  .seq-row .tag {
-    color: var(--accent3);
-    font-size: 10px;
-    letter-spacing: .18em;
-    text-transform: uppercase;
-  }
-  .seq-row .sep { flex: 0 0 10px; }
-  .pat-btns { display: flex; gap: 4px; }
-  .pat-btn { width: 34px; text-align: center; font-weight: bold; }
-  .pat-btn.vide { color: var(--dim); border-style: dashed; }
-  /* motif en cours de lecture : liseré, distinct de la sélection d'édition */
-  .pat-btn.live { box-shadow: inset 0 0 0 2px var(--accent3), 2px 2px 0 rgba(0,0,0,.6); }
-  .pat-add { width: 34px; text-align: center; padding: 6px 0; }
-  button[disabled] { opacity: .4; cursor: not-allowed; }
-  button[disabled].selected { background: var(--panel-edge); color: var(--dim); border-color: var(--panel-edge); }
-  .chain {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-    align-items: center;
-    min-height: 28px;
-    flex: 1 1 200px;
-    padding: 2px 4px;
-    background: rgba(0,0,0,.3);
-    border: 1px solid var(--panel-edge);
-  }
-  .chain-empty { color: var(--dim); font-size: 10px; text-transform: uppercase; letter-spacing: .1em; }
-  .chain-chip {
-    width: 26px;
-    padding: 4px 0;
-    text-align: center;
-    font-weight: bold;
-    box-shadow: none;
-  }
-  .chain-chip.now { background: var(--accent3); color: #000; border-color: var(--accent3); }
-  .tool-msg { font-size: 10px; color: var(--accent2); text-transform: uppercase; letter-spacing: .1em; }
-  .grid-scroll { overflow-x: auto; margin-top: 10px; }
-  .grid-inner { min-width: 520px; }
-  .ov-grid, .seq-grid {
-    display: grid;
-    grid-template-columns: 60px repeat(16, minmax(24px, 1fr));
-    gap: 2px;
-  }
-  .ov-grid { margin-bottom: 8px; }
-  .ov-cell {
-    height: 14px;
-    background: #0a0614;
-    border: 1px solid var(--panel-edge);
-  }
-  .ov-cell.beat { background: #120a22; border-color: #4a3180; }
-  .ov-cell.on { background: var(--tc); border-color: var(--tc); }
-  .ov-cell.on.accent { box-shadow: inset 0 0 0 2px #fff; }
-  .ov-cell.hors { opacity: .25; }
-  .ov-row-label {
-    font-size: 9px;
-    color: var(--tc);
-    display: flex;
-    align-items: center;
-    text-transform: uppercase;
-    overflow: hidden;
-  }
-  .seq-label {
-    font-size: 9px;
-    color: var(--dim);
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    padding-right: 6px;
-    text-transform: uppercase;
-  }
-  .seq-cell {
-    aspect-ratio: 1 / 1;
-    background: #0a0614;
-    border: 1px solid var(--panel-edge);
-    cursor: pointer;
-  }
-  .seq-cell.beat { background: #120a22; border-color: #4a3180; }
-  .seq-cell.on { background: var(--tc); border-color: var(--tc); }
-  /* accent : la note porte un liseré clair et un point central */
-  .seq-cell.on.accent {
-    background:
-      radial-gradient(circle at 50% 50%, #fff 0 22%, transparent 22%),
-      var(--tc);
-    box-shadow: inset 0 0 0 2px rgba(255,255,255,.85);
-  }
-  .seq-cell.ghost { background: rgba(155, 142, 196, .22); }
-  /* pas situé au-delà de la longueur de boucle de la piste : jamais joué */
-  .seq-cell.hors { opacity: .3; }
-  .seq-cell.hors.on { opacity: .45; }
-  .playhead { box-shadow: inset 0 0 0 2px #fff; }
-  /* curseur d'écriture, à l'arrêt seulement */
-  .seq-cell.curseur { box-shadow: inset 0 0 0 2px var(--accent2); }
-  .seq-cell.on.accent.playhead { box-shadow: inset 0 0 0 3px #fff; }
-
-  .keyboard-wrap { position: relative; height: 170px; user-select: none; touch-action: none; }
-  .keyboard { position: relative; height: 100%; display: flex; }
-  .key {
-    position: relative;
-    flex: 1;
-    background: #e8e3ff;
-    border: 2px solid #000;
-    margin-right: -2px;
-    cursor: pointer;
-    display: flex;
-    align-items: flex-end;
-    justify-content: center;
-    padding-bottom: 6px;
-    font-size: 9px;
-    color: #6a5f96;
-  }
-  .key.black {
-    position: absolute;
-    top: 0;
-    width: 4.2%;
-    height: 58%;
-    background: #14092b;
-    border: 2px solid #000;
-    z-index: 2;
+  h1 em {
+    font-style: normal;
+    background: linear-gradient(90deg, var(--chip), var(--tr));
+    -webkit-background-clip: text;
+    background-clip: text;
     color: transparent;
   }
-  .key.active { background: var(--tc); color: #000; }
-  .key.black.active { background: var(--tc); filter: brightness(.8); }
-  .hint {
-    margin-top: 10px;
-    font-size: 10px;
+  header p {
+    margin-top: 14px;
     color: var(--dim);
-    letter-spacing: .05em;
-    line-height: 1.6;
-    text-align: center;
+    font-size: 14px;
+    max-width: 46ch;
+    line-height: 1.65;
   }
-  .hint b { color: var(--accent3); }
-  .crosslink { font-size: 10px; color: var(--dim); margin-bottom: 16px; letter-spacing: .05em; }
-  .crosslink a { color: var(--accent); }
+
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 22px;
+    width: 100%;
+    max-width: 880px;
+  }
+  .card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    text-decoration: none;
+    color: inherit;
+    border: 1px solid rgba(255,255,255,.1);
+    border-radius: 16px;
+    overflow: hidden;
+    background: rgba(255,255,255,.025);
+    transition: transform .22s ease, border-color .22s ease, box-shadow .22s ease;
+  }
+  .card:hover, .card:focus-visible {
+    transform: translateY(-4px);
+    outline: none;
+  }
+  .card.chip:hover, .card.chip:focus-visible {
+    border-color: var(--chip);
+    box-shadow: 0 16px 46px rgba(0,255,156,.18);
+  }
+  .card.tr:hover, .card.tr:focus-visible {
+    border-color: var(--tr);
+    box-shadow: 0 16px 46px rgba(79,214,255,.2);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .card, .card:hover { transform: none; transition: none; }
+  }
+
+  .card canvas {
+    display: block;
+    width: 100%;
+    height: 116px;
+    background: rgba(0,0,0,.45);
+  }
+  .card .body { padding: 20px 22px 24px; display: flex; flex-direction: column; gap: 10px; flex: 1; }
+  .card h2 {
+    font-size: 21px;
+    font-weight: 500;
+    letter-spacing: .02em;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .card .kicker {
+    font-size: 9.5px;
+    letter-spacing: .3em;
+    text-transform: uppercase;
+    color: var(--dim);
+  }
+  .card.chip h2 { color: var(--chip); }
+  .card.tr h2 { color: var(--tr); }
+  .card p { color: var(--dim); font-size: 13px; line-height: 1.6; }
+  .card ul { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+  .card li {
+    font-size: 10.5px;
+    color: var(--dim);
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 20px;
+    padding: 4px 10px;
+  }
+  .card .go {
+    margin-top: auto;
+    padding-top: 14px;
+    font-size: 12px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+  }
+  .card.chip .go { color: var(--chip); }
+  .card.tr .go { color: var(--tr); }
+  .card .go span { transition: margin-left .2s ease; display: inline-block; }
+  .card:hover .go span { margin-left: 6px; }
+
+  footer { color: var(--dim); font-size: 11.5px; text-align: center; line-height: 1.8; }
+  footer b { color: var(--ink); font-weight: 500; }
 </style>
 </head>
 <body>
-  <h1>Synthé 8-Bit</h1>
-  <div class="subtitle">Synthétiseur virtuel chiptune &mdash; Web Audio</div>
-  <div class="crosslink">Envie de nappes&nbsp;? <a href="trance.html">Le studio trance est ici</a>.</div>
+  <header>
+    <div class="eyebrow">Web Audio &mdash; sans dépendance</div>
+    <h1>Deux studios,<br><em>deux mondes sonores</em></h1>
+    <p>
+      Le même séquenceur — motifs enchaînables, morceaux prêts à jouer,
+      partage par lien, export WAV — au service de deux synthèses
+      qui n'ont rien en commun. Choisissez votre camp.
+    </p>
+  </header>
 
-  <div class="console">
-    <canvas id="scope" width="920" height="110"></canvas>
-
-    <fieldset class="songs">
-      <legend>Morceaux</legend>
-      <div class="song-bar" id="songs"></div>
-      <div class="hint" style="text-align:left; margin-top:8px">
-        Sept morceaux prêts à jouer : chargez-en un, appuyez sur <b>Lecture</b>,
-        puis triturez tout ce que vous voulez. <b>Vierge</b> repart de zéro, et
-        le bouton <b>Retour</b> du navigateur annule un chargement.
+  <div class="cards">
+    <a class="card chip" href="chiptune.html">
+      <canvas id="vizChip" width="440" height="116" aria-hidden="true"></canvas>
+      <div class="body">
+        <h2>Synthé 8-Bit <span class="kicker">Chiptune</span></h2>
+        <p>
+          Les puces sonores des consoles : ondes carrées et pulsées, bitcrusher,
+          vibrato, arpégiateur. Trois pistes, quatre motifs, huit morceaux.
+        </p>
+        <ul>
+          <li>Pulse 12,5 %</li><li>Bitcrusher</li><li>Polyrythmie</li><li>Accents</li>
+        </ul>
+        <div class="go">Entrer <span>&rarr;</span></div>
       </div>
-    </fieldset>
+    </a>
 
-    <fieldset class="mixer">
-      <legend>Pistes</legend>
-      <div id="mixer"></div>
-      <div class="hint" style="text-align:left; margin-top:8px">
-        Cliquez sur un nom de piste pour l'éditer et la jouer au clavier
-        (raccourcis <b>1</b>, <b>2</b>, <b>3</b>). <b>M</b> = muet, <b>S</b> = solo.
-        Le nombre est la <b>longueur de boucle</b> : donnez-en une différente à
-        chaque piste et elles se décalent, mesure après mesure.
+    <a class="card tr" href="trance.html">
+      <canvas id="vizTr" width="440" height="116" aria-hidden="true"></canvas>
+      <div class="body">
+        <h2>Studio Trance <span class="kicker">Uplifting</span></h2>
+        <p>
+          Supersaw à sept voix, filtre résonant à enveloppe, sidechain qui pompe,
+          réverbération et délai pointé. Cinq pistes, motifs de deux mesures.
+        </p>
+        <ul>
+          <li>Supersaw</li><li>Filtre résonant</li><li>Sidechain</li><li>Réverb</li>
+        </ul>
+        <div class="go">Entrer <span>&rarr;</span></div>
       </div>
-    </fieldset>
-
-    <div class="panels">
-      <fieldset>
-        <legend>Oscillateur &mdash; <span class="edit-target" id="target1">Mélodie</span></legend>
-        <div class="wave-buttons" id="waves">
-          <button data-wave="square">Carré 50%</button>
-          <button data-wave="pulse25">Pulse 25%</button>
-          <button data-wave="pulse125">Pulse 12.5%</button>
-          <button data-wave="triangle">Triangle</button>
-          <button data-wave="sawtooth">Scie</button>
-          <button data-wave="noise">Bruit</button>
-        </div>
-        <div class="octave-row">
-          <button id="octDown">&minus;</button>
-          <span class="oct-value">Octave <span id="octValue">4</span></span>
-          <button id="octUp">+</button>
-        </div>
-      </fieldset>
-
-      <fieldset>
-        <legend>Enveloppe &mdash; <span class="edit-target" id="target2">Mélodie</span></legend>
-        <div class="row"><label>Attaque</label><input type="range" id="attack" min="0.001" max="1" step="0.001" value="0.01"><output id="attackOut">10ms</output></div>
-        <div class="row"><label>Déclin</label><input type="range" id="decay" min="0.001" max="1" step="0.001" value="0.1"><output id="decayOut">100ms</output></div>
-        <div class="row"><label>Maintien</label><input type="range" id="sustain" min="0" max="1" step="0.01" value="0.6"><output id="sustainOut">60%</output></div>
-        <div class="row"><label>Relâche</label><input type="range" id="release" min="0.01" max="2" step="0.01" value="0.15"><output id="releaseOut">150ms</output></div>
-      </fieldset>
-
-      <fieldset>
-        <legend>Timbre &mdash; <span class="edit-target" id="target3">Mélodie</span></legend>
-        <div class="row"><label>Bits</label><input type="range" id="bits" min="2" max="8" step="1" value="8"><output id="bitsOut">8</output></div>
-        <div class="row"><label>Vib. vit.</label><input type="range" id="vibRate" min="0.5" max="12" step="0.1" value="5"><output id="vibRateOut">5Hz</output></div>
-        <div class="row"><label>Vib. prof.</label><input type="range" id="vibDepth" min="0" max="600" step="5" value="0"><output id="vibDepthOut">0</output></div>
-        <div class="row"><label>Balayage</label><input type="range" id="sweep" min="-24" max="24" step="1" value="0"><output id="sweepOut">0</output></div>
-        <div class="preset-row" id="presets">
-          <button data-preset="leadgb">Lead GB</button>
-          <button data-preset="basse">Basse</button>
-          <button data-preset="cristal">Cristal</button>
-          <button data-preset="percu">Percu</button>
-          <button data-preset="sirene">Sirène</button>
-        </div>
-      </fieldset>
-
-      <fieldset>
-        <legend>Master &amp; écho</legend>
-        <div class="row"><label>Volume</label><input type="range" id="volume" min="0" max="1" step="0.01" value="0.5"><output id="volumeOut">50%</output></div>
-        <div class="row"><label>Écho mix</label><input type="range" id="echoMix" min="0" max="0.8" step="0.01" value="0.12"><output id="echoMixOut">12%</output></div>
-        <div class="row"><label>Écho temps</label><input type="range" id="echoTime" min="0.05" max="0.6" step="0.01" value="0.22"><output id="echoTimeOut">220ms</output></div>
-        <div class="row"><label>Écho retour</label><input type="range" id="echoFb" min="0" max="0.8" step="0.01" value="0.35"><output id="echoFbOut">35%</output></div>
-      </fieldset>
-
-      <fieldset>
-        <legend>Arpégiateur</legend>
-        <div class="row"><label>Mode</label>
-          <select id="arpMode">
-            <option value="off">Désactivé</option>
-            <option value="up">Montant</option>
-            <option value="down">Descendant</option>
-            <option value="updown">Aller-retour</option>
-            <option value="random">Aléatoire</option>
-          </select>
-        </div>
-        <div class="row"><label>Vitesse</label><input type="range" id="arpRate" min="2" max="16" step="0.5" value="8"><output id="arpRateOut">8Hz</output></div>
-        <div class="hint" style="text-align:left">Maintenez plusieurs notes pour lancer l'arpège.</div>
-      </fieldset>
-    </div>
-
-    <fieldset class="seq">
-      <legend>Séquenceur &mdash; motif <span class="pattern-target">A</span> &mdash;
-        <span class="edit-target" id="target4">Mélodie</span></legend>
-
-      <div class="seq-row">
-        <span class="tag">Motif</span>
-        <div class="pat-btns" id="patternBtns"></div>
-        <button id="dupBtn" title="Copier ce motif dans un emplacement libre">Dupliquer</button>
-        <span class="sep"></span>
-        <span class="tag">Lecture</span>
-        <button id="modeLoop" class="selected">Boucle</button>
-        <button id="modeSong">Morceau</button>
-        <button id="followBtn" class="selected" title="La grille suit le motif joué" disabled>Suivre</button>
-      </div>
-
-      <div class="seq-row">
-        <span class="tag">Outils</span>
-        <button id="rotL" title="Décaler le motif d'un pas vers la gauche">&#9664; Décaler</button>
-        <button id="rotR" title="Décaler le motif d'un pas vers la droite">Décaler &#9654;</button>
-        <button id="trDown" title="Transposer d'un demi-ton vers le bas">&minus;&frac12; ton</button>
-        <button id="trUp" title="Transposer d'un demi-ton vers le haut">+&frac12; ton</button>
-        <button id="revBtn" title="Lire le motif à l'envers">Inverser</button>
-        <span class="sep"></span>
-        <button id="undoBtn" title="Annuler (Ctrl+Z)" disabled>&#8630; Annuler</button>
-        <button id="redoBtn" title="Rétablir (Ctrl+Maj+Z)" disabled>Rétablir &#8631;</button>
-        <span class="tool-msg" id="toolMsg"></span>
-      </div>
-
-      <div class="seq-row">
-        <span class="tag">Chaîne</span>
-        <div class="chain" id="chain"></div>
-        <span class="sep"></span>
-        <div class="pat-btns" id="chainAdd"></div>
-        <button id="chainClear">Vider</button>
-      </div>
-
-      <div class="seq-transport">
-        <button id="seqPlay">&#9654; Lecture</button>
-        <button id="seqClear">Effacer piste</button>
-        <button id="armBtn" title="Écrire au clavier dans le motif affiché">Enreg. clavier</button>
-        <button id="recBtn" title="Capturer la sortie audio en direct">&#9679; Capturer</button>
-        <button id="wavBtn" title="Rendre le morceau en fichier WAV">Exporter WAV</button>
-        <button id="shareBtn">&#128279; Partager</button>
-        <div class="row"><label>Tempo</label><input type="range" id="bpm" min="60" max="240" step="1" value="120"><output id="bpmOut">120</output></div>
-        <div class="row"><label>Swing</label><input type="range" id="swing" min="0" max="0.5" step="0.01" value="0"><output id="swingOut">0%</output></div>
-      </div>
-
-      <div class="grid-scroll">
-        <div class="grid-inner">
-          <div class="ov-grid" id="ovGrid"></div>
-          <div class="seq-grid" id="seqGrid"></div>
-        </div>
-      </div>
-      <div class="hint" style="text-align:left; margin-top:6px">
-        Quatre motifs de 16 pas, <b>A</b> à <b>D</b> : les pistes gardent leurs
-        instruments, seul le contenu des pas change. Cliquez une case pour poser
-        une note, une deuxième fois pour l'<b>accentuer</b>, une troisième pour
-        l'effacer. En <b>Boucle</b>, le motif affiché tourne en rond ; en
-        <b>Morceau</b>, la chaîne se déroule puis reprend — cliquez un maillon
-        pour le retirer. <b>Espace</b> lance ou arrête la lecture, et
-        <b>Partager</b> copie un lien qui contient tout.
-        <b>Enreg. clavier</b> écrit dans le motif ce que vous jouez : quantifié
-        pendant la lecture, pas à pas à l'arrêt (flèches &#8592; et &#8594; pour
-        déplacer le curseur). <b>WAV</b> rend le morceau en fichier.
-      </div>
-    </fieldset>
-
-    <div class="keyboard-wrap">
-      <div class="keyboard" id="keyboard"></div>
-    </div>
-
-    <div class="hint">
-      Clavier d'ordinateur : <b>rangée du milieu</b> = touches blanches (Do, Ré, Mi&hellip;),
-      <b>rangée du haut</b> = touches noires, <b>W / X</b> (AZERTY) = octave &minus;/+.
-      Cliquez ou touchez aussi les touches ci-dessus.
-    </div>
+    </a>
   </div>
+
+  <footer>
+    Tout tourne dans le navigateur, rien n'est envoyé nulle part.<br>
+    <b>Astuce</b> : chaque studio met votre morceau dans l'adresse de la page — le lien suffit à le partager.
+  </footer>
 
 <script>
 (function () {
   "use strict";
 
-  const NOTE_NAMES = ["Do", "Do#", "Ré", "Ré#", "Mi", "Fa", "Fa#", "Sol", "Sol#", "La", "La#", "Si"];
-  const KEY_COUNT = 25;   // clavier : 2 octaves + Do final
-  const STEPS = 16;
-  const ROWS = 13;        // piano-roll : Do -> Do
-  const TRACK_COLORS = ["var(--t0)", "var(--t1)", "var(--t2)"];
-
-  // ------- Presets -------
-  const PRESETS = {
-    leadgb:  { label: "Lead GB", wave: "pulse125", octave: 4, attack: 0.005, decay: 0.08,
-               sustain: 0.5, release: 0.12, bits: 4, vibRate: 6, vibDepth: 15, sweep: 0 },
-    basse:   { label: "Basse", wave: "square", octave: 2, attack: 0.005, decay: 0.15,
-               sustain: 0.7, release: 0.1, bits: 6, vibRate: 5, vibDepth: 0, sweep: 0 },
-    cristal: { label: "Cristal", wave: "triangle", octave: 6, attack: 0.01, decay: 0.3,
-               sustain: 0.3, release: 0.5, bits: 8, vibRate: 5, vibDepth: 0, sweep: 0 },
-    percu:   { label: "Percu", wave: "noise", octave: 3, attack: 0.001, decay: 0.09,
-               sustain: 0, release: 0.06, bits: 3, vibRate: 5, vibDepth: 0, sweep: -12 },
-    sirene:  { label: "Sirène", wave: "square", octave: 5, attack: 0.05, decay: 0.1,
-               sustain: 1, release: 0.3, bits: 5, vibRate: 1, vibDepth: 600, sweep: 0 }
-  };
-
-  const PATCH_KEYS = ["wave", "octave", "attack", "decay", "sustain", "release",
-                      "bits", "vibRate", "vibDepth", "sweep"];
-
-  function patchFrom(presetName) {
-    const p = PRESETS[presetName], out = { preset: presetName };
-    PATCH_KEYS.forEach(k => out[k] = p[k]);
-    return out;
-  }
-
-  // ------- Motifs -------
-  const PATTERN_NAMES = ["A", "B", "C", "D"];
-  const PATTERN_COUNT = PATTERN_NAMES.length;
-  const CHAIN_MAX = 32;
-  const empty16 = () => new Array(STEPS).fill(null);
-
-  // Un pas vaut null, une hauteur 0..12, ou la même hauteur + 13 si elle est
-  // accentuée : une seule valeur par pas, donc rien à changer ailleurs.
-  const ACCENT = 13;
-  const noteOf = v => v % ACCENT;
-  const isAccent = v => v >= ACCENT;
-
-  // ------- Bibliothèque de morceaux -------
-  // Un motif s'écrit comme dans les liens partagés : 16 caractères, un par pas.
-  // 0123456789abc = Do Do# Ré Ré# Mi Fa Fa# Sol Sol# La La# Si Do+, "-" = silence.
-  // Une piste choisit un preset et peut en corriger n'importe quel réglage.
-  // echo = [mix, temps, retour] ; chain = l'ordre des motifs en mode morceau.
-  const SONGS = [
-    {
-      name: "Balade", bpm: 120, echo: [0.12, 0.22, 0.35], swing: 0.12, chain: "0012",
-      tracks: [
-        { preset: "leadgb", octave: 4, vol: 0.8, pats: [
-          "047c047c959c7420", "cb97579bc-b-9-7-", "7---5---4---2---", ""] },
-        { preset: "basse", octave: 2, vol: 0.9, pats: [
-          "0--05--59--97-7-", "5-5-5--59-9-7-77", "0-------7-------", ""] },
-        { preset: "percu", octave: 3, vol: 0.7, pats: [
-          "A-c-0-ccA-c-0cc-", "Acc-0-ccAcc-0c0c", "----A-------0--c", ""] }
-      ]
-    },
-    {
-      name: "Aventure", bpm: 138, echo: [0.16, 0.18, 0.3], swing: 0.16, chain: "001102",
-      tracks: [
-        { preset: "leadgb", octave: 5, vol: 0.8, pats: [
-          "0-4-7-c-b-9-7-4-", "579bc-b97-579---", "9--7--5-4--2--0-", ""] },
-        { preset: "basse", octave: 2, vol: 0.9, pats: [
-          "0--07--79--95--5", "0-0-7-7-9-9-5-5-", "0-------7-------", ""] },
-        { preset: "percu", octave: 3, vol: 0.7, pats: [
-          "A-c-0-ccA-c-0-c-", "A-cc0-ccA-cc0ccc", "A-------0-----c-", ""] }
-      ]
-    },
-    {
-      name: "Donjon", bpm: 100, echo: [0.4, 0.3, 0.5], chain: "001122",
-      tracks: [
-        { preset: "cristal", octave: 5, vol: 0.75, pats: [
-          "0--3--5--7--5-3-", "7--8--7--5--3-0-", "c--a--8--7------", ""] },
-        { preset: "basse", octave: 2, vol: 0.95, bits: 5, pats: [
-          "0---8---3---a---", "0-0-8-8-3-3-a-a-", "0-------8-------", ""] },
-        { preset: "percu", octave: 2, vol: 0.6, pats: [
-          "0---0---0---0-c-", "0--c0--c0--c0ccc", "0-------0-------", ""] }
-      ]
-    },
-    {
-      name: "Course", bpm: 176, echo: [0.1, 0.12, 0.25], chain: "0011002",
-      tracks: [
-        { preset: "leadgb", octave: 5, vol: 0.8, pats: [
-          "047904790479c974", "579b579b579bc-b9", "c-9-7-4-2-0-----", ""] },
-        { preset: "basse", octave: 2, vol: 0.95, pats: [
-          "0-0-0-0-5-5-7-7-", "9-9-9-9-5-5-7-7-", "0---------------", ""] },
-        { preset: "percu", octave: 3, vol: 0.65, pats: [
-          "Ac0cAc0cAc0cAc0c", "Accc0cccAccc0ccc", "A---0---A---0---", ""] }
-      ]
-    },
-    {
-      name: "Boss", bpm: 152, echo: [0.14, 0.15, 0.3], chain: "001122",
-      tracks: [
-        { preset: "leadgb", octave: 4, vol: 0.85, bits: 3, sweep: -3, pats: [
-          "0-1-0-1-3-2-3-2-", "7-8-7-8-a-8-7-5-", "c-b-a-8-7-5-3-0-", ""] },
-        { preset: "basse", octave: 1, vol: 1, bits: 4, pats: [
-          "0-0-0-0-1-1-0-0-", "5-5-5-5-3-3-0-0-", "0-0-0-0-0-0-0-0-", ""] },
-        { preset: "percu", octave: 3, vol: 0.75, pats: [
-          "A0c0-ccAc0c0Cccc", "A0c0-ccAcccAcccc", "A-0-A-0-A-0-A000", ""] }
-      ]
-    },
-    {
-      name: "Berceuse", bpm: 76, echo: [0.45, 0.34, 0.5], chain: "0012",
-      tracks: [
-        { preset: "cristal", octave: 6, vol: 0.7, pats: [
-          "c-----9-----7---", "9-----7-----5---", "5---4---2---0---", ""] },
-        { preset: "basse", octave: 3, vol: 0.6, wave: "triangle", pats: [
-          "0-------5-------", "9-------5-------", "0-------7-------", ""] },
-        { preset: "percu", octave: 3, vol: 0.5, pats: ["", "", "", ""] }
-      ]
-    },
-    {
-      // longueurs 16 / 12 / 10 : les trois pistes ne se réalignent qu'au bout
-      // de 240 pas, soit 15 mesures
-      name: "Engrenage", bpm: 128, echo: [0.22, 0.2, 0.4], chain: "0011",
-      tracks: [
-        { preset: "cristal", octave: 5, vol: 0.7, len: 16, pats: [
-          "0--4--7--4--0---", "7--9--c--9--7---", "", ""] },
-        { preset: "basse", octave: 2, vol: 0.9, len: 12, pats: [
-          "A--0--5--7--", "A--0--9--7--", "", ""] },
-        { preset: "percu", octave: 3, vol: 0.65, len: 10, sweep: -18, pats: [
-          "A-c-0-c-c-", "A-ccA-c-c-", "", ""] }
-      ]
-    },
-    {
-      name: "Vierge", bpm: 120, echo: [0.12, 0.22, 0.35], chain: "0",
-      tracks: [
-        { preset: "leadgb", octave: 4, vol: 0.8, pats: ["", "", "", ""] },
-        { preset: "basse", octave: 2, vol: 0.9, pats: ["", "", "", ""] },
-        { preset: "percu", octave: 3, vol: 0.7, pats: ["", "", "", ""] }
-      ]
-    }
-  ];
-
-  // ------- Pistes -------
-  // L'instrument appartient à la piste, les notes appartiennent au motif :
-  // changer de motif change ce qui est joué, jamais le son des pistes.
-  // len = nombre de pas avant de reboucler ; des longueurs inégales décalent les
-  // pistes les unes par rapport aux autres et produisent des polyrythmies.
-  const tracks = [
-    { name: "Mélodie", patch: patchFrom("leadgb"), vol: 0.8, mute: false, solo: false, len: STEPS },
-    { name: "Basse", patch: patchFrom("basse"), vol: 0.9, mute: false, solo: false, len: STEPS },
-    { name: "Percu", patch: patchFrom("percu"), vol: 0.7, mute: false, solo: false, len: STEPS }
-  ];
-  let currentTrack = 0;
-
-  // patterns[motif][piste] = 16 pas ; rempli au démarrage depuis SONGS[0]
-  const patterns = Array.from({ length: PATTERN_COUNT },
-                              () => tracks.map(() => empty16()));
-
-  let editPattern = 0;        // motif affiché dans la grille
-  let chain = [0];            // enchaînement en mode morceau
-  let songMode = false;       // false = boucle le motif édité
-  let followPlayback = true;  // en mode morceau, la grille suit la lecture
-  let chainPos = 0;
-
-  // Motif effectivement joué à cet instant
-  function livePattern() {
-    return (songMode && chain.length) ? chain[chainPos % chain.length] : editPattern;
-  }
-
-  // Notes de la piste i dans le motif affiché
-  function editData(i) { return patterns[editPattern][i]; }
-
-  const master = { volume: 0.5, echoMix: 0.12, echoTime: 0.22, echoFb: 0.35,
-                   bpm: 120, arpMode: "off", arpRate: 8, swing: 0 };
-
-  // ------- Audio -------
-  // Tout le graphe vit dans un "rig" attaché à un contexte : celui du direct,
-  // ou un contexte hors ligne le temps d'un rendu WAV. Les deux empruntent donc
-  // exactement le même chemin de synthèse.
-  let ctx = null, rig = null, recDest = null;
-  const voices = new Map();           // midi -> { src, gain }  (clavier live)
-
-  const PEAK = 0.68;          // niveau d'une note ordinaire
-  const ACCENT_PEAK = 0.98;   // niveau d'une note accentuée
-
-  function midiToFreq(m) { return 440 * Math.pow(2, (m - 69) / 12); }
-
-  function crusherCurve(bits) {
-    const steps = Math.pow(2, bits) / 2;
-    const n = 2048, curve = new Float32Array(n);
-    for (let i = 0; i < n; i++) {
-      const x = (i / (n - 1)) * 2 - 1;
-      curve[i] = Math.round(x * steps) / steps;
-    }
-    return curve;
-  }
-
-  function makePulseWave(actx, duty) {
-    const n = 32;
-    const real = new Float32Array(n), imag = new Float32Array(n);
-    for (let k = 1; k < n; k++) {
-      imag[k] = (2 / (k * Math.PI)) * Math.sin(k * Math.PI * duty);
-    }
-    return actx.createPeriodicWave(real, imag);
-  }
-
-  function makeNoiseBuffer(actx) {
-    // Bruit "puce" : valeurs aléatoires ±1 maintenues quelques échantillons
-    const len = Math.floor(actx.sampleRate * 2);
-    const buf = actx.createBuffer(1, len, actx.sampleRate);
-    const data = buf.getChannelData(0);
-    const hold = 6;
-    let v = 0;
-    for (let i = 0; i < len; i++) {
-      if (i % hold === 0) v = Math.random() < 0.5 ? -1 : 1;
-      data[i] = v * 0.6;
-    }
-    return buf;
-  }
-
-  // Construit la chaîne complète dans un contexte donné
-  function createRig(actx, withAnalyser) {
-    const r = { ctx: actx, trackNodes: [] };
-    r.busIn = actx.createGain();
-    r.masterGain = actx.createGain();
-    r.masterGain.gain.value = master.volume;
-
-    r.delay = actx.createDelay(1);
-    r.delay.delayTime.value = master.echoTime;
-    r.delayFb = actx.createGain();
-    r.delayFb.gain.value = master.echoFb;
-    r.delayWet = actx.createGain();
-    r.delayWet.gain.value = master.echoMix;
-
-    // pistes (chacune crushée séparément) -> bus -> [direct + écho] -> master
-    const tap = withAnalyser ? actx.createAnalyser() : actx.createGain();
-    if (withAnalyser) tap.fftSize = 2048;
-    r.analyser = withAnalyser ? tap : null;
-
-    r.busIn.connect(tap);
-    r.busIn.connect(r.delay);
-    r.delay.connect(r.delayFb);
-    r.delayFb.connect(r.delay);
-    r.delay.connect(r.delayWet);
-    r.delayWet.connect(tap);
-    tap.connect(r.masterGain);
-    r.masterGain.connect(actx.destination);
-
-    r.pulse25 = makePulseWave(actx, 0.25);
-    r.pulse125 = makePulseWave(actx, 0.125);
-    r.noise = makeNoiseBuffer(actx);
-
-    tracks.forEach((tr, i) => {
-      const shaper = actx.createWaveShaper();
-      shaper.curve = crusherCurve(tr.patch.bits);
-      const gain = actx.createGain();
-      gain.gain.value = audibleVol(i);
-      shaper.connect(gain);
-      gain.connect(r.busIn);
-
-      const lfo = actx.createOscillator();
-      lfo.type = "sine";
-      lfo.frequency.value = tr.patch.vibRate;
-      const lfoGain = actx.createGain();
-      lfoGain.gain.value = tr.patch.vibDepth;
-      lfo.connect(lfoGain);
-      lfo.start();
-
-      r.trackNodes[i] = { shaper, gain, lfo, lfoGain };
-    });
-    return r;
-  }
-
-  function initAudio() {
-    if (ctx) { if (ctx.state === "suspended") ctx.resume(); return; }
-    ctx = new (window.AudioContext || window.webkitAudioContext)();
-    rig = createRig(ctx, true);
-    recDest = ctx.createMediaStreamDestination();
-    rig.masterGain.connect(recDest);
-    drawScope();
-  }
-
-  function anySolo() { return tracks.some(t => t.solo); }
-
-  function audibleVol(i) {
-    const tr = tracks[i];
-    if (tr.mute) return 0;
-    if (anySolo() && !tr.solo) return 0;
-    return tr.vol * 0.55;   // marge pour éviter la saturation à plusieurs pistes
-  }
-
-  function refreshTrackGains() {
-    if (!rig) return;
-    tracks.forEach((tr, i) =>
-      rig.trackNodes[i].gain.gain.setTargetAtTime(audibleVol(i), ctx.currentTime, 0.01));
-  }
-
-  function applyPatchToNodes(i) {
-    if (!rig) return;
-    const p = tracks[i].patch, n = rig.trackNodes[i];
-    n.shaper.curve = crusherCurve(p.bits);
-    n.lfo.frequency.setValueAtTime(p.vibRate, ctx.currentTime);
-    n.lfoGain.gain.setValueAtTime(p.vibDepth, ctx.currentTime);
-  }
-
-  function makeSource(r, i, midi) {
-    const p = tracks[i].patch;
-    let src;
-    if (p.wave === "noise") {
-      src = r.ctx.createBufferSource();
-      src.buffer = r.noise;
-      src.loop = true;
-      src.playbackRate.value = midiToFreq(midi) / 220;
-    } else {
-      src = r.ctx.createOscillator();
-      if (p.wave === "pulse25") src.setPeriodicWave(r.pulse25);
-      else if (p.wave === "pulse125") src.setPeriodicWave(r.pulse125);
-      else src.type = p.wave;
-      src.frequency.value = midiToFreq(midi);
-    }
-    r.trackNodes[i].lfoGain.connect(src.detune);
-    return src;
-  }
-
-  // Glissando de hauteur sur la durée de la note : le "pew" des consoles 8-bit.
-  // detune reçoit déjà le vibrato par connexion ; l'automation s'y ajoute.
-  function applySweep(src, patch, when, dur) {
-    if (!patch.sweep) return;
-    src.detune.setValueAtTime(0, when);
-    src.detune.linearRampToValueAtTime(patch.sweep * 100, when + Math.min(0.4, dur));
-  }
-
-  // Note tenue (clavier / arpège) sur la piste sélectionnée
-  function noteOn(midi) {
-    initAudio();
-    if (voices.has(midi)) return;
-    const i = currentTrack, p = tracks[i].patch, t = ctx.currentTime;
-    const src = makeSource(rig, i, midi);
-    const gain = ctx.createGain();
-    const a = Math.max(0.001, p.attack), d = Math.max(0.001, p.decay);
-    gain.gain.setValueAtTime(0, t);
-    gain.gain.linearRampToValueAtTime(PEAK, t + a);
-    gain.gain.linearRampToValueAtTime(p.sustain * PEAK, t + a + d);
-    applySweep(src, p, t, 0.3);
-    src.connect(gain);
-    gain.connect(rig.trackNodes[i].shaper);
-    src.start(t);
-    voices.set(midi, { src, gain, track: i });
-    setKeyVisual(midi, true);
-  }
-
-  function noteOff(midi) {
-    const v = voices.get(midi);
-    if (!v) return;
-    voices.delete(midi);
-    const p = tracks[v.track].patch, t = ctx.currentTime;
-    const r = Math.max(0.01, p.release);
-    v.gain.gain.cancelScheduledValues(t);
-    v.gain.gain.setValueAtTime(v.gain.gain.value, t);
-    v.gain.gain.linearRampToValueAtTime(0.0001, t + r);
-    v.src.stop(t + r + 0.05);
-    setKeyVisual(midi, false);
-  }
-
-  function allNotesOff() { [...voices.keys()].forEach(noteOff); }
-
-  // Note planifiée : indépendante des voix tenues, et rejouable hors ligne
-  function playOn(r, i, midi, when, dur, accent) {
-    const p = tracks[i].patch;
-    const src = makeSource(r, i, midi);
-    const gain = r.ctx.createGain();
-    const peak = accent ? ACCENT_PEAK : PEAK;
-    const a = Math.max(0.001, p.attack), d = Math.max(0.001, p.decay);
-    const rel = Math.max(0.01, p.release);
-    const susT = when + a + d;
-    const end = Math.max(when + Math.max(dur, a + 0.01), susT);
-    gain.gain.setValueAtTime(0, when);
-    gain.gain.linearRampToValueAtTime(peak, when + a);
-    gain.gain.linearRampToValueAtTime(p.sustain * peak, susT);
-    if (end > susT) gain.gain.setValueAtTime(p.sustain * peak, end);
-    gain.gain.linearRampToValueAtTime(0.0001, end + rel);
-    applySweep(src, p, when, dur);
-    src.connect(gain);
-    gain.connect(r.trackNodes[i].shaper);
-    src.start(when);
-    src.stop(end + rel + 0.05);
-  }
-
-  function playNote(i, midi, when, dur, accent) {
-    playOn(rig, i, midi, when, dur, accent);
-  }
-
-  // ------- Arpégiateur -------
-  let held = [], arpTimer = null, arpIndex = 0, arpDir = 1;
-
-  function pressNote(midi) {
-    captureNote(midi);
-    if (master.arpMode === "off") { noteOn(midi); return; }
-    initAudio();
-    if (!held.includes(midi)) held.push(midi);
-    setKeyVisual(midi, true);
-    startArp();
-  }
-
-  function releaseNote(midi) {
-    if (master.arpMode === "off") { noteOff(midi); return; }
-    held = held.filter(m => m !== midi);
-    setKeyVisual(midi, false);
-    if (held.length === 0) stopArp();
-  }
-
-  function startArp() {
-    if (arpTimer) return;
-    arpIndex = 0; arpDir = 1;
-    arpTimer = setInterval(arpTick, 1000 / master.arpRate);
-    arpTick();
-  }
-
-  function stopArp() {
-    if (arpTimer) { clearInterval(arpTimer); arpTimer = null; }
-  }
-
-  function restartArp() { if (arpTimer) { stopArp(); startArp(); } }
-
-  function arpTick() {
-    if (held.length === 0) return;
-    const notes = [...held].sort((x, y) => x - y);
-    let n;
-    if (master.arpMode === "up") {
-      n = notes[arpIndex % notes.length]; arpIndex++;
-    } else if (master.arpMode === "down") {
-      n = notes[notes.length - 1 - (arpIndex % notes.length)]; arpIndex++;
-    } else if (master.arpMode === "updown") {
-      if (notes.length === 1) n = notes[0];
-      else {
-        if (arpIndex >= notes.length - 1) arpDir = -1;
-        if (arpIndex <= 0) arpDir = 1;
-        n = notes[Math.max(0, Math.min(arpIndex, notes.length - 1))];
-        arpIndex += arpDir;
-      }
-    } else {
-      n = notes[Math.floor(Math.random() * notes.length)];
-    }
-    const gate = Math.max(40, (1000 / master.arpRate) * 0.55);
-    noteOn(n);
-    setTimeout(() => noteOff(n), gate);
-  }
-
-  // ------- Table de mixage -------
-  const mixerEl = document.getElementById("mixer");
-  const trackRows = [];
-
-  function buildMixer() {
-    mixerEl.innerHTML = "";
-    tracks.forEach((tr, i) => {
-      const row = document.createElement("div");
-      row.className = "track-row";
-      row.style.setProperty("--tc", TRACK_COLORS[i]);
-
-      const pick = document.createElement("button");
-      pick.className = "track-pick";
-      pick.textContent = (i + 1) + ". " + tr.name;
-      pick.addEventListener("click", () => selectTrack(i));
-
-      const mute = document.createElement("button");
-      mute.className = "mini-btn";
-      mute.textContent = "M";
-      mute.title = "Muet";
-      mute.addEventListener("click", () => {
-        tr.mute = !tr.mute;
-        refreshMixer(); refreshOverview(); refreshTrackGains(); markDirty();
-      });
-
-      const solo = document.createElement("button");
-      solo.className = "mini-btn";
-      solo.textContent = "S";
-      solo.title = "Solo";
-      solo.addEventListener("click", () => {
-        tr.solo = !tr.solo;
-        refreshMixer(); refreshOverview(); refreshTrackGains(); markDirty();
-      });
-
-      const patchName = document.createElement("span");
-      patchName.className = "patch-name";
-
-      // longueur de boucle : en dessous de 16 pas, la piste se décale
-      const len = document.createElement("select");
-      len.className = "len-pick";
-      len.title = "Longueur de la boucle, en pas";
-      for (let n = 1; n <= STEPS; n++) {
-        const o = document.createElement("option");
-        o.value = n;
-        o.textContent = n;
-        len.appendChild(o);
-      }
-      len.value = tr.len;
-      len.addEventListener("change", () => {
-        tr.len = Number(len.value);
-        refreshSeqGrid();
-        markDirty();
-      });
-
-      const vol = document.createElement("input");
-      vol.type = "range";
-      vol.min = 0; vol.max = 1; vol.step = 0.01; vol.value = tr.vol;
-      vol.title = "Volume de la piste";
-      vol.addEventListener("input", () => {
-        tr.vol = Number(vol.value);
-        refreshTrackGains(); markDirty();
-      });
-
-      row.append(pick, mute, solo, patchName, len, vol);
-      mixerEl.appendChild(row);
-      trackRows[i] = { row, mute, solo, patchName, len };
-    });
-    refreshMixer();
-  }
-
-  function refreshMixer() {
-    const solos = anySolo();
-    tracks.forEach((tr, i) => {
-      const r = trackRows[i];
-      r.row.classList.toggle("sel", i === currentTrack);
-      r.row.classList.toggle("silent", tr.mute || (solos && !tr.solo));
-      r.mute.classList.toggle("on", tr.mute);
-      r.solo.classList.toggle("on", tr.solo);
-      const preset = PRESETS[tr.patch.preset];
-      r.patchName.textContent = preset ? preset.label : "Perso";
-      r.len.value = tr.len;
-    });
-  }
-
-  // Habillage lié à la piste courante : couleur d'accent et titres de panneaux
-  function applyTrackSelectionUI() {
-    document.documentElement.style.setProperty("--tc", TRACK_COLORS[currentTrack]);
-    document.querySelectorAll(".edit-target")
-      .forEach(el => el.textContent = tracks[currentTrack].name);
-  }
-
-  function selectTrack(i) {
-    if (i === currentTrack) return;
-    allNotesOff(); held = []; stopArp();
-    currentTrack = i;
-    applyTrackSelectionUI();
-    loadPatchIntoControls();
-    refreshMixer();
-    refreshSeqGrid();
-    refreshKeyLabels();
-    markDirty();
-  }
-
-  // ------- Séquenceur -------
-  let seqPlaying = false, seqStep = 0, nextStepTime = 0, seqTimer = null;
-  let stepQueue = [], playheadStep = -1;
-  const seqGridEl = document.getElementById("seqGrid");
-  const ovGridEl = document.getElementById("ovGrid");
-  const seqCells = [];  // [step][row]
-  const ovCells = [];   // [track][step]
-
-  function buildOverview() {
-    ovGridEl.innerHTML = "";
-    tracks.forEach((tr, i) => {
-      const label = document.createElement("div");
-      label.className = "ov-row-label";
-      label.style.setProperty("--tc", TRACK_COLORS[i]);
-      label.textContent = tr.name;
-      ovGridEl.appendChild(label);
-      ovCells[i] = [];
-      for (let s = 0; s < STEPS; s++) {
-        const cell = document.createElement("div");
-        cell.className = "ov-cell" + (s % 4 === 0 ? " beat" : "");
-        cell.style.setProperty("--tc", TRACK_COLORS[i]);
-        ovGridEl.appendChild(cell);
-        ovCells[i][s] = cell;
-      }
-    });
-    // les libellés et les cellules d'une même piste partagent la classe de ligne
-    refreshOverview();
-  }
-
-  function refreshOverview() {
-    const solos = anySolo();
-    tracks.forEach((tr, i) => {
-      const silent = tr.mute || (solos && !tr.solo);
-      const data = editData(i);
-      for (let s = 0; s < STEPS; s++) {
-        const c = ovCells[i][s];
-        const v = data[s];
-        const on = v !== null && v !== undefined;
-        c.classList.toggle("on", on);
-        c.classList.toggle("accent", on && isAccent(v));
-        c.classList.toggle("hors", s >= tr.len);
-        c.style.opacity = silent ? ".3" : "1";
-      }
-    });
-  }
-
-  function buildSeqGrid() {
-    seqGridEl.innerHTML = "";
-    for (let r = 0; r < ROWS; r++) {
-      const off = ROWS - 1 - r;   // aigu en haut
-      const label = document.createElement("div");
-      label.className = "seq-label";
-      label.textContent = NOTE_NAMES[off % 12] + (off === 12 ? "+" : "");
-      seqGridEl.appendChild(label);
-      for (let s = 0; s < STEPS; s++) {
-        const cell = document.createElement("div");
-        cell.className = "seq-cell" + (s % 4 === 0 ? " beat" : "");
-        cell.dataset.step = s;
-        cell.dataset.off = off;
-        seqGridEl.appendChild(cell);
-        (seqCells[s] = seqCells[s] || [])[off] = cell;
-      }
-    }
-    refreshSeqGrid();
-  }
-
-  function refreshSeqGrid() {
-    const data = editData(currentTrack);
-    const len = tracks[currentTrack].len;
-    for (let s = 0; s < STEPS; s++) {
-      // notes des autres pistes en repère discret
-      const ghosts = new Set();
-      tracks.forEach((tr, i) => {
-        if (i === currentTrack) return;
-        const v = editData(i)[s % tr.len];
-        if (v !== null && v !== undefined) ghosts.add(noteOf(v));
-      });
-      const v = data[s];
-      const note = (v === null || v === undefined) ? -1 : noteOf(v);
-      for (let o = 0; o < ROWS; o++) {
-        const cell = seqCells[s][o];
-        const on = note === o;
-        cell.classList.toggle("on", on);
-        cell.classList.toggle("accent", on && isAccent(v));
-        cell.classList.toggle("ghost", !on && ghosts.has(o));
-        cell.classList.toggle("hors", s >= len);
-        cell.classList.toggle("curseur", recArmed && !seqPlaying && s === writeStep);
-      }
-    }
-    refreshOverview();
-    refreshPatternButtons();   // le marqueur "motif vide" suit les éditions
-  }
-
-  seqGridEl.addEventListener("click", e => {
-    const cell = e.target.closest(".seq-cell");
-    if (!cell) return;
-    const s = Number(cell.dataset.step), o = Number(cell.dataset.off);
-    const data = editData(currentTrack);
-    // trois états successifs sous le doigt : rien, note, note accentuée
-    if (data[s] === o) data[s] = o + ACCENT;
-    else if (data[s] === o + ACCENT) data[s] = null;
-    else data[s] = o;
-    refreshSeqGrid();
-    markDirty();
-    if (!seqPlaying && data[s] !== null) {
-      initAudio();
-      playNote(currentTrack, trackBase(currentTrack) + o, ctx.currentTime + 0.01, 0.12,
-               isAccent(data[s]));
-    }
-  });
-
-  ovGridEl.addEventListener("click", e => {
-    const idx = [...ovGridEl.children].indexOf(e.target);
-    if (idx < 0) return;
-    selectTrack(Math.floor(idx / (STEPS + 1)));
-  });
-
-  function trackBase(i) { return 12 * (tracks[i].patch.octave + 1); }
-  function stepDur() { return 60 / master.bpm / 4; }  // double-croche
-
-  function seqScheduler() {
-    while (nextStepTime < ctx.currentTime + 0.12) {
-      const solos = anySolo();
-      const pat = livePattern();
-      const sd = stepDur();
-      // swing : un pas sur deux glisse vers l'arrière, sans dériver l'horloge
-      const when = nextStepTime + (seqStep % 2 ? master.swing * sd : 0);
-      tracks.forEach((tr, i) => {
-        const v = patterns[pat][i][seqStep % tr.len];
-        if (v === null || v === undefined) return;
-        if (tr.mute || (solos && !tr.solo)) return;
-        playNote(i, trackBase(i) + noteOf(v), when, sd * 0.6, isAccent(v));
-      });
-      // le motif et la position dans la chaîne voyagent avec le pas : l'affichage
-      // les rejouera au bon moment, en retard sur la planification
-      stepQueue.push({ step: seqStep, time: when, pattern: pat, pos: chainPos });
-      nextStepTime += sd;
-      // seqStep ne se remet jamais à zéro : c'est lui qui décale les pistes de
-      // longueurs différentes d'une mesure à l'autre
-      seqStep++;
-      if (seqStep % STEPS === 0 && songMode && chain.length) {
-        chainPos = (chainPos + 1) % chain.length;
-      }
-    }
-  }
-
-  // Chaque piste avance à son propre rythme quand les longueurs diffèrent :
-  // la bande de résumé montre donc une tête de lecture par piste, et la grille
-  // détaillée celle de la piste affichée.
-  function setPlayhead(step) {
-    if (step === playheadStep) return;
-    playheadStep = step;
-    document.querySelectorAll(".playhead").forEach(el => el.classList.remove("playhead"));
-    if (step < 0) return;
-    for (let i = 0; i < tracks.length; i++) {
-      ovCells[i][step % tracks[i].len].classList.add("playhead");
-    }
-    const col = step % tracks[currentTrack].len;
-    for (let o = 0; o < ROWS; o++) seqCells[col][o].classList.add("playhead");
-  }
-
-  const seqPlayBtn = document.getElementById("seqPlay");
-
-  function seqStart() {
-    initAudio();
-    seqPlaying = true;
-    seqStep = 0;
-    chainPos = 0;
-    nextStepTime = ctx.currentTime + 0.05;
-    stepQueue = [];
-    seqTimer = setInterval(seqScheduler, 25);
-    seqScheduler();
-    seqPlayBtn.innerHTML = "&#9632; Stop";
-    seqPlayBtn.classList.add("selected");
-  }
-
-  function seqStop() {
-    seqPlaying = false;
-    if (seqTimer) { clearInterval(seqTimer); seqTimer = null; }
-    stepQueue = [];
-    setPlayhead(-1);
-    livePat = -1;
-    refreshChain();
-    refreshPatternButtons();
-    seqPlayBtn.innerHTML = "&#9654; Lecture";
-    seqPlayBtn.classList.remove("selected");
-  }
-
-  seqPlayBtn.addEventListener("click", () => seqPlaying ? seqStop() : seqStart());
-  document.getElementById("seqClear").addEventListener("click", () => {
-    editData(currentTrack).fill(null);
-    refreshSeqGrid();
-    markDirty();
-  });
-
-  // ------- Motifs et chaîne -------
-  let livePat = -1, livePos = -1;   // ce qui sort des haut-parleurs à l'instant
-  const patBtnsEl = document.getElementById("patternBtns");
-  const chainEl = document.getElementById("chain");
-  const chainAddEl = document.getElementById("chainAdd");
-  const modeLoopBtn = document.getElementById("modeLoop");
-  const modeSongBtn = document.getElementById("modeSong");
-  const followBtn = document.getElementById("followBtn");
-  const dupBtn = document.getElementById("dupBtn");
-  const patLabels = document.querySelectorAll(".pattern-target");
-
-  const patternIsEmpty = p => patterns[p].every(d => d.every(v => v === null || v === undefined));
-
-  function buildPatternBar() {
-    patBtnsEl.innerHTML = "";
-    chainAddEl.innerHTML = "";
-    PATTERN_NAMES.forEach((name, p) => {
-      const b = document.createElement("button");
-      b.className = "pat-btn";
-      b.textContent = name;
-      b.title = "Éditer le motif " + name;
-      b.addEventListener("click", () => selectPattern(p));
-      patBtnsEl.appendChild(b);
-
-      const add = document.createElement("button");
-      add.className = "pat-add";
-      add.textContent = "+" + name;
-      add.title = "Ajouter " + name + " à la chaîne";
-      add.addEventListener("click", () => {
-        if (chain.length >= CHAIN_MAX) return;
-        chain.push(p);
-        refreshChain();
-        markDirty();
-      });
-      chainAddEl.appendChild(add);
-    });
-    refreshPatternButtons();
-  }
-
-  function refreshPatternButtons() {
-    [...patBtnsEl.children].forEach((b, p) => {
-      b.classList.toggle("selected", p === editPattern);
-      b.classList.toggle("vide", patternIsEmpty(p));
-      b.classList.toggle("live", seqPlaying && p === livePat);
-    });
-    patLabels.forEach(el => el.textContent = PATTERN_NAMES[editPattern]);
-  }
-
-  function selectPattern(p, fromPlayback) {
-    if (p === editPattern) return;
-    editPattern = p;
-    refreshPatternButtons();
-    refreshSeqGrid();
-    // l'auto-suivi n'est pas une intention de l'utilisateur : il ne réécrit pas l'URL
-    if (!fromPlayback) markDirty();
-  }
-
-  function refreshChain() {
-    chainEl.innerHTML = "";
-    if (!chain.length) {
-      const vide = document.createElement("span");
-      vide.className = "chain-empty";
-      vide.textContent = "vide — ajoutez des motifs";
-      chainEl.appendChild(vide);
-      return;
-    }
-    chain.forEach((p, i) => {
-      const chip = document.createElement("button");
-      chip.className = "chain-chip";
-      chip.textContent = PATTERN_NAMES[p];
-      chip.title = "Retirer de la chaîne";
-      chip.classList.toggle("now", seqPlaying && songMode && i === livePos);
-      chip.addEventListener("click", () => {
-        chain.splice(i, 1);
-        refreshChain();
-        markDirty();
-      });
-      chainEl.appendChild(chip);
-    });
-  }
-
-  function setSongMode(on) {
-    songMode = on;
-    modeLoopBtn.classList.toggle("selected", !on);
-    modeSongBtn.classList.toggle("selected", on);
-    followBtn.disabled = !on;
-    if (seqPlaying) { chainPos = 0; }
-    refreshChain();
-    markDirty();
-  }
-
-  modeLoopBtn.addEventListener("click", () => setSongMode(false));
-  modeSongBtn.addEventListener("click", () => setSongMode(true));
-
-  followBtn.addEventListener("click", () => {
-    followPlayback = !followPlayback;
-    followBtn.classList.toggle("selected", followPlayback);
-  });
-
-  document.getElementById("chainClear").addEventListener("click", () => {
-    chain = [];
-    refreshChain();
-    markDirty();
-  });
-
-  // Duplique le motif courant dans le premier emplacement libre
-  dupBtn.addEventListener("click", () => {
-    const target = PATTERN_NAMES.findIndex((n, p) => p !== editPattern && patternIsEmpty(p));
-    if (target < 0) {
-      dupBtn.textContent = "Aucun libre";
-      setTimeout(() => dupBtn.textContent = "Dupliquer", 1600);
-      return;
-    }
-    patterns[target] = patterns[editPattern].map(d => d.slice());
-    selectPattern(target);
-  });
-
-  // ------- Bibliothèque : chargement d'un morceau -------
-  function applySong(song) {
-    master.bpm = song.bpm;
-    if (song.echo) {
-      master.echoMix = song.echo[0];
-      master.echoTime = song.echo[1];
-      master.echoFb = song.echo[2];
-    }
-    master.arpMode = "off";
-    master.swing = song.swing || 0;
-    song.tracks.forEach((t, i) => {
-      const patch = patchFrom(t.preset);
-      // tout réglage nommé explicitement dans le morceau corrige le preset
-      PATCH_KEYS.forEach(k => { if (t[k] !== undefined) patch[k] = t[k]; });
-      patch.preset = matchPreset(patch);
-      tracks[i].patch = patch;
-      if (t.vol !== undefined) tracks[i].vol = t.vol;
-      tracks[i].len = t.len || STEPS;
-      tracks[i].mute = false;
-      tracks[i].solo = false;
-      for (let p = 0; p < PATTERN_COUNT; p++) patterns[p][i] = decodeSteps(t.pats[p]);
-    });
-    chain = String(song.chain || "0").split("")
-      .map(c => parseInt(c, 10))
-      .filter(n => Number.isInteger(n) && n >= 0 && n < PATTERN_COUNT)
-      .slice(0, CHAIN_MAX);
-    editPattern = 0;
-    currentTrack = 0;
-    chainPos = 0;
-    songMode = chain.length > 1;
-  }
-
-  // Remet toute l'interface en phase avec l'état, après un chargement complet
-  function refreshAllFromState() {
-    ["volume", "echoMix", "echoTime", "echoFb", "bpm", "arpRate", "swing"]
-      .forEach(k => setSlider(k, master[k]));
-    document.getElementById("arpMode").value = master.arpMode;
-    applyTrackSelectionUI();
-    buildMixer();
-    refreshPatternButtons();
-    refreshSeqGrid();
-    refreshChain();
-    modeLoopBtn.classList.toggle("selected", !songMode);
-    modeSongBtn.classList.toggle("selected", songMode);
-    followBtn.disabled = !songMode;
-    loadPatchIntoControls();
-    refreshKeyLabels();
-    refreshTrackGains();
-    tracks.forEach((tr, i) => applyPatchToNodes(i));
-  }
-
-  function loadSong(song) {
-    const wasPlaying = seqPlaying;
-    if (wasPlaying) seqStop();
-    allNotesOff(); held = []; stopArp();
-
-    // l'état précédent reste dans l'historique : Retour annule le chargement
-    const before = "#" + encodeState();
-    applySong(song);
-    refreshAllFromState();
-    if (!urlBroken) {
-      try {
-        history.replaceState(null, "", before);
-        history.pushState(null, "", "#" + encodeState());
-      } catch (e) { urlBroken = true; }
-    }
-    if (wasPlaying) seqStart();
-  }
-
-  const songsEl = document.getElementById("songs");
-
-  function buildSongBar() {
-    songsEl.innerHTML = "";
-    SONGS.forEach(song => {
-      const b = document.createElement("button");
-      b.textContent = song.name;
-      b.title = song.name + " — " + song.bpm + " BPM";
-      b.addEventListener("click", () => loadSong(song));
-      songsEl.appendChild(b);
-    });
-  }
-
-  // ------- Enregistrement au clavier -------
-  // Armé, il écrit dans le motif affiché ce qu'on joue : quantifié sur le pas
-  // le plus proche pendant la lecture, sinon pas à pas sous un curseur.
-  let recArmed = false, writeStep = 0, lastStepTime = 0;
-  const armBtn = document.getElementById("armBtn");
-
-  function setArmed(on) {
-    recArmed = on;
-    armBtn.classList.toggle("rec-on", on);
-    armBtn.textContent = on ? "Écriture…" : "Enreg. clavier";
-    if (on && !seqPlaying) writeStep = 0;
-    refreshSeqGrid();
-  }
-
-  armBtn.addEventListener("click", () => setArmed(!recArmed));
-
-  function captureNote(midi) {
-    if (!recArmed) return;
-    const off = midi - baseMidi();
-    // le motif ne couvre qu'une octave : la seconde s'y replie
-    const note = off > 12 ? off - 12 : off;
-    if (note < 0 || note > 12) return;
-    const len = tracks[currentTrack].len;
-    const data = editData(currentTrack);
-    let s;
-    if (seqPlaying) {
-      const sd = stepDur();
-      const late = ctx.currentTime - lastStepTime;
-      s = playheadStep + (late > sd / 2 ? 1 : 0);
-    } else {
-      s = writeStep;
-      writeStep = (writeStep + 1) % len;
-    }
-    data[((s % len) + len) % len] = note;
-    refreshSeqGrid();
-    markDirty();
-  }
-
-  function moveWriteStep(delta, erase) {
-    const len = tracks[currentTrack].len;
-    writeStep = ((writeStep + delta) % len + len) % len;
-    if (erase) { editData(currentTrack)[writeStep] = null; markDirty(); }
-    refreshSeqGrid();
-  }
-
-  // ------- Annuler / Rétablir -------
-  // Les états sont conservés sous leur forme encodée : la même chaîne que
-  // celle de l'URL, donc rien de neuf à sérialiser.
-  const HISTORY_MAX = 60;
-  let undoStack = [], redoStack = [], lastSnapshot = null;
-  // L'instantané est différé de 250 ms : un simple drapeau synchrone serait déjà
-  // retombé quand il s'exécute. On neutralise donc la prochaine sauvegarde, et
-  // c'est elle qui lève la consigne.
-  let suppressSnapshot = false;
-
-  function applyEncoded(str) {
-    suppressSnapshot = true;
-    const wasPlaying = seqPlaying;
-    if (wasPlaying) seqStop();
-    allNotesOff(); held = []; stopArp();
-    decodeState(str);
-    refreshAllFromState();
-    lastSnapshot = encodeState();
-    if (!urlBroken) {
-      try { history.replaceState(null, "", "#" + lastSnapshot); } catch (e) { urlBroken = true; }
-    }
-    if (wasPlaying) seqStart();
-    refreshHistoryButtons();
-  }
-
-  function undo() {
-    if (!undoStack.length) return;
-    redoStack.push(lastSnapshot);
-    applyEncoded(undoStack.pop());
-  }
-
-  function redo() {
-    if (!redoStack.length) return;
-    undoStack.push(lastSnapshot);
-    applyEncoded(redoStack.pop());
-  }
-
-  function refreshHistoryButtons() {
-    undoBtn.disabled = !undoStack.length;
-    redoBtn.disabled = !redoStack.length;
-  }
-
-  const undoBtn = document.getElementById("undoBtn");
-  const redoBtn = document.getElementById("redoBtn");
-  undoBtn.addEventListener("click", undo);
-  redoBtn.addEventListener("click", redo);
-
-  // ------- Outils de motif -------
-  // Agissent sur la piste sélectionnée du motif affiché, dans sa longueur utile.
-  function patternSlice() {
-    return { data: editData(currentTrack), len: tracks[currentTrack].len };
-  }
-
-  function rotatePattern(delta) {
-    const { data, len } = patternSlice();
-    const head = data.slice(0, len);
-    const out = head.map((_, k) => head[((k - delta) % len + len) % len]);
-    for (let k = 0; k < len; k++) data[k] = out[k];
-    refreshSeqGrid();
-    markDirty();
-  }
-
-  function transposePattern(delta) {
-    const { data, len } = patternSlice();
-    const notes = [];
-    for (let k = 0; k < len; k++) {
-      const v = data[k];
-      if (v === null || v === undefined) continue;
-      const n = noteOf(v) + delta;
-      if (n < 0 || n > 12) {   // refuse plutôt que d'écraser les extrêmes
-        flashTool("Hors grille");
-        return;
-      }
-      notes.push([k, n + (isAccent(v) ? ACCENT : 0)]);
-    }
-    notes.forEach(([k, v]) => data[k] = v);
-    refreshSeqGrid();
-    markDirty();
-  }
-
-  function reversePattern() {
-    const { data, len } = patternSlice();
-    const head = data.slice(0, len).reverse();
-    for (let k = 0; k < len; k++) data[k] = head[k];
-    refreshSeqGrid();
-    markDirty();
-  }
-
-  let toolTimer = null;
-  const toolMsg = document.getElementById("toolMsg");
-  function flashTool(msg) {
-    toolMsg.textContent = msg;
-    clearTimeout(toolTimer);
-    toolTimer = setTimeout(() => toolMsg.textContent = "", 1600);
-  }
-
-  document.getElementById("rotL").addEventListener("click", () => rotatePattern(-1));
-  document.getElementById("rotR").addEventListener("click", () => rotatePattern(1));
-  document.getElementById("trDown").addEventListener("click", () => transposePattern(-1));
-  document.getElementById("trUp").addEventListener("click", () => transposePattern(1));
-  document.getElementById("revBtn").addEventListener("click", reversePattern);
-
-  // ------- Export WAV hors ligne -------
-  // Le morceau est rendu plus vite que le temps réel dans un contexte hors
-  // ligne, avec le même graphe : le fichier est donc identique à ce qu'on
-  // entend, sans devoir attendre la durée du morceau.
-  function songBars() {
-    return (songMode && chain.length) ? chain.length : 4;
-  }
-
-  function renderTail() {
-    // de quoi laisser mourir la plus longue relâche, plus les répétitions d'écho
-    const longest = Math.max(...tracks.map(t => t.patch.release));
-    return longest + (master.echoMix > 0 ? master.echoTime * 6 : 0) + 0.3;
-  }
-
-  async function renderSong() {
-    const rate = 44100;
-    const sd = 60 / master.bpm / 4;
-    const bars = songBars();
-    const total = bars * STEPS * sd + renderTail();
-    const OfflineCtx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
-    const octx = new OfflineCtx(2, Math.ceil(total * rate), rate);
-    const orig = createRig(octx, false);
-
-    const solos = anySolo();
-    for (let step = 0; step < bars * STEPS; step++) {
-      const pat = (songMode && chain.length)
-        ? chain[Math.floor(step / STEPS) % chain.length] : editPattern;
-      const when = step * sd + (step % 2 ? master.swing * sd : 0);
-      tracks.forEach((tr, i) => {
-        const v = patterns[pat][i][step % tr.len];
-        if (v === null || v === undefined) return;
-        if (tr.mute || (solos && !tr.solo)) return;
-        playOn(orig, i, trackBase(i) + noteOf(v), when, sd * 0.6, isAccent(v));
-      });
-    }
-    return octx.startRendering();
-  }
-
-  // AudioBuffer -> fichier WAV 16 bits
-  function encodeWav(buffer) {
-    const chans = buffer.numberOfChannels, frames = buffer.length;
-    const bytes = 44 + frames * chans * 2;
-    const view = new DataView(new ArrayBuffer(bytes));
-    const str = (off, s) => { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); };
-    str(0, "RIFF"); view.setUint32(4, bytes - 8, true); str(8, "WAVE");
-    str(12, "fmt "); view.setUint32(16, 16, true);
-    view.setUint16(20, 1, true); view.setUint16(22, chans, true);
-    view.setUint32(24, buffer.sampleRate, true);
-    view.setUint32(28, buffer.sampleRate * chans * 2, true);
-    view.setUint16(32, chans * 2, true); view.setUint16(34, 16, true);
-    str(36, "data"); view.setUint32(40, frames * chans * 2, true);
-
-    const data = [];
-    for (let c = 0; c < chans; c++) data.push(buffer.getChannelData(c));
-    let off = 44;
-    for (let i = 0; i < frames; i++) {
-      for (let c = 0; c < chans; c++) {
-        const x = Math.max(-1, Math.min(1, data[c][i]));
-        view.setInt16(off, x < 0 ? x * 0x8000 : x * 0x7fff, true);
-        off += 2;
-      }
-    }
-    return new Blob([view], { type: "audio/wav" });
-  }
-
-  function downloadBlob(blob, name) {
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = name;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-  }
-
-  const wavBtn = document.getElementById("wavBtn");
-  wavBtn.addEventListener("click", async () => {
-    const label = wavBtn.innerHTML;
-    wavBtn.disabled = true;
-    wavBtn.textContent = "Rendu…";
-    try {
-      const buf = await renderSong();
-      downloadBlob(encodeWav(buf), "synthe-8bit.wav");
-      wavBtn.textContent = "Exporté !";
-    } catch (e) {
-      wavBtn.textContent = "Échec du rendu";
-    }
-    setTimeout(() => { wavBtn.innerHTML = label; wavBtn.disabled = false; }, 1600);
-  });
-
-  // ------- Enregistrement -------
-  let recorder = null, recChunks = [];
-  const recBtn = document.getElementById("recBtn");
-
-  recBtn.addEventListener("click", () => {
-    initAudio();
-    if (recorder && recorder.state === "recording") { recorder.stop(); return; }
-    if (typeof MediaRecorder === "undefined") { recBtn.textContent = "Non supporté"; return; }
-    recChunks = [];
-    recorder = new MediaRecorder(recDest.stream);
-    recorder.ondataavailable = e => { if (e.data.size) recChunks.push(e.data); };
-    recorder.onstop = () => {
-      const blob = new Blob(recChunks, { type: recorder.mimeType || "audio/webm" });
-      const ext = (recorder.mimeType || "").includes("ogg") ? "ogg" : "webm";
-      downloadBlob(blob, "synthe-8bit." + ext);
-      recBtn.innerHTML = "&#9679; Capturer";
-      recBtn.classList.remove("rec-on");
-    };
-    recorder.start();
-    recBtn.innerHTML = "&#9632; Stop + fichier";
-    recBtn.classList.add("rec-on");
-  });
-
-  // ------- Clavier virtuel -------
-  const kbEl = document.getElementById("keyboard");
-  const keyEls = new Map();
-  const BLACK = new Set([1, 3, 6, 8, 10]);
-
-  function baseMidi() { return trackBase(currentTrack); }
-
-  function buildKeyboard() {
-    kbEl.innerHTML = "";
-    keyEls.clear();
-    const whiteWidth = 100 / 15;
-    let whiteIndex = 0;
-    for (let i = 0; i < KEY_COUNT; i++) {
-      const semitone = i % 12;
-      const el = document.createElement("div");
-      el.dataset.offset = i;
-      if (BLACK.has(semitone)) {
-        el.className = "key black";
-        el.style.left = (whiteIndex * whiteWidth - 2.1) + "%";
-      } else {
-        el.className = "key";
-        whiteIndex++;
-      }
-      kbEl.appendChild(el);
-      keyEls.set(i, el);
-    }
-    refreshKeyLabels();
-  }
-
-  function refreshKeyLabels() {
-    const oct = tracks[currentTrack].patch.octave;
-    keyEls.forEach((el, i) => {
-      const semitone = i % 12;
-      if (!BLACK.has(semitone)) {
-        el.textContent = NOTE_NAMES[semitone] + (semitone === 0 ? oct + Math.floor(i / 12) : "");
-      }
-    });
-  }
-
-  function setKeyVisual(midi, on) {
-    const el = keyEls.get(midi - baseMidi());
-    if (el) el.classList.toggle("active", on);
-  }
-
-  let pointerDown = false, pointerNote = null;
-
-  function keyFromEvent(e) {
-    const el = document.elementFromPoint(e.clientX, e.clientY);
-    if (el && el.classList.contains("key")) return baseMidi() + Number(el.dataset.offset);
-    return null;
-  }
-
-  kbEl.addEventListener("pointerdown", e => {
-    e.preventDefault();
-    pointerDown = true;
-    const n = keyFromEvent(e);
-    if (n !== null) { pointerNote = n; pressNote(n); }
-  });
-  window.addEventListener("pointermove", e => {
-    if (!pointerDown) return;
-    const n = keyFromEvent(e);
-    if (n !== pointerNote) {
-      if (pointerNote !== null) releaseNote(pointerNote);
-      pointerNote = n;
-      if (n !== null) pressNote(n);
-    }
-  });
-  window.addEventListener("pointerup", () => {
-    pointerDown = false;
-    if (pointerNote !== null) { releaseNote(pointerNote); pointerNote = null; }
-  });
-
-  // Clavier physique (positions : compatible AZERTY/QWERTY)
-  const KEYMAP = {
-    KeyA: 0, KeyW: 1, KeyS: 2, KeyE: 3, KeyD: 4, KeyF: 5, KeyT: 6,
-    KeyG: 7, KeyY: 8, KeyH: 9, KeyU: 10, KeyJ: 11, KeyK: 12, KeyO: 13,
-    KeyL: 14, KeyP: 15, Semicolon: 16, Quote: 17
-  };
-  const downKeys = new Set();
-
-  window.addEventListener("keydown", e => {
-    if (e.repeat) return;
-    const tag = e.target.tagName;
-    if (tag === "INPUT" || tag === "SELECT") return;
-    // un modificateur signe un raccourci, pas une note
-    const mod = e.ctrlKey || e.metaKey || e.altKey;
-    if (!mod && e.code in KEYMAP && !downKeys.has(e.code)) {
-      e.preventDefault();
-      downKeys.add(e.code);
-      pressNote(baseMidi() + KEYMAP[e.code]);
-    } else if (!mod && e.code === "KeyZ") shiftOctave(-1);
-    else if (!mod && e.code === "KeyX") shiftOctave(1);
-    else if (e.code === "KeyZ" && (e.ctrlKey || e.metaKey)) {
-      e.preventDefault();
-      e.shiftKey ? redo() : undo();
-    }
-    else if (e.code === "KeyY" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); redo(); }
-    else if (e.code === "Space") { e.preventDefault(); seqPlaying ? seqStop() : seqStart(); }
-    else if (e.code === "ArrowRight" && recArmed) { e.preventDefault(); moveWriteStep(1, false); }
-    else if (e.code === "ArrowLeft" && recArmed) { e.preventDefault(); moveWriteStep(-1, true); }
-    else if (e.code === "Digit1" || e.code === "Numpad1") selectTrack(0);
-    else if (e.code === "Digit2" || e.code === "Numpad2") selectTrack(1);
-    else if (e.code === "Digit3" || e.code === "Numpad3") selectTrack(2);
-  });
-  window.addEventListener("keyup", e => {
-    if (e.code in KEYMAP && downKeys.has(e.code)) {
-      downKeys.delete(e.code);
-      releaseNote(baseMidi() + KEYMAP[e.code]);
-    }
-  });
-  window.addEventListener("blur", () => { downKeys.clear(); held = []; stopArp(); allNotesOff(); });
-
-  // ------- Contrôles -------
-  const sliders = {};
-  // Vrai pendant qu'on recopie un patch dans les contrôles : les curseurs ne
-  // doivent alors pas réécrire dans le patch ni le marquer comme personnalisé.
-  // Reste vrai jusqu'au premier loadPatchIntoControls() pour que les valeurs
-  // par défaut du HTML n'écrasent pas le patch de la piste 1.
-  let loadingPatch = true;
-
-  function bindSlider(id, fmt, apply) {
-    const input = document.getElementById(id);
-    const out = document.getElementById(id + "Out");
-    sliders[id] = input;
-    const update = () => {
-      const v = Number(input.value);
-      out.textContent = fmt(v);
-      apply(v);
-    };
-    input.addEventListener("input", update);
-    update();
-  }
-
-  function setSlider(id, value) {
-    sliders[id].value = value;
-    sliders[id].dispatchEvent(new Event("input"));
-  }
-
-  const ms = v => v < 1 ? Math.round(v * 1000) + "ms" : v.toFixed(2) + "s";
-  const pct = v => Math.round(v * 100) + "%";
-
-  // Paramètres de piste : écrivent dans le patch de la piste sélectionnée
-  function patchSlider(id, fmt, key, afterApply) {
-    bindSlider(id, fmt, v => {
-      if (loadingPatch) return;
-      tracks[currentTrack].patch[key] = v;
-      markCustom();
-      markDirty();
-      if (afterApply) afterApply();
-    });
-  }
-
-  function markCustom() {
-    tracks[currentTrack].patch.preset = null;
-    refreshMixer();
-    document.querySelectorAll("#presets button").forEach(b => b.classList.remove("selected"));
-  }
-
-  patchSlider("attack", ms, "attack");
-  patchSlider("decay", ms, "decay");
-  patchSlider("sustain", pct, "sustain");
-  patchSlider("release", ms, "release");
-  patchSlider("bits", v => String(v), "bits", () => applyPatchToNodes(currentTrack));
-  patchSlider("vibRate", v => v.toFixed(1) + "Hz", "vibRate", () => applyPatchToNodes(currentTrack));
-  patchSlider("vibDepth", v => String(v), "vibDepth", () => applyPatchToNodes(currentTrack));
-  patchSlider("sweep", v => (v > 0 ? "+" : "") + v, "sweep");
-
-  // Paramètres globaux
-  bindSlider("volume", pct, v => {
-    master.volume = v;
-    if (rig) rig.masterGain.gain.setValueAtTime(v, ctx.currentTime);
-    markDirty();
-  });
-  bindSlider("echoMix", pct, v => {
-    master.echoMix = v;
-    if (rig) rig.delayWet.gain.setValueAtTime(v, ctx.currentTime);
-    markDirty();
-  });
-  bindSlider("echoTime", ms, v => {
-    master.echoTime = v;
-    if (rig) rig.delay.delayTime.setValueAtTime(v, ctx.currentTime);
-    markDirty();
-  });
-  bindSlider("echoFb", pct, v => {
-    master.echoFb = v;
-    if (rig) rig.delayFb.gain.setValueAtTime(v, ctx.currentTime);
-    markDirty();
-  });
-  bindSlider("arpRate", v => v + "Hz", v => { master.arpRate = v; restartArp(); markDirty(); });
-  bindSlider("bpm", v => String(v), v => { master.bpm = v; markDirty(); });
-  bindSlider("swing", v => Math.round(v * 100) + "%", v => { master.swing = v; markDirty(); });
-
-  document.getElementById("arpMode").addEventListener("change", e => {
-    master.arpMode = e.target.value;
-    held = []; stopArp(); allNotesOff();
-    markDirty();
-  });
-
-  function selectWave(wave, silent) {
-    tracks[currentTrack].patch.wave = wave;
-    document.querySelectorAll("#waves button").forEach(b =>
-      b.classList.toggle("selected", b.dataset.wave === wave));
-    if (!silent) { markCustom(); markDirty(); }
-  }
-
-  document.getElementById("waves").addEventListener("click", e => {
-    const btn = e.target.closest("button[data-wave]");
-    if (btn) selectWave(btn.dataset.wave);
-  });
-
-  function setOctave(oct, silent) {
-    const next = Math.min(7, Math.max(0, oct));
-    const patch = tracks[currentTrack].patch;
-    if (next === patch.octave) return;
-    allNotesOff(); held = []; stopArp();
-    patch.octave = next;
-    document.getElementById("octValue").textContent = next;
-    refreshKeyLabels();
-    if (!silent) { markCustom(); markDirty(); }
-  }
-  function shiftOctave(delta) { setOctave(tracks[currentTrack].patch.octave + delta); }
-  document.getElementById("octDown").addEventListener("click", () => shiftOctave(-1));
-  document.getElementById("octUp").addEventListener("click", () => shiftOctave(1));
-
-  // Recharge les contrôles depuis le patch de la piste courante
-  function loadPatchIntoControls() {
-    const patch = tracks[currentTrack].patch;
-    loadingPatch = true;
-    selectWave(patch.wave, true);
-    document.getElementById("octValue").textContent = patch.octave;
-    ["attack", "decay", "sustain", "release", "bits", "vibRate", "vibDepth", "sweep"]
-      .forEach(k => setSlider(k, patch[k]));
-    document.querySelectorAll("#presets button").forEach(b =>
-      b.classList.toggle("selected", b.dataset.preset === patch.preset));
-    loadingPatch = false;
-    applyPatchToNodes(currentTrack);
-  }
-
-  document.getElementById("presets").addEventListener("click", e => {
-    const btn = e.target.closest("button[data-preset]");
-    if (!btn) return;
-    tracks[currentTrack].patch = patchFrom(btn.dataset.preset);
-    loadPatchIntoControls();
-    refreshMixer();
-    refreshKeyLabels();
-    markDirty();
-  });
-
-  // ------- Partage par URL -------
-  // Tout l'état tient dans le fragment, en base 36 :
-  //   #p=2.<bpm>.<vol>.<mix>.<temps>.<retour>.<piste>.<arp>.<arpVit>.<motif>.<mode>
-  //     ~<chaîne>~<piste0>~<piste1>~<piste2>
-  // Une section de piste = ses réglages, puis les 4 motifs concaténés (4 x 16 pas).
-  // La version 1 (une seule grille de 16 pas, pas de chaîne) reste lisible : son
-  // contenu atterrit dans le motif A.
-  const URL_VERSION = 3;
-  // Nombre de champs numériques par piste selon la version : les nouveaux champs
-  // s'ajoutent en fin de liste, donc décoder une ancienne URL revient à s'arrêter
-  // plus tôt et à lire le bloc de motifs à l'index correspondant.
-  const TRACK_FIELDS_BEFORE_V3 = 11;
-  const WAVES = ["square", "pulse25", "pulse125", "triangle", "sawtooth", "noise"];
-  const ARP_MODES = ["off", "up", "down", "updown", "random"];
-  // 13 minuscules pour les hauteurs, 13 majuscules pour les mêmes accentuées,
-  // "-" pour un pas vide. 'b' est un Si, 'B' un Do# accentué : jamais ambigu.
-  const NOTE_CHARS = "0123456789abc" + "ABCDEFGHIJKLM";
-
-  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
-  const b36 = n => Math.round(n).toString(36);
-  // Le champ absent doit rendre la valeur par défaut : sans le garde-fou,
-  // parseInt(undefined, 36) lit la chaîne "undefined" comme un nombre valide.
-  const p36 = (s, def) => {
-    if (typeof s !== "string" || s === "") return def;
-    const n = parseInt(s, 36);
-    return Number.isFinite(n) ? n : def;
-  };
-
-  // Chaque champ de piste : quantification vers l'entier, puis retour
-  const TRACK_FIELDS = [
-    { get: (t) => Math.max(0, WAVES.indexOf(t.patch.wave)),
-      set: (t, n) => t.patch.wave = WAVES[clamp(n, 0, WAVES.length - 1)] },
-    { get: (t) => t.patch.octave,          set: (t, n) => t.patch.octave = clamp(n, 0, 7) },
-    { get: (t) => t.patch.attack * 1000,   set: (t, n) => t.patch.attack = clamp(n, 1, 1000) / 1000 },
-    { get: (t) => t.patch.decay * 1000,    set: (t, n) => t.patch.decay = clamp(n, 1, 1000) / 1000 },
-    { get: (t) => t.patch.sustain * 100,   set: (t, n) => t.patch.sustain = clamp(n, 0, 100) / 100 },
-    { get: (t) => t.patch.release * 100,   set: (t, n) => t.patch.release = clamp(n, 1, 200) / 100 },
-    { get: (t) => t.patch.bits,            set: (t, n) => t.patch.bits = clamp(n, 2, 8) },
-    { get: (t) => t.patch.vibRate * 10,    set: (t, n) => t.patch.vibRate = clamp(n, 5, 120) / 10 },
-    { get: (t) => t.patch.vibDepth / 5,    set: (t, n) => t.patch.vibDepth = clamp(n, 0, 120) * 5 },
-    { get: (t) => t.vol * 100,             set: (t, n) => t.vol = clamp(n, 0, 100) / 100 },
-    { get: (t) => (t.mute ? 1 : 0) | (t.solo ? 2 : 0),
-      set: (t, n) => { t.mute = !!(n & 1); t.solo = !!(n & 2); } },
-    // ---- ajoutés en v3 ----
-    { get: (t) => t.len,                   set: (t, n) => t.len = clamp(n, 1, STEPS) },
-    { get: (t) => t.patch.sweep + 24,      set: (t, n) => t.patch.sweep = clamp(n, 0, 48) - 24 }
-  ];
-
-  const encodeSteps = data =>
-    data.map(v => (v === null || v === undefined) ? "-" : NOTE_CHARS[v]).join("");
-
-  const decodeSteps = str => Array.from({ length: STEPS }, (_, s) => {
-    const idx = NOTE_CHARS.indexOf((str || "")[s]);
-    return idx >= 0 ? idx : null;
-  });
-
-  function encodeState() {
-    const head = [URL_VERSION, master.bpm, master.volume * 100, master.echoMix * 100,
-                  master.echoTime * 100, master.echoFb * 100, currentTrack,
-                  Math.max(0, ARP_MODES.indexOf(master.arpMode)), master.arpRate * 2,
-                  editPattern, songMode ? 1 : 0, master.swing * 100].map(b36).join(".");
-    const body = tracks.map((tr, i) => {
-      const nums = TRACK_FIELDS.map(f => b36(f.get(tr))).join(".");
-      const blob = patterns.map(pat => encodeSteps(pat[i])).join("");
-      return nums + "." + blob;
-    });
-    return "p=" + head + "~" + chain.join("") + "~" + body.join("~");
-  }
-
-  // Retrouve le nom du preset si le patch n'a pas été modifié depuis
-  function matchPreset(patch) {
-    for (const name in PRESETS) {
-      const pre = PRESETS[name];
-      if (PATCH_KEYS.every(k => typeof patch[k] === "number"
-            ? Math.abs(patch[k] - pre[k]) < 1e-6 : patch[k] === pre[k])) return name;
-    }
-    return null;
-  }
-
-  function decodeState(str) {
-    if (!str || str.slice(0, 2) !== "p=") return false;
-    const parts = str.slice(2).split("~");
-    const h = parts[0].split(".");
-    const ver = p36(h[0], -1);
-    if (ver < 1 || ver > URL_VERSION) return false;
-
-    // en v1 les pistes suivent directement l'en-tête, ensuite la chaîne s'intercale
-    const trackParts = parts.slice(ver === 1 ? 1 : 2);
-    const nFields = ver >= 3 ? TRACK_FIELDS.length : TRACK_FIELDS_BEFORE_V3;
-    if (trackParts.length < tracks.length) return false;
-
-    master.bpm = clamp(p36(h[1], 120), 60, 240);
-    master.volume = clamp(p36(h[2], 50), 0, 100) / 100;
-    master.echoMix = clamp(p36(h[3], 12), 0, 80) / 100;
-    master.echoTime = clamp(p36(h[4], 22), 5, 60) / 100;
-    master.echoFb = clamp(p36(h[5], 35), 0, 80) / 100;
-    currentTrack = clamp(p36(h[6], 0), 0, tracks.length - 1);
-    master.arpMode = ARP_MODES[clamp(p36(h[7], 0), 0, ARP_MODES.length - 1)];
-    master.arpRate = clamp(p36(h[8], 16), 4, 32) / 2;
-
-    master.swing = clamp(p36(h[11], 0), 0, 50) / 100;
-
-    if (ver >= 2) {
-      editPattern = clamp(p36(h[9], 0), 0, PATTERN_COUNT - 1);
-      songMode = p36(h[10], 0) === 1;
-      chain = (parts[1] || "").split("")
-        .map(c => parseInt(c, 10))
-        .filter(n => Number.isInteger(n) && n >= 0 && n < PATTERN_COUNT)
-        .slice(0, CHAIN_MAX);
-    } else {
-      editPattern = 0;
-      songMode = false;
-      chain = [0];
-    }
-
-    tracks.forEach((tr, i) => {
-      const f = trackParts[i].split(".");
-      if (f.length < nFields + 1) return;
-      TRACK_FIELDS.slice(0, nFields).forEach((field, k) => {
-        const n = p36(f[k], NaN);
-        if (Number.isFinite(n)) field.set(tr, n);
-      });
-      const blob = f[nFields] || "";
-      for (let p = 0; p < PATTERN_COUNT; p++) {
-        // en v1 le seul motif présent devient A, les autres restent vides
-        const slice = (ver === 1 && p > 0) ? "" : blob.slice(p * STEPS, (p + 1) * STEPS);
-        patterns[p][i] = decodeSteps(slice);
-      }
-      tr.patch.preset = matchPreset(tr.patch);
-    });
-    return true;
-  }
-
-  var urlTimer = null, urlBroken = false;
-
-  function markDirty() {
-    // loadingPatch couvre l'initialisation : rien à écrire tant que l'état
-    // n'est pas complètement chargé
-    if (loadingPatch || urlBroken) return;
-    clearTimeout(urlTimer);
-    urlTimer = setTimeout(() => {
-      const now = encodeState();
-      // une entrée d'historique par changement stabilisé, pas par cran de curseur
-      if (suppressSnapshot) {
-        suppressSnapshot = false;
-      } else if (lastSnapshot !== null && lastSnapshot !== now) {
-        undoStack.push(lastSnapshot);
-        if (undoStack.length > HISTORY_MAX) undoStack.shift();
-        redoStack = [];
-        refreshHistoryButtons();
-      }
-      lastSnapshot = now;
-      try {
-        history.replaceState(null, "", "#" + now);
-      } catch (e) {
-        urlBroken = true;   // certains contextes refusent replaceState (file:// selon le navigateur)
-      }
-    }, 250);
-  }
-
-  function shareUrl() { return location.href.split("#")[0] + "#" + encodeState(); }
-
-  const shareBtn = document.getElementById("shareBtn");
-  let shareTimer = null;
-
-  function flashShare(msg) {
-    shareBtn.textContent = msg;
-    clearTimeout(shareTimer);
-    shareTimer = setTimeout(() => { shareBtn.innerHTML = "&#128279; Partager"; }, 1800);
-  }
-
-  shareBtn.addEventListener("click", async () => {
-    const url = shareUrl();
-    if (!urlBroken) { try { history.replaceState(null, "", "#" + encodeState()); } catch (e) { urlBroken = true; } }
-    try {
-      await navigator.clipboard.writeText(url);
-      flashShare("Lien copié !");
-      return;
-    } catch (e) { /* pas de presse-papiers : on tente la sélection manuelle */ }
-    try {
-      const ta = document.createElement("textarea");
-      ta.value = url;
-      ta.style.cssText = "position:fixed;opacity:0";
-      document.body.appendChild(ta);
-      ta.select();
-      const ok = document.execCommand("copy");
-      ta.remove();
-      flashShare(ok ? "Lien copié !" : "Copiez l'adresse");
-    } catch (e) {
-      flashShare("Copiez l'adresse");
-    }
-  });
-
-  // ------- Oscilloscope -------
-  const scope = document.getElementById("scope");
-  const sctx = scope.getContext("2d");
-
-  function drawIdleScope() {
-    sctx.fillStyle = "#0a0614";
-    sctx.fillRect(0, 0, scope.width, scope.height);
-    sctx.strokeStyle = "#1f8a5c";
-    sctx.lineWidth = 2;
-    sctx.beginPath();
-    sctx.moveTo(0, scope.height / 2);
-    sctx.lineTo(scope.width, scope.height / 2);
-    sctx.stroke();
-  }
-
-  function drawScope() {
-    const data = new Uint8Array(rig.analyser.fftSize);
+  // Deux vignettes animées : une onde carrée crantée pour le chiptune,
+  // un empilement de dents de scie désaccordées pour la trance.
+  const reduce = window.matchMedia
+    && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function setup(id, draw) {
+    const c = document.getElementById(id);
+    if (!c) return;
+    const g = c.getContext("2d");
+    if (reduce) { draw(g, c, 0); return; }
+    let t = 0;
     (function frame() {
       requestAnimationFrame(frame);
-      rig.analyser.getByteTimeDomainData(data);
-      sctx.fillStyle = "#0a0614";
-      sctx.fillRect(0, 0, scope.width, scope.height);
-      sctx.strokeStyle = getComputedStyle(document.documentElement)
-        .getPropertyValue("--t" + currentTrack).trim() || "#00ff9c";
-      sctx.lineWidth = 2;
-      sctx.beginPath();
-      const step = data.length / scope.width;
-      for (let x = 0; x < scope.width; x++) {
-        const v = data[Math.floor(x * step)] / 255;
-        const y = v * scope.height;
-        if (x === 0) sctx.moveTo(x, y); else sctx.lineTo(x, y);
-      }
-      sctx.stroke();
-
-      if (seqPlaying) {
-        while (stepQueue.length && stepQueue[0].time <= ctx.currentTime) {
-          const ev = stepQueue.shift();
-          lastStepTime = ev.time;
-          setPlayhead(ev.step);
-          if (ev.pattern !== livePat || ev.pos !== livePos) {
-            livePat = ev.pattern;
-            livePos = ev.pos;
-            if (songMode && followPlayback) selectPattern(livePat, true);
-            refreshPatternButtons();
-            refreshChain();
-          }
-        }
-      }
+      t += 0.016;
+      draw(g, c, t);
     })();
   }
 
-  // ------- Démarrage -------
-  // Le premier morceau de la bibliothèque sert d'état initial, puis l'URL prend
-  // le dessus si elle en contient un. À faire après le câblage des curseurs,
-  // sinon leurs valeurs par défaut HTML écraseraient ce qu'on vient de charger.
-  applySong(SONGS[0]);
-  decodeState(decodeURIComponent(location.hash.slice(1)));
+  setup("vizChip", (g, c, t) => {
+    g.clearRect(0, 0, c.width, c.height);
+    const mid = c.height / 2;
+    // marches franches, quantifiées : la signature visuelle du 8-bit
+    g.strokeStyle = "#00ff9c";
+    g.lineWidth = 3;
+    g.beginPath();
+    const cols = 44, w = c.width / cols;
+    for (let i = 0; i <= cols; i++) {
+      const phase = i * 0.55 + t * 3.2;
+      const lvl = Math.sign(Math.sin(phase)) * (0.3 + 0.16 * Math.sin(t * 1.3 + i * 0.2));
+      const y = mid - lvl * mid;
+      if (i === 0) g.moveTo(0, y);
+      else { g.lineTo(i * w, g.__lastY !== undefined ? g.__lastY : y); g.lineTo(i * w, y); }
+      g.__lastY = y;
+    }
+    g.stroke();
+    g.strokeStyle = "rgba(255,79,216,.5)";
+    g.lineWidth = 1;
+    g.beginPath();
+    g.moveTo(0, mid); g.lineTo(c.width, mid);
+    g.stroke();
+  });
 
-  ["volume", "echoMix", "echoTime", "echoFb", "bpm", "arpRate", "swing"]
-    .forEach(k => setSlider(k, master[k]));
-  document.getElementById("arpMode").value = master.arpMode;
-
-  applyTrackSelectionUI();
-  buildSongBar();
-  buildMixer();
-  buildOverview();
-  buildKeyboard();
-  buildPatternBar();
-  buildSeqGrid();
-  refreshChain();
-  setSongMode(songMode);
-  followBtn.classList.toggle("selected", followPlayback);
-  loadPatchIntoControls();
-  lastSnapshot = encodeState();
-  refreshHistoryButtons();
-  drawIdleScope();
-  window.addEventListener("pointerdown", initAudio, { once: false });
-
-  // Lien collé dans la barre d'adresse d'un onglet déjà ouvert
-  window.addEventListener("hashchange", () => {
-    if (decodeState(decodeURIComponent(location.hash.slice(1)))) location.reload();
+  setup("vizTr", (g, c, t) => {
+    g.clearRect(0, 0, c.width, c.height);
+    const mid = c.height / 2;
+    const grad = g.createLinearGradient(0, 0, c.width, 0);
+    grad.addColorStop(0, "#4fd6ff");
+    grad.addColorStop(1, "#a56bff");
+    g.strokeStyle = grad;
+    // sept dents de scie légèrement désaccordées, comme le supersaw
+    for (let v = 0; v < 7; v++) {
+      g.globalAlpha = v === 3 ? 0.95 : 0.32;
+      g.lineWidth = v === 3 ? 2.2 : 1;
+      g.beginPath();
+      const det = (v - 3) * 0.012;
+      for (let x = 0; x <= c.width; x += 2) {
+        const u = x / c.width;
+        const ph = (u * 6 * (1 + det) + t * 0.8) % 1;
+        const env = 0.32 + 0.2 * Math.sin(t * 0.9 + u * 3);
+        g.lineTo(x, mid - (ph * 2 - 1) * mid * env);
+      }
+      g.stroke();
+    }
+    g.globalAlpha = 1;
   });
 })();
 </script>
