@@ -168,6 +168,12 @@
     button.rec-on { animation: none; }
   }
 
+  /* --- Bibliothèque --- */
+  .songs { margin-bottom: 12px; }
+  .song-bar { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .song-bar button { flex: 1 1 auto; min-width: 84px; }
+  .song-bar button:last-child { color: var(--dim); border-style: dashed; }
+
   /* --- Pistes --- */
   .mixer { margin-bottom: 12px; }
   .track-row {
@@ -369,6 +375,16 @@
   <div class="console">
     <canvas id="scope" width="920" height="110"></canvas>
 
+    <fieldset class="songs">
+      <legend>Morceaux</legend>
+      <div class="song-bar" id="songs"></div>
+      <div class="hint" style="text-align:left; margin-top:8px">
+        Six morceaux prêts à jouer : chargez-en un, appuyez sur <b>Lecture</b>,
+        puis triturez tout ce que vous voulez. <b>Vierge</b> repart de zéro, et
+        le bouton <b>Retour</b> du navigateur annule un chargement.
+      </div>
+    </fieldset>
+
     <fieldset class="mixer">
       <legend>Pistes</legend>
       <div id="mixer"></div>
@@ -532,7 +548,92 @@
     return out;
   }
 
-  const _ = null; // pas vide, pour lire les motifs de démo
+  // ------- Motifs -------
+  const PATTERN_NAMES = ["A", "B", "C", "D"];
+  const PATTERN_COUNT = PATTERN_NAMES.length;
+  const CHAIN_MAX = 32;
+  const empty16 = () => new Array(STEPS).fill(null);
+
+  // ------- Bibliothèque de morceaux -------
+  // Un motif s'écrit comme dans les liens partagés : 16 caractères, un par pas.
+  // 0123456789abc = Do Do# Ré Ré# Mi Fa Fa# Sol Sol# La La# Si Do+, "-" = silence.
+  // Une piste choisit un preset et peut en corriger n'importe quel réglage.
+  // echo = [mix, temps, retour] ; chain = l'ordre des motifs en mode morceau.
+  const SONGS = [
+    {
+      name: "Balade", bpm: 120, echo: [0.12, 0.22, 0.35], chain: "0012",
+      tracks: [
+        { preset: "leadgb", octave: 4, vol: 0.8, pats: [
+          "047c047c959c7420", "cb97579bc-b-9-7-", "7---5---4---2---", ""] },
+        { preset: "basse", octave: 2, vol: 0.9, pats: [
+          "0--05--59--97-7-", "5-5-5--59-9-7-77", "0-------7-------", ""] },
+        { preset: "percu", octave: 3, vol: 0.7, pats: [
+          "0-c-0-cc0-c-0cc-", "0cc-0-cc0cc-0c0c", "----0-------0--c", ""] }
+      ]
+    },
+    {
+      name: "Aventure", bpm: 138, echo: [0.16, 0.18, 0.3], chain: "001102",
+      tracks: [
+        { preset: "leadgb", octave: 5, vol: 0.8, pats: [
+          "0-4-7-c-b-9-7-4-", "579bc-b97-579---", "9--7--5-4--2--0-", ""] },
+        { preset: "basse", octave: 2, vol: 0.9, pats: [
+          "0--07--79--95--5", "0-0-7-7-9-9-5-5-", "0-------7-------", ""] },
+        { preset: "percu", octave: 3, vol: 0.7, pats: [
+          "0-c-0-cc0-c-0-c-", "0-cc0-cc0-cc0ccc", "0-------0-----c-", ""] }
+      ]
+    },
+    {
+      name: "Donjon", bpm: 100, echo: [0.4, 0.3, 0.5], chain: "001122",
+      tracks: [
+        { preset: "cristal", octave: 5, vol: 0.75, pats: [
+          "0--3--5--7--5-3-", "7--8--7--5--3-0-", "c--a--8--7------", ""] },
+        { preset: "basse", octave: 2, vol: 0.95, bits: 5, pats: [
+          "0---8---3---a---", "0-0-8-8-3-3-a-a-", "0-------8-------", ""] },
+        { preset: "percu", octave: 2, vol: 0.6, pats: [
+          "0---0---0---0-c-", "0--c0--c0--c0ccc", "0-------0-------", ""] }
+      ]
+    },
+    {
+      name: "Course", bpm: 176, echo: [0.1, 0.12, 0.25], chain: "0011002",
+      tracks: [
+        { preset: "leadgb", octave: 5, vol: 0.8, pats: [
+          "047904790479c974", "579b579b579bc-b9", "c-9-7-4-2-0-----", ""] },
+        { preset: "basse", octave: 2, vol: 0.95, pats: [
+          "0-0-0-0-5-5-7-7-", "9-9-9-9-5-5-7-7-", "0---------------", ""] },
+        { preset: "percu", octave: 3, vol: 0.65, pats: [
+          "0c0c0c0c0c0c0c0c", "0ccc0ccc0ccc0ccc", "0---0---0---0---", ""] }
+      ]
+    },
+    {
+      name: "Boss", bpm: 152, echo: [0.14, 0.15, 0.3], chain: "001122",
+      tracks: [
+        { preset: "leadgb", octave: 4, vol: 0.85, bits: 3, pats: [
+          "0-1-0-1-3-2-3-2-", "7-8-7-8-a-8-7-5-", "c-b-a-8-7-5-3-0-", ""] },
+        { preset: "basse", octave: 1, vol: 1, bits: 4, pats: [
+          "0-0-0-0-1-1-0-0-", "5-5-5-5-3-3-0-0-", "0-0-0-0-0-0-0-0-", ""] },
+        { preset: "percu", octave: 3, vol: 0.75, pats: [
+          "0c0c0-cc0c0c0ccc", "0c0c0-cc0ccc0ccc", "0-0-0-0-0-0-0000", ""] }
+      ]
+    },
+    {
+      name: "Berceuse", bpm: 76, echo: [0.45, 0.34, 0.5], chain: "0012",
+      tracks: [
+        { preset: "cristal", octave: 6, vol: 0.7, pats: [
+          "c-----9-----7---", "9-----7-----5---", "5---4---2---0---", ""] },
+        { preset: "basse", octave: 3, vol: 0.6, wave: "triangle", pats: [
+          "0-------5-------", "9-------5-------", "0-------7-------", ""] },
+        { preset: "percu", octave: 3, vol: 0.5, pats: ["", "", "", ""] }
+      ]
+    },
+    {
+      name: "Vierge", bpm: 120, echo: [0.12, 0.22, 0.35], chain: "0",
+      tracks: [
+        { preset: "leadgb", octave: 4, vol: 0.8, pats: ["", "", "", ""] },
+        { preset: "basse", octave: 2, vol: 0.9, pats: ["", "", "", ""] },
+        { preset: "percu", octave: 3, vol: 0.7, pats: ["", "", "", ""] }
+      ]
+    }
+  ];
 
   // ------- Pistes -------
   // L'instrument appartient à la piste, les notes appartiennent au motif :
@@ -544,28 +645,12 @@
   ];
   let currentTrack = 0;
 
-  // ------- Motifs -------
-  const PATTERN_NAMES = ["A", "B", "C", "D"];
-  const PATTERN_COUNT = PATTERN_NAMES.length;
-  const CHAIN_MAX = 32;
-  const empty16 = () => new Array(STEPS).fill(null);
-
-  // patterns[motif][piste] = 16 pas. Morceau de démo sur A, B et C.
-  const patterns = [
-    [ [0, 4, 7, 12, 0, 4, 7, 12, 9, 5, 9, 12, 7, 4, 2, 0],
-      [0, _, _, 0, 5, _, _, 5, 9, _, _, 9, 7, _, 7, _],
-      [0, _, 12, _, 0, _, 12, 12, 0, _, 12, _, 0, 12, 12, _] ],
-    [ [12, 11, 9, 7, 5, 7, 9, 11, 12, _, 11, _, 9, _, 7, _],
-      [5, _, 5, _, 5, _, _, 5, 9, _, 9, _, 7, _, 7, 7],
-      [0, 12, 12, _, 0, _, 12, 12, 0, 12, 12, _, 0, 12, 0, 12] ],
-    [ [7, _, _, _, 5, _, _, _, 4, _, _, _, 2, _, _, _],
-      [0, _, _, _, _, _, _, _, 7, _, _, _, _, _, _, _],
-      [_, _, _, _, 0, _, _, _, _, _, _, _, 0, _, _, 12] ],
-    [ empty16(), empty16(), empty16() ]
-  ];
+  // patterns[motif][piste] = 16 pas ; rempli au démarrage depuis SONGS[0]
+  const patterns = Array.from({ length: PATTERN_COUNT },
+                              () => tracks.map(() => empty16()));
 
   let editPattern = 0;        // motif affiché dans la grille
-  let chain = [0, 0, 1, 2];   // enchaînement en mode morceau : A A B C
+  let chain = [0];            // enchaînement en mode morceau
   let songMode = false;       // false = boucle le motif édité
   let followPlayback = true;  // en mode morceau, la grille suit la lecture
   let chainPos = 0;
@@ -1205,6 +1290,86 @@
     selectPattern(target);
   });
 
+  // ------- Bibliothèque : chargement d'un morceau -------
+  function applySong(song) {
+    master.bpm = song.bpm;
+    if (song.echo) {
+      master.echoMix = song.echo[0];
+      master.echoTime = song.echo[1];
+      master.echoFb = song.echo[2];
+    }
+    master.arpMode = "off";
+    song.tracks.forEach((t, i) => {
+      const patch = patchFrom(t.preset);
+      // tout réglage nommé explicitement dans le morceau corrige le preset
+      PATCH_KEYS.forEach(k => { if (t[k] !== undefined) patch[k] = t[k]; });
+      patch.preset = matchPreset(patch);
+      tracks[i].patch = patch;
+      if (t.vol !== undefined) tracks[i].vol = t.vol;
+      tracks[i].mute = false;
+      tracks[i].solo = false;
+      for (let p = 0; p < PATTERN_COUNT; p++) patterns[p][i] = decodeSteps(t.pats[p]);
+    });
+    chain = String(song.chain || "0").split("")
+      .map(c => parseInt(c, 10))
+      .filter(n => Number.isInteger(n) && n >= 0 && n < PATTERN_COUNT)
+      .slice(0, CHAIN_MAX);
+    editPattern = 0;
+    currentTrack = 0;
+    chainPos = 0;
+    songMode = chain.length > 1;
+  }
+
+  // Remet toute l'interface en phase avec l'état, après un chargement complet
+  function refreshAllFromState() {
+    ["volume", "echoMix", "echoTime", "echoFb", "bpm", "arpRate"]
+      .forEach(k => setSlider(k, master[k]));
+    document.getElementById("arpMode").value = master.arpMode;
+    applyTrackSelectionUI();
+    buildMixer();
+    refreshPatternButtons();
+    refreshSeqGrid();
+    refreshChain();
+    modeLoopBtn.classList.toggle("selected", !songMode);
+    modeSongBtn.classList.toggle("selected", songMode);
+    followBtn.disabled = !songMode;
+    loadPatchIntoControls();
+    refreshKeyLabels();
+    refreshTrackGains();
+    tracks.forEach((tr, i) => applyPatchToNodes(i));
+  }
+
+  function loadSong(song) {
+    const wasPlaying = seqPlaying;
+    if (wasPlaying) seqStop();
+    allNotesOff(); held = []; stopArp();
+
+    // l'état précédent reste dans l'historique : Retour annule le chargement
+    const before = "#" + encodeState();
+    applySong(song);
+    refreshAllFromState();
+    if (!urlBroken) {
+      try {
+        history.replaceState(null, "", before);
+        history.pushState(null, "", "#" + encodeState());
+      } catch (e) { urlBroken = true; }
+    }
+    if (wasPlaying) seqStart();
+  }
+
+  const songsEl = document.getElementById("songs");
+
+  function buildSongBar() {
+    songsEl.innerHTML = "";
+    SONGS.forEach(song => {
+      const b = document.createElement("button");
+      b.textContent = song.name;
+      b.title = song.name + " — " + song.bpm + " BPM";
+      b.addEventListener("click", () => loadSong(song));
+      songsEl.appendChild(b);
+    });
+  }
+
   // ------- Enregistrement -------
   let recorder = null, recChunks = [];
   const recBtn = document.getElementById("recBtn");
@@ -1684,9 +1849,10 @@
   }
 
   // ------- Démarrage -------
-  // L'état vient de l'URL s'il y en a une ; sinon on garde le morceau de démo.
-  // À faire après le câblage des curseurs, sinon leurs valeurs par défaut HTML
-  // écraseraient ce qu'on vient de décoder.
+  // Le premier morceau de la bibliothèque sert d'état initial, puis l'URL prend
+  // le dessus si elle en contient un. À faire après le câblage des curseurs,
+  // sinon leurs valeurs par défaut HTML écraseraient ce qu'on vient de charger.
+  applySong(SONGS[0]);
   decodeState(decodeURIComponent(location.hash.slice(1)));
 
   ["volume", "echoMix", "echoTime", "echoFb", "bpm", "arpRate"]
@@ -1694,6 +1860,7 @@
   document.getElementById("arpMode").value = master.arpMode;
 
   applyTrackSelectionUI();
+  buildSongBar();
   buildMixer();
   buildOverview();
   buildKeyboard();
