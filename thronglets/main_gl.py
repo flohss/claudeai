@@ -66,8 +66,10 @@ import sys
 
 import numpy as np
 
+import tuning
 from i18n import disposition_label
-from simulation import (WIDTH, HEIGHT, MAX_ENERGY, World,
+from simulation import (ACT_APPROACH, ACT_FLEE, ACT_IGNORE, N_TOKENS,
+                        WIDTH, HEIGHT, MAX_ENERGY, World,
                         MEM_ROWS, MEM_COLS, MEM_CLIP, _mem_cell_center)
 
 # The same 6-token palette as every other renderer, as 0..1 floats so a
@@ -1487,12 +1489,42 @@ def build_hud(size, world, env, phase, selected_id, font, small, menu=None):
         col = (150, 220, 140) if disp > 0.05 else (225, 110, 110) if disp < -0.05 else (230, 230, 220)
         text("the flock %s (%+.0f%%)" % (disposition_label(disp), disp * 100), 12, 36, col)
 
+        # the arc of how it got here, saved with the world - a flock that fell
+        # from trust reads nothing like one that was never liked
+        arc = list(getattr(world, "disposition_history", []))
+        if len(arc) > 1:
+            ax, ay, aw, ah = 12, 58, 150, 20
+            pygame.draw.rect(surf, (40, 48, 38), (ax, ay, aw, ah))
+            pygame.draw.line(surf, (90, 98, 86), (ax, ay + ah // 2), (ax + aw, ay + ah // 2))
+            pts = [(ax + i * aw / (len(arc) - 1),
+                    ay + ah / 2 - max(-1.0, min(1.0, v)) * ah / 2) for i, v in enumerate(arc)]
+            pygame.draw.lines(surf, (150, 200, 230), False, pts)
+
+        # what the flock has DECIDED about you, which the average cannot show:
+        # split down the middle looks identical to uniformly indifferent
+        choices = world.choice_summary()
+        if choices:
+            bx, by, bw, bh = 176, 62, 150, 10
+            left = bx
+            for act, colr in ((ACT_APPROACH, (120, 200, 110)), (ACT_FLEE, (220, 95, 90)),
+                              (ACT_IGNORE, (120, 126, 112))):
+                span = int(round(choices.get(act, 0.0) * bw))
+                if span:
+                    pygame.draw.rect(surf, colr, (left, by, span, bh))
+                left += span
+            pygame.draw.rect(surf, (70, 78, 62), (bx, by, bw, bh), 1)
+            text("%d%% come  %d%% flee  %d%% ignore"
+                 % (choices.get(ACT_APPROACH, 0) * 100, choices.get(ACT_FLEE, 0) * 100,
+                    choices.get(ACT_IGNORE, 0) * 100), bx + bw + 10, by - 3, (200, 200, 190), small)
+
     if selected_id is not None:
         c = next((c for c in world.creatures if c.id == selected_id and c.alive), None)
         if c is not None:
             has_mind = c.mind is not None
-            ph = 96 if has_mind else 78
-            px, py, pw = 12, size[1] - ph - 40, 250
+            ph = 124 if has_mind else 78
+            # wider with a mind: the feeling line and the row of five call
+            # meanings both ran off the old 250px panel
+            px, py, pw = 12, size[1] - ph - 40, (300 if has_mind else 250)
             panel = pygame.Surface((pw, ph), pygame.SRCALPHA)
             panel.fill((12, 16, 22, 190))
             pygame.draw.rect(panel, (110, 210, 130), panel.get_rect(), 1)
@@ -1509,6 +1541,17 @@ def build_hud(size, world, env, phase, selected_id, font, small, menu=None):
                 text("mood: %-8s  valence %+.0f%%  arousal %2.0f%%"
                      % (emo, c.mind.valence * 100, c.mind.arousal * 100),
                      px + 10, py + 70, ecol, small)
+                # what THIS creature has learned each colour foretells - more
+                # telling here than a flock average, because you picked it
+                text("what calls mean to it:", px + 10, py + 90, (150, 200, 130), small)
+                cx = px + 10
+                for token in range(1, N_TOKENS):
+                    m = c.mind.signal_meaning(token)
+                    pygame.draw.circle(surf, TOKEN_COLORS[token], (cx + 5, py + 112), 5)
+                    mc = ((225, 110, 110) if m < -0.02 else
+                          (150, 220, 140) if m > 0.02 else (140, 146, 132))
+                    text("%+.2f" % m, cx + 13, py + 105, mc, small)
+                    cx += 46
 
     text("L-drag orbit   scroll zoom   click: select   right-click creature: care/harm   "
          "right-click ground: lay an egg   S/W season/weather   T fast-time",
@@ -1560,6 +1603,10 @@ def main():
     size = (1000, 700)
     pygame.display.set_mode(size, pygame.OPENGL | pygame.DOUBLEBUF)
     pygame.display.set_caption("Thronglets - true 3D")
+    # values pinned in the pygame P screen are the player's defaults for the
+    # WHOLE project, not for one renderer - this view read the built-ins and
+    # quietly ignored them
+    tuning.load_and_apply()
     ctx = moderngl.create_context()
     renderer = Renderer(ctx, size)
     cam = Camera()
