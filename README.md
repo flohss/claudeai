@@ -18,6 +18,20 @@ Le séquenceur pilote **trois pistes** (Mélodie, Basse, Percu) qui jouent simul
 
 Cliquer sur le nom d'une piste la sélectionne : les panneaux de réglage l'éditent alors, et le clavier la joue. Toucher un réglage bascule la piste en mode « Perso » sans altérer les autres.
 
+## Partager un morceau
+
+L'adresse de la page contient tout votre morceau. Chaque modification met à jour le fragment d'URL (sans polluer l'historique), et le bouton **Partager** copie le lien dans le presse-papiers — l'ouvrir restitue les trois motifs, les instruments, le mixage, le tempo et l'écho à l'identique.
+
+L'encodage est compact et lisible : chaque valeur est quantifiée puis écrite en base 36, et les 16 pas d'une piste tiennent en 16 caractères (un par hauteur, `-` pour un pas vide). Un morceau complet occupe environ 150 caractères :
+
+```
+#p=1.4o.1u.14.m.z.1.3.m~2.5.5.28.n.c.5.1o.3.16.0.-47b047c959c7420~…
+   └ master : version, tempo, volume, écho, piste courante, arpège
+                          └ piste : onde, octave, ADSR, bits, vibrato, volume, état, 16 pas
+```
+
+Le décodage est tolérant : un lien tronqué, altéré ou d'une version inconnue retombe simplement sur le morceau de démo, chaque valeur étant bornée à sa plage.
+
 ## Fonctionnalités
 
 - **6 formes d'onde chiptune** : carré 50 %, impulsion 25 %, impulsion 12,5 % (les classiques de la NES/Game Boy), triangle, dents de scie et bruit style console 8-bit.
@@ -28,6 +42,7 @@ Cliquer sur le nom d'une piste la sélectionne : les panneaux de réglage l'édi
 - **Arpégiateur** : modes montant, descendant, aller-retour et aléatoire, vitesse réglable — maintenez plusieurs notes pour lancer l'arpège.
 - **Séquenceur 16 pas × 3 pistes** : bande de résumé des trois pistes, piano-roll détaillé d'une octave avec les notes des autres pistes en repère, tempo 60–240 BPM, horloge audio précise (lookahead) et motifs de démo préchargés.
 - **5 presets** : Lead GB, Basse, Cristal, Percu, Sirène — applicables à la piste sélectionnée.
+- **Partage par URL** : le morceau complet tient dans le lien, restitué à l'identique à l'ouverture.
 - **Enregistrement** : capture le mixage complet et exporte un fichier `.webm`/`.ogg` en un clic.
 - **Oscilloscope** temps réel, coloré selon la piste sélectionnée.
 - **Clavier virtuel de 2 octaves** (souris et tactile, avec glissando) + sélecteur d'octave (0 à 7).

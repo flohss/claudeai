@@ -406,6 +406,7 @@
         <button id="seqPlay">&#9654; Lecture</button>
         <button id="seqClear">Effacer piste</button>
         <button id="recBtn">&#9679; Enregistrer</button>
+        <button id="shareBtn">&#128279; Partager</button>
         <div class="row"><label>Tempo</label><input type="range" id="bpm" min="60" max="240" step="1" value="120"><output id="bpmOut">120</output></div>
       </div>
       <div class="grid-scroll">
@@ -417,7 +418,8 @@
       <div class="hint" style="text-align:left; margin-top:6px">
         La bande du haut résume les trois pistes ; la grille détaille la piste
         sélectionnée (les autres apparaissent en gris clair). Une note par pas.
-        <b>Espace</b> lance ou arrête la lecture.
+        <b>Espace</b> lance ou arrête la lecture. L'adresse de la page conserve
+        tout votre morceau : <b>Partager</b> copie le lien.
       </div>
     </fieldset>
 
@@ -750,7 +752,7 @@
       mute.title = "Muet";
       mute.addEventListener("click", () => {
         tr.mute = !tr.mute;
-        refreshMixer(); refreshOverview(); refreshTrackGains();
+        refreshMixer(); refreshOverview(); refreshTrackGains(); markDirty();
       });
 
       const solo = document.createElement("button");
@@ -759,7 +761,7 @@
       solo.title = "Solo";
       solo.addEventListener("click", () => {
         tr.solo = !tr.solo;
-        refreshMixer(); refreshOverview(); refreshTrackGains();
+        refreshMixer(); refreshOverview(); refreshTrackGains(); markDirty();
       });
 
       const patchName = document.createElement("span");
@@ -771,7 +773,7 @@
       vol.title = "Volume de la piste";
       vol.addEventListener("input", () => {
         tr.vol = Number(vol.value);
-        refreshTrackGains();
+        refreshTrackGains(); markDirty();
       });
 
       row.append(pick, mute, solo, patchName, vol);
@@ -794,16 +796,23 @@
     });
   }
 
+  // Habillage lié à la piste courante : couleur d'accent et titres de panneaux
+  function applyTrackSelectionUI() {
+    document.documentElement.style.setProperty("--tc", TRACK_COLORS[currentTrack]);
+    document.querySelectorAll(".edit-target")
+      .forEach(el => el.textContent = tracks[currentTrack].name);
+  }
+
   function selectTrack(i) {
     if (i === currentTrack) return;
     allNotesOff(); held = []; stopArp();
     currentTrack = i;
-    document.documentElement.style.setProperty("--tc", TRACK_COLORS[i]);
-    document.querySelectorAll(".edit-target").forEach(el => el.textContent = tracks[i].name);
+    applyTrackSelectionUI();
     loadPatchIntoControls();
     refreshMixer();
     refreshSeqGrid();
     refreshKeyLabels();
+    markDirty();
   }
 
   // ------- Séquenceur -------
@@ -892,6 +901,7 @@
     const tr = tracks[currentTrack];
     tr.data[s] = (tr.data[s] === o) ? null : o;
     refreshSeqGrid();
+    markDirty();
     if (!seqPlaying && tr.data[s] !== null) {
       initAudio();
       playNote(currentTrack, trackBase(currentTrack) + o, ctx.currentTime + 0.01, 0.12);
@@ -962,6 +972,7 @@
   document.getElementById("seqClear").addEventListener("click", () => {
     tracks[currentTrack].data.fill(null);
     refreshSeqGrid();
+    markDirty();
   });
 
   // ------- Enregistrement -------
@@ -1129,6 +1140,7 @@
       if (loadingPatch) return;
       tracks[currentTrack].patch[key] = v;
       markCustom();
+      markDirty();
       if (afterApply) afterApply();
     });
   }
@@ -1151,32 +1163,37 @@
   bindSlider("volume", pct, v => {
     master.volume = v;
     if (masterGain) masterGain.gain.setValueAtTime(v, ctx.currentTime);
+    markDirty();
   });
   bindSlider("echoMix", pct, v => {
     master.echoMix = v;
     if (delayWet) delayWet.gain.setValueAtTime(v, ctx.currentTime);
+    markDirty();
   });
   bindSlider("echoTime", ms, v => {
     master.echoTime = v;
     if (delayNode) delayNode.delayTime.setValueAtTime(v, ctx.currentTime);
+    markDirty();
   });
   bindSlider("echoFb", pct, v => {
     master.echoFb = v;
     if (delayFb) delayFb.gain.setValueAtTime(v, ctx.currentTime);
+    markDirty();
   });
-  bindSlider("arpRate", v => v + "Hz", v => { master.arpRate = v; restartArp(); });
-  bindSlider("bpm", v => String(v), v => { master.bpm = v; });
+  bindSlider("arpRate", v => v + "Hz", v => { master.arpRate = v; restartArp(); markDirty(); });
+  bindSlider("bpm", v => String(v), v => { master.bpm = v; markDirty(); });
 
   document.getElementById("arpMode").addEventListener("change", e => {
     master.arpMode = e.target.value;
     held = []; stopArp(); allNotesOff();
+    markDirty();
   });
 
   function selectWave(wave, silent) {
     tracks[currentTrack].patch.wave = wave;
     document.querySelectorAll("#waves button").forEach(b =>
       b.classList.toggle("selected", b.dataset.wave === wave));
-    if (!silent) markCustom();
+    if (!silent) { markCustom(); markDirty(); }
   }
 
   document.getElementById("waves").addEventListener("click", e => {
@@ -1192,7 +1209,7 @@
     patch.octave = next;
     document.getElementById("octValue").textContent = next;
     refreshKeyLabels();
-    if (!silent) markCustom();
+    if (!silent) { markCustom(); markDirty(); }
   }
   function shiftOctave(delta) { setOctave(tracks[currentTrack].patch.octave + delta); }
   document.getElementById("octDown").addEventListener("click", () => shiftOctave(-1));
@@ -1219,6 +1236,141 @@
     loadPatchIntoControls();
     refreshMixer();
     refreshKeyLabels();
+    markDirty();
+  });
+
+  // ------- Partage par URL -------
+  // Tout l'état tient dans le fragment, en base 36 : une section master, puis
+  // une section par piste terminée par ses 16 pas. Format :
+  //   #p=<ver>.<bpm>.<vol>.<mix>.<temps>.<retour>.<piste>.<arp>.<arpVit>~<piste0>~<piste1>~<piste2>
+  const URL_VERSION = 1;
+  const WAVES = ["square", "pulse25", "pulse125", "triangle", "sawtooth", "noise"];
+  const ARP_MODES = ["off", "up", "down", "updown", "random"];
+  const NOTE_CHARS = "0123456789abc";   // un caractère par hauteur, "-" pour un pas vide
+
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  const b36 = n => Math.round(n).toString(36);
+  const p36 = (s, def) => { const n = parseInt(s, 36); return Number.isFinite(n) ? n : def; };
+
+  // Chaque champ de piste : quantification vers l'entier, puis retour
+  const TRACK_FIELDS = [
+    { get: (t) => Math.max(0, WAVES.indexOf(t.patch.wave)),
+      set: (t, n) => t.patch.wave = WAVES[clamp(n, 0, WAVES.length - 1)] },
+    { get: (t) => t.patch.octave,          set: (t, n) => t.patch.octave = clamp(n, 0, 7) },
+    { get: (t) => t.patch.attack * 1000,   set: (t, n) => t.patch.attack = clamp(n, 1, 1000) / 1000 },
+    { get: (t) => t.patch.decay * 1000,    set: (t, n) => t.patch.decay = clamp(n, 1, 1000) / 1000 },
+    { get: (t) => t.patch.sustain * 100,   set: (t, n) => t.patch.sustain = clamp(n, 0, 100) / 100 },
+    { get: (t) => t.patch.release * 100,   set: (t, n) => t.patch.release = clamp(n, 1, 200) / 100 },
+    { get: (t) => t.patch.bits,            set: (t, n) => t.patch.bits = clamp(n, 2, 8) },
+    { get: (t) => t.patch.vibRate * 10,    set: (t, n) => t.patch.vibRate = clamp(n, 5, 120) / 10 },
+    { get: (t) => t.patch.vibDepth / 5,    set: (t, n) => t.patch.vibDepth = clamp(n, 0, 120) * 5 },
+    { get: (t) => t.vol * 100,             set: (t, n) => t.vol = clamp(n, 0, 100) / 100 },
+    { get: (t) => (t.mute ? 1 : 0) | (t.solo ? 2 : 0),
+      set: (t, n) => { t.mute = !!(n & 1); t.solo = !!(n & 2); } }
+  ];
+
+  function encodeState() {
+    const head = [URL_VERSION, master.bpm, master.volume * 100, master.echoMix * 100,
+                  master.echoTime * 100, master.echoFb * 100, currentTrack,
+                  Math.max(0, ARP_MODES.indexOf(master.arpMode)), master.arpRate * 2].map(b36).join(".");
+    const body = tracks.map(tr => {
+      const nums = TRACK_FIELDS.map(f => b36(f.get(tr))).join(".");
+      const pat = tr.data.map(v => (v === null || v === undefined) ? "-" : NOTE_CHARS[v]).join("");
+      return nums + "." + pat;
+    });
+    return "p=" + head + "~" + body.join("~");
+  }
+
+  // Retrouve le nom du preset si le patch n'a pas été modifié depuis
+  function matchPreset(patch) {
+    for (const name in PRESETS) {
+      const pre = PRESETS[name];
+      if (PATCH_KEYS.every(k => typeof patch[k] === "number"
+            ? Math.abs(patch[k] - pre[k]) < 1e-6 : patch[k] === pre[k])) return name;
+    }
+    return null;
+  }
+
+  function decodeState(str) {
+    if (!str || str.slice(0, 2) !== "p=") return false;
+    const parts = str.slice(2).split("~");
+    if (parts.length < tracks.length + 1) return false;
+    const h = parts[0].split(".");
+    if (p36(h[0], -1) !== URL_VERSION) return false;
+
+    master.bpm = clamp(p36(h[1], 120), 60, 240);
+    master.volume = clamp(p36(h[2], 50), 0, 100) / 100;
+    master.echoMix = clamp(p36(h[3], 12), 0, 80) / 100;
+    master.echoTime = clamp(p36(h[4], 22), 5, 60) / 100;
+    master.echoFb = clamp(p36(h[5], 35), 0, 80) / 100;
+    currentTrack = clamp(p36(h[6], 0), 0, tracks.length - 1);
+    master.arpMode = ARP_MODES[clamp(p36(h[7], 0), 0, ARP_MODES.length - 1)];
+    master.arpRate = clamp(p36(h[8], 16), 4, 32) / 2;
+
+    tracks.forEach((tr, i) => {
+      const f = parts[i + 1].split(".");
+      if (f.length < TRACK_FIELDS.length + 1) return;
+      TRACK_FIELDS.forEach((field, k) => {
+        const n = p36(f[k], NaN);
+        if (Number.isFinite(n)) field.set(tr, n);
+      });
+      const pat = f[TRACK_FIELDS.length];
+      tr.data = Array.from({ length: STEPS }, (_, s) => {
+        const idx = NOTE_CHARS.indexOf(pat[s]);
+        return idx >= 0 ? idx : null;
+      });
+      tr.patch.preset = matchPreset(tr.patch);
+    });
+    return true;
+  }
+
+  var urlTimer = null, urlBroken = false;
+
+  function markDirty() {
+    // loadingPatch couvre l'initialisation : rien à écrire tant que l'état
+    // n'est pas complètement chargé
+    if (loadingPatch || urlBroken) return;
+    clearTimeout(urlTimer);
+    urlTimer = setTimeout(() => {
+      try {
+        history.replaceState(null, "", "#" + encodeState());
+      } catch (e) {
+        urlBroken = true;   // certains contextes refusent replaceState (file:// selon le navigateur)
+      }
+    }, 250);
+  }
+
+  function shareUrl() { return location.href.split("#")[0] + "#" + encodeState(); }
+
+  const shareBtn = document.getElementById("shareBtn");
+  let shareTimer = null;
+
+  function flashShare(msg) {
+    shareBtn.textContent = msg;
+    clearTimeout(shareTimer);
+    shareTimer = setTimeout(() => { shareBtn.innerHTML = "&#128279; Partager"; }, 1800);
+  }
+
+  shareBtn.addEventListener("click", async () => {
+    const url = shareUrl();
+    if (!urlBroken) { try { history.replaceState(null, "", "#" + encodeState()); } catch (e) { urlBroken = true; } }
+    try {
+      await navigator.clipboard.writeText(url);
+      flashShare("Lien copié !");
+      return;
+    } catch (e) { /* pas de presse-papiers : on tente la sélection manuelle */ }
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = url;
+      ta.style.cssText = "position:fixed;opacity:0";
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand("copy");
+      ta.remove();
+      flashShare(ok ? "Lien copié !" : "Copiez l'adresse");
+    } catch (e) {
+      flashShare("Copiez l'adresse");
+    }
   });
 
   // ------- Oscilloscope -------
@@ -1264,7 +1416,16 @@
   }
 
   // ------- Démarrage -------
-  document.documentElement.style.setProperty("--tc", TRACK_COLORS[0]);
+  // L'état vient de l'URL s'il y en a une ; sinon on garde le morceau de démo.
+  // À faire après le câblage des curseurs, sinon leurs valeurs par défaut HTML
+  // écraseraient ce qu'on vient de décoder.
+  decodeState(decodeURIComponent(location.hash.slice(1)));
+
+  ["volume", "echoMix", "echoTime", "echoFb", "bpm", "arpRate"]
+    .forEach(k => setSlider(k, master[k]));
+  document.getElementById("arpMode").value = master.arpMode;
+
+  applyTrackSelectionUI();
   buildMixer();
   buildOverview();
   buildKeyboard();
@@ -1272,6 +1433,11 @@
   loadPatchIntoControls();
   drawIdleScope();
   window.addEventListener("pointerdown", initAudio, { once: false });
+
+  // Lien collé dans la barre d'adresse d'un onglet déjà ouvert
+  window.addEventListener("hashchange", () => {
+    if (decodeState(decodeURIComponent(location.hash.slice(1)))) location.reload();
+  });
 })();
 </script>
 </body>
