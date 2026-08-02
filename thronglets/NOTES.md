@@ -244,6 +244,32 @@ and needs both its sides. The report lists those under `NOT CHECKED` with the
 scenarios that were missing, rather than quietly checking fewer claims than it
 appears to.
 
+### The other family of tests: press V
+
+There are two kinds of test here and confusing them is easy. `report.py` and
+the Measure screen produce **numbers**; they never say good or bad. `test_all.py`
+runs the **pass/fail guards** and never produces a number worth quoting - it
+answers "is anything broken?". Only the first had a screen.
+
+`V` at the start menu runs the guards, taking the suite list from `test_all`
+itself so a suite added there appears here, each still as its own subprocess -
+the shape test_all chose so a crashed suite cannot take the others down. It
+cannot take the game down either.
+
+It says out loud that it runs on **built-in** values. That is worth stating
+because the obvious assumption is the opposite: a guard screen sitting one key
+away from the screen that pins parameters looks like it would check them.
+`test_smoke` and `test_learning` do not import `tuning` at all, and `test_tuning`
+calls `reset_to_builtin()` before every probe. So a pass means the game *as
+shipped* is sound and says nothing about what you have pinned. If parameters are
+pinned, the screen says so in orange before you start.
+
+Cancelling taught its own small lesson. A suite killed mid-run exits non-zero
+*because* it was killed, and the first version printed `BROKEN (-15)` next to
+`smoke` - accusing the code of a failure the player had just caused by pressing
+stop. On a screen whose entire job is to say whether something is broken, that
+is the worst possible thing to get wrong. A killed suite now reads `stopped`.
+
 It plays six scenarios - hunted and unhunted with nobody touching the game, a
 hand that only wanders, a hand that feeds, a hand that burns, and learning
 switched off as a control - and reports **every metric as mean ± standard

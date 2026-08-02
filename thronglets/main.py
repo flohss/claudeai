@@ -43,12 +43,18 @@ tests to run, how many seeds and how many ticks, and it writes the same file
 report.py writes - running the same function, so the two cannot disagree. It
 times this machine while you choose and shows what the run will cost before you
 start it, which the command line cannot.
+
+V opens Checks: the other family of tests - test_all.py's pass/fail guards,
+which answer "is anything broken?" instead of producing numbers. It runs them
+against the BUILT-IN values, not any you have pinned, and says so.
 """
 
 import argparse
+import collections
 import math
 import os
 import random
+import subprocess
 import sys
 import threading
 import time
@@ -58,6 +64,7 @@ import pygame
 
 import report
 import simulation
+import test_all
 import tuning
 from i18n import STATE_LABELS, TRAIT_LABELS, disposition_label
 from simulation import (DANGER, DISTRESS, FOOD, Genome, HAND_PERCEPTION, HEIGHT, IDLE, MATE, MAX_POPULATION, N_TOKENS,
@@ -254,7 +261,27 @@ TEXT = {
         "tuning_status_one_reset": "{name} back to its built-in value",
         "tuning_status_locked": "{name} cannot be changed: {why}",
         "choose_start_measure": "  T = measure - run the report on this machine and get a file",
-        "choose_start_hint": "Press R, N, M, P or T   (ENTER = new game).",
+        "choose_start_checks": "  V = checks - run every guard and see if anything is broken",
+        "choose_start_hint": "Press R, N, M, P, T or V   (ENTER = new game).",
+        "checks_title": "CHECKS - is anything broken?",
+        "checks_hint": "SPACE = full / quick   ENTER = run   ESC = back (or stop a run)",
+        "checks_what": "Three suites of pass/fail guards. Not measurements - these answer",
+        "checks_what2": "\"is anything broken?\", and each one guards a failure that really happened.",
+        "checks_builtin": "NOTE: these run against the BUILT-IN values, not your pinned ones.",
+        "checks_pinned_warn": "You have {n} pinned parameter(s). They are NOT in force here - a pass",
+        "checks_pinned_warn2": "does not mean your settings are safe, only that the game as shipped is.",
+        "checks_mode": "mode",
+        "checks_mode_full": "full - every check, about {mins} minutes",
+        "checks_mode_quick": "quick - each suite's fast half, about {mins} minutes",
+        "checks_waiting": "waiting",
+        "checks_running": "running...",
+        "checks_ok": "OK",
+        "checks_broken": "BROKEN",
+        "checks_stopped": "stopped",
+        "checks_all_ok": "NOTHING IS BROKEN - all {n} suites passed in {el}",
+        "checks_some_broken": "BROKEN: {names} - the lines above say what failed",
+        "checks_cancelled": "stopped before the end - nothing was concluded",
+        "checks_output": "OUTPUT",
         "meas_title": "MEASURE - run the report on this machine",
         "meas_hint": "up/down = move   SPACE = include/exclude a test   left/right = change a number (shift = x10)",
         "meas_hint2": "A = all   Z = none   ENTER = run   ESC = back",
@@ -541,7 +568,27 @@ TEXT = {
         "tuning_status_one_reset": "{name} revenu a sa valeur d'origine",
         "tuning_status_locked": "{name} non modifiable : {why}",
         "choose_start_measure": "  T = tester - lancer le rapport sur cette machine et obtenir un fichier",
-        "choose_start_hint": "Appuie sur R, N, M, P ou T   (ENTREE = nouvelle partie).",
+        "choose_start_checks": "  V = verifications - lancer tous les garde-fous et voir si quelque chose casse",
+        "choose_start_hint": "Appuie sur R, N, M, P, T ou V   (ENTREE = nouvelle partie).",
+        "checks_title": "VERIFICATIONS - est-ce que quelque chose est casse ?",
+        "checks_hint": "ESPACE = complet / rapide   ENTREE = lancer   ECHAP = retour (ou arreter)",
+        "checks_what": "Trois suites de garde-fous. Ce ne sont pas des mesures - elles repondent",
+        "checks_what2": "a \"est-ce que quelque chose est casse ?\", et chacune garde un echec reel.",
+        "checks_builtin": "NOTE : elles tournent sur les valeurs D'ORIGINE, pas sur les tiennes.",
+        "checks_pinned_warn": "Tu as {n} parametre(s) epingle(s). Ils ne sont PAS actifs ici - un succes",
+        "checks_pinned_warn2": "ne dit pas que tes reglages sont sains, seulement que le jeu livre l'est.",
+        "checks_mode": "mode",
+        "checks_mode_full": "complet - toutes les verifications, environ {mins} minutes",
+        "checks_mode_quick": "rapide - la moitie rapide de chaque suite, environ {mins} minutes",
+        "checks_waiting": "en attente",
+        "checks_running": "en cours...",
+        "checks_ok": "OK",
+        "checks_broken": "CASSE",
+        "checks_stopped": "arrete",
+        "checks_all_ok": "RIEN N'EST CASSE - les {n} suites sont passees en {el}",
+        "checks_some_broken": "CASSE : {names} - les lignes ci-dessus disent quoi",
+        "checks_cancelled": "arrete avant la fin - rien n'a ete conclu",
+        "checks_output": "SORTIE",
         "meas_title": "TESTER - lancer le rapport sur cette machine",
         "meas_hint": "haut/bas = deplacer   ESPACE = inclure/exclure un test   gauche/droite = changer un nombre (maj = x10)",
         "meas_hint2": "A = tout   Z = rien   ENTREE = lancer   ECHAP = retour",
@@ -1976,7 +2023,7 @@ def choose_start(screen, font, lang, has_save):
     if has_save:
         lines.append(t["choose_start_resume"])
     lines += [t["choose_start_new"], t["choose_start_master"], t["choose_start_tuning"],
-              t["choose_start_measure"]]
+              t["choose_start_measure"], t["choose_start_checks"]]
     pinned = len(tuning.load())
     if pinned:
         lines.append(t["choose_start_pinned"].format(n=pinned))
@@ -1996,6 +2043,8 @@ def choose_start(screen, font, lang, has_save):
                     return "tuning"
                 if event.key == pygame.K_t:
                     return "measure"
+                if event.key == pygame.K_v:
+                    return "checks"
                 if event.key == pygame.K_m:
                     return "master"
                 if event.key == pygame.K_r and has_save:
@@ -2078,6 +2127,155 @@ class _Speedometer:
 
     def stop(self):
         self._stop.set()
+
+
+def show_checks(screen, font, lang):
+    """The other family of tests: the pass/fail guards, from inside the game.
+
+    Measure answers "what are the numbers?"; this answers "is anything
+    broken?". It runs test_all.py's suites - taking the list from test_all
+    itself rather than repeating it, so a suite added there appears here - each
+    as its own subprocess, which is the shape test_all chose deliberately: a
+    crashed suite cannot take the others down, and every suite starts from
+    clean module state. It cannot take the game down either.
+
+    It says out loud that it runs on BUILT-IN values. test_smoke and
+    test_learning do not import tuning at all, and test_tuning resets to
+    built-in before every probe - so a pass here means the game as SHIPPED is
+    sound, and says nothing about parameters you have pinned. A screen inside
+    the game, reachable right next to the one that pins them, has to be honest
+    about that or it is a trap."""
+    t = TEXT[lang]
+    quick = False
+    pinned = len(tuning.load())
+    # suite name -> "waiting" | "running" | returncode
+    results = {name: "waiting" for name, _full, _q in test_all.SUITES}
+    lines = collections.deque(maxlen=400)
+    state = {"proc": None, "started": None, "finished": None, "cancelled": False}
+    worker = None
+    clock = pygame.time.Clock()
+
+    def run_all():
+        state.update(started=time.time(), finished=None, cancelled=False)
+        for name, full, fast in test_all.SUITES:
+            if state["cancelled"]:
+                results[name] = "stopped"
+                continue
+            results[name] = "running"
+            cmd = [sys.executable, "-u"] + [os.path.join(test_all.HERE, a) if a.endswith(".py")
+                                            else a for a in (fast if quick else full)]
+            try:
+                proc = subprocess.Popen(cmd, cwd=test_all.HERE, stdout=subprocess.PIPE,
+                                        stderr=subprocess.STDOUT, text=True, bufsize=1)
+            except OSError as exc:
+                results[name] = 127
+                lines.append(f"{name}: could not start - {exc}")
+                continue
+            state["proc"] = proc
+            for line in proc.stdout:
+                lines.append(line.rstrip())
+            code = proc.wait()
+            # A suite we killed exited non-zero BECAUSE we killed it. Reporting
+            # that as BROKEN accuses the code of a failure the player caused by
+            # pressing stop - the one reading a guard screen can least afford.
+            results[name] = "stopped" if state["cancelled"] else code
+            state["proc"] = None
+        state["finished"] = time.time()
+
+    def launch():
+        nonlocal worker
+        lines.clear()
+        for name in results:
+            results[name] = "waiting"
+        worker = threading.Thread(target=run_all, daemon=True)
+        worker.start()
+
+    def cancel():
+        state["cancelled"] = True
+        proc = state["proc"]
+        if proc is not None:
+            proc.terminate()          # the suite dies, the game does not
+
+    while True:
+        running = worker is not None and worker.is_alive()
+        screen.fill(BG)
+        screen.blit(font.render(t["checks_title"], True, (255, 255, 255)), (20, 16))
+        screen.blit(font.render(t["checks_hint"], True, HUD_HINT), (20, 38))
+        y = 68
+        if not running and state["finished"] is None and not state["cancelled"]:
+            screen.blit(font.render(t["checks_what"], True, HUD_HINT), (20, y)); y += 18
+            screen.blit(font.render(t["checks_what2"], True, HUD_HINT), (20, y)); y += 24
+            screen.blit(font.render(t["checks_builtin"], True, (235, 150, 90)), (20, y)); y += 18
+            if pinned:
+                screen.blit(font.render(t["checks_pinned_warn"].format(n=pinned),
+                                        True, (235, 150, 90)), (20, y)); y += 18
+                screen.blit(font.render(t["checks_pinned_warn2"], True,
+                                        (235, 150, 90)), (20, y)); y += 18
+            y += 8
+            mode = (t["checks_mode_quick"] if quick else t["checks_mode_full"]).format(
+                mins=2 if quick else 7)
+            screen.blit(font.render(f"{t['checks_mode']}: {mode}", True,
+                                    (255, 210, 120)), (20, y))
+            y += 30
+
+        for name, _full, _q in test_all.SUITES:
+            r = results[name]
+            if r == "waiting":
+                label, col = t["checks_waiting"], (96, 102, 92)
+            elif r == "running":
+                label, col = t["checks_running"], (255, 210, 120)
+            elif r == "stopped":
+                label, col = t["checks_stopped"], (96, 102, 92)
+            elif r == 0:
+                label, col = t["checks_ok"], (120, 210, 100)
+            else:
+                label, col = f"{t['checks_broken']} ({r})", (225, 85, 75)
+            screen.blit(font.render(f"  {name:<12} {label}", True, col), (20, y))
+            y += 20
+
+        if state["finished"] is not None and not running:
+            y += 8
+            broken = [n for n, r in results.items() if isinstance(r, int) and r != 0]
+            if state["cancelled"]:
+                screen.blit(font.render(t["checks_cancelled"], True, (235, 150, 90)), (20, y))
+            elif broken:
+                screen.blit(font.render(t["checks_some_broken"].format(
+                    names=", ".join(broken)), True, (225, 85, 75)), (20, y))
+            else:
+                screen.blit(font.render(t["checks_all_ok"].format(
+                    n=len(results), el=_hms(state["finished"] - state["started"])),
+                    True, (120, 210, 100)), (20, y))
+            y += 26
+
+        if lines:
+            screen.blit(font.render(t["checks_output"], True, HUD_ACCENT), (20, y)); y += 20
+            room = max(1, (SCREEN_H - y - 20) // 16)
+            for line in list(lines)[-room:]:
+                col = (225, 85, 75) if ("FAIL" in line or "BROKEN" in line) else \
+                      (120, 210, 100) if line.startswith("OK") else TEXT_COLOR
+                screen.blit(font.render(line[:150], True, col), (20, y))
+                y += 16
+
+        pygame.display.flip()
+
+        for event in events():
+            if event.type == pygame.QUIT:
+                cancel()
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    if running:
+                        cancel()
+                    else:
+                        return
+                elif running:
+                    continue
+                elif event.key == pygame.K_SPACE:
+                    quick = not quick
+                elif event.key == pygame.K_RETURN:
+                    launch()
+        clock.tick(10 if running else 30)
 
 
 def show_measure(screen, font, lang):
@@ -2864,6 +3062,8 @@ def main():
             show_tuning(screen, font, lang)
         elif start == "measure":
             show_measure(screen, font, lang)
+        elif start == "checks":
+            show_checks(screen, font, lang)
         else:
             break
     if start == "master":

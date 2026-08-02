@@ -92,6 +92,14 @@ command line cannot give you: while you are choosing, it times a real world on
 22.4 million ticks and *six days*, and a terminal will start that without a
 word. `ESC` stops a run within a second or two, mid-world.
 
+**`V` runs the other family of tests** — the pass/fail guards (`test_all.py`),
+which answer "is anything broken?" rather than producing numbers. It shows each
+suite's status live and the output as it comes, and states plainly that it runs
+against **built-in** values: `test_smoke` and `test_learning` never import
+`tuning`, and `test_tuning` resets to built-in before every probe, so a pass
+means the game *as shipped* is sound and says nothing about parameters you have
+pinned. If you have any pinned, it warns you before you start.
+
 On launch you're asked to press `E`/`F` for English or French, `ENTER`
 defaulting to French. If a save from a previous run exists
 (`thronglets_save.json`), you're then asked whether to resume it — say yes
