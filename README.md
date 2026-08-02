@@ -74,6 +74,14 @@ Deux modes de lecture :
 
 Cliquez `+A`…`+D` pour ajouter un maillon, un maillon pour le retirer. Pendant la lecture, le maillon courant s'allume et le motif joué est cerclé ; si **Suivre** est actif, la grille se cale automatiquement sur le motif entendu. **Dupliquer** recopie le motif courant dans le premier emplacement libre — la façon rapide de partir d'une variation.
 
+## Le studio
+
+- **Enregistrement au clavier** — armez **Enreg. clavier** et jouez : pendant la lecture les notes sont quantifiées sur le pas le plus proche, à l'arrêt elles s'écrivent pas à pas sous un curseur. Les flèches ← et → reculent en effaçant ou avancent sans écrire. La seconde octave du clavier se replie dans l'octave du motif.
+- **Outils de motif** — décaler la boucle d'un pas, transposer d'un demi-ton, inverser le motif. La transposition refuse plutôt que d'écraser : si une note devait sortir de la grille, rien ne bouge et un message le dit.
+- **Annuler / Rétablir** — `Ctrl+Z` et `Ctrl+Maj+Z`, jusqu'à 60 pas en arrière. Les états sont conservés sous leur forme encodée, la même que celle de l'URL. Une entrée par changement stabilisé, pas par cran de curseur.
+- **Export WAV** — le morceau est rendu dans un `OfflineAudioContext`, avec exactement le même graphe audio que le direct : le fichier est identique à ce qu'on entend, produit plus vite que sa durée. En mode morceau il couvre toute la chaîne, sinon quatre mesures, plus de quoi laisser mourir les relâches et l'écho.
+- **Capturer** — l'ancien enregistrement en temps réel reste disponible pour saisir une improvisation au clavier.
+
 ## Partager un morceau
 
 L'adresse de la page contient tout votre morceau. Chaque modification met à jour le fragment d'URL (sans polluer l'historique), et le bouton **Partager** copie le lien dans le presse-papiers — l'ouvrir restitue les quatre motifs, la chaîne, les instruments, le mixage, le tempo et l'écho à l'identique.
@@ -105,7 +113,10 @@ Le décodage est tolérant : un lien tronqué, altéré ou d'une version inconnu
 - **5 presets** : Lead GB, Basse, Cristal, Percu, Sirène — applicables à la piste sélectionnée.
 - **Bibliothèque de 7 morceaux** prêts à jouer, plus un emplacement vierge, écrits en clair dans le source.
 - **Partage par URL** : le morceau complet — motifs, chaîne et réglages — tient dans le lien, restitué à l'identique à l'ouverture.
-- **Enregistrement** : capture le mixage complet et exporte un fichier `.webm`/`.ogg` en un clic.
+- **Export WAV** : rendu hors ligne du morceau complet, plus rapide que le temps réel.
+- **Enregistrement au clavier** : écriture quantifiée pendant la lecture, ou pas à pas à l'arrêt.
+- **Outils de motif** : décalage, transposition, inversion, avec annuler/rétablir sur 60 pas.
+- **Capture en direct** : enregistre le mixage joué et exporte un `.webm`/`.ogg`.
 - **Oscilloscope** temps réel, coloré selon la piste sélectionnée.
 - **Clavier virtuel de 2 octaves** (souris et tactile, avec glissando) + sélecteur d'octave (0 à 7).
 - **Polyphonie** illimitée.
@@ -119,6 +130,8 @@ Le mappage utilise la position physique des touches, donc il fonctionne aussi bi
 - **W / X** (en AZERTY) : octave −1 / +1
 - **1 / 2 / 3** : sélectionner la piste
 - **Espace** : lancer ou arrêter le séquenceur
+- **Ctrl+Z** / **Ctrl+Maj+Z** : annuler, rétablir
+- **← / →** (enregistrement armé) : reculer en effaçant, avancer sans écrire
 
 ## Structure
 

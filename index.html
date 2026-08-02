@@ -292,6 +292,7 @@
     box-shadow: none;
   }
   .chain-chip.now { background: var(--accent3); color: #000; border-color: var(--accent3); }
+  .tool-msg { font-size: 10px; color: var(--accent2); text-transform: uppercase; letter-spacing: .1em; }
   .grid-scroll { overflow-x: auto; margin-top: 10px; }
   .grid-inner { min-width: 520px; }
   .ov-grid, .seq-grid {
@@ -346,6 +347,8 @@
   .seq-cell.hors { opacity: .3; }
   .seq-cell.hors.on { opacity: .45; }
   .playhead { box-shadow: inset 0 0 0 2px #fff; }
+  /* curseur d'écriture, à l'arrêt seulement */
+  .seq-cell.curseur { box-shadow: inset 0 0 0 2px var(--accent2); }
   .seq-cell.on.accent.playhead { box-shadow: inset 0 0 0 3px #fff; }
 
   .keyboard-wrap { position: relative; height: 170px; user-select: none; touch-action: none; }
@@ -496,6 +499,19 @@
       </div>
 
       <div class="seq-row">
+        <span class="tag">Outils</span>
+        <button id="rotL" title="Décaler le motif d'un pas vers la gauche">&#9664; Décaler</button>
+        <button id="rotR" title="Décaler le motif d'un pas vers la droite">Décaler &#9654;</button>
+        <button id="trDown" title="Transposer d'un demi-ton vers le bas">&minus;&frac12; ton</button>
+        <button id="trUp" title="Transposer d'un demi-ton vers le haut">+&frac12; ton</button>
+        <button id="revBtn" title="Lire le motif à l'envers">Inverser</button>
+        <span class="sep"></span>
+        <button id="undoBtn" title="Annuler (Ctrl+Z)" disabled>&#8630; Annuler</button>
+        <button id="redoBtn" title="Rétablir (Ctrl+Maj+Z)" disabled>Rétablir &#8631;</button>
+        <span class="tool-msg" id="toolMsg"></span>
+      </div>
+
+      <div class="seq-row">
         <span class="tag">Chaîne</span>
         <div class="chain" id="chain"></div>
         <span class="sep"></span>
@@ -506,7 +522,9 @@
       <div class="seq-transport">
         <button id="seqPlay">&#9654; Lecture</button>
         <button id="seqClear">Effacer piste</button>
-        <button id="recBtn">&#9679; Enregistrer</button>
+        <button id="armBtn" title="Écrire au clavier dans le motif affiché">Enreg. clavier</button>
+        <button id="recBtn" title="Capturer la sortie audio en direct">&#9679; Capturer</button>
+        <button id="wavBtn" title="Rendre le morceau en fichier WAV">Exporter WAV</button>
         <button id="shareBtn">&#128279; Partager</button>
         <div class="row"><label>Tempo</label><input type="range" id="bpm" min="60" max="240" step="1" value="120"><output id="bpmOut">120</output></div>
         <div class="row"><label>Swing</label><input type="range" id="swing" min="0" max="0.5" step="0.01" value="0"><output id="swingOut">0%</output></div>
@@ -526,6 +544,9 @@
         <b>Morceau</b>, la chaîne se déroule puis reprend — cliquez un maillon
         pour le retirer. <b>Espace</b> lance ou arrête la lecture, et
         <b>Partager</b> copie un lien qui contient tout.
+        <b>Enreg. clavier</b> écrit dans le motif ce que vous jouez : quantifié
+        pendant la lecture, pas à pas à l'arrêt (flèches &#8592; et &#8594; pour
+        déplacer le curseur). <b>WAV</b> rend le morceau en fichier.
       </div>
     </fieldset>
 
@@ -713,9 +734,10 @@
                    bpm: 120, arpMode: "off", arpRate: 8, swing: 0 };
 
   // ------- Audio -------
-  let ctx = null, busIn, analyser, masterGain, delayNode, delayFb, delayWet, recDest;
-  let pulse25Wave, pulse125Wave, noiseBuffer;
-  const trackNodes = [];              // { shaper, gain, lfo, lfoGain }
+  // Tout le graphe vit dans un "rig" attaché à un contexte : celui du direct,
+  // ou un contexte hors ligne le temps d'un rendu WAV. Les deux empruntent donc
+  // exactement le même chemin de synthèse.
+  let ctx = null, rig = null, recDest = null;
   const voices = new Map();           // midi -> { src, gain }  (clavier live)
 
   const PEAK = 0.68;          // niveau d'une note ordinaire
@@ -733,19 +755,19 @@
     return curve;
   }
 
-  function makePulseWave(duty) {
+  function makePulseWave(actx, duty) {
     const n = 32;
     const real = new Float32Array(n), imag = new Float32Array(n);
     for (let k = 1; k < n; k++) {
       imag[k] = (2 / (k * Math.PI)) * Math.sin(k * Math.PI * duty);
     }
-    return ctx.createPeriodicWave(real, imag);
+    return actx.createPeriodicWave(real, imag);
   }
 
-  function makeNoiseBuffer() {
+  function makeNoiseBuffer(actx) {
     // Bruit "puce" : valeurs aléatoires ±1 maintenues quelques échantillons
-    const len = ctx.sampleRate * 2;
-    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const len = Math.floor(actx.sampleRate * 2);
+    const buf = actx.createBuffer(1, len, actx.sampleRate);
     const data = buf.getChannelData(0);
     const hold = 6;
     let v = 0;
@@ -756,59 +778,65 @@
     return buf;
   }
 
-  function initAudio() {
-    if (ctx) { if (ctx.state === "suspended") ctx.resume(); return; }
-    ctx = new (window.AudioContext || window.webkitAudioContext)();
+  // Construit la chaîne complète dans un contexte donné
+  function createRig(actx, withAnalyser) {
+    const r = { ctx: actx, trackNodes: [] };
+    r.busIn = actx.createGain();
+    r.masterGain = actx.createGain();
+    r.masterGain.gain.value = master.volume;
 
-    busIn = ctx.createGain();
-    analyser = ctx.createAnalyser();
-    analyser.fftSize = 2048;
-    masterGain = ctx.createGain();
-    masterGain.gain.value = master.volume;
+    r.delay = actx.createDelay(1);
+    r.delay.delayTime.value = master.echoTime;
+    r.delayFb = actx.createGain();
+    r.delayFb.gain.value = master.echoFb;
+    r.delayWet = actx.createGain();
+    r.delayWet.gain.value = master.echoMix;
 
-    delayNode = ctx.createDelay(1);
-    delayNode.delayTime.value = master.echoTime;
-    delayFb = ctx.createGain();
-    delayFb.gain.value = master.echoFb;
-    delayWet = ctx.createGain();
-    delayWet.gain.value = master.echoMix;
+    // pistes (chacune crushée séparément) -> bus -> [direct + écho] -> master
+    const tap = withAnalyser ? actx.createAnalyser() : actx.createGain();
+    if (withAnalyser) tap.fftSize = 2048;
+    r.analyser = withAnalyser ? tap : null;
 
-    // pistes (chacune crushée séparément) -> bus -> [direct + écho] -> analyseur -> master
-    busIn.connect(analyser);
-    busIn.connect(delayNode);
-    delayNode.connect(delayFb);
-    delayFb.connect(delayNode);
-    delayNode.connect(delayWet);
-    delayWet.connect(analyser);
-    analyser.connect(masterGain);
-    masterGain.connect(ctx.destination);
+    r.busIn.connect(tap);
+    r.busIn.connect(r.delay);
+    r.delay.connect(r.delayFb);
+    r.delayFb.connect(r.delay);
+    r.delay.connect(r.delayWet);
+    r.delayWet.connect(tap);
+    tap.connect(r.masterGain);
+    r.masterGain.connect(actx.destination);
 
-    recDest = ctx.createMediaStreamDestination();
-    masterGain.connect(recDest);
-
-    pulse25Wave = makePulseWave(0.25);
-    pulse125Wave = makePulseWave(0.125);
-    noiseBuffer = makeNoiseBuffer();
+    r.pulse25 = makePulseWave(actx, 0.25);
+    r.pulse125 = makePulseWave(actx, 0.125);
+    r.noise = makeNoiseBuffer(actx);
 
     tracks.forEach((tr, i) => {
-      const shaper = ctx.createWaveShaper();
+      const shaper = actx.createWaveShaper();
       shaper.curve = crusherCurve(tr.patch.bits);
-      const gain = ctx.createGain();
+      const gain = actx.createGain();
       gain.gain.value = audibleVol(i);
       shaper.connect(gain);
-      gain.connect(busIn);
+      gain.connect(r.busIn);
 
-      const lfo = ctx.createOscillator();
+      const lfo = actx.createOscillator();
       lfo.type = "sine";
       lfo.frequency.value = tr.patch.vibRate;
-      const lfoGain = ctx.createGain();
+      const lfoGain = actx.createGain();
       lfoGain.gain.value = tr.patch.vibDepth;
       lfo.connect(lfoGain);
       lfo.start();
 
-      trackNodes[i] = { shaper, gain, lfo, lfoGain };
+      r.trackNodes[i] = { shaper, gain, lfo, lfoGain };
     });
+    return r;
+  }
 
+  function initAudio() {
+    if (ctx) { if (ctx.state === "suspended") ctx.resume(); return; }
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    rig = createRig(ctx, true);
+    recDest = ctx.createMediaStreamDestination();
+    rig.masterGain.connect(recDest);
     drawScope();
   }
 
@@ -818,39 +846,39 @@
     const tr = tracks[i];
     if (tr.mute) return 0;
     if (anySolo() && !tr.solo) return 0;
-    return tr.vol * 0.55;   // marge pour éviter la saturation à 3 pistes
+    return tr.vol * 0.55;   // marge pour éviter la saturation à plusieurs pistes
   }
 
   function refreshTrackGains() {
-    if (!ctx) return;
+    if (!rig) return;
     tracks.forEach((tr, i) =>
-      trackNodes[i].gain.gain.setTargetAtTime(audibleVol(i), ctx.currentTime, 0.01));
+      rig.trackNodes[i].gain.gain.setTargetAtTime(audibleVol(i), ctx.currentTime, 0.01));
   }
 
   function applyPatchToNodes(i) {
-    if (!ctx) return;
-    const p = tracks[i].patch, n = trackNodes[i];
+    if (!rig) return;
+    const p = tracks[i].patch, n = rig.trackNodes[i];
     n.shaper.curve = crusherCurve(p.bits);
     n.lfo.frequency.setValueAtTime(p.vibRate, ctx.currentTime);
     n.lfoGain.gain.setValueAtTime(p.vibDepth, ctx.currentTime);
   }
 
-  function makeSource(i, midi) {
+  function makeSource(r, i, midi) {
     const p = tracks[i].patch;
     let src;
     if (p.wave === "noise") {
-      src = ctx.createBufferSource();
-      src.buffer = noiseBuffer;
+      src = r.ctx.createBufferSource();
+      src.buffer = r.noise;
       src.loop = true;
       src.playbackRate.value = midiToFreq(midi) / 220;
     } else {
-      src = ctx.createOscillator();
-      if (p.wave === "pulse25") src.setPeriodicWave(pulse25Wave);
-      else if (p.wave === "pulse125") src.setPeriodicWave(pulse125Wave);
+      src = r.ctx.createOscillator();
+      if (p.wave === "pulse25") src.setPeriodicWave(r.pulse25);
+      else if (p.wave === "pulse125") src.setPeriodicWave(r.pulse125);
       else src.type = p.wave;
       src.frequency.value = midiToFreq(midi);
     }
-    trackNodes[i].lfoGain.connect(src.detune);
+    r.trackNodes[i].lfoGain.connect(src.detune);
     return src;
   }
 
@@ -867,7 +895,7 @@
     initAudio();
     if (voices.has(midi)) return;
     const i = currentTrack, p = tracks[i].patch, t = ctx.currentTime;
-    const src = makeSource(i, midi);
+    const src = makeSource(rig, i, midi);
     const gain = ctx.createGain();
     const a = Math.max(0.001, p.attack), d = Math.max(0.001, p.decay);
     gain.gain.setValueAtTime(0, t);
@@ -875,7 +903,7 @@
     gain.gain.linearRampToValueAtTime(p.sustain * PEAK, t + a + d);
     applySweep(src, p, t, 0.3);
     src.connect(gain);
-    gain.connect(trackNodes[i].shaper);
+    gain.connect(rig.trackNodes[i].shaper);
     src.start(t);
     voices.set(midi, { src, gain, track: i });
     setKeyVisual(midi, true);
@@ -896,32 +924,37 @@
 
   function allNotesOff() { [...voices.keys()].forEach(noteOff); }
 
-  // Note planifiée (séquenceur) : indépendante des voix tenues
-  function playNote(i, midi, when, dur, accent) {
+  // Note planifiée : indépendante des voix tenues, et rejouable hors ligne
+  function playOn(r, i, midi, when, dur, accent) {
     const p = tracks[i].patch;
-    const src = makeSource(i, midi);
-    const gain = ctx.createGain();
+    const src = makeSource(r, i, midi);
+    const gain = r.ctx.createGain();
     const peak = accent ? ACCENT_PEAK : PEAK;
     const a = Math.max(0.001, p.attack), d = Math.max(0.001, p.decay);
-    const r = Math.max(0.01, p.release);
+    const rel = Math.max(0.01, p.release);
     const susT = when + a + d;
     const end = Math.max(when + Math.max(dur, a + 0.01), susT);
     gain.gain.setValueAtTime(0, when);
     gain.gain.linearRampToValueAtTime(peak, when + a);
     gain.gain.linearRampToValueAtTime(p.sustain * peak, susT);
     if (end > susT) gain.gain.setValueAtTime(p.sustain * peak, end);
-    gain.gain.linearRampToValueAtTime(0.0001, end + r);
+    gain.gain.linearRampToValueAtTime(0.0001, end + rel);
     applySweep(src, p, when, dur);
     src.connect(gain);
-    gain.connect(trackNodes[i].shaper);
+    gain.connect(r.trackNodes[i].shaper);
     src.start(when);
-    src.stop(end + r + 0.05);
+    src.stop(end + rel + 0.05);
+  }
+
+  function playNote(i, midi, when, dur, accent) {
+    playOn(rig, i, midi, when, dur, accent);
   }
 
   // ------- Arpégiateur -------
   let held = [], arpTimer = null, arpIndex = 0, arpDir = 1;
 
   function pressNote(midi) {
+    captureNote(midi);
     if (master.arpMode === "off") { noteOn(midi); return; }
     initAudio();
     if (!held.includes(midi)) held.push(midi);
@@ -1162,6 +1195,7 @@
         cell.classList.toggle("accent", on && isAccent(v));
         cell.classList.toggle("ghost", !on && ghosts.has(o));
         cell.classList.toggle("hors", s >= len);
+        cell.classList.toggle("curseur", recArmed && !seqPlaying && s === writeStep);
       }
     }
     refreshOverview();
@@ -1469,6 +1503,241 @@
     });
   }
 
+  // ------- Enregistrement au clavier -------
+  // Armé, il écrit dans le motif affiché ce qu'on joue : quantifié sur le pas
+  // le plus proche pendant la lecture, sinon pas à pas sous un curseur.
+  let recArmed = false, writeStep = 0, lastStepTime = 0;
+  const armBtn = document.getElementById("armBtn");
+
+  function setArmed(on) {
+    recArmed = on;
+    armBtn.classList.toggle("rec-on", on);
+    armBtn.textContent = on ? "Écriture…" : "Enreg. clavier";
+    if (on && !seqPlaying) writeStep = 0;
+    refreshSeqGrid();
+  }
+
+  armBtn.addEventListener("click", () => setArmed(!recArmed));
+
+  function captureNote(midi) {
+    if (!recArmed) return;
+    const off = midi - baseMidi();
+    // le motif ne couvre qu'une octave : la seconde s'y replie
+    const note = off > 12 ? off - 12 : off;
+    if (note < 0 || note > 12) return;
+    const len = tracks[currentTrack].len;
+    const data = editData(currentTrack);
+    let s;
+    if (seqPlaying) {
+      const sd = stepDur();
+      const late = ctx.currentTime - lastStepTime;
+      s = playheadStep + (late > sd / 2 ? 1 : 0);
+    } else {
+      s = writeStep;
+      writeStep = (writeStep + 1) % len;
+    }
+    data[((s % len) + len) % len] = note;
+    refreshSeqGrid();
+    markDirty();
+  }
+
+  function moveWriteStep(delta, erase) {
+    const len = tracks[currentTrack].len;
+    writeStep = ((writeStep + delta) % len + len) % len;
+    if (erase) { editData(currentTrack)[writeStep] = null; markDirty(); }
+    refreshSeqGrid();
+  }
+
+  // ------- Annuler / Rétablir -------
+  // Les états sont conservés sous leur forme encodée : la même chaîne que
+  // celle de l'URL, donc rien de neuf à sérialiser.
+  const HISTORY_MAX = 60;
+  let undoStack = [], redoStack = [], lastSnapshot = null;
+  // L'instantané est différé de 250 ms : un simple drapeau synchrone serait déjà
+  // retombé quand il s'exécute. On neutralise donc la prochaine sauvegarde, et
+  // c'est elle qui lève la consigne.
+  let suppressSnapshot = false;
+
+  function applyEncoded(str) {
+    suppressSnapshot = true;
+    const wasPlaying = seqPlaying;
+    if (wasPlaying) seqStop();
+    allNotesOff(); held = []; stopArp();
+    decodeState(str);
+    refreshAllFromState();
+    lastSnapshot = encodeState();
+    if (!urlBroken) {
+      try { history.replaceState(null, "", "#" + lastSnapshot); } catch (e) { urlBroken = true; }
+    }
+    if (wasPlaying) seqStart();
+    refreshHistoryButtons();
+  }
+
+  function undo() {
+    if (!undoStack.length) return;
+    redoStack.push(lastSnapshot);
+    applyEncoded(undoStack.pop());
+  }
+
+  function redo() {
+    if (!redoStack.length) return;
+    undoStack.push(lastSnapshot);
+    applyEncoded(redoStack.pop());
+  }
+
+  function refreshHistoryButtons() {
+    undoBtn.disabled = !undoStack.length;
+    redoBtn.disabled = !redoStack.length;
+  }
+
+  const undoBtn = document.getElementById("undoBtn");
+  const redoBtn = document.getElementById("redoBtn");
+  undoBtn.addEventListener("click", undo);
+  redoBtn.addEventListener("click", redo);
+
+  // ------- Outils de motif -------
+  // Agissent sur la piste sélectionnée du motif affiché, dans sa longueur utile.
+  function patternSlice() {
+    return { data: editData(currentTrack), len: tracks[currentTrack].len };
+  }
+
+  function rotatePattern(delta) {
+    const { data, len } = patternSlice();
+    const head = data.slice(0, len);
+    const out = head.map((_, k) => head[((k - delta) % len + len) % len]);
+    for (let k = 0; k < len; k++) data[k] = out[k];
+    refreshSeqGrid();
+    markDirty();
+  }
+
+  function transposePattern(delta) {
+    const { data, len } = patternSlice();
+    const notes = [];
+    for (let k = 0; k < len; k++) {
+      const v = data[k];
+      if (v === null || v === undefined) continue;
+      const n = noteOf(v) + delta;
+      if (n < 0 || n > 12) {   // refuse plutôt que d'écraser les extrêmes
+        flashTool("Hors grille");
+        return;
+      }
+      notes.push([k, n + (isAccent(v) ? ACCENT : 0)]);
+    }
+    notes.forEach(([k, v]) => data[k] = v);
+    refreshSeqGrid();
+    markDirty();
+  }
+
+  function reversePattern() {
+    const { data, len } = patternSlice();
+    const head = data.slice(0, len).reverse();
+    for (let k = 0; k < len; k++) data[k] = head[k];
+    refreshSeqGrid();
+    markDirty();
+  }
+
+  let toolTimer = null;
+  const toolMsg = document.getElementById("toolMsg");
+  function flashTool(msg) {
+    toolMsg.textContent = msg;
+    clearTimeout(toolTimer);
+    toolTimer = setTimeout(() => toolMsg.textContent = "", 1600);
+  }
+
+  document.getElementById("rotL").addEventListener("click", () => rotatePattern(-1));
+  document.getElementById("rotR").addEventListener("click", () => rotatePattern(1));
+  document.getElementById("trDown").addEventListener("click", () => transposePattern(-1));
+  document.getElementById("trUp").addEventListener("click", () => transposePattern(1));
+  document.getElementById("revBtn").addEventListener("click", reversePattern);
+
+  // ------- Export WAV hors ligne -------
+  // Le morceau est rendu plus vite que le temps réel dans un contexte hors
+  // ligne, avec le même graphe : le fichier est donc identique à ce qu'on
+  // entend, sans devoir attendre la durée du morceau.
+  function songBars() {
+    return (songMode && chain.length) ? chain.length : 4;
+  }
+
+  function renderTail() {
+    // de quoi laisser mourir la plus longue relâche, plus les répétitions d'écho
+    const longest = Math.max(...tracks.map(t => t.patch.release));
+    return longest + (master.echoMix > 0 ? master.echoTime * 6 : 0) + 0.3;
+  }
+
+  async function renderSong() {
+    const rate = 44100;
+    const sd = 60 / master.bpm / 4;
+    const bars = songBars();
+    const total = bars * STEPS * sd + renderTail();
+    const OfflineCtx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    const octx = new OfflineCtx(2, Math.ceil(total * rate), rate);
+    const orig = createRig(octx, false);
+
+    const solos = anySolo();
+    for (let step = 0; step < bars * STEPS; step++) {
+      const pat = (songMode && chain.length)
+        ? chain[Math.floor(step / STEPS) % chain.length] : editPattern;
+      const when = step * sd + (step % 2 ? master.swing * sd : 0);
+      tracks.forEach((tr, i) => {
+        const v = patterns[pat][i][step % tr.len];
+        if (v === null || v === undefined) return;
+        if (tr.mute || (solos && !tr.solo)) return;
+        playOn(orig, i, trackBase(i) + noteOf(v), when, sd * 0.6, isAccent(v));
+      });
+    }
+    return octx.startRendering();
+  }
+
+  // AudioBuffer -> fichier WAV 16 bits
+  function encodeWav(buffer) {
+    const chans = buffer.numberOfChannels, frames = buffer.length;
+    const bytes = 44 + frames * chans * 2;
+    const view = new DataView(new ArrayBuffer(bytes));
+    const str = (off, s) => { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); };
+    str(0, "RIFF"); view.setUint32(4, bytes - 8, true); str(8, "WAVE");
+    str(12, "fmt "); view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true); view.setUint16(22, chans, true);
+    view.setUint32(24, buffer.sampleRate, true);
+    view.setUint32(28, buffer.sampleRate * chans * 2, true);
+    view.setUint16(32, chans * 2, true); view.setUint16(34, 16, true);
+    str(36, "data"); view.setUint32(40, frames * chans * 2, true);
+
+    const data = [];
+    for (let c = 0; c < chans; c++) data.push(buffer.getChannelData(c));
+    let off = 44;
+    for (let i = 0; i < frames; i++) {
+      for (let c = 0; c < chans; c++) {
+        const x = Math.max(-1, Math.min(1, data[c][i]));
+        view.setInt16(off, x < 0 ? x * 0x8000 : x * 0x7fff, true);
+        off += 2;
+      }
+    }
+    return new Blob([view], { type: "audio/wav" });
+  }
+
+  function downloadBlob(blob, name) {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  }
+
+  const wavBtn = document.getElementById("wavBtn");
+  wavBtn.addEventListener("click", async () => {
+    const label = wavBtn.innerHTML;
+    wavBtn.disabled = true;
+    wavBtn.textContent = "Rendu…";
+    try {
+      const buf = await renderSong();
+      downloadBlob(encodeWav(buf), "synthe-8bit.wav");
+      wavBtn.textContent = "Exporté !";
+    } catch (e) {
+      wavBtn.textContent = "Échec du rendu";
+    }
+    setTimeout(() => { wavBtn.innerHTML = label; wavBtn.disabled = false; }, 1600);
+  });
+
   // ------- Enregistrement -------
   let recorder = null, recChunks = [];
   const recBtn = document.getElementById("recBtn");
@@ -1483,16 +1752,12 @@
     recorder.onstop = () => {
       const blob = new Blob(recChunks, { type: recorder.mimeType || "audio/webm" });
       const ext = (recorder.mimeType || "").includes("ogg") ? "ogg" : "webm";
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = "synthe-8bit." + ext;
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-      recBtn.innerHTML = "&#9679; Enregistrer";
+      downloadBlob(blob, "synthe-8bit." + ext);
+      recBtn.innerHTML = "&#9679; Capturer";
       recBtn.classList.remove("rec-on");
     };
     recorder.start();
-    recBtn.innerHTML = "&#9632; Stop + export";
+    recBtn.innerHTML = "&#9632; Stop + fichier";
     recBtn.classList.add("rec-on");
   });
 
@@ -1580,13 +1845,22 @@
     if (e.repeat) return;
     const tag = e.target.tagName;
     if (tag === "INPUT" || tag === "SELECT") return;
-    if (e.code in KEYMAP && !downKeys.has(e.code)) {
+    // un modificateur signe un raccourci, pas une note
+    const mod = e.ctrlKey || e.metaKey || e.altKey;
+    if (!mod && e.code in KEYMAP && !downKeys.has(e.code)) {
       e.preventDefault();
       downKeys.add(e.code);
       pressNote(baseMidi() + KEYMAP[e.code]);
-    } else if (e.code === "KeyZ") shiftOctave(-1);
-    else if (e.code === "KeyX") shiftOctave(1);
+    } else if (!mod && e.code === "KeyZ") shiftOctave(-1);
+    else if (!mod && e.code === "KeyX") shiftOctave(1);
+    else if (e.code === "KeyZ" && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      e.shiftKey ? redo() : undo();
+    }
+    else if (e.code === "KeyY" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); redo(); }
     else if (e.code === "Space") { e.preventDefault(); seqPlaying ? seqStop() : seqStart(); }
+    else if (e.code === "ArrowRight" && recArmed) { e.preventDefault(); moveWriteStep(1, false); }
+    else if (e.code === "ArrowLeft" && recArmed) { e.preventDefault(); moveWriteStep(-1, true); }
     else if (e.code === "Digit1" || e.code === "Numpad1") selectTrack(0);
     else if (e.code === "Digit2" || e.code === "Numpad2") selectTrack(1);
     else if (e.code === "Digit3" || e.code === "Numpad3") selectTrack(2);
@@ -1657,22 +1931,22 @@
   // Paramètres globaux
   bindSlider("volume", pct, v => {
     master.volume = v;
-    if (masterGain) masterGain.gain.setValueAtTime(v, ctx.currentTime);
+    if (rig) rig.masterGain.gain.setValueAtTime(v, ctx.currentTime);
     markDirty();
   });
   bindSlider("echoMix", pct, v => {
     master.echoMix = v;
-    if (delayWet) delayWet.gain.setValueAtTime(v, ctx.currentTime);
+    if (rig) rig.delayWet.gain.setValueAtTime(v, ctx.currentTime);
     markDirty();
   });
   bindSlider("echoTime", ms, v => {
     master.echoTime = v;
-    if (delayNode) delayNode.delayTime.setValueAtTime(v, ctx.currentTime);
+    if (rig) rig.delay.delayTime.setValueAtTime(v, ctx.currentTime);
     markDirty();
   });
   bindSlider("echoFb", pct, v => {
     master.echoFb = v;
-    if (delayFb) delayFb.gain.setValueAtTime(v, ctx.currentTime);
+    if (rig) rig.delayFb.gain.setValueAtTime(v, ctx.currentTime);
     markDirty();
   });
   bindSlider("arpRate", v => v + "Hz", v => { master.arpRate = v; restartArp(); markDirty(); });
@@ -1876,8 +2150,19 @@
     if (loadingPatch || urlBroken) return;
     clearTimeout(urlTimer);
     urlTimer = setTimeout(() => {
+      const now = encodeState();
+      // une entrée d'historique par changement stabilisé, pas par cran de curseur
+      if (suppressSnapshot) {
+        suppressSnapshot = false;
+      } else if (lastSnapshot !== null && lastSnapshot !== now) {
+        undoStack.push(lastSnapshot);
+        if (undoStack.length > HISTORY_MAX) undoStack.shift();
+        redoStack = [];
+        refreshHistoryButtons();
+      }
+      lastSnapshot = now;
       try {
-        history.replaceState(null, "", "#" + encodeState());
+        history.replaceState(null, "", "#" + now);
       } catch (e) {
         urlBroken = true;   // certains contextes refusent replaceState (file:// selon le navigateur)
       }
@@ -1933,10 +2218,10 @@
   }
 
   function drawScope() {
-    const data = new Uint8Array(analyser.fftSize);
+    const data = new Uint8Array(rig.analyser.fftSize);
     (function frame() {
       requestAnimationFrame(frame);
-      analyser.getByteTimeDomainData(data);
+      rig.analyser.getByteTimeDomainData(data);
       sctx.fillStyle = "#0a0614";
       sctx.fillRect(0, 0, scope.width, scope.height);
       sctx.strokeStyle = getComputedStyle(document.documentElement)
@@ -1954,6 +2239,7 @@
       if (seqPlaying) {
         while (stepQueue.length && stepQueue[0].time <= ctx.currentTime) {
           const ev = stepQueue.shift();
+          lastStepTime = ev.time;
           setPlayhead(ev.step);
           if (ev.pattern !== livePat || ev.pos !== livePos) {
             livePat = ev.pattern;
@@ -1989,6 +2275,8 @@
   setSongMode(songMode);
   followBtn.classList.toggle("selected", followPlayback);
   loadPatchIntoControls();
+  lastSnapshot = encodeState();
+  refreshHistoryButtons();
   drawIdleScope();
   window.addEventListener("pointerdown", initAudio, { once: false });
 
