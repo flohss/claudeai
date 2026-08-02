@@ -1,10 +1,19 @@
-# Synthé 8-Bit 🎹
+# Synthés virtuels 🎹
 
-Un synthétiseur virtuel 8-bit (chiptune) jouable dans le navigateur, écrit en HTML/CSS/JavaScript pur avec l'API Web Audio — aucune dépendance, aucun build.
+Deux synthétiseurs jouables dans le navigateur, écrits en HTML/CSS/JavaScript pur avec l'API Web Audio — aucune dépendance, aucun build.
+
+Deux instruments, deux mondes sonores :
+
+| Page | Genre | Moteur |
+| --- | --- | --- |
+| [`index.html`](index.html) | **Chiptune 8-bit** | Oscillateurs carré/pulse/triangle, bitcrusher, vibrato |
+| [`trance.html`](trance.html) | **Trance** | Supersaw, filtre résonant à enveloppe, sidechain, réverbération, boîte à rythmes |
+
+Les deux partagent la même architecture — séquenceur à motifs enchaînables, bibliothèque de morceaux, partage par URL, annuler/rétablir, export WAV — mais rien de leur synthèse.
 
 ## Utilisation
 
-Ouvrez simplement `index.html` dans un navigateur moderne (Chrome, Firefox, Edge, Safari), ou servez le dossier :
+Ouvrez simplement `index.html` ou `trance.html` dans un navigateur moderne (Chrome, Firefox, Edge, Safari), ou servez le dossier :
 
 ```bash
 npx serve .
@@ -133,6 +142,23 @@ Le mappage utilise la position physique des touches, donc il fonctionne aussi bi
 - **Ctrl+Z** / **Ctrl+Maj+Z** : annuler, rétablir
 - **← / →** (enregistrement armé) : reculer en effaçant, avancer sans écrire
 
+## Le studio trance
+
+[`trance.html`](trance.html) reprend l'architecture du séquenceur mais change tout le reste.
+
+**Cinq pistes** : Lead, Nappe, Basse, Pluck et une **batterie de synthèse** (grosse caisse à hauteur descendante, clap en trois éclats, charleston fermé et ouvert, crash). La grille s'adapte : treize lignes de hauteurs pour les pistes mélodiques, cinq lignes de percussions pour la batterie.
+
+**Le moteur** :
+
+- **Supersaw** — sept dents de scie désaccordées en éventail symétrique autour de la fondamentale, avec compensation de niveau. C'est le timbre signature du genre.
+- **Filtre résonant à enveloppe** — chaque note traverse son propre passe-bas qui s'ouvre puis retombe. Fréquence, résonance, montée et durée réglables : de quoi passer du pluck sec au lead qui s'ouvre.
+- **Sidechain** — chaque coup de grosse caisse creuse le volume des pistes qui l'ont demandé, avec un temps de remontée global. C'est le pompage caractéristique, dosable piste par piste.
+- **Réverbération à convolution** — la réponse impulsionnelle est un bruit décroissant généré à la volée, de 0,5 à 5 secondes.
+- **Délai pointé de 3/16** — calé sur le tempo, avec retour réglable.
+- **Panoramique** par piste.
+
+**Motifs de 32 pas** (deux mesures), quatre motifs enchaînables, trois morceaux fournis — *Ascension* (138 BPM, uplifting), *Nébuleuse* (132, plus profond), *Orage* (142, agressif) — plus un emplacement vierge.
+
 ## Structure
 
-Tout tient dans un seul fichier : [`index.html`](index.html) (interface, styles rétro et moteur audio).
+Deux fichiers autonomes, sans dépendance ni build : [`index.html`](index.html) pour le chiptune, [`trance.html`](trance.html) pour la trance. Chacun contient son interface, ses styles et son moteur audio.
