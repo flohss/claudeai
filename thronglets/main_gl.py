@@ -66,6 +66,7 @@ import sys
 
 import numpy as np
 
+import simulation
 import tuning
 from i18n import disposition_label
 from simulation import (ACT_APPROACH, ACT_FLEE, ACT_IGNORE, N_TOKENS,
@@ -1521,9 +1522,11 @@ def build_hud(size, world, env, phase, selected_id, font, small, menu=None):
         c = next((c for c in world.creatures if c.id == selected_id and c.alive), None)
         if c is not None:
             has_mind = c.mind is not None
-            ph = 124 if has_mind else 78
-            # wider with a mind: the feeling line and the row of five call
-            # meanings both ran off the old 250px panel
+            ph = 172 if has_mind else 78
+            # One line per fact, rather than two facts sharing a line. The
+            # feeling line used to sit beside energy and ran clean off the
+            # panel as soon as the wording gained its neutral band ("doesn't
+            # know you yet" is half again as long as "is wary of you").
             px, py, pw = 12, size[1] - ph - 40, (300 if has_mind else 250)
             panel = pygame.Surface((pw, ph), pygame.SRCALPHA)
             panel.fill((12, 16, 22, 190))
@@ -1535,23 +1538,34 @@ def build_hud(size, world, env, phase, selected_id, font, small, menu=None):
             text("energy: %3.0f%%" % (100.0 * c.energy / MAX_ENERGY), px + 10, py + 48, fnt=small)
             if has_mind:
                 d = c.mind.disposition()
-                text("feeling: %s (%+.0f%%)" % (disposition_label(d), d * 100), px + 120, py + 48, fnt=small)
+                text("feeling: %s (%+.0f%%)" % (disposition_label(d), d * 100),
+                     px + 10, py + 66, fnt=small)
                 emo = c.mind.emotion()
                 ecol = MOOD_HUD_COLORS.get(emo, (230, 230, 220))
-                text("mood: %-8s  valence %+.0f%%  arousal %2.0f%%"
+                text("mood: %-8s val %+.0f%%  aro %2.0f%%"
                      % (emo, c.mind.valence * 100, c.mind.arousal * 100),
-                     px + 10, py + 70, ecol, small)
+                     px + 10, py + 84, ecol, small)
                 # what THIS creature has learned each colour foretells - more
                 # telling here than a flock average, because you picked it
-                text("what calls mean to it:", px + 10, py + 90, (150, 200, 130), small)
+                text("what calls mean to it:", px + 10, py + 104, (150, 200, 130), small)
                 cx = px + 10
                 for token in range(1, N_TOKENS):
                     m = c.mind.signal_meaning(token)
-                    pygame.draw.circle(surf, TOKEN_COLORS[token], (cx + 5, py + 112), 5)
+                    pygame.draw.circle(surf, TOKEN_COLORS[token], (cx + 5, py + 126), 5)
                     mc = ((225, 110, 110) if m < -0.02 else
                           (150, 220, 140) if m > 0.02 else (140, 146, 132))
-                    text("%+.2f" % m, cx + 13, py + 105, mc, small)
+                    text("%+.2f" % m, cx + 13, py + 119, mc, small)
                     cx += 46
+                # the only learning that reaches the body: how much harder this
+                # one runs because it worked out what a hunter costs it
+                if c.mind.dread > 0.0:
+                    grasp = min(1.0, c.mind.dread / max(1e-9, simulation.KNOWLEDGE_FLEE_FULL))
+                    text("dread %.3f -> runs %+.0f%% harder"
+                         % (c.mind.dread, simulation.KNOWLEDGE_FLEE_GAIN * grasp * 100),
+                         px + 10, py + 146, (225, 110, 110), small)
+                else:
+                    text("hunters mean nothing to it yet", px + 10, py + 146,
+                         (140, 146, 132), small)
 
     text("L-drag orbit   scroll zoom   click: select   right-click creature: care/harm   "
          "right-click ground: lay an egg   S/W season/weather   T fast-time",

@@ -48,6 +48,7 @@ import time
 import numpy as np
 import pygame
 
+import simulation
 import tuning
 from i18n import STATE_LABELS, TRAIT_LABELS, disposition_label
 from simulation import (DANGER, DISTRESS, FOOD, Genome, HAND_PERCEPTION, HEIGHT, IDLE, MATE, MAX_POPULATION, N_TOKENS,
@@ -288,6 +289,9 @@ TEXT = {
         "mind_expects": "expects of this moment",
         "mind_decided": "has decided to",
         "mind_surprise": "surprise",
+        "mind_dread": "what a hunter means to it",
+        "mind_dread_none": "has not understood hunters yet",
+        "mind_dread_runs": "runs {pct:+.0f}% harder for it",
         "mind_words": "what the flock's calls mean to it",
         "mind_dwells": "cannot stop going over",
         "mind_dwells_none": "nothing has shocked it yet",
@@ -545,6 +549,9 @@ TEXT = {
         "mind_expects": "ce qu'elle attend de cet instant",
         "mind_decided": "elle a decide de",
         "mind_surprise": "surprise",
+        "mind_dread": "un chasseur, pour elle",
+        "mind_dread_none": "les chasseurs ne lui disent rien",
+        "mind_dread_runs": "elle fuit {pct:+.0f}% plus fort",
         "mind_words": "ce que les cris du groupe veulent dire pour elle",
         "mind_dwells": "ce qu'elle ressasse",
         "mind_dwells_none": "rien ne l'a encore choquee",
@@ -1105,7 +1112,7 @@ def draw_mind_panel(screen, font, mind, t):
     entirely unseen. Drawn bottom-left over the field, out of the HUD's way."""
     pad, w = 10, 300
     rows = max(1, len(mind.replay))
-    h = 166 + rows * 15
+    h = 216 + rows * 15
     x, y = 10, SCREEN_H - h - 10
     panel = pygame.Surface((w, h), pygame.SRCALPHA)
     panel.fill((16, 20, 14, 232))
@@ -1134,6 +1141,28 @@ def draw_mind_panel(screen, font, mind, t):
     # how badly its last expectation was violated
     screen.blit(font.render(f"{t['mind_surprise']}  {mind.surprise:.3f}", True, HUD_HINT),
                 (x + pad, cy)); cy += 18
+
+    # The one piece of learning that reaches its body. Everything else on this
+    # panel is what the creature feels; this is what it does about it. Read the
+    # constants off the module rather than the import, so a value pinned in the
+    # tuning screen shows up here instead of the built-in one.
+    dread = mind.dread
+    screen.blit(font.render(t["mind_dread"], True, HUD_HINT), (x + pad, cy))
+    if dread <= 0.0:
+        cy += 18
+        screen.blit(font.render(t["mind_dread_none"], True, HUD_SEP), (x + pad, cy)); cy += 32
+    else:
+        full = max(1e-9, simulation.KNOWLEDGE_FLEE_FULL)
+        grasp = min(1.0, dread / full)
+        bonus = simulation.KNOWLEDGE_FLEE_GAIN * grasp
+        screen.blit(font.render(f"{dread:.3f}", True, HUD_HINT), (x + w - pad - 40, cy))
+        cy += 18
+        pygame.draw.rect(screen, HUD_SEP, (x + pad, cy, w - 2 * pad, 8), width=1)
+        pygame.draw.rect(screen, (225, 85, 75),
+                         (x + pad + 1, cy + 1, int((w - 2 * pad - 2) * grasp), 6))
+        cy += 14
+        screen.blit(font.render(t["mind_dread_runs"].format(pct=bonus * 100), True,
+                                (225, 85, 75)), (x + pad, cy)); cy += 18
 
     # what the flock's own calls have come to mean to it: the colour swatch is
     # the evolved, inherited word; the bar beside it is the meaning this one

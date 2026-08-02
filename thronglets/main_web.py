@@ -28,6 +28,7 @@ import time
 import numpy as np
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+import simulation
 from i18n import disposition_label
 from simulation import (ACT_APPROACH, ACT_FLEE, ACT_IGNORE, DANGER, DISTRESS, FOOD, HEIGHT, IDLE, MATE,
                          MAX_POPULATION, N_TOKENS, N_TRAITS, TRAIT_HEARING,
@@ -166,6 +167,7 @@ def snapshot(state):
         "disposition": _disposition_payload(w),
         "choices": _choices_payload(w),
         "signal_meanings": _meanings_payload(w),
+        "dread": _dread_payload(w),
         "disposition_history": [float(v) for v in getattr(w, "disposition_history", [])],
     }
 
@@ -196,6 +198,23 @@ def _meanings_payload(w):
     if meanings is None:
         return None
     return {str(token): float(v) for token, v in meanings.items()}
+
+
+def _dread_payload(w):
+    """The one place learning reaches the body: a creature that has worked out
+    what a hunter costs it runs harder. Reported as the share of the flock that
+    has understood anything at all, and the average extra push that buys them -
+    every other learned readout is about what they feel, this one is about
+    whether they live."""
+    minds = [c.mind for c in w.creatures if c.alive and c.mind is not None]
+    if not minds:
+        return None
+    full = max(1e-9, simulation.KNOWLEDGE_FLEE_FULL)
+    bonus = [simulation.KNOWLEDGE_FLEE_GAIN * min(1.0, m.dread / full) for m in minds]
+    return {"understood": sum(1 for m in minds if m.dread > 0.0) / len(minds),
+            "mean_dread": sum(m.dread for m in minds) / len(minds),
+            "mean_bonus": sum(bonus) / len(bonus),
+            "max_bonus": max(bonus)}
 
 
 def _family_payload(state):
@@ -625,6 +644,7 @@ INDEX_HTML = """<!doctype html>
         <div class="row" id="settings"></div>
         <div class="row" id="hud-disposition" style="display:none"></div>
         <div class="row" id="hud-choices" style="display:none"></div>
+        <div class="row" id="hud-dread" style="display:none"></div>
         <div class="row" id="vocab-danger"></div>
         <div class="row" id="vocab-food"></div>
         <div class="row" id="vocab-distress"></div>
@@ -896,6 +916,8 @@ const STRINGS = {
     choiceApproach: "coming",
     choiceFlee: "fleeing",
     choiceIgnore: "ignoring you",
+    dreadNone: "none of them has understood a hunter yet",
+    dreadSome: "{pct}% understand a hunter, and run {gain}% harder for it (up to {max}%)",
     translatorDreaded: "dreaded",
     translatorWelcomed: "welcomed",
     translatorNoise: "still just noise",
@@ -1001,6 +1023,8 @@ const STRINGS = {
     choiceApproach: "viennent",
     choiceFlee: "fuient",
     choiceIgnore: "t'ignorent",
+    dreadNone: "aucune n'a encore compris ce qu'est un chasseur",
+    dreadSome: "{pct}% ont compris un chasseur, et fuient {gain}% plus fort (jusqu'a {max}%)",
     translatorDreaded: "redoute",
     translatorWelcomed: "bienvenu",
     translatorNoise: "encore du bruit",
@@ -1566,10 +1590,31 @@ function renderLearned(state) {
   const t = STRINGS[uiLang];
   const dispRow = document.getElementById('hud-disposition');
   const choiceRow = document.getElementById('hud-choices');
+  const dreadRow = document.getElementById('hud-dread');
   if (!state.disposition) {                 // learning off: show nothing at all
     dispRow.style.display = 'none';
     choiceRow.style.display = 'none';
+    dreadRow.style.display = 'none';
     return;
+  }
+  // the one learned thing that changes whether they live, not just how they
+  // feel: understanding a hunter buys extra flight, and nothing is ever taken
+  // away from a creature that has understood nothing
+  const dr = state.dread;
+  if (!dr) {
+    dreadRow.style.display = 'none';
+  } else if (dr.understood <= 0) {
+    dreadRow.innerHTML = `<span style="color:#9aa090">${t.dreadNone}</span>`;
+    dreadRow.style.display = '';
+  } else {
+    const bar = `<span class="gauge"><span class="gauge-seg" ` +
+      `style="width:${dr.understood * 100}%;background:#dc5f5a"></span></span>`;
+    const line = t.dreadSome
+      .replace('{pct}', Math.round(dr.understood * 100))
+      .replace('{gain}', '+' + Math.round(dr.mean_bonus * 100))
+      .replace('{max}', '+' + Math.round(dr.max_bonus * 100));
+    dreadRow.innerHTML = `${bar} <span style="color:#e16e6e">${line}</span>`;
+    dreadRow.style.display = '';
   }
   const d = state.disposition.value;
   const label = uiLang === 'fr' ? state.disposition.label_fr : state.disposition.label_en;
