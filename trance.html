@@ -287,6 +287,18 @@
   .hold-cell.beat { background: rgba(255,255,255,.1); }
   .hold-cell.mesure { background: rgba(255,255,255,.16); }
   .hold-cell.on { background: var(--accent2); box-shadow: 0 0 7px var(--accent2); }
+  /* piste d'automation du filtre : une barre par pas, tracée à la souris */
+  .sweep-grid { display: grid; gap: 2px; margin-top: 10px; }
+  .sweep-cell {
+    height: 46px; background: rgba(255,255,255,.045); border-radius: 3px;
+    cursor: crosshair; position: relative; overflow: hidden;
+    display: flex; align-items: flex-end;
+  }
+  .sweep-cell.beat { background: rgba(255,255,255,.09); }
+  .sweep-cell.mesure { background: rgba(255,255,255,.14); }
+  .sweep-bar { width: 100%; background: linear-gradient(180deg, var(--accent4), #b8791f); }
+  .sweep-cell.pose .sweep-bar { box-shadow: 0 0 6px var(--accent4); }
+  .sweep-hint { font-size: 10px; color: var(--dim); letter-spacing: .04em; }
   /* note prolongée : la couleur de la piste, en retrait */
   .seq-cell.prolonge { background: var(--tc); opacity: .4; }
   .ov-cell.tenu { background: var(--tc); opacity: .4; }
@@ -396,6 +408,7 @@
         <div class="row"><label>Réverb</label><input type="range" id="revSize" min="0.5" max="5" step="0.1" value="2.6"><output id="revSizeOut">2.6s</output></div>
         <div class="row"><label>Retour</label><input type="range" id="delFb" min="0" max="0.85" step="0.01" value="0.42"><output id="delFbOut">42%</output></div>
         <div class="row"><label>Ducking</label><input type="range" id="duck" min="0.05" max="0.6" step="0.01" value="0.22"><output id="duckOut">220ms</output></div>
+        <div class="row"><label>Résonance</label><input type="range" id="filtQ" min="0" max="20" step="0.5" value="6"><output id="filtQOut">6</output></div>
       </fieldset>
     </div>
 
@@ -456,7 +469,14 @@
         <div class="grid-inner">
           <div class="ov-grid" id="ovGrid"></div>
           <div class="seq-grid" id="seqGrid"></div>
+          <div class="sweep-grid" id="sweepGrid"></div>
         </div>
+      </div>
+      <div class="bar">
+        <span class="tag">Filtre</span>
+        <span class="sweep-hint">Tracez la courbe à la souris dans la bande ci-dessus</span>
+        <button id="sweepOpen" title="Ouvrir le filtre sur tout le motif">Ouvrir</button>
+        <button id="sweepClear" title="Retirer tous les points du motif">Vider</button>
       </div>
       <div class="hint">
         Quatre motifs de 32 pas (deux mesures), <b>A</b> à <b>D</b>. Un clic pose une note,
@@ -625,7 +645,9 @@
     },
     {
       name: "Orage", bpm: 142, chain: "0011002",
-      master: { revSize: 2.2, delFb: 0.38, duck: 0.19 },
+      master: { revSize: 2.2, delFb: 0.38, duck: 0.19, filtQ: 9 },
+      // le motif B ouvre progressivement le filtre : la montée du morceau
+      sweeps: ["", "789abccdefghijkllmnopqrstuuvwxyz", "", ""],
       tracks: [
         { preset: "lead", octave: 4, vol: 0.6, cutoff: 80, reso: 13, pats: [
           "0-0-3-0-7-0-3-0-a-0-7-0-3-0-0-0-",
@@ -689,7 +711,13 @@
   const livePattern = () => (songMode && chain.length) ? chain[chainPos % chain.length] : editPattern;
   const editData = i => patterns[editPattern][i];
 
-  const master = { volume: 0.55, bpm: 138, swing: 0, revSize: 2.6, delFb: 0.42, duck: 0.22 };
+  const master = { volume: 0.55, bpm: 138, swing: 0, revSize: 2.6, delFb: 0.42, duck: 0.22,
+                   filtQ: 6 };
+  // Automation du filtre master, un point par pas et par motif. null = pas de point :
+  // le filtre garde sa dernière valeur et glisse vers le point suivant.
+  const SWEEP_MAX = 35;                 // 36 niveaux, un caractère en base 36
+  const sweeps = Array.from({ length: PATTERN_COUNT }, () => new Array(STEPS).fill(null));
+  const sweepHz = v => cutoffHz(v * 100 / SWEEP_MAX);
 
   // ------- Audio -------
   let ctx = null, rig = null;
@@ -731,7 +759,14 @@
 
     r.bus = actx.createGain();
     r.bus.connect(tap);
-    tap.connect(r.masterGain);
+    // Filtre master balayable, après le tap : la réverbération et le délai le
+    // traversent aussi, comme sur le filtre d'une table de mixage.
+    r.masterFilter = actx.createBiquadFilter();
+    r.masterFilter.type = "lowpass";
+    r.masterFilter.frequency.value = 18000;
+    r.masterFilter.Q.value = master.filtQ;
+    tap.connect(r.masterFilter);
+    r.masterFilter.connect(r.masterGain);
     // Filet de sécurité : réverbération longue et cinq pistes peuvent se cumuler
     // au-delà du plein niveau selon les réglages.
     r.limiter = actx.createDynamicsCompressor();
@@ -791,6 +826,16 @@
   }
 
   function dottedDelay() { return (60 / master.bpm) * 0.75; }
+
+  // Un point d'automation glisse jusqu'au pas suivant : deux points éloignés
+  // suffisent à dessiner un long balayage.
+  function applySweep(r, v, when, sd) {
+    if (v === null || v === undefined || !r.masterFilter) return;
+    const f = r.masterFilter.frequency;
+    f.cancelScheduledValues(when);
+    f.setValueAtTime(f.value, when);
+    f.exponentialRampToValueAtTime(Math.max(60, sweepHz(v)), when + sd);
+  }
 
   function initAudio() {
     if (ctx) { if (ctx.state === "suspended") ctx.resume(); return; }
@@ -1079,6 +1124,8 @@
   let seqPlaying = false, seqStep = 0, nextStepTime = 0, seqTimer = null;
   let stepQueue = [], playheadStep = -1, lastStepTime = 0;
   const seqGridEl = document.getElementById("seqGrid");
+  const sweepGridEl = document.getElementById("sweepGrid");
+  const sweepCells = [];
   const ovGridEl = document.getElementById("ovGrid");
   let seqCells = [];
   const ovCells = [];
@@ -1122,6 +1169,72 @@
       }
     });
   }
+
+  function buildSweepGrid() {
+    sweepGridEl.innerHTML = "";
+    sweepGridEl.style.gridTemplateColumns = gridCols();
+    sweepCells.length = 0;
+    const label = document.createElement("div");
+    label.className = "seq-label";
+    label.textContent = "Filtre";
+    sweepGridEl.appendChild(label);
+    for (let s = 0; s < STEPS; s++) {
+      const cell = document.createElement("div");
+      cell.className = "sweep-cell" + (s % 16 === 0 ? " mesure" : s % 4 === 0 ? " beat" : "");
+      cell.dataset.sweep = s;
+      const bar = document.createElement("div");
+      bar.className = "sweep-bar";
+      cell.appendChild(bar);
+      sweepGridEl.appendChild(cell);
+      sweepCells[s] = { cell, bar };
+    }
+    refreshSweepGrid();
+  }
+
+  function refreshSweepGrid() {
+    const lane = sweeps[editPattern];
+    for (let s = 0; s < STEPS; s++) {
+      const v = lane[s];
+      const { cell, bar } = sweepCells[s];
+      cell.classList.toggle("pose", v !== null);
+      bar.style.height = v === null ? "0" : ((v + 1) / (SWEEP_MAX + 1) * 100) + "%";
+      cell.title = v === null ? "" : hzLabel(Math.round(sweepHz(v))) + " Hz";
+    }
+  }
+
+  // Tracé à la souris : la hauteur du pointeur dans la bande donne la coupure.
+  function sweepFromEvent(cellEl, clientY) {
+    const box = cellEl.getBoundingClientRect();
+    const part = 1 - (clientY - box.top) / box.height;
+    return Math.max(0, Math.min(SWEEP_MAX, Math.round(part * SWEEP_MAX)));
+  }
+  let sweepDrawing = false;
+  function drawSweepAt(target, clientY) {
+    const cell = target && target.closest ? target.closest(".sweep-cell") : null;
+    if (!cell) return;
+    sweeps[editPattern][Number(cell.dataset.sweep)] = sweepFromEvent(cell, clientY);
+    refreshSweepGrid(); markDirty();
+  }
+  sweepGridEl.addEventListener("pointerdown", e => {
+    if (!e.target.closest(".sweep-cell")) return;
+    e.preventDefault();
+    sweepDrawing = true;
+    drawSweepAt(e.target, e.clientY);
+  });
+  window.addEventListener("pointermove", e => {
+    if (!sweepDrawing) return;
+    drawSweepAt(document.elementFromPoint(e.clientX, e.clientY), e.clientY);
+  });
+  window.addEventListener("pointerup", () => { sweepDrawing = false; });
+
+  document.getElementById("sweepClear").addEventListener("click", () => {
+    sweeps[editPattern].fill(null);
+    refreshSweepGrid(); markDirty();
+  });
+  document.getElementById("sweepOpen").addEventListener("click", () => {
+    sweeps[editPattern].fill(SWEEP_MAX);
+    refreshSweepGrid(); markDirty();
+  });
 
   function buildSeqGrid() {
     const rows = rowsOf(currentTrack);
@@ -1266,6 +1379,7 @@
       const pat = livePattern();
       const sd = stepDur();
       const when = nextStepTime + (seqStep % 2 ? master.swing * sd : 0);
+      applySweep(rig, sweeps[pat][seqStep % STEPS], nextStepTime, sd);
       tracks.forEach((tr, i) => {
         const suite = patterns[pat][i];
         const v = suite[seqStep % STEPS];
@@ -1374,6 +1488,7 @@
     editPattern = p;
     refreshPatternButtons();
     refreshSeqGrid();
+    refreshSweepGrid();
     if (!fromPlayback) markDirty();
   }
 
@@ -1567,6 +1682,14 @@
 
 
   // ------- Bibliothèque -------
+  // Attention : parseInt(undefined, 36) lit la chaîne « undefined » comme un
+  // nombre valide. On refuse donc tout ce qui n'est pas un caractère.
+  const sweepChar = c => {
+    if (typeof c !== "string" || c === "-") return null;
+    const v = parseInt(c, 36);
+    return Number.isFinite(v) ? clamp(v, 0, SWEEP_MAX) : null;
+  };
+
   function applySong(song) {
     master.bpm = song.bpm;
     master.swing = song.swing || 0;
@@ -1580,6 +1703,13 @@
       tracks[i].mute = false; tracks[i].solo = false;
       for (let p = 0; p < PATTERN_COUNT; p++) patterns[p][i] = decodeSteps(t.pats[p]);
     });
+    // les courbes de filtre du morceau, ou table rase s'il n'en fournit pas
+    sweeps.forEach((lane, q) => {
+      const txt = (song.sweeps && song.sweeps[q]) || "";
+      for (let k = 0; k < STEPS; k++) {
+        lane[k] = sweepChar(txt[k]);
+      }
+    });
     chain = String(song.chain || "0").split("")
       .map(c => parseInt(c, 10))
       .filter(n => Number.isInteger(n) && n >= 0 && n < PATTERN_COUNT)
@@ -1589,10 +1719,11 @@
   }
 
   function refreshAllFromState() {
-    ["volume", "bpm", "swing", "revSize", "delFb", "duck"].forEach(k => setSlider(k, master[k]));
+    ["volume", "bpm", "swing", "revSize", "delFb", "duck", "filtQ"].forEach(k => setSlider(k, master[k]));
     applyTrackSelectionUI();
     buildMixer();
     buildSeqGrid();
+    refreshSweepGrid();
     refreshChain();
     modeLoopBtn.classList.toggle("selected", !songMode);
     modeSongBtn.classList.toggle("selected", songMode);
@@ -1658,6 +1789,7 @@
       const pat = (songMode && chain.length)
         ? chain[Math.floor(step / STEPS) % chain.length] : editPattern;
       const when = step * sd + (step % 2 ? master.swing * sd : 0);
+      applySweep(orig, sweeps[pat][step % STEPS], step * sd, sd);
       tracks.forEach((tr, i) => {
         const suite = patterns[pat][i];
         const v = suite[step % STEPS];
@@ -1890,6 +2022,11 @@
     markDirty();
   });
   bindSlider("duck", ms, v => { master.duck = v; markDirty(); });
+  bindSlider("filtQ", v => String(v), v => {
+    master.filtQ = v;
+    if (rig) rig.masterFilter.Q.setTargetAtTime(v, ctx.currentTime, 0.02);
+    markDirty();
+  });
 
   function selectWave(wave, silent) {
     tracks[currentTrack].patch.wave = wave;
@@ -2006,12 +2143,16 @@
     const head = [URL_VERSION, master.bpm, master.volume * 100, master.swing * 100,
                   master.revSize * 10, master.delFb * 100, master.duck * 100,
                   currentTrack, editPattern, songMode ? 1 : 0,
-                  accordsActifs ? 1 : 0].map(b36).join(".");
+                  accordsActifs ? 1 : 0, master.filtQ * 2].map(b36).join(".");
     const body = tracks.map((tr, i) => {
       const nums = TRACK_FIELDS.map(f => b36(f.get(tr))).join(".");
       return nums + "." + patterns.map(pat => encodeSteps(pat[i])).join("_");
     });
-    return "t=" + head + "~" + chain.join("") + "~" + body.join("~");
+    // les courbes de filtre ferment le fragment : un lien d'avant, plus court,
+    // se relit sans changement
+    const courbes = sweeps.map(lane =>
+      lane.map(v => v === null ? "-" : v.toString(36)).join("")).join("_");
+    return "t=" + head + "~" + chain.join("") + "~" + body.join("~") + "~" + courbes;
   }
 
   function matchPreset(patch) {
@@ -2041,6 +2182,15 @@
     editPattern = clamp(p36(h[8], 0), 0, PATTERN_COUNT - 1);
     songMode = p36(h[9], 0) === 1;
     accordsActifs = p36(h[10], 1) === 1;
+    master.filtQ = clamp(p36(h[11], 12), 0, 40) / 2;
+
+    const courbes = (parts[2 + tracks.length] || "").split("_");
+    sweeps.forEach((lane, q) => {
+      const txt = courbes[q] || "";
+      for (let k = 0; k < STEPS; k++) {
+        lane[k] = sweepChar(txt[k]);
+      }
+    });
 
     chain = (parts[1] || "").split("")
       .map(c => parseInt(c, 10))
@@ -2161,7 +2311,7 @@
   applySong(SONGS[0]);
   decodeState(decodeURIComponent(location.hash.slice(1)));
 
-  ["volume", "bpm", "swing", "revSize", "delFb", "duck"].forEach(k => setSlider(k, master[k]));
+  ["volume", "bpm", "swing", "revSize", "delFb", "duck", "filtQ"].forEach(k => setSlider(k, master[k]));
   applyTrackSelectionUI();
   buildSongBar();
   buildMixer();
@@ -2169,6 +2319,7 @@
   buildKeyboard();
   buildPatternBar();
   buildSeqGrid();
+  buildSweepGrid();
   refreshChain();
   setSongMode(songMode);
   setPoly(accordsActifs);

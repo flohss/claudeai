@@ -108,6 +108,22 @@ La batterie du studio trance n'a pas de rangée *Tenue* — prolonger un charles
 
 Dans les liens partagés, un pas tenu s'écrit `=` : `(047)===` est un Do majeur qui dure quatre pas.
 
+## Le balayage de filtre
+
+Les réglages étaient figés pour tout un motif. Le geste central de la trance et de la techno — **le filtre qui se referme puis rouvre sur deux mesures** — était donc hors de portée.
+
+Les studios [trance](trance.html) et [909](drums909.html) ont maintenant une **bande d'automation** sous la grille : une barre par pas, qu'on trace à la souris d'un seul glissé. Chaque point règle la coupure d'un **filtre passe-bas master**, placé après la réverbération et le délai — comme le filtre d'une table de mixage, il emporte tout le mixage, queues comprises.
+
+Un point ne saute pas : le filtre **glisse jusqu'au point suivant** sur la durée d'un pas. Deux points éloignés suffisent donc à dessiner une longue montée, et une courbe dense donne un mouvement détaillé. Un pas sans point ne change rien : le filtre garde sa dernière valeur. Une bande entièrement vide laisse le son intact, filtre grand ouvert.
+
+**Chaque motif a sa propre courbe** : A peut rester fermé pendant que B s'ouvre. Deux boutons complètent le tracé — **Ouvrir** met le motif à fond, **Vider** retire tous ses points.
+
+La **résonance** du filtre master se règle dans le panneau Master (elle existait déjà sur la 909). C'est elle qui fait chanter le balayage plutôt que simplement l'assourdir.
+
+Deux morceaux fournis s'en servent : le motif B d'*Orage* ouvre progressivement le filtre du grave à l'aigu — c'est la montée du morceau — et *Entrepôt* referme le filtre au milieu de chaque mesure avant de le rouvrir.
+
+Dans les liens partagés, les courbes ferment le fragment, un caractère base 36 par pas et `-` pour un pas sans point. Elles sont ajoutées **à la fin** exprès : un lien produit avant leur existence se relit sans rien changer.
+
 ## Quatre motifs enchaînés
 
 Le séquenceur contient **quatre motifs de 16 pas**, nommés A à D. Les pistes gardent leurs instruments d'un motif à l'autre : changer de motif change ce qui est joué, jamais le son.
@@ -156,6 +172,7 @@ Le décodage est tolérant : un lien tronqué, altéré ou d'une version inconnu
 - **Groove** : accents par pas, swing jusqu'à 50 %, et longueur de boucle réglable piste par piste pour des polyrythmies.
 - **Accords** : autant de hauteurs qu'on veut sur un même pas, à la souris ou au clavier — les touches encore tenues se groupent sur le pas courant. Un bouton **Accords / Mono** ramène le séquenceur à une note par pas quand on préfère.
 - **Durée de note** : une rangée **Tenue** prolonge une note sur les pas suivants, pour les nappes tenues et les basses legato.
+- **Balayage de filtre** : une bande d'automation par motif, tracée à la souris, qui pilote un filtre passe-bas master (trance et 909).
 - **Balayage de hauteur** par piste : −24 à +24 demi-tons sur la durée de la note.
 - **5 presets** : Lead GB, Basse, Cristal, Percu, Sirène — applicables à la piste sélectionnée.
 - **Bibliothèque de 7 morceaux** prêts à jouer, plus un emplacement vierge, écrits en clair dans le source.
@@ -213,7 +230,7 @@ Le mappage utilise la position physique des touches, donc il fonctionne aussi bi
 
 Chaque voix se règle en niveau, accord, chute, grain et départ réverb. Le pas-à-pas fait 16 temps, avec **accent** au deuxième clic, **shuffle** jusqu'à 55 %, et un **aléa** qui décale légèrement les frappes pour casser la rigidité machine.
 
-Le master enchaîne **saturation** (courbe douce, jamais d'écrêtage net), **filtre résonant** balayable, réverbération courte, puis un **limiteur** : la résonance peut pousser le signal bien au-delà du plein niveau, et sans lui le rendu saturerait.
+Le master enchaîne **saturation** (courbe douce, jamais d'écrêtage net), **filtre résonant** balayable — au curseur ou à la bande d'automation —, réverbération courte, puis un **limiteur** : la résonance peut pousser le signal bien au-delà du plein niveau, et sans lui le rendu saturerait.
 
 Trois grooves fournis : **Chicago** (124 BPM, house shufflée), **Detroit** (134, techno en doubles-croches), **Entrepôt** (128, charleys ouverts et filtre fermé).
 
