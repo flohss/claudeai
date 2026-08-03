@@ -181,6 +181,7 @@ Le décodage est tolérant : un lien tronqué, altéré ou d'une version inconnu
 - **Enregistrement au clavier** : écriture quantifiée pendant la lecture, ou pas à pas à l'arrêt.
 - **Outils de motif** : décalage, transposition, inversion, avec annuler/rétablir sur 60 pas.
 - **Capture en direct** : enregistre le mixage joué et exporte un `.webm`/`.ogg`.
+- **Export / import JSON** : le morceau entier dans un fichier texte lisible et modifiable à la main.
 - **Info-bulles** : chaque paramètre explique son effet au survol et au focus clavier.
 - **Oscilloscope** temps réel, coloré selon la piste sélectionnée.
 - **Clavier virtuel de 2 octaves** (souris et tactile, avec glissando) + sélecteur d'octave (0 à 7).
@@ -259,6 +260,41 @@ Le **diagramme s'affiche à l'écran** : les opérateurs se placent par étage s
 La profondeur de modulation suit la fréquence du modulateur, de sorte que **le timbre reste le même d'un bout à l'autre du clavier** au lieu de devenir criard dans l'aigu.
 
 Six presets — Piano él., Cloche, Marimba, Basse FM, Cuivre, Verre — et trois morceaux : **Rhodes** (96 BPM), **Carillon** (78), **Fanfare** (128). C'est la page où les **accords** comptent le plus : un piano électrique qui ne sait pas plaquer une triade, ce n'est pas un piano électrique.
+
+## Sauvegarder un morceau en JSON
+
+Le lien partagé est compact mais illisible. **Exporter JSON** enregistre le même morceau dans un fichier fait pour être ouvert : valeurs réelles au lieu de base 36, une entrée par piste, et les motifs dans la notation documentée plus haut.
+
+```json
+{
+  "format": "synthes-virtuels/trance",
+  "version": 1,
+  "nom": "Morceau trance",
+  "master": { "volume": 0.55, "bpm": 132, "swing": 0, "revSize": 3.6, "filtQ": 6 },
+  "chaine": "001122",
+  "mode": "morceau",
+  "accords": true,
+  "filtre": ["--------------------------------", "…"],
+  "pistes": [
+    {
+      "nom": "Nappe", "preset": null,
+      "volume": 0.58, "muet": false, "solo": false,
+      "reglages": { "wave": "supersaw", "octave": 3, "detune": 32, "attack": 1.4, … },
+      "motifs": ["(037)===============================", "…"]
+    }
+  ]
+}
+```
+
+**Importer JSON** relit ce fichier. Tout est là — pistes, instruments complets, quatre motifs, chaîne, courbes de filtre, réglages master —, donc l'aller-retour rend exactement l'état de départ. C'est vérifié par un test : l'état encodé avant l'export et après l'import sont la même chaîne, sur les quatre studios.
+
+Comme le fichier est du texte, **on peut le modifier à la main** : changer un tempo, renommer une piste, réécrire un motif, mettre une voix en muet. Le fichier réimporté prend les modifications.
+
+Trois garde-fous, parce qu'un fichier arrive de l'extérieur :
+
+- Un fichier venant d'un autre studio est **refusé en le nommant** (« Fichier du studio 8-bit ») plutôt qu'à moitié chargé. Un JSON malformé dit « JSON invalide ». Dans les deux cas, rien ne bouge.
+- Chaque valeur lue est vérifiée avant d'être posée, puis **tout repasse par le codec des liens partagés** : ses bornes et ses garde-fous sont déjà éprouvés, et aucune valeur du fichier n'atteint le moteur audio sans passer par eux. Un tempo à 99999 revient à 150, un volume à −50 revient à 0.
+- Un import est **annulable** : `Ctrl+Z` rend l'état précédent.
 
 ## Les info-bulles
 

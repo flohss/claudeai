@@ -328,6 +328,9 @@
         <button id="armBtn" title="Écrire aux pads dans le motif">Enreg. pads</button>
         <button id="wavBtn" title="Rendre le groove en fichier WAV">Exporter WAV</button>
         <button id="shareBtn">Partager</button>
+        <button id="jsonOut">Exporter JSON</button>
+        <button id="jsonIn">Importer JSON</button>
+        <input type="file" id="jsonFile" accept=".json,application/json" hidden>
       </div>
 
       <div class="bar">
@@ -1607,6 +1610,8 @@
   }
 
   const INFOS = {
+    "jsonOut": "Enregistre le morceau entier dans un fichier JSON lisible : pistes, instruments, motifs, chaîne et réglages. Il s'ouvre et se modifie dans n'importe quel éditeur de texte.",
+    "jsonIn": "Recharge un morceau depuis un fichier JSON exporté d'ici. Ctrl+Z annule l'import.",
       "level": "Niveau de la voix sélectionnée dans le mixage.",
       "tune": "Accord de la voix. Sur la grosse caisse ça change sa profondeur, sur les toms leur hauteur.",
       "decay": "Durée de la voix. Longue, la grosse caisse traîne ; courte, elle claque.",
@@ -1629,6 +1634,121 @@
       "sweepClear": "Retire tous les points de filtre du motif affiché : le filtre cesse de bouger."
   };
   const ONDES = {};
+
+  // ------- Export / import JSON -------
+  // Le lien partagé est compact mais illisible. Le fichier JSON, lui, est fait
+  // pour être ouvert, relu et modifié à la main : valeurs réelles plutôt que
+  // base 36, et motifs dans la même notation que les liens.
+  const JSON_FORMAT = "synthes-virtuels/drums909";
+  const JSON_VERSION = 1;
+  const JSON_STUDIOS = {
+    "synthes-virtuels/chiptune": "8-bit",
+    "synthes-virtuels/trance": "trance",
+    "synthes-virtuels/drums909": "boîte à rythmes",
+    "synthes-virtuels/fm": "FM"
+  };
+  const jNombre = (v, def) => (typeof v === "number" && Number.isFinite(v)) ? v : def;
+  const jTexte = (v, def) => typeof v === "string" ? v : def;
+  const jOui = (v, def) => typeof v === "boolean" ? v : def;
+  const jListe = v => Array.isArray(v) ? v : [];
+
+  function documentJSON() {
+    return {
+      format: JSON_FORMAT,
+      version: JSON_VERSION,
+      nom: "Groove 909",
+      master: {
+        volume: master.volume, bpm: master.bpm, swing: master.swing,
+        accent: master.accent, humanize: master.humanize,
+        drive: master.drive, cutoff: master.cutoff, reso: master.reso,
+        revSize: master.revSize
+      },
+      chaine: chain.join(""),
+      mode: songMode ? "morceau" : "boucle",
+      filtre: sweeps.map(lane => lane.map(v => v === null ? "-" : v.toString(36)).join("")),
+      voix: insts.map((it, i) => ({
+        id: INSTS[i].id, nom: INSTS[i].name, muet: it.mute,
+        reglages: INST_KEYS.reduce((o, k) => (o[k] = it[k], o), {}),
+        motifs: patterns.map(p => encodeSteps(p[i]))
+      }))
+    };
+  }
+
+  function chargerJSON(doc) {
+    if (!doc || typeof doc !== "object" || Array.isArray(doc)) return "Fichier illisible";
+    if (typeof doc.format === "string" && doc.format !== JSON_FORMAT) {
+      const autre = JSON_STUDIOS[doc.format];
+      return autre ? "Fichier du studio " + autre : "Format inconnu";
+    }
+    const m = (doc.master && typeof doc.master === "object") ? doc.master : {};
+    ["volume", "bpm", "swing", "accent", "humanize", "drive", "cutoff", "reso", "revSize"]
+      .forEach(k => { if (Number.isFinite(m[k])) master[k] = m[k]; });
+    chain = jTexte(doc.chaine, "").split("")
+      .map(c => parseInt(c, 10))
+      .filter(n => Number.isInteger(n) && n >= 0 && n < PATTERN_COUNT)
+      .slice(0, CHAIN_MAX);
+    if (!chain.length) chain = [0];
+    songMode = doc.mode === "morceau";
+    const courbes = jListe(doc.filtre);
+    sweeps.forEach((lane, q) => {
+      const txt = jTexte(courbes[q], "");
+      for (let k = 0; k < STEPS; k++) lane[k] = sweepChar(txt[k]);
+    });
+    jListe(doc.voix).forEach((d, i) => {
+      const it = insts[i];
+      if (!it || !d || typeof d !== "object") return;
+      it.mute = jOui(d.muet, it.mute);
+      const r = (d.reglages && typeof d.reglages === "object") ? d.reglages : {};
+      INST_KEYS.forEach(k => { if (Number.isFinite(r[k])) it[k] = r[k]; });
+      const mot = jListe(d.motifs);
+      for (let p = 0; p < PATTERN_COUNT; p++) patterns[p][i] = decodeSteps(jTexte(mot[p], ""));
+    });
+    // Tout repasse par le codec des liens : ses bornes et ses garde-fous sont
+    // déjà éprouvés, aucune valeur du fichier n'atteint le moteur sans passer
+    // par eux.
+    decodeState(encodeState());
+    refreshAllFromState();
+    markDirty();
+    return null;
+  }
+
+  const jsonBtn = document.getElementById("jsonIn");
+  const jsonFile = document.getElementById("jsonFile");
+  let jsonTimer = null;
+  function flashJSON(msg) {
+    jsonBtn.textContent = msg;
+    clearTimeout(jsonTimer);
+    jsonTimer = setTimeout(() => jsonBtn.textContent = "Importer JSON", 2200);
+  }
+
+  document.getElementById("jsonOut").addEventListener("click", () => {
+    const blob = new Blob([JSON.stringify(documentJSON(), null, 2)],
+                          { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "909-" + new Date().toISOString().slice(0, 10) + ".json";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  });
+
+  jsonBtn.addEventListener("click", () => jsonFile.click());
+  jsonFile.addEventListener("change", () => {
+    const f = jsonFile.files && jsonFile.files[0];
+    jsonFile.value = "";                    // pour pouvoir recharger le même fichier
+    if (!f) return;
+    const lecteur = new FileReader();
+    lecteur.onerror = () => flashJSON("Lecture impossible");
+    lecteur.onload = () => {
+      let doc = null;
+      try { doc = JSON.parse(lecteur.result); }
+      catch (e) { flashJSON("JSON invalide"); return; }
+      const erreur = chargerJSON(doc);
+      flashJSON(erreur || "Morceau chargé");
+    };
+    lecteur.readAsText(f);
+  });
 
   // ------- Info-bulles -------
   // Le libellé d'un curseur dit son nom, pas son effet. Le titre natif du

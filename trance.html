@@ -470,6 +470,9 @@
         <button id="armBtn" title="Écrire au clavier dans le motif">Enreg. clavier</button>
         <button id="wavBtn" title="Rendre le morceau en fichier WAV">Exporter WAV</button>
         <button id="shareBtn">Partager</button>
+        <button id="jsonOut">Exporter JSON</button>
+        <button id="jsonIn">Importer JSON</button>
+        <input type="file" id="jsonFile" accept=".json,application/json" hidden>
         <div class="row" style="flex:1; min-width:190px; margin-top:0">
           <label>Tempo</label><input type="range" id="bpm" min="110" max="150" step="1" value="138"><output id="bpmOut">138</output>
         </div>
@@ -2321,6 +2324,8 @@
   }
 
   const INFOS = {
+    "jsonOut": "Enregistre le morceau entier dans un fichier JSON lisible : pistes, instruments, motifs, chaîne et réglages. Il s'ouvre et se modifie dans n'importe quel éditeur de texte.",
+    "jsonIn": "Recharge un morceau depuis un fichier JSON exporté d'ici. Ctrl+Z annule l'import.",
       "detune": "Écart entre les sept dents de scie du supersaw. À zéro elles se superposent ; au maximum, c'est la nappe très large du genre.",
       "attack": "Temps que met la note à atteindre son volume plein. Long, c'est une nappe qui entre en fondu.",
       "decay": "Temps de retombée depuis le sommet de l'attaque jusqu'au niveau de maintien.",
@@ -2365,6 +2370,131 @@
       "triangle": "Triangle : doux, presque sans harmoniques. Utile en sous-basse.",
       "sine": "Sinus pur : aucune harmonique. Sous le reste, il apporte le grave sans encombrer."
   };
+
+  // ------- Export / import JSON -------
+  // Le lien partagé est compact mais illisible. Le fichier JSON, lui, est fait
+  // pour être ouvert, relu et modifié à la main : valeurs réelles plutôt que
+  // base 36, et motifs dans la même notation que les liens.
+  const JSON_FORMAT = "synthes-virtuels/trance";
+  const JSON_VERSION = 1;
+  const JSON_STUDIOS = {
+    "synthes-virtuels/chiptune": "8-bit",
+    "synthes-virtuels/trance": "trance",
+    "synthes-virtuels/drums909": "boîte à rythmes",
+    "synthes-virtuels/fm": "FM"
+  };
+  const jNombre = (v, def) => (typeof v === "number" && Number.isFinite(v)) ? v : def;
+  const jTexte = (v, def) => typeof v === "string" ? v : def;
+  const jOui = (v, def) => typeof v === "boolean" ? v : def;
+  const jListe = v => Array.isArray(v) ? v : [];
+
+  function documentJSON() {
+    return {
+      format: JSON_FORMAT,
+      version: JSON_VERSION,
+      nom: "Morceau trance",
+      master: {
+        volume: master.volume, bpm: master.bpm, swing: master.swing,
+        revSize: master.revSize, delFb: master.delFb, duck: master.duck,
+        filtQ: master.filtQ
+      },
+      chaine: chain.join(""),
+      mode: songMode ? "morceau" : "boucle",
+      accords: accordsActifs,
+      filtre: sweeps.map(lane => lane.map(v => v === null ? "-" : v.toString(36)).join("")),
+      pistes: tracks.map((tr, i) => ({
+        nom: tr.name,
+        preset: tr.patch.preset || null,
+        volume: tr.vol, muet: tr.mute, solo: tr.solo,
+        reglages: PATCH_KEYS.reduce((o, k) => (o[k] = tr.patch[k], o), {}),
+        motifs: patterns.map(p => encodeSteps(p[i]))
+      }))
+    };
+  }
+
+  function chargerJSON(doc) {
+    if (!doc || typeof doc !== "object" || Array.isArray(doc)) return "Fichier illisible";
+    if (typeof doc.format === "string" && doc.format !== JSON_FORMAT) {
+      const autre = JSON_STUDIOS[doc.format];
+      return autre ? "Fichier du studio " + autre : "Format inconnu";
+    }
+    const m = (doc.master && typeof doc.master === "object") ? doc.master : {};
+    ["volume", "bpm", "swing", "revSize", "delFb", "duck", "filtQ"]
+      .forEach(k => { if (Number.isFinite(m[k])) master[k] = m[k]; });
+    chain = jTexte(doc.chaine, "").split("")
+      .map(c => parseInt(c, 10))
+      .filter(n => Number.isInteger(n) && n >= 0 && n < PATTERN_COUNT)
+      .slice(0, CHAIN_MAX);
+    if (!chain.length) chain = [0];
+    songMode = doc.mode === "morceau";
+    accordsActifs = jOui(doc.accords, accordsActifs);
+    const courbes = jListe(doc.filtre);
+    sweeps.forEach((lane, q) => {
+      const txt = jTexte(courbes[q], "");
+      for (let k = 0; k < STEPS; k++) lane[k] = sweepChar(txt[k]);
+    });
+    jListe(doc.pistes).forEach((d, i) => {
+      const tr = tracks[i];
+      if (!tr || !d || typeof d !== "object") return;
+      tr.name = jTexte(d.nom, tr.name);
+      tr.vol = jNombre(d.volume, tr.vol);
+      tr.mute = jOui(d.muet, tr.mute);
+      tr.solo = jOui(d.solo, tr.solo);
+      const r = (d.reglages && typeof d.reglages === "object") ? d.reglages : {};
+      PATCH_KEYS.forEach(k => {
+        if (k === "wave") { if (WAVES.indexOf(r.wave) >= 0) tr.patch.wave = r.wave; }
+        else if (Number.isFinite(r[k])) tr.patch[k] = r[k];
+      });
+      tr.patch.preset = matchPreset(tr.patch);
+      const mot = jListe(d.motifs);
+      for (let p = 0; p < PATTERN_COUNT; p++) patterns[p][i] = decodeSteps(jTexte(mot[p], ""));
+    });
+    // Tout repasse par le codec des liens : ses bornes et ses garde-fous sont
+    // déjà éprouvés, aucune valeur du fichier n'atteint le moteur sans passer
+    // par eux.
+    decodeState(encodeState());
+    refreshAllFromState();
+    markDirty();
+    return null;
+  }
+
+  const jsonBtn = document.getElementById("jsonIn");
+  const jsonFile = document.getElementById("jsonFile");
+  let jsonTimer = null;
+  function flashJSON(msg) {
+    jsonBtn.textContent = msg;
+    clearTimeout(jsonTimer);
+    jsonTimer = setTimeout(() => jsonBtn.textContent = "Importer JSON", 2200);
+  }
+
+  document.getElementById("jsonOut").addEventListener("click", () => {
+    const blob = new Blob([JSON.stringify(documentJSON(), null, 2)],
+                          { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "trance-" + new Date().toISOString().slice(0, 10) + ".json";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  });
+
+  jsonBtn.addEventListener("click", () => jsonFile.click());
+  jsonFile.addEventListener("change", () => {
+    const f = jsonFile.files && jsonFile.files[0];
+    jsonFile.value = "";                    // pour pouvoir recharger le même fichier
+    if (!f) return;
+    const lecteur = new FileReader();
+    lecteur.onerror = () => flashJSON("Lecture impossible");
+    lecteur.onload = () => {
+      let doc = null;
+      try { doc = JSON.parse(lecteur.result); }
+      catch (e) { flashJSON("JSON invalide"); return; }
+      const erreur = chargerJSON(doc);
+      flashJSON(erreur || "Morceau chargé");
+    };
+    lecteur.readAsText(f);
+  });
 
   // ------- Info-bulles -------
   // Le libellé d'un curseur dit son nom, pas son effet. Le titre natif du
