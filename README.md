@@ -47,7 +47,7 @@ La barre **Morceaux** charge un titre complet — motifs, chaîne, instruments, 
 
 ### Écrire son propre morceau
 
-La bibliothèque est un simple tableau `SONGS` dans [`chiptune.html`](chiptune.html), lisible et modifiable à la main. Un motif s'écrit sur 16 caractères, un par pas, dans la même notation que les liens partagés :
+La bibliothèque est un simple tableau `SONGS` dans [`chiptune.html`](chiptune.html), lisible et modifiable à la main. Un motif s'écrit sur 16 pas, dans la même notation que les liens partagés :
 
 ```js
 {
@@ -63,16 +63,28 @@ La bibliothèque est un simple tableau `SONGS` dans [`chiptune.html`](chiptune.h
 
 `0123456789abc` valent Do, Do#, Ré… jusqu'au Do de l'octave supérieure, et `-` est un silence. Les **majuscules `A` à `M`** sont les mêmes hauteurs, accentuées — `b` est un Si, `B` un Do# accentué, jamais d'ambiguïté.
 
+Un **accord** s'écrit entre parenthèses, précédé d'un `!` s'il est accentué : `(047)` est un Do majeur, `!(59c)` un Fa majeur accentué. Le groupe compte pour **un seul pas**. Comme une note isolée garde son écriture d'avant, les anciens motifs et les anciens liens se relisent sans changement.
+
 Une piste part d'un preset et peut en corriger n'importe quel réglage (`bits: 3`, `wave: "triangle"`, `sweep: -18`…), fixer sa longueur de boucle avec `len`, et le morceau règle son `swing`. `chain` donne l'ordre des motifs, ici A A B B A C.
 
 ## Le groove
 
 Quatre réglages font sortir le séquenceur de la grille rigide :
 
-- **Accents** — cliquez une case une fois pour poser une note, une deuxième pour l'accentuer (elle sonne nettement plus fort), une troisième pour l'effacer. La note accentuée porte un liseré clair et un point central.
+- **Accents** — la rangée **Acc.**, en tête de grille, accentue le pas entier : les notes concernées sonnent nettement plus fort et portent un liseré clair avec un point central. L'accent porte sur le pas, donc sur tout l'accord ; il tombe de lui-même quand la dernière note du pas est retirée.
 - **Swing** — un curseur près du tempo qui retarde un pas sur deux, jusqu'à la moitié d'un pas. Quelques pourcents suffisent à faire respirer une boucle.
 - **Longueur de boucle par piste** — le nombre à droite de chaque piste, de 1 à 16 pas. Donnez 16 à la mélodie, 12 à la basse et 10 à la percussion, et les trois ne se réalignent qu'au bout de 15 mesures : c'est la polyrythmie du morceau **Engrenage**. Les pas au-delà de la longueur sont estompés dans la grille, et chaque piste a sa propre tête de lecture.
 - **Balayage de hauteur** — de −24 à +24 demi-tons parcourus sur la durée de la note. En négatif et court, c'est le « pew » descendant des percussions de NES ; en positif, un effet de montée.
+
+## Les accords
+
+Un pas ne porte plus une note mais **autant de hauteurs qu'on veut**. Un clic sur une case l'ajoute à son pas, un second l'en retire ; empiler trois cases dans la même colonne fait un accord. Ça vaut pour les studios 8-bit, trance et FM — la boîte à rythmes n'en a pas besoin, ses dix voix étant déjà des lignes indépendantes.
+
+Au clavier, avec **Enreg. clavier** armé, la règle est celle d'un musicien : **une note encore tenue quand la suivante tombe rejoint le même pas**. Plaquez trois touches ensemble, vous obtenez un accord ; jouez-les l'une après l'autre, vous obtenez trois pas. Aucune fenêtre de temps n'intervient — une mélodie rapide reste une mélodie.
+
+La transposition déplace l'accord entier, et refuse toujours plutôt que d'écraser : si une seule de ses notes devait sortir de la grille, rien ne bouge.
+
+Dans les morceaux fournis, les nappes de *Ascension*, *Nébuleuse* et *Orage* sont désormais de vraies triades, et le piano électrique de *Rhodes* enchaîne une progression accordée. Le studio 8-bit garde ses lignes monophoniques : c'est ce que faisaient les consoles, une voix par canal.
 
 ## Quatre motifs enchaînés
 
@@ -97,18 +109,18 @@ Cliquez `+A`…`+D` pour ajouter un maillon, un maillon pour le retirer. Pendant
 
 L'adresse de la page contient tout votre morceau. Chaque modification met à jour le fragment d'URL (sans polluer l'historique), et le bouton **Partager** copie le lien dans le presse-papiers — l'ouvrir restitue les quatre motifs, la chaîne, les instruments, le mixage, le tempo et l'écho à l'identique.
 
-L'encodage est compact et lisible : chaque valeur est quantifiée puis écrite en base 36, et les 16 pas d'un motif tiennent en 16 caractères (un par hauteur, `-` pour un pas vide). Un morceau complet occupe environ 320 caractères :
+L'encodage est compact et lisible : chaque valeur est quantifiée puis écrite en base 36, un pas tient en un caractère (`-` pour un pas vide) et un accord entre parenthèses. Un morceau complet occupe environ 340 caractères :
 
 ```
-#p=3.4o.1u.14.m.z.1.3.m.0.0.v~0012~2.5.5.28.n.c.5.1o.3.16.0.g.f.-47b047c959c7420…
+#p=3.4o.1u.14.m.z.1.3.m.0.0.v~0012~2.5.5.28.n.c.5.1o.3.16.0.g.f.-47b047c959c7420_…
    └ master : version, tempo, volume, écho, piste, arpège, motif, mode, swing
                               └ chaîne : A A B C
                                      └ piste : onde, octave, ADSR, bits, vibrato,
                                        volume, état, longueur, balayage,
-                                       puis les 4 motifs bout à bout
+                                       puis les 4 motifs séparés par « _ »
 ```
 
-Le décodage est tolérant : un lien tronqué, altéré ou d'une version inconnue retombe simplement sur le premier morceau de la bibliothèque, chaque valeur étant bornée à sa plage. Les liens produits par les versions précédentes restent lisibles : les champs apparus depuis reprennent leur valeur par défaut, et un lien de la toute première version voit son contenu atterrir dans le motif A.
+Le décodage est tolérant : un lien tronqué, altéré ou d'une version inconnue retombe simplement sur le premier morceau de la bibliothèque, chaque valeur étant bornée à sa plage. Les liens produits par les versions précédentes restent lisibles : les champs apparus depuis reprennent leur valeur par défaut, un lien de la toute première version voit son contenu atterrir dans le motif A, et un lien d'avant les accords — sans le séparateur `_` — est redécoupé à longueur fixe. C'est vérifié page par page : les fragments produits par la version précédente rouvrent avec exactement la même grille, les mêmes accents et le même tempo.
 
 ## Fonctionnalités
 
@@ -120,6 +132,7 @@ Le décodage est tolérant : un lien tronqué, altéré ou d'une version inconnu
 - **Arpégiateur** : modes montant, descendant, aller-retour et aléatoire, vitesse réglable — maintenez plusieurs notes pour lancer l'arpège.
 - **Séquenceur 4 motifs × 16 pas × 3 pistes** : mode boucle ou mode morceau avec chaîne de motifs, bande de résumé des trois pistes, piano-roll détaillé d'une octave avec les notes des autres pistes en repère, tempo 60–240 BPM et horloge audio précise (lookahead).
 - **Groove** : accents par pas, swing jusqu'à 50 %, et longueur de boucle réglable piste par piste pour des polyrythmies.
+- **Accords** : autant de hauteurs qu'on veut sur un même pas, à la souris ou au clavier — les touches encore tenues se groupent sur le pas courant.
 - **Balayage de hauteur** par piste : −24 à +24 demi-tons sur la durée de la note.
 - **5 presets** : Lead GB, Basse, Cristal, Percu, Sirène — applicables à la piste sélectionnée.
 - **Bibliothèque de 7 morceaux** prêts à jouer, plus un emplacement vierge, écrits en clair dans le source.
@@ -159,7 +172,7 @@ Le mappage utilise la position physique des touches, donc il fonctionne aussi bi
 - **Délai pointé de 3/16** — calé sur le tempo, avec retour réglable.
 - **Panoramique** par piste.
 
-**Motifs de 32 pas** (deux mesures), quatre motifs enchaînables, trois morceaux fournis — *Ascension* (138 BPM, uplifting), *Nébuleuse* (132, plus profond), *Orage* (142, agressif) — plus un emplacement vierge.
+**Motifs de 32 pas** (deux mesures), **accords** sur chaque pas — les nappes des trois morceaux en sont faites —, quatre motifs enchaînables, trois morceaux fournis — *Ascension* (138 BPM, uplifting), *Nébuleuse* (132, plus profond), *Orage* (142, agressif) — plus un emplacement vierge.
 
 ## La boîte à rythmes 909
 
@@ -204,7 +217,7 @@ Le **diagramme s'affiche à l'écran** : les opérateurs se placent par étage s
 
 La profondeur de modulation suit la fréquence du modulateur, de sorte que **le timbre reste le même d'un bout à l'autre du clavier** au lieu de devenir criard dans l'aigu.
 
-Six presets — Piano él., Cloche, Marimba, Basse FM, Cuivre, Verre — et trois morceaux : **Rhodes** (96 BPM), **Carillon** (78), **Fanfare** (128).
+Six presets — Piano él., Cloche, Marimba, Basse FM, Cuivre, Verre — et trois morceaux : **Rhodes** (96 BPM), **Carillon** (78), **Fanfare** (128). C'est la page où les **accords** comptent le plus : un piano électrique qui ne sait pas plaquer une triade, ce n'est pas un piano électrique.
 
 ## Structure
 

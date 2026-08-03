@@ -348,7 +348,15 @@
   .seq-cell.hors.on { opacity: .45; }
   .playhead { box-shadow: inset 0 0 0 2px #fff; }
   /* curseur d'écriture, à l'arrêt seulement */
-  .seq-cell.curseur { box-shadow: inset 0 0 0 2px var(--accent2); }
+  .seq-cell.curseur, .acc-cell.curseur { box-shadow: inset 0 0 0 2px var(--accent2); }
+  /* rangée d'accents : l'accent porte sur le pas entier, donc sur tout l'accord */
+  .acc-cell {
+    height: 14px; background: #241548; border: 1px solid var(--panel-edge);
+    border-radius: 2px; cursor: pointer; margin-bottom: 6px;
+  }
+  .acc-cell.beat { background: #331e63; }
+  .acc-cell.on { background: var(--accent2); border-color: #fff6; }
+  .acc-cell.hors { opacity: .3; }
   .seq-cell.on.accent.playhead { box-shadow: inset 0 0 0 3px #fff; }
 
   .keyboard-wrap { position: relative; height: 170px; user-select: none; touch-action: none; }
@@ -601,13 +609,20 @@
   const PATTERN_NAMES = ["A", "B", "C", "D"];
   const PATTERN_COUNT = PATTERN_NAMES.length;
   const CHAIN_MAX = 32;
-  const empty16 = () => new Array(STEPS).fill(null);
+  const empty16 = () => new Array(STEPS).fill(0);
 
-  // Un pas vaut null, une hauteur 0..12, ou la même hauteur + 13 si elle est
-  // accentuée : une seule valeur par pas, donc rien à changer ailleurs.
-  const ACCENT = 13;
-  const noteOf = v => v % ACCENT;
-  const isAccent = v => v >= ACCENT;
+  // Un pas est un masque : 13 bits de hauteurs, plus un bit d'accent.
+  // Plusieurs bits allumés sur le même pas = un accord.
+  const NOTE_BITS = 0x1FFF;
+  const ACC_BIT = 1 << 13;
+  const stepEmpty = m => !m || !(m & NOTE_BITS);
+  const stepAccent = m => !!(m & ACC_BIT);
+  const stepHas = (m, n) => !!(m & (1 << n));
+  const stepNotes = m => {
+    const o = [];
+    for (let n = 0; n < ROWS; n++) if (m & (1 << n)) o.push(n);
+    return o;
+  };
 
   // ------- Bibliothèque de morceaux -------
   // Un motif s'écrit comme dans les liens partagés : 16 caractères, un par pas.
@@ -1119,6 +1134,7 @@
   const ovGridEl = document.getElementById("ovGrid");
   const seqCells = [];  // [step][row]
   const ovCells = [];   // [track][step]
+  const accCells = [];  // [step] — la rangée d'accents
 
   function buildOverview() {
     ovGridEl.innerHTML = "";
@@ -1149,9 +1165,9 @@
       for (let s = 0; s < STEPS; s++) {
         const c = ovCells[i][s];
         const v = data[s];
-        const on = v !== null && v !== undefined;
+        const on = !stepEmpty(v);
         c.classList.toggle("on", on);
-        c.classList.toggle("accent", on && isAccent(v));
+        c.classList.toggle("accent", on && stepAccent(v));
         c.classList.toggle("hors", s >= tr.len);
         c.style.opacity = silent ? ".3" : "1";
       }
@@ -1160,6 +1176,19 @@
 
   function buildSeqGrid() {
     seqGridEl.innerHTML = "";
+    accCells.length = 0;
+    // l'accent porte sur le pas entier, donc sur tout l'accord
+    const accLabel = document.createElement("div");
+    accLabel.className = "seq-label";
+    accLabel.textContent = "Acc.";
+    seqGridEl.appendChild(accLabel);
+    for (let s = 0; s < STEPS; s++) {
+      const cell = document.createElement("div");
+      cell.className = "acc-cell" + (s % 4 === 0 ? " beat" : "");
+      cell.dataset.acc = s;
+      seqGridEl.appendChild(cell);
+      accCells[s] = cell;
+    }
     for (let r = 0; r < ROWS; r++) {
       const off = ROWS - 1 - r;   // aigu en haut
       const label = document.createElement("div");
@@ -1186,16 +1215,18 @@
       const ghosts = new Set();
       tracks.forEach((tr, i) => {
         if (i === currentTrack) return;
-        const v = editData(i)[s % tr.len];
-        if (v !== null && v !== undefined) ghosts.add(noteOf(v));
+        stepNotes(editData(i)[s % tr.len]).forEach(x => ghosts.add(x));
       });
       const v = data[s];
-      const note = (v === null || v === undefined) ? -1 : noteOf(v);
+      const acc = stepAccent(v);
+      accCells[s].classList.toggle("on", acc && !stepEmpty(v));
+      accCells[s].classList.toggle("hors", s >= len);
+      accCells[s].classList.toggle("curseur", recArmed && !seqPlaying && s === writeStep);
       for (let o = 0; o < ROWS; o++) {
         const cell = seqCells[s][o];
-        const on = note === o;
+        const on = stepHas(v, o);
         cell.classList.toggle("on", on);
-        cell.classList.toggle("accent", on && isAccent(v));
+        cell.classList.toggle("accent", on && acc);
         cell.classList.toggle("ghost", !on && ghosts.has(o));
         cell.classList.toggle("hors", s >= len);
         cell.classList.toggle("curseur", recArmed && !seqPlaying && s === writeStep);
@@ -1206,20 +1237,25 @@
   }
 
   seqGridEl.addEventListener("click", e => {
+    const data = editData(currentTrack);
+    const acc = e.target.closest(".acc-cell");
+    if (acc) {
+      data[Number(acc.dataset.acc)] ^= ACC_BIT;
+      refreshSeqGrid(); markDirty();
+      return;
+    }
     const cell = e.target.closest(".seq-cell");
     if (!cell) return;
     const s = Number(cell.dataset.step), o = Number(cell.dataset.off);
-    const data = editData(currentTrack);
-    // trois états successifs sous le doigt : rien, note, note accentuée
-    if (data[s] === o) data[s] = o + ACCENT;
-    else if (data[s] === o + ACCENT) data[s] = null;
-    else data[s] = o;
+    const avant = stepHas(data[s], o);
+    data[s] ^= (1 << o);                  // une hauteur de plus ou de moins
+    if (stepEmpty(data[s])) data[s] = 0;  // plus aucune note : l'accent tombe
     refreshSeqGrid();
     markDirty();
-    if (!seqPlaying && data[s] !== null) {
+    if (!seqPlaying && !avant) {
       initAudio();
       playNote(currentTrack, trackBase(currentTrack) + o, ctx.currentTime + 0.01, 0.12,
-               isAccent(data[s]));
+               stepAccent(data[s]));
     }
   });
 
@@ -1241,9 +1277,10 @@
       const when = nextStepTime + (seqStep % 2 ? master.swing * sd : 0);
       tracks.forEach((tr, i) => {
         const v = patterns[pat][i][seqStep % tr.len];
-        if (v === null || v === undefined) return;
+        if (stepEmpty(v)) return;
         if (tr.mute || (solos && !tr.solo)) return;
-        playNote(i, trackBase(i) + noteOf(v), when, sd * 0.6, isAccent(v));
+        stepNotes(v).forEach(x =>
+          playNote(i, trackBase(i) + x, when, sd * 0.6, stepAccent(v)));
       });
       // le motif et la position dans la chaîne voyagent avec le pas : l'affichage
       // les rejouera au bon moment, en retard sur la planification
@@ -1271,6 +1308,7 @@
     }
     const col = step % tracks[currentTrack].len;
     for (let o = 0; o < ROWS; o++) seqCells[col][o].classList.add("playhead");
+    if (accCells[col]) accCells[col].classList.add("playhead");
   }
 
   const seqPlayBtn = document.getElementById("seqPlay");
@@ -1318,7 +1356,7 @@
   const dupBtn = document.getElementById("dupBtn");
   const patLabels = document.querySelectorAll(".pattern-target");
 
-  const patternIsEmpty = p => patterns[p].every(d => d.every(v => v === null || v === undefined));
+  const patternIsEmpty = p => patterns[p].every(d => d.every(stepEmpty));
 
   function buildPatternBar() {
     patBtnsEl.innerHTML = "";
@@ -1536,10 +1574,13 @@
       const late = ctx.currentTime - lastStepTime;
       s = playheadStep + (late > sd / 2 ? 1 : 0);
     } else {
-      s = writeStep;
-      writeStep = (writeStep + 1) % len;
+      // une note encore tenue : la suivante rejoint le même pas, et l'accord
+      // se forme. Un critère de temps prendrait une mélodie rapide pour un accord.
+      const groupe = voices.size > 0 || held.length > 0;
+      s = groupe ? (writeStep - 1 + len) % len : writeStep;
+      if (!groupe) writeStep = (writeStep + 1) % len;
     }
-    data[((s % len) + len) % len] = note;
+    data[((s % len) + len) % len] |= (1 << note);
     refreshSeqGrid();
     markDirty();
   }
@@ -1547,7 +1588,7 @@
   function moveWriteStep(delta, erase) {
     const len = tracks[currentTrack].len;
     writeStep = ((writeStep + delta) % len + len) % len;
-    if (erase) { editData(currentTrack)[writeStep] = null; markDirty(); }
+    if (erase) { editData(currentTrack)[writeStep] = 0; markDirty(); }
     refreshSeqGrid();
   }
 
@@ -1618,13 +1659,15 @@
     const notes = [];
     for (let k = 0; k < len; k++) {
       const v = data[k];
-      if (v === null || v === undefined) continue;
-      const n = noteOf(v) + delta;
-      if (n < 0 || n > 12) {   // refuse plutôt que d'écraser les extrêmes
+      if (stepEmpty(v)) continue;
+      const ns = stepNotes(v).map(x => x + delta);
+      if (ns.some(x => x < 0 || x > 12)) {   // refuse plutôt que d'écraser les extrêmes
         flashTool("Hors grille");
         return;
       }
-      notes.push([k, n + (isAccent(v) ? ACCENT : 0)]);
+      let m = stepAccent(v) ? ACC_BIT : 0;
+      ns.forEach(x => m |= 1 << x);
+      notes.push([k, m]);
     }
     notes.forEach(([k, v]) => data[k] = v);
     refreshSeqGrid();
@@ -1683,9 +1726,10 @@
       const when = step * sd + (step % 2 ? master.swing * sd : 0);
       tracks.forEach((tr, i) => {
         const v = patterns[pat][i][step % tr.len];
-        if (v === null || v === undefined) return;
+        if (stepEmpty(v)) return;
         if (tr.mute || (solos && !tr.solo)) return;
-        playOn(orig, i, trackBase(i) + noteOf(v), when, sd * 0.6, isAccent(v));
+        stepNotes(v).forEach(x =>
+          playOn(orig, i, trackBase(i) + x, when, sd * 0.6, stepAccent(v)));
       });
     }
     return octx.startRendering();
@@ -2028,7 +2072,10 @@
   const ARP_MODES = ["off", "up", "down", "updown", "random"];
   // 13 minuscules pour les hauteurs, 13 majuscules pour les mêmes accentuées,
   // "-" pour un pas vide. 'b' est un Si, 'B' un Do# accentué : jamais ambigu.
-  const NOTE_CHARS = "0123456789abc" + "ABCDEFGHIJKLM";
+  const LOW_CHARS = "0123456789abc";     // hauteurs simples
+  const ACC_CHARS = "ABCDEFGHIJKLM";     // les mêmes, accentuées
+  // Un accord s'écrit entre parenthèses, précédé de "!" s'il est accentué.
+  // Un pas isolé garde l'écriture d'avant : les anciens liens restent lisibles.
 
   const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
   const b36 = n => Math.round(n).toString(36);
@@ -2060,13 +2107,40 @@
     { get: (t) => t.patch.sweep + 24,      set: (t, n) => t.patch.sweep = clamp(n, 0, 48) - 24 }
   ];
 
-  const encodeSteps = data =>
-    data.map(v => (v === null || v === undefined) ? "-" : NOTE_CHARS[v]).join("");
+  function encodeStep(m) {
+    if (stepEmpty(m)) return "-";
+    const ns = stepNotes(m), acc = stepAccent(m);
+    if (ns.length === 1) return acc ? ACC_CHARS[ns[0]] : LOW_CHARS[ns[0]];
+    return (acc ? "!(" : "(") + ns.map(x => LOW_CHARS[x]).join("") + ")";
+  }
+  const encodeSteps = data => data.map(encodeStep).join("");
 
-  const decodeSteps = str => Array.from({ length: STEPS }, (_, s) => {
-    const idx = NOTE_CHARS.indexOf((str || "")[s]);
-    return idx >= 0 ? idx : null;
-  });
+  function decodeSteps(str) {
+    const out = new Array(STEPS).fill(0);
+    let i = 0, s = 0;
+    str = str || "";
+    while (i < str.length && s < STEPS) {
+      let ch = str[i], acc = false;
+      if (ch === "-") { i++; s++; continue; }
+      if (ch === "!") { acc = true; ch = str[++i]; }
+      if (ch === "(") {
+        let m = acc ? ACC_BIT : 0;
+        for (i++; i < str.length && str[i] !== ")"; i++) {
+          const x = LOW_CHARS.indexOf(str[i]);
+          if (x >= 0) m |= 1 << x;
+        }
+        i++;
+        out[s++] = (m & NOTE_BITS) ? m : 0;
+        continue;
+      }
+      const lo = LOW_CHARS.indexOf(ch), up = ACC_CHARS.indexOf(ch);
+      if (lo >= 0) out[s++] = (1 << lo) | (acc ? ACC_BIT : 0);
+      else if (up >= 0) out[s++] = (1 << up) | ACC_BIT;
+      else s++;
+      i++;
+    }
+    return out;
+  }
 
   function encodeState() {
     const head = [URL_VERSION, master.bpm, master.volume * 100, master.echoMix * 100,
@@ -2075,7 +2149,7 @@
                   editPattern, songMode ? 1 : 0, master.swing * 100].map(b36).join(".");
     const body = tracks.map((tr, i) => {
       const nums = TRACK_FIELDS.map(f => b36(f.get(tr))).join(".");
-      const blob = patterns.map(pat => encodeSteps(pat[i])).join("");
+      const blob = patterns.map(pat => encodeSteps(pat[i])).join("_");
       return nums + "." + blob;
     });
     return "p=" + head + "~" + chain.join("") + "~" + body.join("~");
@@ -2135,10 +2209,13 @@
         if (Number.isFinite(n)) field.set(tr, n);
       });
       const blob = f[nFields] || "";
+      // sans séparateur, c'est un lien d'avant les accords : découpage fixe
+      const morceaux = blob.indexOf("_") >= 0
+        ? blob.split("_")
+        : Array.from({ length: PATTERN_COUNT }, (_, q) => blob.slice(q * STEPS, (q + 1) * STEPS));
       for (let p = 0; p < PATTERN_COUNT; p++) {
         // en v1 le seul motif présent devient A, les autres restent vides
-        const slice = (ver === 1 && p > 0) ? "" : blob.slice(p * STEPS, (p + 1) * STEPS);
-        patterns[p][i] = decodeSteps(slice);
+        patterns[p][i] = decodeSteps((ver === 1 && p > 0) ? "" : morceaux[p]);
       }
       tr.patch.preset = matchPreset(tr.patch);
     });
