@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Trois studios</title>
+<title>Quatre studios</title>
 <style>
   :root {
     --ink: #eef1ff;
@@ -14,6 +14,7 @@
     --tr2: #a56bff;
     --drum: #f08a24;
     --drum2: #e0472e;
+    --fm: #d9b06a;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -49,7 +50,7 @@
   }
   h1 em {
     font-style: normal;
-    background: linear-gradient(90deg, var(--chip), var(--drum), var(--tr));
+    background: linear-gradient(90deg, var(--chip), var(--drum), var(--fm), var(--tr));
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
@@ -64,10 +65,10 @@
 
   .cards {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(288px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(262px, 1fr));
     gap: 22px;
     width: 100%;
-    max-width: 1120px;
+    max-width: 1180px;
   }
   .card {
     position: relative;
@@ -97,6 +98,10 @@
     border-color: var(--drum);
     box-shadow: 0 16px 46px rgba(240,138,36,.2);
   }
+  .card.fm:hover, .card.fm:focus-visible {
+    border-color: var(--fm);
+    box-shadow: 0 16px 46px rgba(217,176,106,.2);
+  }
   @media (prefers-reduced-motion: reduce) {
     .card, .card:hover { transform: none; transition: none; }
   }
@@ -125,6 +130,7 @@
   .card.chip h2 { color: var(--chip); }
   .card.tr h2 { color: var(--tr); }
   .card.d909 h2 { color: var(--drum); }
+  .card.fm h2 { color: var(--fm); }
   .card p { color: var(--dim); font-size: 13px; line-height: 1.6; }
   .card ul { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
   .card li {
@@ -144,6 +150,7 @@
   .card.chip .go { color: var(--chip); }
   .card.tr .go { color: var(--tr); }
   .card.d909 .go { color: var(--drum); }
+  .card.fm .go { color: var(--fm); }
   .card .go span { transition: margin-left .2s ease; display: inline-block; }
   .card:hover .go span { margin-left: 6px; }
 
@@ -154,10 +161,10 @@
 <body>
   <header>
     <div class="eyebrow">Web Audio &mdash; sans dépendance</div>
-    <h1>Trois studios,<br><em>trois mondes sonores</em></h1>
+    <h1>Quatre studios,<br><em>quatre mondes sonores</em></h1>
     <p>
       Le même séquenceur — motifs enchaînables, morceaux prêts à jouer,
-      partage par lien, export WAV — au service de trois synthèses
+      partage par lien, export WAV — au service de quatre synthèses
       qui n'ont rien en commun. Choisissez votre camp.
     </p>
   </header>
@@ -188,6 +195,21 @@
         </p>
         <ul>
           <li>10 voix</li><li>Accents</li><li>Shuffle</li><li>Filtre master</li>
+        </ul>
+        <div class="go">Entrer <span>&rarr;</span></div>
+      </div>
+    </a>
+
+    <a class="card fm" href="fm.html">
+      <canvas id="vizFm" width="440" height="116" aria-hidden="true"></canvas>
+      <div class="body">
+        <h2>Synthé FM <span class="kicker">Quatre opérateurs</span></h2>
+        <p>
+          Un oscillateur en module un autre : pianos électriques, cloches,
+          marimbas, cuivres. Huit algorithmes, rebouclage, diagramme à l'écran.
+        </p>
+        <ul>
+          <li>4 opérateurs</li><li>8 algorithmes</li><li>Rebouclage</li><li>Chorus</li>
         </ul>
         <div class="go">Entrer <span>&rarr;</span></div>
       </div>
@@ -287,6 +309,33 @@
         }
       }
     }
+  });
+
+  setup("vizFm", (g, c, t) => {
+    g.clearRect(0, 0, c.width, c.height);
+    const mid = c.height / 2;
+    // la modulante en pointillé, la porteuse déformée par elle en trait plein
+    const index = 3 + 2.4 * Math.sin(t * 0.7);
+    g.strokeStyle = "rgba(217,176,106,.32)";
+    g.lineWidth = 1;
+    g.setLineDash([3, 3]);
+    g.beginPath();
+    for (let x = 0; x <= c.width; x += 2) {
+      const u = x / c.width;
+      g.lineTo(x, mid - Math.sin(u * Math.PI * 6 + t * 2) * mid * 0.3);
+    }
+    g.stroke();
+    g.setLineDash([]);
+    g.strokeStyle = "#d9b06a";
+    g.lineWidth = 2;
+    g.beginPath();
+    for (let x = 0; x <= c.width; x += 1) {
+      const u = x / c.width;
+      const phase = u * Math.PI * 12 + t * 3
+        + index * Math.sin(u * Math.PI * 6 + t * 2);
+      g.lineTo(x, mid - Math.sin(phase) * mid * 0.52);
+    }
+    g.stroke();
   });
 
   setup("vizTr", (g, c, t) => {

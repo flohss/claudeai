@@ -1,16 +1,17 @@
 # Synthés virtuels 🎹
 
-Trois instruments jouables dans le navigateur, écrits en HTML/CSS/JavaScript pur avec l'API Web Audio — aucune dépendance, aucun build.
+Quatre instruments jouables dans le navigateur, écrits en HTML/CSS/JavaScript pur avec l'API Web Audio — aucune dépendance, aucun build.
 
-[`index.html`](index.html) est un **écran d'accueil** qui mène aux trois studios :
+[`index.html`](index.html) est un **écran d'accueil** qui mène aux quatre studios :
 
 | Page | Genre | Moteur |
 | --- | --- | --- |
 | [`chiptune.html`](chiptune.html) | **Chiptune 8-bit** | Oscillateurs carré/pulse/triangle, bitcrusher, vibrato |
 | [`drums909.html`](drums909.html) | **House &amp; techno** | Dix voix de percussion synthétisées, saturation, filtre master |
+| [`fm.html`](fm.html) | **FM** | Quatre opérateurs, huit algorithmes, rebouclage, chorus |
 | [`trance.html`](trance.html) | **Trance** | Supersaw, filtre résonant à enveloppe, sidechain, réverbération |
 
-Les trois partagent la même architecture — séquenceur à motifs enchaînables, bibliothèque de morceaux, partage par URL, annuler/rétablir, export WAV — mais rien de leur synthèse. Chaque studio ramène au menu par un lien en haut de page.
+Les quatre partagent la même architecture — séquenceur à motifs enchaînables, bibliothèque de morceaux, partage par URL, annuler/rétablir, export WAV — mais rien de leur synthèse. Chaque studio ramène au menu par un lien en haut de page.
 
 ## Utilisation
 
@@ -180,13 +181,39 @@ Le master enchaîne **saturation** (courbe douce, jamais d'écrêtage net), **fi
 
 Trois grooves fournis : **Chicago** (124 BPM, house shufflée), **Detroit** (134, techno en doubles-croches), **Entrepôt** (128, charleys ouverts et filtre fermé).
 
+## Le synthé FM
+
+Les trois autres moteurs sont *soustractifs* : on part d'une onde riche et le filtre lui enlève des choses. [`fm.html`](fm.html) fonctionne à l'envers — **un oscillateur module la fréquence d'un autre**, et le timbre naît de leur rapport. C'est la seule famille de synthèse de la collection où le filtre ne joue aucun rôle.
+
+**Quatre opérateurs**, chacun avec son rapport de fréquence, son niveau, son désaccord fin et son enveloppe ADSR complète. Un rapport entier donne un son harmonique, un rapport fractionnaire le rend inharmonique : c'est toute la différence entre un piano électrique et une cloche.
+
+**Huit algorithmes** décrivent qui module qui :
+
+| Algorithme | Câblage | Caractère |
+| --- | --- | --- |
+| **Pile** | 4→3→2→1 | Métallique, agressif |
+| **Double** | 4→3→1, 2→1 | Deux couleurs sur une porteuse |
+| **Y** | 3→2→1, 4→1 | Corps plus complexe |
+| **2 paires** | 2→1, 4→3 | Le piano électrique classique |
+| **Paire+2** | 2→1, plus deux sinus purs | Doux, hybride |
+| **Étoile** | 4 module 1, 2 et 3 | Trois voix liées |
+| **Pile+1** | 3→2→1, plus un sinus | Attaque nette sur fond pur |
+| **Additif** | aucune modulation | Orgue, quatre sinus empilés |
+
+Le **diagramme s'affiche à l'écran** : les opérateurs se placent par étage selon leur profondeur de modulation, les flèches montrent le sens, et un liseré jaune marque ceux qui sortent vraiment du son. Le **rebouclage** ramène le dernier opérateur sur lui-même — Web Audio interdisant les boucles sans retard, une ligne à retard d'un bloc la rend légale.
+
+La profondeur de modulation suit la fréquence du modulateur, de sorte que **le timbre reste le même d'un bout à l'autre du clavier** au lieu de devenir criard dans l'aigu.
+
+Six presets — Piano él., Cloche, Marimba, Basse FM, Cuivre, Verre — et trois morceaux : **Rhodes** (96 BPM), **Carillon** (78), **Fanfare** (128).
+
 ## Structure
 
-Quatre fichiers autonomes, sans dépendance ni build :
+Cinq fichiers autonomes, sans dépendance ni build :
 
-- [`index.html`](index.html) — l'accueil, avec une vignette animée par studio : onde carrée crantée, pas-à-pas qui défile, dents de scie désaccordées.
+- [`index.html`](index.html) — l'accueil, avec une vignette animée par studio : onde carrée crantée, pas-à-pas qui défile, porteuse déformée par sa modulante, dents de scie désaccordées.
 - [`chiptune.html`](chiptune.html) — le synthé 8-bit.
 - [`drums909.html`](drums909.html) — la boîte à rythmes.
+- [`fm.html`](fm.html) — le synthé FM.
 - [`trance.html`](trance.html) — le studio trance.
 
 Chaque studio est un document séparé : leurs identifiants, leurs styles, leurs raccourcis clavier et leur contexte audio ne se marchent jamais dessus.
