@@ -1,15 +1,16 @@
 # Synthés virtuels 🎹
 
-Deux synthétiseurs jouables dans le navigateur, écrits en HTML/CSS/JavaScript pur avec l'API Web Audio — aucune dépendance, aucun build.
+Trois instruments jouables dans le navigateur, écrits en HTML/CSS/JavaScript pur avec l'API Web Audio — aucune dépendance, aucun build.
 
-[`index.html`](index.html) est un **écran d'accueil** qui mène aux deux studios :
+[`index.html`](index.html) est un **écran d'accueil** qui mène aux trois studios :
 
 | Page | Genre | Moteur |
 | --- | --- | --- |
 | [`chiptune.html`](chiptune.html) | **Chiptune 8-bit** | Oscillateurs carré/pulse/triangle, bitcrusher, vibrato |
-| [`trance.html`](trance.html) | **Trance** | Supersaw, filtre résonant à enveloppe, sidechain, réverbération, boîte à rythmes |
+| [`drums909.html`](drums909.html) | **House &amp; techno** | Dix voix de percussion synthétisées, saturation, filtre master |
+| [`trance.html`](trance.html) | **Trance** | Supersaw, filtre résonant à enveloppe, sidechain, réverbération |
 
-Les deux partagent la même architecture — séquenceur à motifs enchaînables, bibliothèque de morceaux, partage par URL, annuler/rétablir, export WAV — mais rien de leur synthèse. Chaque studio ramène au menu par un lien en haut de page.
+Les trois partagent la même architecture — séquenceur à motifs enchaînables, bibliothèque de morceaux, partage par URL, annuler/rétablir, export WAV — mais rien de leur synthèse. Chaque studio ramène au menu par un lien en haut de page.
 
 ## Utilisation
 
@@ -159,12 +160,33 @@ Le mappage utilise la position physique des touches, donc il fonctionne aussi bi
 
 **Motifs de 32 pas** (deux mesures), quatre motifs enchaînables, trois morceaux fournis — *Ascension* (138 BPM, uplifting), *Nébuleuse* (132, plus profond), *Orage* (142, agressif) — plus un emplacement vierge.
 
+## La boîte à rythmes 909
+
+[`drums909.html`](drums909.html) synthétise **dix voix** de percussion, sans aucun échantillon :
+
+| Voix | Synthèse |
+| --- | --- |
+| **BD** grosse caisse | Sinus dont la hauteur chute de cinq fois la fondamentale, plus un claquement d'attaque |
+| **SD** caisse claire | Deux triangles inharmoniques mêlés à du bruit filtré en bande |
+| **CP** clap | Trois éclats de bruit rapprochés puis une traîne, en passe-bande |
+| **LT / MT / HT** toms | Sinus à hauteur descendante, avec une pointe de bruit |
+| **RS** rimshot | Deux carrés très brefs, autour de 1,5 kHz |
+| **CH / OH** charleys | Six carrés à rapports inharmoniques passés au passe-haut — la recette analogique |
+| **CY** cymbale | Le même empilement, décroissance longue et passe-haut plus bas |
+
+Chaque voix se règle en niveau, accord, chute, grain et départ réverb. Le pas-à-pas fait 16 temps, avec **accent** au deuxième clic, **shuffle** jusqu'à 55 %, et un **aléa** qui décale légèrement les frappes pour casser la rigidité machine.
+
+Le master enchaîne **saturation** (courbe douce, jamais d'écrêtage net), **filtre résonant** balayable, réverbération courte, puis un **limiteur** : la résonance peut pousser le signal bien au-delà du plein niveau, et sans lui le rendu saturerait.
+
+Trois grooves fournis : **Chicago** (124 BPM, house shufflée), **Detroit** (134, techno en doubles-croches), **Entrepôt** (128, charleys ouverts et filtre fermé).
+
 ## Structure
 
-Trois fichiers autonomes, sans dépendance ni build :
+Quatre fichiers autonomes, sans dépendance ni build :
 
-- [`index.html`](index.html) — l'accueil, avec une vignette animée par studio (onde carrée crantée d'un côté, dents de scie désaccordées de l'autre).
+- [`index.html`](index.html) — l'accueil, avec une vignette animée par studio : onde carrée crantée, pas-à-pas qui défile, dents de scie désaccordées.
 - [`chiptune.html`](chiptune.html) — le synthé 8-bit.
+- [`drums909.html`](drums909.html) — la boîte à rythmes.
 - [`trance.html`](trance.html) — le studio trance.
 
 Chaque studio est un document séparé : leurs identifiants, leurs styles, leurs raccourcis clavier et leur contexte audio ne se marchent jamais dessus.

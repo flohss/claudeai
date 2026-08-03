@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Deux studios</title>
+<title>Trois studios</title>
 <style>
   :root {
     --ink: #eef1ff;
@@ -12,13 +12,16 @@
     --chip2: #ff4fd8;
     --tr: #4fd6ff;
     --tr2: #a56bff;
+    --drum: #f08a24;
+    --drum2: #e0472e;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     min-height: 100vh;
     background:
       radial-gradient(70% 55% at 18% 8%, rgba(0,255,156,.10) 0%, transparent 55%),
-      radial-gradient(70% 55% at 82% 92%, rgba(165,107,255,.14) 0%, transparent 55%),
+      radial-gradient(60% 50% at 50% 96%, rgba(240,138,36,.12) 0%, transparent 55%),
+      radial-gradient(70% 55% at 88% 8%, rgba(165,107,255,.14) 0%, transparent 55%),
       #06070d;
     color: var(--ink);
     font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
@@ -46,7 +49,7 @@
   }
   h1 em {
     font-style: normal;
-    background: linear-gradient(90deg, var(--chip), var(--tr));
+    background: linear-gradient(90deg, var(--chip), var(--drum), var(--tr));
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
@@ -61,10 +64,10 @@
 
   .cards {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(288px, 1fr));
     gap: 22px;
     width: 100%;
-    max-width: 880px;
+    max-width: 1120px;
   }
   .card {
     position: relative;
@@ -89,6 +92,10 @@
   .card.tr:hover, .card.tr:focus-visible {
     border-color: var(--tr);
     box-shadow: 0 16px 46px rgba(79,214,255,.2);
+  }
+  .card.d909:hover, .card.d909:focus-visible {
+    border-color: var(--drum);
+    box-shadow: 0 16px 46px rgba(240,138,36,.2);
   }
   @media (prefers-reduced-motion: reduce) {
     .card, .card:hover { transform: none; transition: none; }
@@ -117,6 +124,7 @@
   }
   .card.chip h2 { color: var(--chip); }
   .card.tr h2 { color: var(--tr); }
+  .card.d909 h2 { color: var(--drum); }
   .card p { color: var(--dim); font-size: 13px; line-height: 1.6; }
   .card ul { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
   .card li {
@@ -135,6 +143,7 @@
   }
   .card.chip .go { color: var(--chip); }
   .card.tr .go { color: var(--tr); }
+  .card.d909 .go { color: var(--drum); }
   .card .go span { transition: margin-left .2s ease; display: inline-block; }
   .card:hover .go span { margin-left: 6px; }
 
@@ -145,10 +154,10 @@
 <body>
   <header>
     <div class="eyebrow">Web Audio &mdash; sans dépendance</div>
-    <h1>Deux studios,<br><em>deux mondes sonores</em></h1>
+    <h1>Trois studios,<br><em>trois mondes sonores</em></h1>
     <p>
       Le même séquenceur — motifs enchaînables, morceaux prêts à jouer,
-      partage par lien, export WAV — au service de deux synthèses
+      partage par lien, export WAV — au service de trois synthèses
       qui n'ont rien en commun. Choisissez votre camp.
     </p>
   </header>
@@ -164,6 +173,21 @@
         </p>
         <ul>
           <li>Pulse 12,5 %</li><li>Bitcrusher</li><li>Polyrythmie</li><li>Accents</li>
+        </ul>
+        <div class="go">Entrer <span>&rarr;</span></div>
+      </div>
+    </a>
+
+    <a class="card d909" href="drums909.html">
+      <canvas id="viz909" width="440" height="116" aria-hidden="true"></canvas>
+      <div class="body">
+        <h2>Boîte à rythmes <span class="kicker">House &amp; techno</span></h2>
+        <p>
+          Dix voix de synthèse façon 909 : grosse caisse, caisse claire, clap,
+          toms, charleys, cymbale. Pas-à-pas 16 temps, shuffle, saturation.
+        </p>
+        <ul>
+          <li>10 voix</li><li>Accents</li><li>Shuffle</li><li>Filtre master</li>
         </ul>
         <div class="go">Entrer <span>&rarr;</span></div>
       </div>
@@ -194,8 +218,9 @@
 (function () {
   "use strict";
 
-  // Deux vignettes animées : une onde carrée crantée pour le chiptune,
-  // un empilement de dents de scie désaccordées pour la trance.
+  // Une vignette animée par studio : onde carrée crantée pour le chiptune,
+  // pas-à-pas qui défile pour la boîte à rythmes, dents de scie désaccordées
+  // pour la trance.
   const reduce = window.matchMedia
     && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -234,6 +259,34 @@
     g.beginPath();
     g.moveTo(0, mid); g.lineTo(c.width, mid);
     g.stroke();
+  });
+
+  setup("viz909", (g, c, t) => {
+    g.clearRect(0, 0, c.width, c.height);
+    // seize pas qui s'allument au passage de la tête de lecture
+    const cols = 16, gap = 5;
+    const w = (c.width - gap * (cols + 1)) / cols;
+    const rows = 3, h = 15, top = (c.height - (rows * h + (rows - 1) * 7)) / 2;
+    const motif = [
+      [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0],
+      [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1],
+      [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0]
+    ];
+    const head = Math.floor((t * 5.5) % cols);
+    for (let r = 0; r < rows; r++) {
+      for (let i = 0; i < cols; i++) {
+        const x = gap + i * (w + gap), y = top + r * (h + 7);
+        const on = motif[r][i];
+        g.fillStyle = on ? (r === 0 ? "#e0472e" : r === 1 ? "#f08a24" : "#f6c945")
+                         : (i % 4 === 0 ? "rgba(255,255,255,.14)" : "rgba(255,255,255,.07)");
+        g.fillRect(x, y, w, h);
+        if (i === head) {
+          g.strokeStyle = "rgba(255,255,255,.85)";
+          g.lineWidth = 1.5;
+          g.strokeRect(x + .75, y + .75, w - 1.5, h - 1.5);
+        }
+      }
+    }
   });
 
   setup("vizTr", (g, c, t) => {
