@@ -30,7 +30,7 @@ Dans le studio 8-bit, le séquenceur pilote **trois pistes** (Mélodie, Basse, P
 
 Cliquer sur le nom d'une piste la sélectionne : les panneaux de réglage l'éditent alors, et le clavier la joue. Toucher un réglage bascule la piste en mode « Perso » sans altérer les autres.
 
-## Sept morceaux fournis
+## Neuf morceaux fournis
 
 La barre **Morceaux** charge un titre complet — motifs, chaîne, instruments, tempo et écho :
 
@@ -43,6 +43,8 @@ La barre **Morceaux** charge un titre complet — motifs, chaîne, instruments, 
 | **Boss** | 152 | Chromatismes menaçants, basse en 4 bits |
 | **Berceuse** | 76 | Très lent, sans percussion, écho long |
 | **Engrenage** | 128 | Polyrythmie : boucles de 16, 12 et 10 pas qui se décalent |
+| **Cascade** | 144 | Arpèges qui montent et retombent, basse tenue, percu en boucle de 12 |
+| **Veillée** | 88 | Très lent, notes tenues sur quatre pas, sirène lointaine |
 
 **Vierge** repart d'une page blanche, et le bouton **Retour** du navigateur annule un chargement — l'état précédent est déposé dans l'historique avant d'être remplacé.
 
@@ -176,7 +178,7 @@ Le décodage est tolérant : un lien tronqué, altéré ou d'une version inconnu
 - **Balayage de filtre** : une bande d'automation par motif, tracée à la souris, qui pilote un filtre passe-bas master (trance et 909).
 - **Balayage de hauteur** par piste : −24 à +24 demi-tons sur la durée de la note.
 - **5 presets** : Lead GB, Basse, Cristal, Percu, Sirène — applicables à la piste sélectionnée.
-- **Bibliothèque de 7 morceaux** prêts à jouer, plus un emplacement vierge, écrits en clair dans le source.
+- **Bibliothèque de 9 morceaux** prêts à jouer, plus un emplacement vierge, écrits en clair dans le source.
 - **Partage par URL** : le morceau complet — motifs, chaîne et réglages — tient dans le lien, restitué à l'identique à l'ouverture.
 - **Export WAV** : rendu hors ligne du morceau complet, plus rapide que le temps réel.
 - **Enregistrement au clavier** : écriture quantifiée pendant la lecture, ou pas à pas à l'arrêt.
@@ -215,7 +217,16 @@ Le mappage utilise la position physique des touches, donc il fonctionne aussi bi
 - **Délai pointé de 3/16** — calé sur le tempo, avec retour réglable.
 - **Panoramique** par piste.
 
-**Motifs de 32 pas** (deux mesures), **accords** sur chaque pas et **notes tenues** — les nappes des trois morceaux sont des triades tenues sur la mesure entière —, quatre motifs enchaînables, trois morceaux fournis — *Ascension* (138 BPM, uplifting), *Nébuleuse* (132, plus profond), *Orage* (142, agressif) — plus un emplacement vierge.
+**Motifs de 32 pas** (deux mesures), **accords** sur chaque pas et **notes tenues** — les nappes sont des triades tenues sur la mesure entière —, quatre motifs enchaînables, et **six morceaux fournis** plus un emplacement vierge :
+
+| Morceau | Tempo | Ambiance |
+| --- | --- | --- |
+| **Ascension** | 138 | Uplifting classique, nappe majeure, montée franche |
+| **Nébuleuse** | 132 | Plus profond et plus lent, réverbération longue |
+| **Orage** | 142 | Agressif, filtre qui s'ouvre progressivement sur le motif B |
+| **Aurore** | 140 | Majeur lumineux, pluck en arpèges, balayage de filtre sur la reprise |
+| **Cavale** | 146 | Tendu, basse syncopée, le motif C referme le filtre avant la relance |
+| **Éclipse** | 126 | Mineur, très aéré, nappes tenues sur deux mesures entières |
 
 ## La boîte à rythmes 909
 
@@ -235,7 +246,16 @@ Chaque voix se règle en niveau, accord, chute, grain et départ réverb. Le pas
 
 Le master enchaîne **saturation** (courbe douce, jamais d'écrêtage net), **filtre résonant** balayable — au curseur ou à la bande d'automation —, réverbération courte, puis un **limiteur** : la résonance peut pousser le signal bien au-delà du plein niveau, et sans lui le rendu saturerait.
 
-Trois grooves fournis : **Chicago** (124 BPM, house shufflée), **Detroit** (134, techno en doubles-croches), **Entrepôt** (128, charleys ouverts et filtre fermé).
+Six grooves fournis :
+
+| Groove | Tempo | Caractère |
+| --- | --- | --- |
+| **Chicago** | 124 | House shufflée, clap sur le contretemps |
+| **Detroit** | 134 | Techno en doubles-croches, rimshot continu |
+| **Entrepôt** | 128 | Charleys ouverts, filtre qui se referme au milieu de la mesure |
+| **Garage** | 132 | Shuffle marqué, charley chaloupé, caisse claire tardive |
+| **Berlin** | 138 | Minimal, filtre bas et résonant, toms en fin de motif |
+| **Rave** | 148 | Dur et rapide, charleys ouverts, cymbale sur les départs |
 
 ## Le synthé FM
 
@@ -260,7 +280,18 @@ Le **diagramme s'affiche à l'écran** : les opérateurs se placent par étage s
 
 La profondeur de modulation suit la fréquence du modulateur, de sorte que **le timbre reste le même d'un bout à l'autre du clavier** au lieu de devenir criard dans l'aigu.
 
-Six presets — Piano él., Cloche, Marimba, Basse FM, Cuivre, Verre — et trois morceaux : **Rhodes** (96 BPM), **Carillon** (78), **Fanfare** (128). C'est la page où les **accords** comptent le plus : un piano électrique qui ne sait pas plaquer une triade, ce n'est pas un piano électrique.
+Six presets — Piano él., Cloche, Marimba, Basse FM, Cuivre, Verre — et six morceaux :
+
+| Morceau | Tempo | Caractère |
+| --- | --- | --- |
+| **Rhodes** | 96 | Piano électrique, progression en accords plaqués |
+| **Carillon** | 78 | Cloches inharmoniques et marimba |
+| **Fanfare** | 128 | Cuivres en algorithme Y, basse FM appuyée |
+| **Verre** | 84 | Timbres de verre tenus, cloches espacées, très réverbéré |
+| **Poursuite** | 132 | Cuivres en accords courts, marimba rapide, basse continue |
+| **Choral** | 66 | Quatre accords tenus une mesure chacun, presque un orgue |
+
+C'est la page où les **accords** comptent le plus : un piano électrique qui ne sait pas plaquer une triade, ce n'est pas un piano électrique.
 
 ## Sauvegarder un morceau en JSON
 
