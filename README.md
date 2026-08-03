@@ -1,8 +1,8 @@
 # Synthés virtuels 🎹
 
-Quatre instruments jouables dans le navigateur, écrits en HTML/CSS/JavaScript pur avec l'API Web Audio — aucune dépendance, aucun build.
+Quatre instruments jouables dans le navigateur, plus une table de montage pour les réunir. Écrits en HTML/CSS/JavaScript pur avec l'API Web Audio — aucune dépendance, aucun build.
 
-[`index.html`](index.html) est un **écran d'accueil** qui mène aux quatre studios :
+[`index.html`](index.html) est un **écran d'accueil** qui mène aux quatre studios et au montage :
 
 | Page | Genre | Moteur |
 | --- | --- | --- |
@@ -10,6 +10,7 @@ Quatre instruments jouables dans le navigateur, écrits en HTML/CSS/JavaScript p
 | [`drums909.html`](drums909.html) | **House &amp; techno** | Dix voix de percussion synthétisées, saturation, filtre master |
 | [`fm.html`](fm.html) | **FM** | Quatre opérateurs, huit algorithmes, rebouclage, chorus |
 | [`trance.html`](trance.html) | **Trance** | Supersaw, filtre résonant à enveloppe, sidechain, réverbération |
+| [`montage.html`](montage.html) | **Multipiste** | Table de mixage : réunit les rendus des quatre studios en un seul fichier |
 
 Les quatre partagent la même architecture — séquenceur à motifs enchaînables, bibliothèque de morceaux, partage par URL, annuler/rétablir, export WAV — mais rien de leur synthèse. Chaque studio ramène au menu par un lien en haut de page.
 
@@ -304,14 +305,34 @@ Le `title` natif du navigateur n'aurait pas suffi : il arrive après une seconde
 
 La cible est **la ligne entière**, pas le curseur seul : c'est bien plus facile à viser.
 
+## Relier les studios : la table de montage
+
+Les quatre studios ne savent faire qu'une chose à la fois. Un morceau complet demande pourtant une boîte à rythmes **et** un synthé, et rien ne permettait de les réunir.
+
+Les faire jouer ensemble et en phase supposerait qu'ils partagent une horloge audio. Ce sont des documents séparés, avec chacun son `AudioContext` ; il faudrait des iframes et du `postMessage`, ce qui fonctionnerait en local mais serait bloqué par la politique de sécurité des pages publiées. Une passerelle qui casse là où on s'en sert n'en est pas une.
+
+Chaque studio sait en revanche **rendre son morceau en WAV**. [`montage.html`](montage.html) est le chaînon qui manquait : on y dépose ces rendus, on les cale, on les mixe, on ressort un seul fichier.
+
+Par piste : **volume**, **muet**, **solo**, **décalage en mesures** et **boucler**. La forme d'onde est dessinée, ce qui montre d'un coup d'œil où le morceau respire et où il frappe.
+
+Deux détails font tout le travail :
+
+- **Boucler** répète une piste courte jusqu'à la fin du montage. C'est ce qui permet de poser deux mesures de batterie sous huit mesures de synthé, sans rien réexporter.
+- La longueur du montage est fixée par les pistes **non bouclées** — les pistes bouclées la remplissent. Si tout est bouclé, la plus longue donne la mesure. Une piste décalée repousse la fin d'autant.
+
+Le **tempo** du montage ne change aucun son : il sert seulement à exprimer les décalages et la règle en mesures.
+
+Le mixage passe par un **limiteur** avec une attaque de 0,5 ms : quatre pistes qui s'additionnent dépassent vite le plein niveau, et sans lui le rendu saturerait. La lecture et l'export partagent exactement le même graphe audio, donc le fichier est ce qu'on a entendu.
+
 ## Structure
 
-Cinq fichiers autonomes, sans dépendance ni build :
+Six fichiers autonomes, sans dépendance ni build :
 
 - [`index.html`](index.html) — l'accueil, avec une vignette animée par studio : onde carrée crantée, pas-à-pas qui défile, porteuse déformée par sa modulante, dents de scie désaccordées.
 - [`chiptune.html`](chiptune.html) — le synthé 8-bit.
 - [`drums909.html`](drums909.html) — la boîte à rythmes.
 - [`fm.html`](fm.html) — le synthé FM.
 - [`trance.html`](trance.html) — le studio trance.
+- [`montage.html`](montage.html) — la table de montage, qui ne synthétise rien et se contente d'assembler des WAV.
 
 Chaque studio est un document séparé : leurs identifiants, leurs styles, leurs raccourcis clavier et leur contexte audio ne se marchent jamais dessus.

@@ -15,6 +15,7 @@
     --drum: #f08a24;
     --drum2: #e0472e;
     --fm: #d9b06a;
+    --mix: #37d4b0;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -102,6 +103,10 @@
     border-color: var(--fm);
     box-shadow: 0 16px 46px rgba(217,176,106,.2);
   }
+  .card.mix:hover, .card.mix:focus-visible {
+    border-color: var(--mix);
+    box-shadow: 0 16px 46px rgba(55,212,176,.2);
+  }
   @media (prefers-reduced-motion: reduce) {
     .card, .card:hover { transform: none; transition: none; }
   }
@@ -131,6 +136,7 @@
   .card.tr h2 { color: var(--tr); }
   .card.d909 h2 { color: var(--drum); }
   .card.fm h2 { color: var(--fm); }
+  .card.mix h2 { color: var(--mix); }
   .card p { color: var(--dim); font-size: 13px; line-height: 1.6; }
   .card ul { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
   .card li {
@@ -151,6 +157,7 @@
   .card.tr .go { color: var(--tr); }
   .card.d909 .go { color: var(--drum); }
   .card.fm .go { color: var(--fm); }
+  .card.mix .go { color: var(--mix); }
   .card .go span { transition: margin-left .2s ease; display: inline-block; }
   .card:hover .go span { margin-left: 6px; }
 
@@ -165,7 +172,8 @@
     <p>
       Le même séquenceur — motifs enchaînables, morceaux prêts à jouer,
       partage par lien, export WAV — au service de quatre synthèses
-      qui n'ont rien en commun. Choisissez votre camp.
+      qui n'ont rien en commun. Choisissez votre camp, puis réunissez
+      vos rendus sur la <em>table de montage</em>.
     </p>
   </header>
 
@@ -229,6 +237,21 @@
         <div class="go">Entrer <span>&rarr;</span></div>
       </div>
     </a>
+
+    <a class="card mix" href="montage.html">
+      <canvas id="vizMix" width="440" height="116" aria-hidden="true"></canvas>
+      <div class="body">
+        <h2>Montage <span class="kicker">Assembler</span></h2>
+        <p>
+          Les quatre studios rendent chacun leur WAV. Réunissez-les ici :
+          volumes, décalages en mesures, boucles, et un seul fichier en sortie.
+        </p>
+        <ul>
+          <li>Multipiste</li><li>Boucles</li><li>Limiteur</li><li>Export WAV</li>
+        </ul>
+        <div class="go">Entrer <span>&rarr;</span></div>
+      </div>
+    </a>
   </div>
 
   <footer>
@@ -258,6 +281,29 @@
       draw(g, c, t);
     })();
   }
+
+  setup("vizMix", (g, c, t) => {
+    g.clearRect(0, 0, c.width, c.height);
+    // quatre bandes empilées, chacune la couleur de son studio, et une tête
+    // de lecture qui les traverse ensemble
+    const voies = ["#00ff9c", "#f08a24", "#d9b06a", "#4fd6ff"];
+    const h = c.height / voies.length;
+    voies.forEach((couleur, v) => {
+      const mid = v * h + h / 2;
+      g.fillStyle = couleur;
+      g.globalAlpha = .85;
+      for (let x = 0; x < c.width; x += 3) {
+        const p = x * 0.05 + v * 1.7;
+        const amp = (0.25 + 0.55 * Math.abs(Math.sin(p * 0.31 + t * 0.9 + v)))
+                  * Math.abs(Math.sin(p * 1.7 + v * 2)) * (h * 0.42);
+        g.fillRect(x, mid - amp, 2, amp * 2);
+      }
+      g.globalAlpha = 1;
+    });
+    const x = ((t * 46) % (c.width + 40)) - 20;
+    g.fillStyle = "rgba(55,212,176,.95)";
+    g.fillRect(x, 0, 2, c.height);
+  });
 
   setup("vizChip", (g, c, t) => {
     g.clearRect(0, 0, c.width, c.height);

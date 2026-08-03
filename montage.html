@@ -1,0 +1,688 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Table de montage</title>
+<style>
+  :root {
+    --bg: #0d1114;
+    --panel: #161d21;
+    --panel2: #10161a;
+    --edge: #2b383f;
+    --ink: #dfe9ec;
+    --dim: #93a6ae;          /* 5,4:1 sur le fond des panneaux */
+    --accent: #37d4b0;
+    --accent2: #f2a63c;
+    --accent3: #e2596b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background:
+      radial-gradient(120% 70% at 50% -10%, #17262b 0%, transparent 60%),
+      var(--bg);
+    color: var(--ink);
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    min-height: 100vh;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 24px 12px 48px;
+  }
+  h1 {
+    font-size: clamp(21px, 4.2vw, 36px);
+    font-weight: 200; letter-spacing: .42em; text-transform: uppercase;
+    color: var(--accent); margin-bottom: 3px;
+  }
+  .subtitle {
+    color: var(--dim); font-size: 11px; letter-spacing: .3em;
+    text-transform: uppercase; margin-bottom: 6px; text-align: center;
+  }
+  .crosslink { font-size: 11px; color: var(--dim); margin-bottom: 20px; text-align: center; }
+  .crosslink a { color: var(--accent); text-decoration: none; border-bottom: 1px solid currentColor; }
+  .crosslink a:hover { color: var(--accent2); }
+
+  .console {
+    width: 100%; max-width: 1000px;
+    background: linear-gradient(180deg, rgba(40,58,66,.5), rgba(10,15,18,.85));
+    border: 1px solid var(--edge); border-radius: 14px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.05);
+    padding: 18px;
+  }
+  fieldset {
+    border: 1px solid var(--edge); border-radius: 10px;
+    padding: 12px 14px 14px; background: rgba(255,255,255,.02); min-width: 0;
+  }
+  fieldset + fieldset { margin-top: 12px; }
+  legend {
+    color: var(--accent); font-size: 10px; letter-spacing: .25em;
+    text-transform: uppercase; padding: 0 8px;
+  }
+  .hint { margin-top: 11px; font-size: 10.5px; color: var(--dim); line-height: 1.7; }
+  .hint b { color: var(--accent2); font-weight: 600; }
+
+  button {
+    font: inherit; font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+    background: rgba(255,255,255,.04); color: var(--ink);
+    border: 1px solid var(--edge); border-radius: 7px;
+    padding: 8px 11px; cursor: pointer;
+    transition: background .15s, border-color .15s, color .15s;
+  }
+  button:hover:not([disabled]) { background: rgba(255,255,255,.09); border-color: var(--accent); }
+  button:focus-visible { outline: 2px solid var(--accent2); outline-offset: 2px; }
+  button[disabled] { opacity: .35; cursor: not-allowed; }
+  button.on { background: var(--accent2); color: #1b1204; border-color: transparent; font-weight: 700; }
+  button.primaire { background: linear-gradient(180deg, var(--accent), #199e81); color: #04201a; border-color: transparent; font-weight: 700; }
+
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .bar + .bar { margin-top: 10px; }
+  .tag { color: var(--accent2); font-size: 10px; letter-spacing: .22em; text-transform: uppercase; }
+  .sep { flex: 0 0 10px; }
+
+  input[type=range] {
+    -webkit-appearance: none; appearance: none;
+    height: 4px; background: rgba(255,255,255,.13); border-radius: 3px;
+    outline: none; min-width: 40px;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--accent); box-shadow: 0 0 8px rgba(55,212,176,.6); cursor: pointer;
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 12px; height: 12px; border-radius: 50%; background: var(--accent);
+    border: none; cursor: pointer;
+  }
+  input[type=range]:focus-visible { outline: 2px solid var(--accent2); outline-offset: 3px; }
+  input[type=number] {
+    background: rgba(0,0,0,.45); color: var(--ink);
+    border: 1px solid var(--edge); border-radius: 6px;
+    font: inherit; font-size: 11px; padding: 6px 7px; width: 76px;
+  }
+  .row {
+    display: grid; grid-template-columns: 84px minmax(30px, 1fr) 56px;
+    align-items: center; gap: 10px; margin-top: 9px; font-size: 11px;
+  }
+  .row label {
+    color: var(--dim); font-size: 10px; letter-spacing: .06em;
+    text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .row output { text-align: right; color: var(--accent); font-variant-numeric: tabular-nums; }
+
+  /* zone de dépôt */
+  .depot {
+    border: 2px dashed var(--edge); border-radius: 12px;
+    padding: 26px 16px; text-align: center; color: var(--dim);
+    font-size: 12px; line-height: 1.7; cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  .depot:hover, .depot.survol { border-color: var(--accent); background: rgba(55,212,176,.07); }
+  .depot b { color: var(--ink); font-weight: 600; }
+
+  /* pistes */
+  .piste {
+    border: 1px solid var(--edge); border-left: 4px solid var(--pc, var(--accent));
+    border-radius: 9px; background: rgba(0,0,0,.28);
+    padding: 10px 12px; margin-top: 10px;
+  }
+  .piste.silent { opacity: .45; }
+  .piste-tete { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+  .piste-nom {
+    font-size: 12px; font-weight: 600; flex: 1 1 180px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .piste-duree { font-size: 10px; color: var(--dim); font-variant-numeric: tabular-nums; }
+  .mini { padding: 5px 9px; font-size: 10px; }
+  .onde {
+    display: block; width: 100%; height: 46px; margin-top: 9px;
+    background: rgba(0,0,0,.42); border: 1px solid var(--edge); border-radius: 6px;
+  }
+  .reglages {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 4px 14px; margin-top: 2px;
+  }
+
+  .transport { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; margin-top: 12px; }
+  .horloge {
+    font-variant-numeric: tabular-nums; color: var(--accent);
+    font-size: 13px; letter-spacing: .06em; min-width: 92px;
+  }
+  .msg { font-size: 10px; color: var(--accent3); letter-spacing: .1em; text-transform: uppercase; }
+
+  .regle { position: relative; height: 20px; margin-top: 12px; }
+  .regle canvas { display: block; width: 100%; height: 100%; }
+
+  .bulle {
+    position: fixed; top: 0; left: 0; z-index: 60;
+    max-width: 290px; padding: 8px 11px;
+    font-size: 11px; line-height: 1.55; letter-spacing: .01em;
+    text-transform: none; text-align: left; border-radius: 8px;
+    opacity: 0; pointer-events: none; transition: opacity .12s ease;
+    background: #10181c; color: var(--ink);
+    border: 1px solid var(--edge);
+    box-shadow: 0 10px 28px rgba(0,0,0,.65);
+  }
+  .bulle.on { opacity: 1; }
+  @media (prefers-reduced-motion: reduce) { .bulle { transition: none; } }
+</style>
+
+  <h1>Montage</h1>
+  <div class="subtitle">Table de mixage &mdash; assembler les quatre studios</div>
+  <div class="crosslink"><a href="index.html">&#8592; Menu</a> &nbsp;·&nbsp;
+    <a href="chiptune.html">Synthé 8-bit</a> &nbsp;·&nbsp;
+    <a href="drums909.html">Boîte à rythmes</a> &nbsp;·&nbsp;
+    <a href="fm.html">Synthé FM</a> &nbsp;·&nbsp;
+    <a href="trance.html">Studio trance</a></div>
+
+  <div class="console">
+    <fieldset>
+      <legend>Pistes</legend>
+      <div class="depot" id="depot" tabindex="0" role="button"
+           aria-label="Ajouter des fichiers audio">
+        Déposez ici les <b>fichiers WAV</b> exportés des studios, ou cliquez pour les choisir.<br>
+        Chaque studio a son bouton <b>Exporter WAV</b> : rendez le même nombre de mesures
+        au même tempo dans chacun, et les pistes se superposent d'elles-mêmes.
+      </div>
+      <input type="file" id="fichiers" accept="audio/*,.wav" multiple hidden>
+      <div id="pistes"></div>
+      <div class="hint" id="vide">
+        Aucune piste. Un morceau complet demande souvent une boîte à rythmes et
+        un ou deux synthés : rendez-les séparément, réunissez-les ici.
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Master</legend>
+      <div class="row">
+        <label>Volume</label>
+        <input type="range" id="volume" min="0" max="1" step="0.01" value="0.9">
+        <output id="volumeOut">90%</output>
+      </div>
+      <div class="bar" style="margin-top:12px">
+        <span class="tag">Tempo</span>
+        <input type="number" id="bpm" min="40" max="240" step="1" value="128">
+        <span class="hint" style="margin:0">
+          sert seulement à exprimer les décalages en mesures
+        </span>
+      </div>
+      <div class="regle"><canvas id="regle" width="1800" height="40"></canvas></div>
+      <div class="transport">
+        <button id="play" class="primaire" disabled>&#9654; Lecture</button>
+        <button id="wav" disabled>Exporter le mixage</button>
+        <button id="vider" disabled>Tout retirer</button>
+        <span class="horloge" id="horloge">0:00 / 0:00</span>
+        <span class="msg" id="msg"></span>
+      </div>
+      <div class="hint">
+        Le mixage passe par un <b>limiteur</b> : quatre pistes qui s'additionnent
+        dépassent vite le plein niveau, et sans lui le rendu saturerait.
+        <b>Boucler</b> répète une piste courte jusqu'à la fin du morceau &mdash;
+        c'est ce qui permet de poser deux mesures de batterie sous huit mesures de synthé.
+      </div>
+    </fieldset>
+  </div>
+
+<script>
+(function () {
+  "use strict";
+
+  const COULEURS = ["#37d4b0", "#f2a63c", "#e2596b", "#7f9dff", "#c08cff", "#5fd0e8"];
+  const master = { volume: 0.9, bpm: 128 };
+
+  // Une piste : le tampon décodé, plus ce qu'on en fait au mixage.
+  const pistes = [];
+  let ctx = null, rig = null, joue = false, depart = 0, raf = null;
+
+  const pistesEl = document.getElementById("pistes");
+  const videEl = document.getElementById("vide");
+  const playBtn = document.getElementById("play");
+  const wavBtn = document.getElementById("wav");
+  const viderBtn = document.getElementById("vider");
+  const horlogeEl = document.getElementById("horloge");
+  const msgEl = document.getElementById("msg");
+  const regleEl = document.getElementById("regle");
+
+  let msgTimer = null;
+  function flash(texte) {
+    msgEl.textContent = texte;
+    clearTimeout(msgTimer);
+    msgTimer = setTimeout(() => msgEl.textContent = "", 2600);
+  }
+
+  const duree = s => {
+    const t = Math.max(0, s);
+    return Math.floor(t / 60) + ":" + String(Math.floor(t % 60)).padStart(2, "0");
+  };
+  const parMesure = () => 60 / master.bpm * 4;      // une mesure de quatre temps
+
+  function initAudio() {
+    if (ctx) { if (ctx.state === "suspended") ctx.resume(); return; }
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    rig = creerRig(ctx);
+  }
+
+  // Le même graphe pour le direct et pour le rendu : ce qu'on entend est ce
+  // qu'on exporte.
+  function creerRig(actx) {
+    const r = { ctx: actx };
+    r.somme = actx.createGain();
+    r.master = actx.createGain();
+    r.master.gain.value = master.volume;
+    r.limiteur = actx.createDynamicsCompressor();
+    r.limiteur.threshold.value = -3;
+    r.limiteur.knee.value = 2;
+    r.limiteur.ratio.value = 18;
+    r.limiteur.attack.value = 0.0005;   // laisser passer les transitoires ferait écrêter
+    r.limiteur.release.value = 0.12;
+    r.sortie = actx.createGain();
+    r.sortie.gain.value = 0.9;          // marge après le limiteur
+    r.somme.connect(r.master);
+    r.master.connect(r.limiteur);
+    r.limiteur.connect(r.sortie);
+    r.sortie.connect(actx.destination);
+    return r;
+  }
+
+  // ------- Longueur du montage -------
+  // Les pistes bouclées remplissent la durée fixée par les autres. Si tout est
+  // bouclé, la plus longue donne la mesure.
+  function finDe(p) { return p.decalage * parMesure() + p.buffer.duration; }
+  function longueurTotale() {
+    const fixes = pistes.filter(p => !p.boucle);
+    const base = fixes.length ? fixes : pistes;
+    return base.reduce((m, p) => Math.max(m, finDe(p)), 0);
+  }
+
+  const solos = () => pistes.some(p => p.solo);
+  const audible = p => !p.mute && (!solos() || p.solo);
+
+  // ------- Lecture -------
+  function brancher(r, quand, total) {
+    const sources = [];
+    pistes.forEach(p => {
+      if (!audible(p)) return;
+      const src = r.ctx.createBufferSource();
+      src.buffer = p.buffer;
+      const g = r.ctx.createGain();
+      g.gain.value = p.volume;
+      src.connect(g);
+      g.connect(r.somme);
+      const debut = quand + p.decalage * parMesure();
+      const fin = quand + total;
+      if (debut >= fin) return;
+      if (p.boucle) {
+        src.loop = true;
+        src.start(debut);
+        src.stop(fin);
+      } else {
+        src.start(debut);
+        src.stop(Math.min(fin, debut + p.buffer.duration) + 0.01);
+      }
+      sources.push(src);
+    });
+    return sources;
+  }
+
+  let sourcesEnCours = [];
+  function lecture() {
+    if (!pistes.length) return;
+    initAudio();
+    arreter(true);
+    const total = longueurTotale();
+    depart = ctx.currentTime + 0.06;
+    sourcesEnCours = brancher(rig, depart, total);
+    joue = true;
+    playBtn.innerHTML = "&#9632; Arrêt";
+    boucleAffichage();
+  }
+  function arreter(silencieux) {
+    sourcesEnCours.forEach(s => { try { s.stop(); } catch (e) {} });
+    sourcesEnCours = [];
+    joue = false;
+    playBtn.innerHTML = "&#9654; Lecture";
+    cancelAnimationFrame(raf);
+    if (!silencieux) dessinerRegle(0);
+    if (!silencieux) majHorloge(0);
+  }
+
+  function boucleAffichage() {
+    const total = longueurTotale();
+    const tic = () => {
+      if (!joue) return;
+      const t = ctx.currentTime - depart;
+      if (t >= total) { arreter(); majHorloge(0); dessinerRegle(0); return; }
+      majHorloge(Math.max(0, t));
+      dessinerRegle(Math.max(0, t));
+      raf = requestAnimationFrame(tic);
+    };
+    tic();
+  }
+  function majHorloge(t) {
+    horlogeEl.textContent = duree(t) + " / " + duree(longueurTotale());
+  }
+
+  // ------- Règle des mesures + tête de lecture -------
+  function dessinerRegle(t) {
+    const c = regleEl, g = c.getContext("2d");
+    const L = c.width, H = c.height;
+    g.clearRect(0, 0, L, H);
+    const total = longueurTotale();
+    if (!total) return;
+    const mes = parMesure();
+    const n = Math.ceil(total / mes);
+    g.font = "16px Helvetica, Arial, sans-serif";
+    g.textBaseline = "top";
+    for (let i = 0; i <= n; i++) {
+      const x = Math.round(i / total * mes * L);
+      if (x > L) break;
+      const fort = i % 4 === 0;
+      g.fillStyle = fort ? "rgba(255,255,255,.42)" : "rgba(255,255,255,.16)";
+      g.fillRect(x, fort ? 0 : H * 0.45, 1, fort ? H : H * 0.55);
+      if (fort && i < n) { g.fillStyle = "rgba(255,255,255,.42)"; g.fillText(String(i + 1), x + 5, 2); }
+    }
+    if (t > 0) {
+      const x = Math.round(t / total * L);
+      g.fillStyle = "#37d4b0";
+      g.fillRect(x, 0, 2, H);
+    }
+  }
+
+  // ------- Dessin de l'onde -------
+  function dessinerOnde(canvas, buffer, couleur) {
+    const g = canvas.getContext("2d");
+    const L = canvas.width, H = canvas.height;
+    g.clearRect(0, 0, L, H);
+    const d = buffer.getChannelData(0);
+    const pas = Math.max(1, Math.floor(d.length / L));
+    g.fillStyle = couleur;
+    for (let x = 0; x < L; x++) {
+      let bas = 1, haut = -1;
+      const debut = x * pas;
+      for (let i = 0; i < pas && debut + i < d.length; i++) {
+        const v = d[debut + i];
+        if (v < bas) bas = v;
+        if (v > haut) haut = v;
+      }
+      if (bas > haut) { bas = 0; haut = 0; }
+      const y1 = (1 - haut) * H / 2, y2 = (1 - bas) * H / 2;
+      g.fillRect(x, y1, 1, Math.max(1, y2 - y1));
+    }
+  }
+
+  // ------- Ajout de fichiers -------
+  const fichiersEl = document.getElementById("fichiers");
+  const depotEl = document.getElementById("depot");
+  depotEl.addEventListener("click", () => fichiersEl.click());
+  depotEl.addEventListener("keydown", e => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fichiersEl.click(); }
+  });
+  fichiersEl.addEventListener("change", () => {
+    ajouter([...fichiersEl.files]);
+    fichiersEl.value = "";
+  });
+  ["dragenter", "dragover"].forEach(t => depotEl.addEventListener(t, e => {
+    e.preventDefault(); depotEl.classList.add("survol");
+  }));
+  ["dragleave", "drop"].forEach(t => depotEl.addEventListener(t, e => {
+    e.preventDefault(); depotEl.classList.remove("survol");
+  }));
+  depotEl.addEventListener("drop", e => {
+    if (e.dataTransfer && e.dataTransfer.files) ajouter([...e.dataTransfer.files]);
+  });
+
+  async function ajouter(fichiers) {
+    if (!fichiers.length) return;
+    initAudio();
+    let refuses = 0;
+    for (const f of fichiers) {
+      let buffer = null;
+      try {
+        buffer = await ctx.decodeAudioData(await f.arrayBuffer());
+      } catch (e) { refuses++; continue; }
+      if (!buffer || !buffer.duration) { refuses++; continue; }
+      pistes.push({
+        nom: f.name.replace(/\.[^.]+$/, ""),
+        buffer, volume: 0.85, mute: false, solo: false, decalage: 0, boucle: false,
+        couleur: COULEURS[pistes.length % COULEURS.length]
+      });
+    }
+    if (refuses) flash(refuses + (refuses > 1 ? " fichiers illisibles" : " fichier illisible"));
+    construire();
+  }
+
+  // ------- Interface des pistes -------
+  function construire() {
+    pistesEl.innerHTML = "";
+    pistes.forEach((p, i) => pistesEl.appendChild(ligne(p, i)));
+    videEl.style.display = pistes.length ? "none" : "";
+    [playBtn, wavBtn, viderBtn].forEach(b => b.disabled = !pistes.length);
+    majHorloge(0);
+    dessinerRegle(0);
+    poserBulles();
+  }
+
+  function ligne(p, i) {
+    const bloc = document.createElement("div");
+    bloc.className = "piste" + (audible(p) ? "" : " silent");
+    bloc.style.setProperty("--pc", p.couleur);
+
+    const tete = document.createElement("div");
+    tete.className = "piste-tete";
+    const nom = document.createElement("span");
+    nom.className = "piste-nom";
+    nom.textContent = p.nom;
+    const dur = document.createElement("span");
+    dur.className = "piste-duree";
+    dur.textContent = duree(p.buffer.duration) + " · "
+      + (p.buffer.duration / parMesure()).toFixed(1) + " mes.";
+
+    const mute = bouton("M", "Rendre cette piste muette", p.mute, () => {
+      p.mute = !p.mute; construire();
+    });
+    const solo = bouton("S", "N'entendre que les pistes en solo", p.solo, () => {
+      p.solo = !p.solo; construire();
+    });
+    const boucle = bouton("Boucler", "Répéter cette piste jusqu'à la fin du montage", p.boucle, () => {
+      p.boucle = !p.boucle; construire();
+    });
+    const oter = bouton("Retirer", "Retirer cette piste du montage", false, () => {
+      pistes.splice(i, 1); construire();
+    });
+    tete.append(nom, dur, mute, solo, boucle, oter);
+
+    const onde = document.createElement("canvas");
+    onde.className = "onde";
+    onde.width = 900; onde.height = 92;
+    onde.dataset.info = "Forme d'onde de la piste. Elle montre d'un coup d'œil où le "
+      + "morceau respire et où il frappe.";
+
+    const reglages = document.createElement("div");
+    reglages.className = "reglages";
+    reglages.append(
+      curseur("Volume", 0, 1, 0.01, p.volume, v => Math.round(v * 100) + "%", v => {
+        p.volume = v;
+      }, "Niveau de cette piste dans le mixage."),
+      curseur("Décalage", 0, 32, 0.25, p.decalage, v => v.toFixed(2).replace(/\.?0+$/, "") + " mes.", v => {
+        p.decalage = v; construire();
+      }, "Retarde l'entrée de cette piste, en mesures. Le tempo du master dit "
+       + "ce que vaut une mesure.")
+    );
+
+    bloc.append(tete, onde, reglages);
+    setTimeout(() => dessinerOnde(onde, p.buffer, p.couleur), 0);
+    return bloc;
+  }
+
+  function bouton(texte, info, actif, action) {
+    const b = document.createElement("button");
+    b.className = "mini" + (actif ? " on" : "");
+    b.textContent = texte;
+    b.dataset.info = info;
+    b.addEventListener("click", action);
+    return b;
+  }
+
+  function curseur(nom, min, max, pas, valeur, format, action, info) {
+    const ligne = document.createElement("div");
+    ligne.className = "row";
+    ligne.dataset.info = info;
+    const lab = document.createElement("label");
+    lab.textContent = nom;
+    const inp = document.createElement("input");
+    inp.type = "range"; inp.min = min; inp.max = max; inp.step = pas; inp.value = valeur;
+    const out = document.createElement("output");
+    out.textContent = format(valeur);
+    inp.addEventListener("input", () => {
+      const v = Number(inp.value);
+      out.textContent = format(v);
+      action(v);
+    });
+    ligne.append(lab, inp, out);
+    return ligne;
+  }
+
+  // ------- Master -------
+  const volumeEl = document.getElementById("volume");
+  const volumeOut = document.getElementById("volumeOut");
+  volumeEl.addEventListener("input", () => {
+    master.volume = Number(volumeEl.value);
+    volumeOut.textContent = Math.round(master.volume * 100) + "%";
+    if (rig) rig.master.gain.setTargetAtTime(master.volume, ctx.currentTime, 0.02);
+  });
+  const bpmEl = document.getElementById("bpm");
+  bpmEl.addEventListener("input", () => {
+    const v = Number(bpmEl.value);
+    if (!Number.isFinite(v) || v < 40 || v > 240) return;
+    master.bpm = v;
+    construire();
+  });
+
+  playBtn.addEventListener("click", () => joue ? arreter() : lecture());
+  viderBtn.addEventListener("click", () => {
+    arreter();
+    pistes.length = 0;
+    construire();
+  });
+
+  // ------- Export du mixage -------
+  wavBtn.addEventListener("click", async () => {
+    if (!pistes.length || !audiblePistes()) { flash("Rien à exporter"); return; }
+    wavBtn.disabled = true;
+    const ancien = wavBtn.textContent;
+    wavBtn.textContent = "Rendu…";
+    try {
+      const total = longueurTotale();
+      const taux = pistes[0].buffer.sampleRate;
+      const OfflineCtx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+      const octx = new OfflineCtx(2, Math.ceil((total + 0.4) * taux), taux);
+      const r = creerRig(octx);
+      brancher(r, 0, total);
+      const rendu = await octx.startRendering();
+      telecharger(encodeWav(rendu), "montage-" + new Date().toISOString().slice(0, 10) + ".wav");
+    } catch (e) {
+      flash("Rendu impossible");
+    }
+    wavBtn.textContent = ancien;
+    wavBtn.disabled = false;
+  });
+  const audiblePistes = () => pistes.some(audible);
+
+  function encodeWav(buffer) {
+    const chans = buffer.numberOfChannels, frames = buffer.length;
+    const bytes = 44 + frames * chans * 2;
+    const view = new DataView(new ArrayBuffer(bytes));
+    const str = (off, s) => { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); };
+    str(0, "RIFF"); view.setUint32(4, bytes - 8, true); str(8, "WAVE");
+    str(12, "fmt "); view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true); view.setUint16(22, chans, true);
+    view.setUint32(24, buffer.sampleRate, true);
+    view.setUint32(28, buffer.sampleRate * chans * 2, true);
+    view.setUint16(32, chans * 2, true); view.setUint16(34, 16, true);
+    str(36, "data"); view.setUint32(40, frames * chans * 2, true);
+    const data = [];
+    for (let c = 0; c < chans; c++) data.push(buffer.getChannelData(c));
+    let off = 44;
+    for (let i = 0; i < frames; i++) {
+      for (let c = 0; c < chans; c++) {
+        const x = Math.max(-1, Math.min(1, data[c][i]));
+        view.setInt16(off, x < 0 ? x * 0x8000 : x * 0x7fff, true);
+        off += 2;
+      }
+    }
+    return new Blob([view], { type: "audio/wav" });
+  }
+
+  function telecharger(blob, nom) {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = nom;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  }
+
+  // ------- Info-bulles -------
+  // Même composant que dans les studios : au survol comme à la prise de focus,
+  // parce qu'un curseur se règle très bien aux flèches.
+  const INFOS = {
+    "volume": "Niveau du mixage entier, avant le limiteur.",
+    "bpm": "Tempo du montage. Il ne change aucun son : il sert seulement à "
+         + "exprimer les décalages et la règle en mesures.",
+    "play": "Écoute le montage tel qu'il sera exporté, limiteur compris.",
+    "wav": "Rend toutes les pistes en un seul fichier WAV, avec exactement le "
+         + "même graphe audio que la lecture.",
+    "vider": "Retire toutes les pistes du montage.",
+    "depot": "Déposez ici les WAV exportés des studios. Ils se superposent tous "
+           + "à partir du début, chacun avec son propre décalage."
+  };
+  const bulle = document.createElement("div");
+  bulle.className = "bulle";
+  bulle.setAttribute("role", "tooltip");
+  document.body.appendChild(bulle);
+  let bulleTimer = null;
+
+  function montrerBulle(el) {
+    const texte = el.dataset.info;
+    if (!texte) return;
+    bulle.textContent = texte;
+    bulle.classList.add("on");
+    const b = el.getBoundingClientRect(), t = bulle.getBoundingClientRect();
+    const x = Math.max(8, Math.min(window.innerWidth - t.width - 8,
+                                   b.left + b.width / 2 - t.width / 2));
+    const y = b.top - t.height - 8 < 8 ? b.bottom + 8 : b.top - t.height - 8;
+    bulle.style.transform = "translate(" + Math.round(x) + "px," + Math.round(y) + "px)";
+  }
+  function cacherBulle() { bulle.classList.remove("on"); clearTimeout(bulleTimer); }
+
+  document.addEventListener("pointerover", e => {
+    const el = e.target.closest("[data-info]");
+    if (!el) { cacherBulle(); return; }
+    montrerBulle(el);
+    clearTimeout(bulleTimer);
+    if (e.pointerType === "touch") bulleTimer = setTimeout(cacherBulle, 4500);
+  });
+  document.addEventListener("focusin", e => {
+    const el = e.target.closest("[data-info]");
+    if (el) montrerBulle(el); else cacherBulle();
+  });
+  document.addEventListener("focusout", cacherBulle);
+  window.addEventListener("scroll", cacherBulle, true);
+  window.addEventListener("keydown", e => { if (e.key === "Escape") cacherBulle(); });
+
+  function poserBulles() {
+    Object.keys(INFOS).forEach(cle => {
+      const el = document.getElementById(cle);
+      if (!el) return;
+      const cible = el.closest(".row") || el;
+      cible.dataset.info = INFOS[cle];
+      cible.removeAttribute("title");
+      el.removeAttribute("title");
+    });
+  }
+
+  window.addEventListener("keydown", e => {
+    if (e.target.tagName === "INPUT") return;
+    if (e.code === "Space" && pistes.length) { e.preventDefault(); joue ? arreter() : lecture(); }
+  });
+
+  // ------- Démarrage -------
+  construire();
+  window.addEventListener("pointerdown", initAudio, { once: true });
+})();
+</script>
