@@ -14,7 +14,7 @@ Six instruments jouables dans le navigateur, plus une table de montage pour les 
 | [`cordes.html`](cordes.html) | **Cordes pincées** | Modélisation physique : ligne à retard rebouclée, sans oscillateur |
 | [`montage.html`](montage.html) | **Multipiste** | Table de mixage : réunit les rendus des six studios en un seul fichier |
 
-Les six partagent la même architecture — séquenceur à motifs enchaînables, bibliothèque de morceaux, partage par URL, annuler/rétablir, export WAV — mais rien de leur synthèse. Chaque studio ramène au menu par un lien en haut de page.
+Les six partagent la même architecture — séquenceur à motifs enchaînables, **bibliothèque de neuf morceaux** plus un emplacement vierge, partage par URL, annuler/rétablir, export WAV — mais rien de leur synthèse. Chaque studio ramène au menu par un lien en haut de page.
 
 ## Utilisation
 
@@ -219,7 +219,7 @@ Le mappage utilise la position physique des touches, donc il fonctionne aussi bi
 - **Délai pointé de 3/16** — calé sur le tempo, avec retour réglable.
 - **Panoramique** par piste.
 
-**Motifs de 32 pas** (deux mesures), **accords** sur chaque pas et **notes tenues** — les nappes sont des triades tenues sur la mesure entière —, quatre motifs enchaînables, et **six morceaux fournis** plus un emplacement vierge :
+**Motifs de 32 pas** (deux mesures), **accords** sur chaque pas et **notes tenues** — les nappes sont des triades tenues sur la mesure entière —, quatre motifs enchaînables, et **neuf morceaux fournis** plus un emplacement vierge :
 
 | Morceau | Tempo | Ambiance |
 | --- | --- | --- |
@@ -229,6 +229,9 @@ Le mappage utilise la position physique des touches, donc il fonctionne aussi bi
 | **Aurore** | 140 | Majeur lumineux, pluck en arpèges, balayage de filtre sur la reprise |
 | **Cavale** | 146 | Tendu, basse syncopée, le motif C referme le filtre avant la relance |
 | **Éclipse** | 126 | Mineur, très aéré, nappes tenues sur deux mesures entières |
+| **Falaise** | 136 | Lead descendant en notes longues, montée de filtre sur le motif C |
+| **Néon** | 144 | Rapide et sec, pluck en doubles-croches, filtre en creux |
+| **Aube** | 120 | Le plus lent de la page, dans la veine d'*Éclipse* : la nappe fait tout |
 
 ## La boîte à rythmes 909
 
@@ -248,7 +251,7 @@ Chaque voix se règle en niveau, accord, chute, grain et départ réverb. Le pas
 
 Le master enchaîne **saturation** (courbe douce, jamais d'écrêtage net), **filtre résonant** balayable — au curseur ou à la bande d'automation —, réverbération courte, puis un **limiteur** : la résonance peut pousser le signal bien au-delà du plein niveau, et sans lui le rendu saturerait.
 
-Six grooves fournis :
+Neuf grooves fournis :
 
 | Groove | Tempo | Caractère |
 | --- | --- | --- |
@@ -258,6 +261,9 @@ Six grooves fournis :
 | **Garage** | 132 | Shuffle marqué, charley chaloupé, caisse claire tardive |
 | **Berlin** | 138 | Minimal, filtre bas et résonant, toms en fin de motif |
 | **Rave** | 148 | Dur et rapide, charleys ouverts, cymbale sur les départs |
+| **Sous-sol** | 122 | Shuffle lourd, grosse caisse en contretemps, rimshot isolé |
+| **Marteau** | 150 | Le plus dur : saturation forte, charleys pleins, cymbale à l'entrée |
+| **Cassure** | 134 | Breakbeat, grosse caisse déplacée, toms en fin de motif |
 
 ## Le synthé FM
 
@@ -282,7 +288,7 @@ Le **diagramme s'affiche à l'écran** : les opérateurs se placent par étage s
 
 La profondeur de modulation suit la fréquence du modulateur, de sorte que **le timbre reste le même d'un bout à l'autre du clavier** au lieu de devenir criard dans l'aigu.
 
-Six presets — Piano él., Cloche, Marimba, Basse FM, Cuivre, Verre — et six morceaux :
+Six presets — Piano él., Cloche, Marimba, Basse FM, Cuivre, Verre — et neuf morceaux :
 
 | Morceau | Tempo | Caractère |
 | --- | --- | --- |
@@ -292,6 +298,9 @@ Six presets — Piano él., Cloche, Marimba, Basse FM, Cuivre, Verre — et six 
 | **Verre** | 84 | Timbres de verre tenus, cloches espacées, très réverbéré |
 | **Poursuite** | 132 | Cuivres en accords courts, marimba rapide, basse continue |
 | **Choral** | 66 | Quatre accords tenus une mesure chacun, presque un orgue |
+| **Tubulaire** | 72 | Cloches tenues et verre lointain, très peu de notes |
+| **Vapeur** | 92 | Piano électrique en triades, marimba sur le contretemps |
+| **Rouages** | 148 | Marimba mécanique, cuivres en réponse, basse martelée |
 
 C'est la page où les **accords** comptent le plus : un piano électrique qui ne sait pas plaquer une triade, ce n'est pas un piano électrique.
 
@@ -352,9 +361,21 @@ Trois rangées commandent le pas entier :
 
 Le filtre est un **passe-bas à 24 dB par octave**, obtenu en chaînant deux `BiquadFilter` : l'API n'en offre que 12 par filtre, et à cette pente-là le son reste bien trop ouvert pour le genre. La résonance monte assez haut pour que le filtre siffle, et une **bande d'automation** sous la grille permet de dessiner la coupure pas par pas — la main sur le bouton, sans la main.
 
-Trois motifs fournis : **Acide** (132 BPM, la ligne classique, avec une montée de coupure sur le motif C), **Cuve** (126, plus lente et plus saturée, notes tenues), **Sirop** (138, arpège rapide et filtre plus ouvert).
+Neuf motifs fournis :
 
-Un détail de méthode : les motifs sont écrits en jetons plutôt qu'en chaînes, parce qu'un glissando s'écrit `/3` — deux caractères pour **un** pas. Mes trois premiers motifs faisaient 14 ou 15 pas au lieu de 16 et se sont fait attraper par le test.
+| Motif | Tempo | Caractère |
+| --- | --- | --- |
+| **Acide** | 132 | La ligne classique, avec une montée de coupure sur le motif C |
+| **Cuve** | 126 | Plus lente et plus saturée, notes tenues |
+| **Sirop** | 138 | Arpège rapide et filtre plus ouvert |
+| **Filature** | 128 | Shuffle marqué, glissandos espacés, coupure très basse |
+| **Sonde** | 140 | Une note sur deux, glissandos rares, filtre court |
+| **Vertige** | 136 | Le plus résonant : longue enveloppe, saturation forte, coupure en creux |
+| **Bitume** | 120 | Le shuffle le plus lourd, descente chromatique sur le motif C |
+| **Spirale** | 146 | Doubles-croches continues, aucun silence, filtre bref |
+| **Résine** | 130 | Glissando immédiat sur la même note, la signature de la machine |
+
+Un détail de méthode : les motifs sont écrits en jetons plutôt qu'en chaînes, parce qu'un glissando s'écrit `/3` — deux caractères pour **un** pas. Mes trois premiers motifs faisaient 14 ou 15 pas au lieu de 16 et se sont fait attraper par le test ; les six suivants sont passés par un générateur qui compte les jetons à l'écriture, et le même piège s'est représenté trois fois — sans le compteur, ils partaient à 14.
 
 ## Les cordes pincées
 
@@ -377,7 +398,19 @@ Les réglages sont physiques, et s'entendent :
 
 Deux commandes propres au geste : l'**arpège** égrène les notes d'un accord comme une main qui balaie les cordes, et la rangée **Étouf.** pose la main dessus pour couper ce qui résonne — l'inverse d'une tenue, et la seule façon d'arrêter une corde qui décide toute seule quand elle s'éteint.
 
-Six instruments : **Guitare**, **Harpe**, **Clavecin**, **Koto**, **Contrebasse**, **Cithare**. Trois morceaux : *Sarabande* (76 BPM, accords plaqués), *Pluie* (112, harpe en arpèges), *Atelier* (128, clavecin sec).
+Six instruments : **Guitare**, **Harpe**, **Clavecin**, **Koto**, **Contrebasse**, **Cithare**. Neuf morceaux :
+
+| Morceau | Tempo | Caractère |
+| --- | --- | --- |
+| **Sarabande** | 76 | Accords plaqués à la guitare |
+| **Pluie** | 112 | Harpe en arpèges |
+| **Atelier** | 128 | Clavecin sec |
+| **Berceau** | 68 | Harpe et cithare, réverbération longue |
+| **Ricochet** | 132 | Koto rebondissant sur des accords de guitare |
+| **Charpente** | 104 | Clavecin à deux voix, le plus écrit de la page |
+| **Bruine** | 96 | Cithare en gouttes sur une harpe tenue |
+| **Estuaire** | 60 | Le plus lent : quatre accords, presque rien d'autre |
+| **Bal** | 124 | Guitare rythmique et koto en réponse |
 
 Le bruit d'excitation vient d'une suite **reproductible** : une même note rend toujours exactement le même signal. Ce n'est pas un détail — c'est ce qui permet à un test de comparer deux rendus, et ça évite les mauvaises surprises intermittentes qu'un bruit vraiment aléatoire avait déjà causées ailleurs dans ce projet.
 

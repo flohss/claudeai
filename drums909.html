@@ -512,6 +512,42 @@
       chain: "0011022"
     },
     {
+      name: "Sous-sol", bpm: 122, swing: 0.24, accent: 1.4,
+      master: { drive: 12, cutoff: 82, reso: 4, revSize: 1.9 },
+      sweeps: ["", "", "", ""],
+      pats: [
+        { bd: "X---x---X---x---", ch: "--x---x---x---x-", rs: "------x---------" },
+        { bd: "X---x---X---x---", cp: "----X-------X---", ch: "--x-x-x---x-x-x-", oh: "------------x---" },
+        { bd: "X-------X-------", cp: "----X-------X---", ch: "--x---x---x---x-", lt: "-------------x--", oh: "--------------x-" },
+        {}
+      ],
+      chain: "0011022"
+    },
+    {
+      name: "Marteau", bpm: 150, swing: 0, accent: 2.0,
+      master: { drive: 52, cutoff: 92, reso: 6, revSize: 0.6 },
+      sweeps: ["", "", "468acegikmoqsuwy", ""],
+      pats: [
+        { bd: "X---X---X---X---", ch: "xxxxxxxxxxxxxxxx", rs: "--x---x---x---x-" },
+        { bd: "X---X---X---X---", ch: "xXxxxXxxxXxxxXxx", sd: "----X-------X---", oh: "------------x---" },
+        { bd: "X-X-X-X-X-X-X-X-", ch: "xxxxxxxxxxxxxxxx", sd: "----X---X---X-XX", cy: "X---------------" },
+        {}
+      ],
+      chain: "00110222"
+    },
+    {
+      name: "Cassure", bpm: 134, swing: 0.1, accent: 1.7,
+      master: { drive: 26, cutoff: 86, reso: 7, revSize: 1.3 },
+      sweeps: ["", "", "", ""],
+      pats: [
+        { bd: "X-----X---X-----", sd: "----X-------X---", ch: "x-x-x-x-x-x-x-x-" },
+        { bd: "X-----X---X---X-", sd: "----X-------X-x-", ch: "x-xxx-x-x-xxx-x-", oh: "--------------x-" },
+        { bd: "X---------X-----", sd: "----X---x---X-xx", ch: "x-x-x-x-x-x-x-x-", lt: "-----------x----", mt: "------------x---" },
+        {}
+      ],
+      chain: "0011202"
+    },
+    {
       name: "Vierge", bpm: 126, swing: 0.18, accent: 1.6,
       master: { drive: 18, cutoff: 100, reso: 2, revSize: 1.1 },
       pats: [{}, {}, {}, {}], chain: "0"
