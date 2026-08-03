@@ -3,15 +3,18 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="light">
 <title>Synthé FM</title>
 <style>
   :root {
+    /* la page est claire par choix : on refuse l'assombrissement automatique */
+    color-scheme: only light;
     --paper: #d9d2c4;
     --panel: #cec6b6;
     --panel2: #c2b9a7;
     --edge: #a89d88;
     --ink: #2f2a22;
-    --dim: #6d6455;
+    --dim: #4a4335;   /* assez sombre pour rester lisible sur le beige : 5:1 */
     --lcd: #1d2a1c;
     --lcd-on: #7ee06a;
     --accent: #a8422c;
@@ -199,7 +202,7 @@
     border: 1px solid #8b8171; border-radius: 0 0 3px 3px;
     margin-right: -1px; cursor: pointer;
     display: flex; align-items: flex-end; justify-content: center;
-    padding-bottom: 5px; font-size: 9px; color: #8b8171;
+    padding-bottom: 5px; font-size: 9px; color: #5f5749;
   }
   .key.black {
     position: absolute; top: 0; width: 4.2%; height: 60%;

@@ -12,7 +12,7 @@
     --edge: #4c4640;
     --cream: #e6dfd2;
     --ink: #e9e4da;
-    --dim: #9d948a;
+    --dim: #ccc3b5;   /* tient 4,5:1 même sur le haut du dégradé des pads */
     --red: #e0472e;
     --orange: #f08a24;
     --yellow: #f6c945;
@@ -483,12 +483,17 @@
 
     // Limiteur de sécurité : la résonance du filtre master peut faire monter le
     // signal bien au-delà du plein niveau, et le rendu saturerait sans lui.
+    // L'attaque est quasi nulle pour rattraper les transitoires de percussion.
     r.limiter = actx.createDynamicsCompressor();
-    r.limiter.threshold.value = -3;
+    r.limiter.threshold.value = -4;
     r.limiter.knee.value = 0;
     r.limiter.ratio.value = 20;
-    r.limiter.attack.value = 0.002;
-    r.limiter.release.value = 0.12;
+    r.limiter.attack.value = 0.0005;
+    r.limiter.release.value = 0.1;
+    // Marge finale : même un dépassement bref du limiteur reste sous le plein
+    // niveau. Sans elle, la crête du rendu touchait par moments 32767.
+    r.outGain = actx.createGain();
+    r.outGain.gain.value = 0.85;
 
     r.bus = actx.createGain();
     r.bus.connect(r.shaper);
@@ -496,7 +501,8 @@
     r.filter.connect(tap);
     tap.connect(r.masterGain);
     r.masterGain.connect(r.limiter);
-    r.limiter.connect(actx.destination);
+    r.limiter.connect(r.outGain);
+    r.outGain.connect(actx.destination);
 
     r.reverb = actx.createConvolver();
     r.reverb.buffer = makeImpulse(actx, master.revSize);

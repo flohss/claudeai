@@ -287,7 +287,7 @@
     cursor: pointer;
     display: flex; align-items: flex-end; justify-content: center;
     padding-bottom: 6px;
-    font-size: 9px; color: #56618a;
+    font-size: 9px; color: #3a4263;   /* lisible sur le bas du dégradé des touches */
   }
   .key.black {
     position: absolute; top: 0;
@@ -689,7 +689,16 @@
     r.bus = actx.createGain();
     r.bus.connect(tap);
     tap.connect(r.masterGain);
-    r.masterGain.connect(actx.destination);
+    // Filet de sécurité : réverbération longue et cinq pistes peuvent se cumuler
+    // au-delà du plein niveau selon les réglages.
+    r.limiter = actx.createDynamicsCompressor();
+    r.limiter.threshold.value = -4;
+    r.limiter.knee.value = 2;
+    r.limiter.ratio.value = 16;
+    r.limiter.attack.value = 0.002;
+    r.limiter.release.value = 0.15;
+    r.masterGain.connect(r.limiter);
+    r.limiter.connect(actx.destination);
 
     // Réverbération partagée
     r.reverb = actx.createConvolver();
