@@ -223,6 +223,43 @@ The other HUD rows get away with the same line because their `display:none` is
 an inline attribute. Content correct, panel hidden - which reads exactly like a
 feature that was never wired up. It sets `'block'` now.
 
+## Do the two halves of this game agree about what a word means?
+
+Two systems here have no connection in the code. **Selection** decides which
+colour a creature EMITS in a given state: it is in the genome, inherited, and
+nothing about it is learned. **Learning** decides what a creature comes to
+expect on HEARING a colour: it is in the value head, not inherited, and nothing
+about it is selected for. The report read `vocabulary()` and threw the token
+away, keeping only the agreement share, so the two were never crossed.
+
+They are now, as `danger_word_gap` and friends, with a claim comparing hunted
+worlds against unhunted ones - because without predators there is nothing to
+learn about danger, so any agreement there has to collapse or it was an
+artefact.
+
+A first pass over 12 seeds x 3000 ticks went the right way and did not clear
+the bar:
+
+| | with predators | without |
+|---|---|---|
+| the danger colour is the most dreaded | 5/11 seeds | 0/10 seeds |
+| its value minus the other colours' | -0.0276 ± 0.0207 | +0.0093 ± 0.0147 |
+
+Difference -0.0369 against a bar of 0.0414: **not shown**. The ranking tests
+are friendlier (5/11 against a 1-in-5 chance is p=0.050; 5/11 versus 0/10 by
+Fisher is p=0.023) but the value gap was the stated primary test and it failed.
+
+The likely reason is visible in the same table: agreement on the danger colour
+was only **48%**. Half the flock. The word barely exists at 3000 ticks - the
+smoke test shows food-call agreement still climbing at 6000. So two systems
+were being asked to agree on a word the language had not finished inventing.
+A longer run is the obvious next step and was not affordable here.
+
+One thing worth keeping from writing this. `differs()` tested `abs(gap)`, so a
+real gap pointing the WRONG way - the danger colour turning out to be the most
+*welcome* - would have been reported as confirming the claim. It takes an
+`expect` sign now and says `CONTRADICTED` instead.
+
 ## Run the measurements yourself (`report.py`)
 
 Every number this project claims came from running worlds headlessly and reading

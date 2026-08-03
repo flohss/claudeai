@@ -181,6 +181,36 @@ def measure(world):
         spread = [float(np.std([m.signal_meaning(t) for m in minds])) for t in meanings]
         out["call_disagreement"] = float(np.mean(spread))
 
+    # Do the two halves of this game agree about what a word means?
+    #
+    # SELECTION decides which colour a creature EMITS in a given state: it is in
+    # the genome, inherited, and nothing about it is learned. LEARNING decides
+    # what a creature comes to expect on HEARING a colour: it is in the value
+    # head, not inherited, and nothing about it is selected for. Nothing in the
+    # code connects them, and until now nothing crossed them either - this
+    # function read vocabulary() and threw the token away, keeping only the
+    # agreement share.
+    #
+    # Three ways to be wrong, all guarded here. The word has to EXIST, so the
+    # agreement share is reported beside every figure - a colour used by 30% of
+    # the flock is not a word. Silence (token 0) has no learned meaning, so
+    # those worlds report no figure instead of a zero. And chance is 1 in 5,
+    # not 1 in 2, so the ranking is reported as a fraction over seeds next to
+    # the value gap, which is the more sensitive of the two.
+    vocab = world.vocabulary()
+    if meanings and vocab:
+        for state, name, pick, direction in (
+                (S.DANGER, "danger", min, "dreaded"),
+                (S.FOOD, "food", max, "welcome")):
+            token, share = vocab[state]
+            out[f"{name}_word_share"] = float(share)
+            if token == 0 or token not in meanings:
+                continue                       # silence: nothing was learned of it
+            others = [v for t, v in meanings.items() if t != token]
+            out[f"{name}_word_gap"] = float(meanings[token] - np.mean(others))
+            out[f"{name}_word_is_most_{direction}"] = float(
+                token == pick(meanings, key=meanings.get))
+
     # dread reaching a hand that is only CLOSING IN is a headline claim of this
     # project and was missing from the log entirely
     still = np.mean([m.value(S.Mind.features(0.6, 0.2, 0.0, 0.0)) for m in minds])
@@ -302,15 +332,26 @@ def _side(label, stats):
             f"[{stats['min']:+.4f} .. {stats['max']:+.4f}]")
 
 
-def differs(claim, left_label, left, right_label, right, key):
+def differs(claim, left_label, left, right_label, right, key, expect=0):
     """A claim that two things come out DIFFERENT, reported as both sides plus
     the gap. A gap only means something next to the noise it has to beat, so
-    the spreads sit beside it rather than a bare difference."""
+    the spreads sit beside it rather than a bare difference.
+
+    `expect` is the sign the claim predicts: -1 if the left side should come
+    out LOWER, +1 higher, 0 if either direction would do. Without it a big gap
+    the wrong way round reads as confirmation, because the size test is on the
+    absolute value - "the danger colour is the one they dread" would be
+    reported as holding by a run where that colour turned out to be the most
+    WELCOME one."""
     a, b = left[key], right[key]
     gap = a["mean"] - b["mean"]
     noise = max(a["sd"], b["sd"])
-    verdict = ("holds: the gap clears the spread" if abs(gap) > noise * 2
-               else "NOT SHOWN: the gap is inside the spread - treat as unproven")
+    if abs(gap) <= noise * 2:
+        verdict = "NOT SHOWN: the gap is inside the spread - treat as unproven"
+    elif expect and gap * expect < 0:
+        verdict = ("CONTRADICTED: the gap is real but points the other way")
+    else:
+        verdict = "holds: the gap clears the spread"
     return ["", f"CLAIM: {claim}", _side(left_label, a), _side(right_label, b),
             f"  gap {gap:+.4f}   largest sd {noise:.4f}   -> {verdict}"]
 
@@ -446,6 +487,12 @@ CLAIMS = [
          "the same hand lunging", "hand_lunging_worth", "anticipation_gap",
          "measured on the burned flock - one that was never hurt has no reason "
          "to dread either")),
+    (("hunted, you never touch it", "unhunted, you never touch it"),
+     lambda c: differs(
+         "the colour evolved for danger is the one the flock learned to dread",
+         "with predators", c["hunted, you never touch it"],
+         "without predators", c["unhunted, you never touch it"],
+         "danger_word_gap", expect=-1)),
     (("unhunted, you never touch it",),
      lambda c: stays_within(
          "an unhunted flock is not afraid of anything",
