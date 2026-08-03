@@ -108,7 +108,12 @@
     color: var(--ink); border: 1px solid var(--edge); border-radius: 3px;
     padding: 7px 10px; cursor: pointer;
   }
-  button:hover:not([disabled]) { background: linear-gradient(180deg, #fdf9f0, #d6cdb9); }
+  /* « :hover:not([disabled]) » est plus spécifique que « .selected » : sans cette
+     exclusion, survoler un bouton actif effaçait sa couleur — au point de rendre
+     son texte illisible sur la page claire. */
+  button:hover:not([disabled]):not(.selected):not(.rec-on) { background: linear-gradient(180deg, #fdf9f0, #d6cdb9); }
+  button.selected:hover:not([disabled]),
+  button.rec-on:hover:not([disabled]) { filter: brightness(1.08); }
   button:focus-visible { outline: 2px solid var(--accent2); outline-offset: 2px; }
   button.selected {
     background: linear-gradient(180deg, var(--accent), #8a3423);
@@ -256,7 +261,8 @@
     <a href="chiptune.html">Synthé 8-bit</a> &nbsp;·&nbsp;
     <a href="drums909.html">Boîte à rythmes</a> &nbsp;·&nbsp;
     <a href="trance.html">Studio trance</a> &nbsp;·&nbsp;
-    <a href="montage.html">Montage</a></div>
+    <a href="montage.html">Montage</a> &nbsp;·&nbsp;
+    <a href="acid303.html">Basse acide</a></div>
 
   <div class="console">
     <div class="screens">

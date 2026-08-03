@@ -160,7 +160,12 @@
     cursor: pointer;
     transition: background .15s, border-color .15s, color .15s;
   }
-  button:hover:not([disabled]) { background: rgba(255,255,255,.09); border-color: var(--accent); }
+  /* « :hover:not([disabled]) » est plus spécifique que « .selected » : sans cette
+     exclusion, survoler un bouton actif effaçait sa couleur — au point de rendre
+     son texte illisible sur la page claire. */
+  button:hover:not([disabled]):not(.selected):not(.rec-on) { background: rgba(255,255,255,.09); border-color: var(--accent); }
+  button.selected:hover:not([disabled]),
+  button.rec-on:hover:not([disabled]) { filter: brightness(1.08); }
   button:focus-visible { outline: 2px solid var(--accent2); outline-offset: 2px; }
   button.selected {
     background: linear-gradient(180deg, var(--accent), #2596c4);
@@ -350,7 +355,8 @@
   <h1>Trance</h1>
   <div class="subtitle">Studio &mdash; supersaw, filtre résonant, sidechain</div>
   <div class="crosslink"><a href="index.html">&#8592; Menu</a> &nbsp;·&nbsp; <a href="chiptune.html">Synthé 8-bit</a> &nbsp;·&nbsp; <a href="drums909.html">Boîte à rythmes</a> &nbsp;·&nbsp; <a href="fm.html">Synthé FM</a> &nbsp;·&nbsp;
-    <a href="montage.html">Montage</a></div>
+    <a href="montage.html">Montage</a> &nbsp;·&nbsp;
+    <a href="acid303.html">Basse acide</a></div>
 
   <div class="console">
     <canvas id="scope" width="1040" height="96"></canvas>

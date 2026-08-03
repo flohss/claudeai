@@ -1,8 +1,8 @@
 # Synthés virtuels 🎹
 
-Quatre instruments jouables dans le navigateur, plus une table de montage pour les réunir. Écrits en HTML/CSS/JavaScript pur avec l'API Web Audio — aucune dépendance, aucun build.
+Cinq instruments jouables dans le navigateur, plus une table de montage pour les réunir. Écrits en HTML/CSS/JavaScript pur avec l'API Web Audio — aucune dépendance, aucun build.
 
-[`index.html`](index.html) est un **écran d'accueil** qui mène aux quatre studios et au montage :
+[`index.html`](index.html) est un **écran d'accueil** qui mène aux cinq studios et au montage :
 
 | Page | Genre | Moteur |
 | --- | --- | --- |
@@ -10,9 +10,10 @@ Quatre instruments jouables dans le navigateur, plus une table de montage pour l
 | [`drums909.html`](drums909.html) | **House &amp; techno** | Dix voix de percussion synthétisées, saturation, filtre master |
 | [`fm.html`](fm.html) | **FM** | Quatre opérateurs, huit algorithmes, rebouclage, chorus |
 | [`trance.html`](trance.html) | **Trance** | Supersaw, filtre résonant à enveloppe, sidechain, réverbération |
-| [`montage.html`](montage.html) | **Multipiste** | Table de mixage : réunit les rendus des quatre studios en un seul fichier |
+| [`acid303.html`](acid303.html) | **Acid** | Monophonique, filtre 24 dB, glissando, accent, saturation |
+| [`montage.html`](montage.html) | **Multipiste** | Table de mixage : réunit les rendus des cinq studios en un seul fichier |
 
-Les quatre partagent la même architecture — séquenceur à motifs enchaînables, bibliothèque de morceaux, partage par URL, annuler/rétablir, export WAV — mais rien de leur synthèse. Chaque studio ramène au menu par un lien en haut de page.
+Les cinq partagent la même architecture — séquenceur à motifs enchaînables, bibliothèque de morceaux, partage par URL, annuler/rétablir, export WAV — mais rien de leur synthèse. Chaque studio ramène au menu par un lien en haut de page.
 
 ## Utilisation
 
@@ -336,6 +337,24 @@ Le `title` natif du navigateur n'aurait pas suffi : il arrive après une seconde
 
 La cible est **la ligne entière**, pas le curseur seul : c'est bien plus facile à viser.
 
+## La basse acide
+
+[`acid303.html`](acid303.html) est la compagne naturelle de la boîte à rythmes : **une seule voix**, et tout le caractère dans la façon dont elle est jouée.
+
+**L'oscillateur ne s'arrête jamais.** C'est l'architecture de la machine d'origine, et ce n'est pas un détail : un seul oscillateur tourne en continu, et le séquenceur ne fait qu'ouvrir une porte et déplacer sa fréquence. C'est ce qui rend le glissando possible — sans ça, chaque note serait un nouvel oscillateur et il n'y aurait rien à faire glisser.
+
+Trois rangées commandent le pas entier :
+
+- **Acc.** — la note frappe plus fort *et* ouvre le filtre plus grand. Sur une ligne monophonique, c'est ce qui crée le relief.
+- **Gliss.** — la hauteur coule depuis la note précédente, et **l'enveloppe de filtre ne repart pas**. C'est de là que vient le son : une note glissée sonne plus sourde que ses voisines, et c'est ce contraste qui fait le motif.
+- **Tenue** — la note se prolonge sur le pas suivant.
+
+Le filtre est un **passe-bas à 24 dB par octave**, obtenu en chaînant deux `BiquadFilter` : l'API n'en offre que 12 par filtre, et à cette pente-là le son reste bien trop ouvert pour le genre. La résonance monte assez haut pour que le filtre siffle, et une **bande d'automation** sous la grille permet de dessiner la coupure pas par pas — la main sur le bouton, sans la main.
+
+Trois motifs fournis : **Acide** (132 BPM, la ligne classique, avec une montée de coupure sur le motif C), **Cuve** (126, plus lente et plus saturée, notes tenues), **Sirop** (138, arpège rapide et filtre plus ouvert).
+
+Un détail de méthode : les motifs sont écrits en jetons plutôt qu'en chaînes, parce qu'un glissando s'écrit `/3` — deux caractères pour **un** pas. Mes trois premiers motifs faisaient 14 ou 15 pas au lieu de 16 et se sont fait attraper par le test.
+
 ## Relier les studios : la table de montage
 
 Les quatre studios ne savent faire qu'une chose à la fois. Un morceau complet demande pourtant une boîte à rythmes **et** un synthé, et rien ne permettait de les réunir.
@@ -357,13 +376,14 @@ Le mixage passe par un **limiteur** avec une attaque de 0,5 ms : quatre pistes q
 
 ## Structure
 
-Six fichiers autonomes, sans dépendance ni build :
+Sept fichiers autonomes, sans dépendance ni build :
 
-- [`index.html`](index.html) — l'accueil, avec une vignette animée par studio : onde carrée crantée, pas-à-pas qui défile, porteuse déformée par sa modulante, dents de scie désaccordées.
+- [`index.html`](index.html) — l'accueil, avec une vignette animée par studio : onde carrée crantée, pas-à-pas qui défile, porteuse déformée par sa modulante, dents de scie désaccordées, ligne de basse reliée par ses glissandos.
 - [`chiptune.html`](chiptune.html) — le synthé 8-bit.
 - [`drums909.html`](drums909.html) — la boîte à rythmes.
 - [`fm.html`](fm.html) — le synthé FM.
 - [`trance.html`](trance.html) — le studio trance.
+- [`acid303.html`](acid303.html) — la basse acide.
 - [`montage.html`](montage.html) — la table de montage, qui ne synthétise rien et se contente d'assembler des WAV.
 
 Chaque studio est un document séparé : leurs identifiants, leurs styles, leurs raccourcis clavier et leur contexte audio ne se marchent jamais dessus.

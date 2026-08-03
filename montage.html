@@ -63,7 +63,12 @@
     padding: 8px 11px; cursor: pointer;
     transition: background .15s, border-color .15s, color .15s;
   }
-  button:hover:not([disabled]) { background: rgba(255,255,255,.09); border-color: var(--accent); }
+  /* « :hover:not([disabled]) » est plus spécifique que « .selected » : sans cette
+     exclusion, survoler un bouton actif effaçait sa couleur — au point de rendre
+     son texte illisible sur la page claire. */
+  button:hover:not([disabled]):not(.on):not(.primaire) { background: rgba(255,255,255,.09); border-color: var(--accent); }
+  button.on:hover:not([disabled]),
+  button.primaire:hover:not([disabled]) { filter: brightness(1.08); }
   button:focus-visible { outline: 2px solid var(--accent2); outline-offset: 2px; }
   button[disabled] { opacity: .35; cursor: not-allowed; }
   button.on { background: var(--accent2); color: #1b1204; border-color: transparent; font-weight: 700; }
@@ -162,12 +167,13 @@
 </style>
 
   <h1>Montage</h1>
-  <div class="subtitle">Table de mixage &mdash; assembler les quatre studios</div>
+  <div class="subtitle">Table de mixage &mdash; assembler les cinq studios</div>
   <div class="crosslink"><a href="index.html">&#8592; Menu</a> &nbsp;·&nbsp;
     <a href="chiptune.html">Synthé 8-bit</a> &nbsp;·&nbsp;
     <a href="drums909.html">Boîte à rythmes</a> &nbsp;·&nbsp;
     <a href="fm.html">Synthé FM</a> &nbsp;·&nbsp;
-    <a href="trance.html">Studio trance</a></div>
+    <a href="trance.html">Studio trance</a> &nbsp;·&nbsp;
+    <a href="acid303.html">Basse acide</a></div>
 
   <div class="console">
     <fieldset>
@@ -209,7 +215,7 @@
         <span class="msg" id="msg"></span>
       </div>
       <div class="hint">
-        Le mixage passe par un <b>limiteur</b> : quatre pistes qui s'additionnent
+        Le mixage passe par un <b>limiteur</b> : plusieurs pistes qui s'additionnent
         dépassent vite le plein niveau, et sans lui le rendu saturerait.
         <b>Boucler</b> répète une piste courte jusqu'à la fin du morceau &mdash;
         c'est ce qui permet de poser deux mesures de batterie sous huit mesures de synthé.
@@ -628,7 +634,7 @@
     "wav": "Rend toutes les pistes en un seul fichier WAV, avec exactement le "
          + "même graphe audio que la lecture.",
     "vider": "Retire toutes les pistes du montage.",
-    "depot": "Déposez ici les WAV exportés des studios. Ils se superposent tous "
+    "depot": "Déposez ici les WAV exportés des cinq studios. Ils se superposent tous "
            + "à partir du début, chacun avec son propre décalage."
   };
   const bulle = document.createElement("div");
