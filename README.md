@@ -1,8 +1,8 @@
 # Synthés virtuels 🎹
 
-Cinq instruments jouables dans le navigateur, plus une table de montage pour les réunir. Écrits en HTML/CSS/JavaScript pur avec l'API Web Audio — aucune dépendance, aucun build.
+Six instruments jouables dans le navigateur, plus une table de montage pour les réunir. Écrits en HTML/CSS/JavaScript pur avec l'API Web Audio — aucune dépendance, aucun build.
 
-[`index.html`](index.html) est un **écran d'accueil** qui mène aux cinq studios et au montage :
+[`index.html`](index.html) est un **écran d'accueil** qui mène aux six studios et au montage :
 
 | Page | Genre | Moteur |
 | --- | --- | --- |
@@ -11,9 +11,10 @@ Cinq instruments jouables dans le navigateur, plus une table de montage pour les
 | [`fm.html`](fm.html) | **FM** | Quatre opérateurs, huit algorithmes, rebouclage, chorus |
 | [`trance.html`](trance.html) | **Trance** | Supersaw, filtre résonant à enveloppe, sidechain, réverbération |
 | [`acid303.html`](acid303.html) | **Acid** | Monophonique, filtre 24 dB, glissando, accent, saturation |
-| [`montage.html`](montage.html) | **Multipiste** | Table de mixage : réunit les rendus des cinq studios en un seul fichier |
+| [`cordes.html`](cordes.html) | **Cordes pincées** | Modélisation physique : ligne à retard rebouclée, sans oscillateur |
+| [`montage.html`](montage.html) | **Multipiste** | Table de mixage : réunit les rendus des six studios en un seul fichier |
 
-Les cinq partagent la même architecture — séquenceur à motifs enchaînables, bibliothèque de morceaux, partage par URL, annuler/rétablir, export WAV — mais rien de leur synthèse. Chaque studio ramène au menu par un lien en haut de page.
+Les six partagent la même architecture — séquenceur à motifs enchaînables, bibliothèque de morceaux, partage par URL, annuler/rétablir, export WAV — mais rien de leur synthèse. Chaque studio ramène au menu par un lien en haut de page.
 
 ## Utilisation
 
@@ -355,6 +356,31 @@ Trois motifs fournis : **Acide** (132 BPM, la ligne classique, avec une montée 
 
 Un détail de méthode : les motifs sont écrits en jetons plutôt qu'en chaînes, parce qu'un glissando s'écrit `/3` — deux caractères pour **un** pas. Mes trois premiers motifs faisaient 14 ou 15 pas au lieu de 16 et se sont fait attraper par le test.
 
+## Les cordes pincées
+
+Les cinq autres moteurs fabriquent une forme d'onde puis la sculptent. [`cordes.html`](cordes.html) fait l'inverse : il **simule un objet qui vibre**.
+
+Une note y est une **ligne à retard** — un tampon circulaire — qu'on remplit d'une bouffée de bruit, puis qu'on reboucle sur elle-même à travers un filtre qui l'amortit. Le bruit tourne, s'appauvrit à chaque tour, et ce qui en sort est une corde. C'est le **Karplus-Strong**, et il n'y a pas un seul oscillateur dans la page.
+
+Conséquence : **la hauteur ne se règle pas, elle se mesure**. Elle vaut la fréquence d'échantillonnage divisée par la longueur de la ligne. C'est ce qui rend ce moteur agréable à vérifier — un test rend une note en WAV, cherche sa période par autocorrélation, et compare à la note demandée. Le résultat tient dans les **8 centièmes de demi-ton** sur trois octaves.
+
+Cette précision demande du soin : chaque filtre de la boucle ajoute son propre retard, qu'il faut retrancher de la longueur sous peine d'entendre une note trop grave. Le reste fractionnaire est absorbé par un filtre passe-tout, celui-là même qui sert aussi à la raideur.
+
+Les réglages sont physiques, et s'entendent :
+
+- **Durée** — le gain de rebouclage. Plus il approche de 1, plus la corde entretient sa propre vibration.
+- **Brillance** — l'amortissement des aigus à chaque tour. Bas, la corde est sourde ; haut, elle reste claire longtemps.
+- **Raideur** — l'inharmonicité. Une corde idéale a des partiels exactement multiples ; une corde épaisse et rigide les décale vers l'aigu. C'est ce qui sépare un piano d'une harpe.
+- **Pince** — où la corde est pincée, du chevalet au milieu. La pince supprime les partiels dont un ventre tombe sous le doigt : près du chevalet le son est nasillard, au milieu il est rond.
+- **Matière** — la nature de l'excitation, du bruit (un doigt) à l'impulsion (un bec ou un marteau).
+- **Corps** — deux résonances larges après la corde. Sans elles le son est juste mais sec, comme une corde tendue en l'air.
+
+Deux commandes propres au geste : l'**arpège** égrène les notes d'un accord comme une main qui balaie les cordes, et la rangée **Étouf.** pose la main dessus pour couper ce qui résonne — l'inverse d'une tenue, et la seule façon d'arrêter une corde qui décide toute seule quand elle s'éteint.
+
+Six instruments : **Guitare**, **Harpe**, **Clavecin**, **Koto**, **Contrebasse**, **Cithare**. Trois morceaux : *Sarabande* (76 BPM, accords plaqués), *Pluie* (112, harpe en arpèges), *Atelier* (128, clavecin sec).
+
+Le bruit d'excitation vient d'une suite **reproductible** : une même note rend toujours exactement le même signal. Ce n'est pas un détail — c'est ce qui permet à un test de comparer deux rendus, et ça évite les mauvaises surprises intermittentes qu'un bruit vraiment aléatoire avait déjà causées ailleurs dans ce projet.
+
 ## Relier les studios : la table de montage
 
 Les quatre studios ne savent faire qu'une chose à la fois. Un morceau complet demande pourtant une boîte à rythmes **et** un synthé, et rien ne permettait de les réunir.
@@ -376,7 +402,7 @@ Le mixage passe par un **limiteur** avec une attaque de 0,5 ms : quatre pistes q
 
 ## Structure
 
-Sept fichiers autonomes, sans dépendance ni build :
+Huit fichiers autonomes, sans dépendance ni build :
 
 - [`index.html`](index.html) — l'accueil, avec une vignette animée par studio : onde carrée crantée, pas-à-pas qui défile, porteuse déformée par sa modulante, dents de scie désaccordées, ligne de basse reliée par ses glissandos.
 - [`chiptune.html`](chiptune.html) — le synthé 8-bit.
@@ -384,6 +410,7 @@ Sept fichiers autonomes, sans dépendance ni build :
 - [`fm.html`](fm.html) — le synthé FM.
 - [`trance.html`](trance.html) — le studio trance.
 - [`acid303.html`](acid303.html) — la basse acide.
+- [`cordes.html`](cordes.html) — les cordes pincées.
 - [`montage.html`](montage.html) — la table de montage, qui ne synthétise rien et se contente d'assembler des WAV.
 
 Chaque studio est un document séparé : leurs identifiants, leurs styles, leurs raccourcis clavier et leur contexte audio ne se marchent jamais dessus.

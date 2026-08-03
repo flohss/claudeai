@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Cinq studios</title>
+<title>Six studios</title>
 <style>
   :root {
     --ink: #eef1ff;
@@ -17,6 +17,7 @@
     --fm: #d9b06a;
     --mix: #37d4b0;
     --acid: #d1590f;
+    --cord: #e0a252;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -112,6 +113,10 @@
     border-color: var(--acid);
     box-shadow: 0 16px 46px rgba(209,89,15,.22);
   }
+  .card.cord:hover, .card.cord:focus-visible {
+    border-color: var(--cord);
+    box-shadow: 0 16px 46px rgba(224,162,82,.22);
+  }
   @media (prefers-reduced-motion: reduce) {
     .card, .card:hover { transform: none; transition: none; }
   }
@@ -143,6 +148,7 @@
   .card.fm h2 { color: var(--fm); }
   .card.mix h2 { color: var(--mix); }
   .card.acid h2 { color: #f0873c; }
+  .card.cord h2 { color: var(--cord); }
   .card p { color: var(--dim); font-size: 13px; line-height: 1.6; }
   .card ul { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
   .card li {
@@ -165,6 +171,7 @@
   .card.fm .go { color: var(--fm); }
   .card.mix .go { color: var(--mix); }
   .card.acid .go { color: #f0873c; }
+  .card.cord .go { color: var(--cord); }
   .card .go span { transition: margin-left .2s ease; display: inline-block; }
   .card:hover .go span { margin-left: 6px; }
 
@@ -175,10 +182,10 @@
 <body>
   <header>
     <div class="eyebrow">Web Audio &mdash; sans dépendance</div>
-    <h1>Cinq studios,<br><em>cinq mondes sonores</em></h1>
+    <h1>Six studios,<br><em>six mondes sonores</em></h1>
     <p>
       Le même séquenceur — motifs enchaînables, morceaux prêts à jouer,
-      partage par lien, export WAV — au service de cinq synthèses
+      partage par lien, export WAV — au service de six synthèses
       qui n'ont rien en commun. Choisissez votre camp, puis réunissez
       vos rendus sur la <em>table de montage</em>.
     </p>
@@ -260,12 +267,27 @@
       </div>
     </a>
 
+    <a class="card cord" href="cordes.html">
+      <canvas id="vizCord" width="440" height="116" aria-hidden="true"></canvas>
+      <div class="body">
+        <h2>Cordes <span class="kicker">Modélisation physique</span></h2>
+        <p>
+          Aucun oscillateur : une ligne à retard excitée par une bouffée de bruit
+          et rebouclée sur elle-même. La hauteur vient de sa longueur.
+        </p>
+        <ul>
+          <li>Karplus-Strong</li><li>Six instruments</li><li>Arpège</li><li>Étouffoir</li>
+        </ul>
+        <div class="go">Entrer <span>&rarr;</span></div>
+      </div>
+    </a>
+
     <a class="card mix" href="montage.html">
       <canvas id="vizMix" width="440" height="116" aria-hidden="true"></canvas>
       <div class="body">
         <h2>Montage <span class="kicker">Assembler</span></h2>
         <p>
-          Les cinq studios rendent chacun leur WAV. Réunissez-les ici :
+          Les six studios rendent chacun leur WAV. Réunissez-les ici :
           volumes, décalages en mesures, boucles, et un seul fichier en sortie.
         </p>
         <ul>
@@ -330,11 +352,33 @@
     g.fillRect(cur * w, 0, 2, c.height);
   });
 
+  setup("vizCord", (g, c, t) => {
+    g.clearRect(0, 0, c.width, c.height);
+    // six cordes pincées : chacune vibre à sa fréquence et s'amortit
+    const n = 6;
+    for (let k = 0; k < n; k++) {
+      const y0 = (k + 0.5) * c.height / n;
+      const phase = (t * 0.9 + k * 0.31) % 2.2;          // pincée toutes les 2,2 s
+      const amp = Math.max(0, 1 - phase / 2.2) * (c.height / n) * 0.42;
+      const f = 2 + k * 1.6;
+      g.strokeStyle = "rgba(224,162,82," + (0.35 + 0.55 * (amp > 0.5 ? 1 : amp)) + ")";
+      g.lineWidth = 1.6;
+      g.beginPath();
+      for (let x = 0; x <= c.width; x += 4) {
+        const u = x / c.width;
+        // une corde fixée à ses deux bouts : le ventre est au milieu
+        const y = y0 + Math.sin(Math.PI * u) * Math.sin(f * Math.PI * u + t * 14) * amp;
+        if (x === 0) g.moveTo(x, y); else g.lineTo(x, y);
+      }
+      g.stroke();
+    }
+  });
+
   setup("vizMix", (g, c, t) => {
     g.clearRect(0, 0, c.width, c.height);
     // quatre bandes empilées, chacune la couleur de son studio, et une tête
     // de lecture qui les traverse ensemble
-    const voies = ["#00ff9c", "#f08a24", "#d9b06a", "#4fd6ff", "#d1590f"];
+    const voies = ["#00ff9c", "#f08a24", "#d9b06a", "#4fd6ff", "#d1590f", "#e0a252"];
     const h = c.height / voies.length;
     voies.forEach((couleur, v) => {
       const mid = v * h + h / 2;
