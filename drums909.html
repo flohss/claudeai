@@ -142,6 +142,19 @@
   .panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 11px; margin: 12px 0; }
 
   /* --- Grille de pas, façon façade de boîte à rythmes --- */
+  .bulle {
+    position: fixed; top: 0; left: 0; z-index: 60;
+    max-width: 290px; padding: 8px 11px;
+    font-size: 11px; line-height: 1.55; letter-spacing: .01em;
+    text-transform: none; text-align: left;
+    border-radius: 8px;
+    opacity: 0; pointer-events: none; transition: opacity .12s ease;
+    background: #2a2724; color: var(--ink);
+    border: 1px solid var(--edge);
+    box-shadow: 0 10px 28px rgba(0,0,0,.55);
+  }
+  .bulle.on { opacity: 1; }
+  @media (prefers-reduced-motion: reduce) { .bulle { transition: none; } }
   .grid-scroll { overflow-x: auto; margin-top: 11px; padding-bottom: 4px; }
   .grid-inner { min-width: 700px; }
   /* piste d'automation du filtre : une barre par pas, tracée à la souris */
@@ -1593,6 +1606,88 @@
     })();
   }
 
+  const INFOS = {
+      "level": "Niveau de la voix sélectionnée dans le mixage.",
+      "tune": "Accord de la voix. Sur la grosse caisse ça change sa profondeur, sur les toms leur hauteur.",
+      "decay": "Durée de la voix. Longue, la grosse caisse traîne ; courte, elle claque.",
+      "snap": "Dosage du claquement d'attaque, la partie bruitée qui fait ressortir la frappe dans un mixage.",
+      "rev": "Quantité de cette voix envoyée dans la réverbération commune.",
+      "bpm": "Tempo en pulsations par minute. Un pas vaut une double-croche.",
+      "swing": "Retarde un pas sur deux : c'est le shuffle qui fait balancer la house.",
+      "accent": "De combien un pas accentué frappe plus fort que les autres.",
+      "humanize": "Décale chaque frappe de quelques millisecondes au hasard, pour casser la rigidité de la machine.",
+      "volume": "Niveau général avant la saturation, le filtre et le limiteur.",
+      "drive": "Saturation douce du mixage. Elle épaissit et colore sans jamais écrêter net.",
+      "cutoff": "Coupure du filtre master. C'est le même paramètre que la bande d'automation sous la grille.",
+      "reso": "Bosse au point de coupure du filtre master : elle fait chanter le balayage.",
+      "revSize": "Longueur de la réverbération.",
+      "seqPlay": "Lance ou arrête le séquenceur. La barre d'espace fait la même chose.",
+      "dupBtn": "Recopie le motif affiché dans le premier emplacement libre.",
+      "wavBtn": "Rend le groove en fichier WAV, avec exactement le même graphe audio que le direct.",
+      "shareBtn": "Copie un lien qui contient tout le groove : motifs, chaîne, voix et réglages.",
+      "sweepOpen": "Ouvre le filtre à fond sur les 16 pas du motif affiché.",
+      "sweepClear": "Retire tous les points de filtre du motif affiché : le filtre cesse de bouger."
+  };
+  const ONDES = {};
+
+  // ------- Info-bulles -------
+  // Le libellé d'un curseur dit son nom, pas son effet. Le titre natif du
+  // navigateur arrive après une seconde, se coupe, et n'apparaît jamais au
+  // clavier : on affiche la nôtre, au survol comme à la prise de focus.
+  const bulle = document.createElement("div");
+  bulle.className = "bulle";
+  bulle.setAttribute("role", "tooltip");
+  document.body.appendChild(bulle);
+  let bulleTimer = null;
+
+  function montrerBulle(el) {
+    const texte = el.dataset.info;
+    if (!texte) return;
+    bulle.textContent = texte;
+    bulle.classList.add("on");
+    const b = el.getBoundingClientRect(), t = bulle.getBoundingClientRect();
+    const x = Math.max(8, Math.min(window.innerWidth - t.width - 8,
+                                   b.left + b.width / 2 - t.width / 2));
+    // au-dessus si la place existe, sinon en dessous
+    const y = b.top - t.height - 8 < 8 ? b.bottom + 8 : b.top - t.height - 8;
+    bulle.style.transform = "translate(" + Math.round(x) + "px," + Math.round(y) + "px)";
+  }
+  function cacherBulle() { bulle.classList.remove("on"); clearTimeout(bulleTimer); }
+
+  document.addEventListener("pointerover", e => {
+    const el = e.target.closest("[data-info]");
+    if (!el) { cacherBulle(); return; }
+    montrerBulle(el);
+    clearTimeout(bulleTimer);
+    // au doigt, rien ne déclenche la sortie : on referme tout seul
+    if (e.pointerType === "touch") bulleTimer = setTimeout(cacherBulle, 4500);
+  });
+  document.addEventListener("focusin", e => {
+    const el = e.target.closest("[data-info]");
+    if (el) montrerBulle(el); else cacherBulle();
+  });
+  document.addEventListener("focusout", cacherBulle);
+  window.addEventListener("scroll", cacherBulle, true);
+  window.addEventListener("keydown", e => { if (e.key === "Escape") cacherBulle(); });
+
+  function poserBulles() {
+    Object.keys(INFOS).forEach(cle => {
+      const el = cle[0] === "." || cle[0] === "["
+        ? document.querySelector(cle) : document.getElementById(cle);
+      if (!el) return;
+      // sur un curseur, toute la ligne devient la cible : c'est plus facile à viser
+      const cible = el.closest(".row") || el;
+      cible.dataset.info = INFOS[cle];
+      // sinon le titre natif s'afficherait par-dessus, une seconde plus tard
+      cible.removeAttribute("title");
+      el.removeAttribute("title");
+    });
+    document.querySelectorAll("[data-wave]").forEach(b => {
+      const t = ONDES[b.dataset.wave];
+      if (t) { b.dataset.info = t; b.removeAttribute("title"); }
+    });
+  }
+
   // ------- Démarrage -------
   applySong(SONGS[0]);
   decodeState(decodeURIComponent(location.hash.slice(1)));
@@ -1611,6 +1706,7 @@
   loadInstIntoControls();
   lastSnapshot = encodeState();
   refreshHistoryButtons();
+  poserBulles();
   drawIdleScope();
   window.addEventListener("pointerdown", initAudio, { once: false });
 

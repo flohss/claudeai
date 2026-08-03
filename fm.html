@@ -176,6 +176,19 @@
   .chain-chip.now { background: var(--accent3); color: #241a05; border-color: #8a5f0d; }
   .tool-msg { font-size: 10px; color: var(--accent); letter-spacing: .08em; text-transform: uppercase; }
 
+  .bulle {
+    position: fixed; top: 0; left: 0; z-index: 60;
+    max-width: 290px; padding: 8px 11px;
+    font-size: 11px; line-height: 1.55; letter-spacing: .01em;
+    text-transform: none; text-align: left;
+    border-radius: 8px;
+    opacity: 0; pointer-events: none; transition: opacity .12s ease;
+    background: #fdf8ef; color: #2a2318;
+    border: 1px solid #b9ad95;
+    box-shadow: 0 10px 28px rgba(0,0,0,.28);
+  }
+  .bulle.on { opacity: 1; }
+  @media (prefers-reduced-motion: reduce) { .bulle { transition: none; } }
   .grid-scroll { overflow-x: auto; margin-top: 11px; padding-bottom: 4px; }
   .grid-inner { min-width: 620px; }
   .ov-grid, .seq-grid { display: grid; grid-template-columns: 62px repeat(16, minmax(26px, 1fr)); gap: 2px; }
@@ -843,7 +856,7 @@
       patchName.className = "patch-name";
       const vol = document.createElement("input");
       vol.type = "range"; vol.min = 0; vol.max = 1; vol.step = 0.01; vol.value = tr.vol;
-      vol.title = "Volume de la piste";
+      vol.dataset.info = "Volume de cette piste dans le mixage. Cliquez son nom à gauche pour l'éditer et la jouer au clavier ; M la rend muette, S la met en solo.";
       vol.addEventListener("input", () => {
         tr.vol = Number(vol.value); refreshTrackGains(); markDirty();
       });
@@ -1952,6 +1965,92 @@
     })();
   }
 
+  const INFOS = {
+      "feedback": "Réinjecte le dernier opérateur sur lui-même. Ça enrichit le timbre jusqu'au bruit : au maximum, c'est presque de la percussion métallique.",
+      "octave": "Octave de la piste. Le motif ne bouge pas, seule sa hauteur change.",
+      "ratio": "Rapport entre la fréquence de l'opérateur et celle de la note. Un rapport entier donne un son harmonique, un rapport fractionnaire une cloche.",
+      "olevel": "Niveau de l'opérateur. Sur une porteuse c'est son volume ; sur un modulateur, la force de la modulation — donc la brillance.",
+      "odetune": "Léger désaccord de l'opérateur, en centièmes de ton. Quelques unités suffisent à animer un timbre trop droit.",
+      "oa": "Attaque de cet opérateur seul. Chaque opérateur a son enveloppe : c'est ce qui fait évoluer le timbre au fil de la note.",
+      "od": "Déclin de cet opérateur, du sommet de l'attaque vers son niveau de maintien.",
+      "os": "Niveau tenu par cet opérateur pendant la note. Sur un modulateur, à zéro, la brillance disparaît après l'attaque.",
+      "orl": "Extinction de cet opérateur une fois la note relâchée.",
+      "volume": "Niveau général du mixage, avant le chorus et la réverbération.",
+      "chorus": "Deux copies légèrement retardées et désaccordées, pour élargir le son sans le brouiller.",
+      "reverb": "Quantité de réverbération sur l'ensemble du mixage.",
+      "bpm": "Tempo en pulsations par minute. Un pas de la grille vaut une double-croche.",
+      "seqPlay": "Lance ou arrête le séquenceur. La barre d'espace fait la même chose.",
+      "dupBtn": "Recopie le motif affiché dans le premier emplacement libre.",
+      "polyBtn": "Accords : plusieurs hauteurs par pas. Mono : la note posée remplace celle qui occupait le pas.",
+      "trUp": "Transpose tout le motif d'un demi-ton vers le haut. Refuse plutôt que d'écraser si une note sortirait de la grille.",
+      "trDown": "Transpose tout le motif d'un demi-ton vers le bas.",
+      "rotL": "Décale le motif entier d'un pas vers la gauche, en boucle.",
+      "rotR": "Décale le motif entier d'un pas vers la droite, en boucle.",
+      "revBtn": "Lit le motif à l'envers, du dernier pas au premier.",
+      "armBtn": "Écrit dans le motif ce que vous jouez au clavier : quantifié pendant la lecture, pas à pas à l'arrêt.",
+      "wavBtn": "Rend le morceau en fichier WAV, avec exactement le même graphe audio que le direct.",
+      "shareBtn": "Copie un lien qui contient tout le morceau : motifs, chaîne, instruments et réglages."
+  };
+  const ONDES = {};
+
+  // ------- Info-bulles -------
+  // Le libellé d'un curseur dit son nom, pas son effet. Le titre natif du
+  // navigateur arrive après une seconde, se coupe, et n'apparaît jamais au
+  // clavier : on affiche la nôtre, au survol comme à la prise de focus.
+  const bulle = document.createElement("div");
+  bulle.className = "bulle";
+  bulle.setAttribute("role", "tooltip");
+  document.body.appendChild(bulle);
+  let bulleTimer = null;
+
+  function montrerBulle(el) {
+    const texte = el.dataset.info;
+    if (!texte) return;
+    bulle.textContent = texte;
+    bulle.classList.add("on");
+    const b = el.getBoundingClientRect(), t = bulle.getBoundingClientRect();
+    const x = Math.max(8, Math.min(window.innerWidth - t.width - 8,
+                                   b.left + b.width / 2 - t.width / 2));
+    // au-dessus si la place existe, sinon en dessous
+    const y = b.top - t.height - 8 < 8 ? b.bottom + 8 : b.top - t.height - 8;
+    bulle.style.transform = "translate(" + Math.round(x) + "px," + Math.round(y) + "px)";
+  }
+  function cacherBulle() { bulle.classList.remove("on"); clearTimeout(bulleTimer); }
+
+  document.addEventListener("pointerover", e => {
+    const el = e.target.closest("[data-info]");
+    if (!el) { cacherBulle(); return; }
+    montrerBulle(el);
+    clearTimeout(bulleTimer);
+    // au doigt, rien ne déclenche la sortie : on referme tout seul
+    if (e.pointerType === "touch") bulleTimer = setTimeout(cacherBulle, 4500);
+  });
+  document.addEventListener("focusin", e => {
+    const el = e.target.closest("[data-info]");
+    if (el) montrerBulle(el); else cacherBulle();
+  });
+  document.addEventListener("focusout", cacherBulle);
+  window.addEventListener("scroll", cacherBulle, true);
+  window.addEventListener("keydown", e => { if (e.key === "Escape") cacherBulle(); });
+
+  function poserBulles() {
+    Object.keys(INFOS).forEach(cle => {
+      const el = cle[0] === "." || cle[0] === "["
+        ? document.querySelector(cle) : document.getElementById(cle);
+      if (!el) return;
+      // sur un curseur, toute la ligne devient la cible : c'est plus facile à viser
+      const cible = el.closest(".row") || el;
+      cible.dataset.info = INFOS[cle];
+      // sinon le titre natif s'afficherait par-dessus, une seconde plus tard
+      cible.removeAttribute("title");
+      el.removeAttribute("title");
+    });
+    document.querySelectorAll("[data-wave]").forEach(b => {
+      const t = ONDES[b.dataset.wave];
+      if (t) { b.dataset.info = t; b.removeAttribute("title"); }
+    });
+  }
+
   // ------- Démarrage -------
   applySong(SONGS[0]);
   decodeState(decodeURIComponent(location.hash.slice(1)));
@@ -1974,6 +2073,7 @@
   drawAlgo();
   lastSnapshot = encodeState();
   refreshHistoryButtons();
+  poserBulles();
   drawIdleScope();
   window.addEventListener("pointerdown", initAudio, { once: false });
 

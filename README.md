@@ -181,6 +181,7 @@ Le décodage est tolérant : un lien tronqué, altéré ou d'une version inconnu
 - **Enregistrement au clavier** : écriture quantifiée pendant la lecture, ou pas à pas à l'arrêt.
 - **Outils de motif** : décalage, transposition, inversion, avec annuler/rétablir sur 60 pas.
 - **Capture en direct** : enregistre le mixage joué et exporte un `.webm`/`.ogg`.
+- **Info-bulles** : chaque paramètre explique son effet au survol et au focus clavier.
 - **Oscilloscope** temps réel, coloré selon la piste sélectionnée.
 - **Clavier virtuel de 2 octaves** (souris et tactile, avec glissando) + sélecteur d'octave (0 à 7).
 - **Polyphonie** illimitée.
@@ -258,6 +259,14 @@ Le **diagramme s'affiche à l'écran** : les opérateurs se placent par étage s
 La profondeur de modulation suit la fréquence du modulateur, de sorte que **le timbre reste le même d'un bout à l'autre du clavier** au lieu de devenir criard dans l'aigu.
 
 Six presets — Piano él., Cloche, Marimba, Basse FM, Cuivre, Verre — et trois morceaux : **Rhodes** (96 BPM), **Carillon** (78), **Fanfare** (128). C'est la page où les **accords** comptent le plus : un piano électrique qui ne sait pas plaquer une triade, ce n'est pas un piano électrique.
+
+## Les info-bulles
+
+Un libellé de curseur dit son nom, pas son effet : « Grain », « Env. montée » ou « Rapport » ne parlent qu'à qui sait déjà. **Survolez n'importe quel paramètre** et une bulle explique à quoi il sert et ce qu'on entend quand on le bouge — 108 explications au total, écrites une par une pour chaque studio.
+
+Le `title` natif du navigateur n'aurait pas suffi : il arrive après une seconde, se coupe, ne se met jamais en forme, et **n'apparaît pas au clavier**. La bulle maison s'ouvre au survol comme à la prise de focus — utile, puisqu'un curseur se règle très bien aux flèches — se ferme avec `Échap`, se replace toute seule quand il n'y a pas la place au-dessus, et se referme d'elle-même après quelques secondes au doigt, faute d'événement de sortie sur écran tactile.
+
+La cible est **la ligne entière**, pas le curseur seul : c'est bien plus facile à viser.
 
 ## Structure
 

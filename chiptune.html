@@ -293,6 +293,19 @@
   }
   .chain-chip.now { background: var(--accent3); color: #000; border-color: var(--accent3); }
   .tool-msg { font-size: 10px; color: var(--accent2); text-transform: uppercase; letter-spacing: .1em; }
+  .bulle {
+    position: fixed; top: 0; left: 0; z-index: 60;
+    max-width: 290px; padding: 8px 11px;
+    font-size: 11px; line-height: 1.55; letter-spacing: .01em;
+    text-transform: none; text-align: left;
+    border-radius: 8px;
+    opacity: 0; pointer-events: none; transition: opacity .12s ease;
+    background: #241548; color: var(--ink);
+    border: 1px solid var(--panel-edge);
+    box-shadow: 0 10px 28px rgba(0,0,0,.6);
+  }
+  .bulle.on { opacity: 1; }
+  @media (prefers-reduced-motion: reduce) { .bulle { transition: none; } }
   .grid-scroll { overflow-x: auto; margin-top: 10px; }
   .grid-inner { min-width: 520px; }
   .ov-grid, .seq-grid {
@@ -1109,7 +1122,7 @@
       const vol = document.createElement("input");
       vol.type = "range";
       vol.min = 0; vol.max = 1; vol.step = 0.01; vol.value = tr.vol;
-      vol.title = "Volume de la piste";
+      vol.dataset.info = "Volume de cette piste dans le mixage. Cliquez son nom à gauche pour l'éditer et la jouer au clavier ; M la rend muette, S la met en solo.";
       vol.addEventListener("input", () => {
         tr.vol = Number(vol.value);
         refreshTrackGains(); markDirty();
@@ -2427,6 +2440,104 @@
     })();
   }
 
+  const INFOS = {
+      "attack": "Temps que met la note à atteindre son volume plein. Très court pour l'attaque nette d'une console, long pour un son qui monte doucement.",
+      "decay": "Temps de retombée depuis le sommet de l'attaque jusqu'au niveau de maintien.",
+      "sustain": "Volume tenu pendant toute la durée de la note. À zéro chaque note est percussive, au maximum elle reste pleine.",
+      "release": "Temps d'extinction une fois la note relâchée. C'est la traîne qu'elle laisse derrière elle.",
+      "bits": "Résolution du signal, de 8 à 2 bits. Moins il y a de bits, plus le son se casse et grésille : c'est tout le grain rétro.",
+      "vibRate": "Vitesse de l'oscillation de hauteur. Lente, c'est un vibrato de chanteur ; rapide, un effet de machine.",
+      "vibDepth": "Amplitude du vibrato, jusqu'à 6 demi-tons. Au-delà de deux, ce n'est plus un vibrato mais une sirène.",
+      "sweep": "Hauteur parcourue pendant la note, de −24 à +24 demi-tons. En négatif et court, c'est le « pew » descendant des percussions NES.",
+      "volume": "Niveau général du mixage, avant l'écho et la sortie.",
+      "echoMix": "Proportion de son repris par l'écho. À zéro, pas d'écho du tout.",
+      "echoTime": "Durée entre deux répétitions. Courte, elle épaissit le son ; longue, elle crée un contrechant.",
+      "echoFb": "Part du signal réinjectée dans l'écho : c'est le nombre de répétitions avant extinction.",
+      "arpMode": "Ordre de défilement des notes tenues : montant, descendant, aller-retour ou aléatoire.",
+      "arpRate": "Vitesse de défilement de l'arpège quand plusieurs notes sont maintenues.",
+      "bpm": "Tempo en pulsations par minute. Un pas de la grille vaut une double-croche, soit un quart de temps.",
+      "swing": "Retarde un pas sur deux, jusqu'à la moitié d'un pas. Quelques pourcents suffisent à faire respirer une boucle.",
+      "octUp": "Monte l'instrument de la piste d'une octave. Le motif ne bouge pas, seule sa hauteur change.",
+      "octDown": "Descend l'instrument de la piste d'une octave.",
+      "seqPlay": "Lance ou arrête le séquenceur. La barre d'espace fait la même chose.",
+      "dupBtn": "Recopie le motif affiché dans le premier emplacement libre — la façon rapide de partir d'une variation.",
+      "polyBtn": "Accords : plusieurs hauteurs par pas. Mono : la note posée remplace celle qui occupait le pas.",
+      "trUp": "Transpose tout le motif d'un demi-ton vers le haut. Refuse plutôt que d'écraser si une note sortirait de la grille.",
+      "trDown": "Transpose tout le motif d'un demi-ton vers le bas.",
+      "rotL": "Décale le motif entier d'un pas vers la gauche, en boucle.",
+      "rotR": "Décale le motif entier d'un pas vers la droite, en boucle.",
+      "revBtn": "Lit le motif à l'envers, du dernier pas au premier.",
+      "armBtn": "Écrit dans le motif ce que vous jouez au clavier : quantifié pendant la lecture, pas à pas à l'arrêt.",
+      "wavBtn": "Rend le morceau en fichier WAV, avec exactement le même graphe audio que le direct.",
+      "shareBtn": "Copie un lien qui contient tout le morceau : motifs, chaîne, instruments et réglages."
+  };
+  const ONDES = {
+      "square": "Carré 50 % : le timbre le plus plein des consoles, creux et rond.",
+      "pulse25": "Impulsion 25 % : plus nasillard que le carré, idéal pour une mélodie qui doit passer devant.",
+      "pulse125": "Impulsion 12,5 % : très fin et perçant, le lead classique de la Game Boy.",
+      "triangle": "Triangle : doux et sans harmoniques aiguës. Sur NES, c'était le canal réservé à la basse.",
+      "sawtooth": "Dents de scie : le timbre le plus riche, brillant et un peu agressif.",
+      "noise": "Bruit : pas de hauteur, seulement du souffle. C'est le canal des percussions."
+  };
+
+  // ------- Info-bulles -------
+  // Le libellé d'un curseur dit son nom, pas son effet. Le titre natif du
+  // navigateur arrive après une seconde, se coupe, et n'apparaît jamais au
+  // clavier : on affiche la nôtre, au survol comme à la prise de focus.
+  const bulle = document.createElement("div");
+  bulle.className = "bulle";
+  bulle.setAttribute("role", "tooltip");
+  document.body.appendChild(bulle);
+  let bulleTimer = null;
+
+  function montrerBulle(el) {
+    const texte = el.dataset.info;
+    if (!texte) return;
+    bulle.textContent = texte;
+    bulle.classList.add("on");
+    const b = el.getBoundingClientRect(), t = bulle.getBoundingClientRect();
+    const x = Math.max(8, Math.min(window.innerWidth - t.width - 8,
+                                   b.left + b.width / 2 - t.width / 2));
+    // au-dessus si la place existe, sinon en dessous
+    const y = b.top - t.height - 8 < 8 ? b.bottom + 8 : b.top - t.height - 8;
+    bulle.style.transform = "translate(" + Math.round(x) + "px," + Math.round(y) + "px)";
+  }
+  function cacherBulle() { bulle.classList.remove("on"); clearTimeout(bulleTimer); }
+
+  document.addEventListener("pointerover", e => {
+    const el = e.target.closest("[data-info]");
+    if (!el) { cacherBulle(); return; }
+    montrerBulle(el);
+    clearTimeout(bulleTimer);
+    // au doigt, rien ne déclenche la sortie : on referme tout seul
+    if (e.pointerType === "touch") bulleTimer = setTimeout(cacherBulle, 4500);
+  });
+  document.addEventListener("focusin", e => {
+    const el = e.target.closest("[data-info]");
+    if (el) montrerBulle(el); else cacherBulle();
+  });
+  document.addEventListener("focusout", cacherBulle);
+  window.addEventListener("scroll", cacherBulle, true);
+  window.addEventListener("keydown", e => { if (e.key === "Escape") cacherBulle(); });
+
+  function poserBulles() {
+    Object.keys(INFOS).forEach(cle => {
+      const el = cle[0] === "." || cle[0] === "["
+        ? document.querySelector(cle) : document.getElementById(cle);
+      if (!el) return;
+      // sur un curseur, toute la ligne devient la cible : c'est plus facile à viser
+      const cible = el.closest(".row") || el;
+      cible.dataset.info = INFOS[cle];
+      // sinon le titre natif s'afficherait par-dessus, une seconde plus tard
+      cible.removeAttribute("title");
+      el.removeAttribute("title");
+    });
+    document.querySelectorAll("[data-wave]").forEach(b => {
+      const t = ONDES[b.dataset.wave];
+      if (t) { b.dataset.info = t; b.removeAttribute("title"); }
+    });
+  }
+
   // ------- Démarrage -------
   // Le premier morceau de la bibliothèque sert d'état initial, puis l'URL prend
   // le dessus si elle en contient un. À faire après le câblage des curseurs,
@@ -2452,6 +2563,7 @@
   loadPatchIntoControls();
   lastSnapshot = encodeState();
   refreshHistoryButtons();
+  poserBulles();
   drawIdleScope();
   window.addEventListener("pointerdown", initAudio, { once: false });
 

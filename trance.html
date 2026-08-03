@@ -247,6 +247,19 @@
   .chain-chip.now { background: var(--accent4); color: #1a1200; border-color: transparent; }
   .tool-msg { font-size: 10px; color: var(--accent3); letter-spacing: .1em; text-transform: uppercase; }
 
+  .bulle {
+    position: fixed; top: 0; left: 0; z-index: 60;
+    max-width: 290px; padding: 8px 11px;
+    font-size: 11px; line-height: 1.55; letter-spacing: .01em;
+    text-transform: none; text-align: left;
+    border-radius: 8px;
+    opacity: 0; pointer-events: none; transition: opacity .12s ease;
+    background: #101a36; color: var(--text);
+    border: 1px solid var(--panel-edge);
+    box-shadow: 0 10px 28px rgba(0,0,0,.65);
+  }
+  .bulle.on { opacity: 1; }
+  @media (prefers-reduced-motion: reduce) { .bulle { transition: none; } }
   .grid-scroll { overflow-x: auto; margin-top: 12px; padding-bottom: 4px; }
   .grid-inner { min-width: 760px; }
   .ov-grid, .seq-grid { display: grid; gap: 2px; }
@@ -1076,7 +1089,7 @@
 
       const vol = document.createElement("input");
       vol.type = "range"; vol.min = 0; vol.max = 1; vol.step = 0.01; vol.value = tr.vol;
-      vol.title = "Volume de la piste";
+      vol.dataset.info = "Volume de cette piste dans le mixage. Cliquez son nom à gauche pour l'éditer et la jouer au clavier ; M la rend muette, S la met en solo.";
       vol.addEventListener("input", () => {
         tr.vol = Number(vol.value);
         refreshTrackGains(); markDirty();
@@ -2307,6 +2320,110 @@
     })();
   }
 
+  const INFOS = {
+      "detune": "Écart entre les sept dents de scie du supersaw. À zéro elles se superposent ; au maximum, c'est la nappe très large du genre.",
+      "attack": "Temps que met la note à atteindre son volume plein. Long, c'est une nappe qui entre en fondu.",
+      "decay": "Temps de retombée depuis le sommet de l'attaque jusqu'au niveau de maintien.",
+      "sustain": "Volume tenu pendant toute la durée de la note. À zéro, chaque note est un pluck.",
+      "release": "Temps d'extinction une fois la note relâchée.",
+      "cutoff": "Fréquence au-dessus de laquelle le filtre de la piste coupe. C'est son réglage de brillance.",
+      "reso": "Bosse au point de coupure. Elle fait siffler le filtre et rend son ouverture chantante.",
+      "envAmt": "De combien le filtre s'ouvre en plus au début de chaque note, avant de retomber vers la coupure réglée.",
+      "envDec": "Durée de cette ouverture. Courte, c'est un pluck sec ; longue, un lead qui s'épanouit.",
+      "sidechain": "De combien cette piste se creuse à chaque coup de grosse caisse. C'est le pompage caractéristique.",
+      "revSend": "Quantité de cette piste envoyée dans la réverbération commune.",
+      "delSend": "Quantité envoyée dans le délai pointé de 3/16, calé sur le tempo.",
+      "pan": "Place de la piste entre l'enceinte gauche et la droite.",
+      "volume": "Niveau général du mixage, avant le filtre master et le limiteur.",
+      "revSize": "Longueur de la réverbération, de 0,5 à 5 secondes.",
+      "delFb": "Part du délai réinjectée : c'est le nombre de répétitions avant extinction.",
+      "duck": "Temps que mettent les pistes à remonter après un coup de grosse caisse.",
+      "filtQ": "Résonance du filtre master balayable. C'est elle qui fait chanter le balayage au lieu de simplement assourdir.",
+      "bpm": "Tempo en pulsations par minute. Un pas vaut une double-croche, et un motif fait deux mesures.",
+      "swing": "Retarde un pas sur deux. Rare en trance, mais quelques pourcents cassent la rigidité.",
+      "octUp": "Monte l'instrument de la piste d'une octave. Le motif ne bouge pas, seule sa hauteur change.",
+      "octDown": "Descend l'instrument de la piste d'une octave.",
+      "seqPlay": "Lance ou arrête le séquenceur. La barre d'espace fait la même chose.",
+      "dupBtn": "Recopie le motif affiché dans le premier emplacement libre.",
+      "polyBtn": "Accords : plusieurs hauteurs par pas. Mono : la note posée remplace celle qui occupait le pas.",
+      "trUp": "Transpose tout le motif d'un demi-ton vers le haut. Refuse plutôt que d'écraser si une note sortirait de la grille.",
+      "trDown": "Transpose tout le motif d'un demi-ton vers le bas.",
+      "rotL": "Décale le motif entier d'un pas vers la gauche, en boucle.",
+      "rotR": "Décale le motif entier d'un pas vers la droite, en boucle.",
+      "revBtn": "Lit le motif à l'envers, du dernier pas au premier.",
+      "armBtn": "Écrit dans le motif ce que vous jouez au clavier : quantifié pendant la lecture, pas à pas à l'arrêt.",
+      "wavBtn": "Rend le morceau en fichier WAV, avec exactement le même graphe audio que le direct.",
+      "shareBtn": "Copie un lien qui contient tout le morceau : motifs, chaîne, instruments et réglages.",
+      "sweepOpen": "Ouvre le filtre à fond sur les 32 pas du motif affiché.",
+      "sweepClear": "Retire tous les points de filtre du motif affiché : le filtre cesse de bouger."
+  };
+  const ONDES = {
+      "supersaw": "Sept dents de scie désaccordées en éventail : le timbre signature de la trance, large et mouvant.",
+      "saw": "Une seule dent de scie : riche et franche, la base des basses et des plucks.",
+      "square": "Carré : creux et un peu boisé, plus rond que la dent de scie.",
+      "pulse": "Impulsion : nasillard, il ressort bien dans un mixage chargé.",
+      "triangle": "Triangle : doux, presque sans harmoniques. Utile en sous-basse.",
+      "sine": "Sinus pur : aucune harmonique. Sous le reste, il apporte le grave sans encombrer."
+  };
+
+  // ------- Info-bulles -------
+  // Le libellé d'un curseur dit son nom, pas son effet. Le titre natif du
+  // navigateur arrive après une seconde, se coupe, et n'apparaît jamais au
+  // clavier : on affiche la nôtre, au survol comme à la prise de focus.
+  const bulle = document.createElement("div");
+  bulle.className = "bulle";
+  bulle.setAttribute("role", "tooltip");
+  document.body.appendChild(bulle);
+  let bulleTimer = null;
+
+  function montrerBulle(el) {
+    const texte = el.dataset.info;
+    if (!texte) return;
+    bulle.textContent = texte;
+    bulle.classList.add("on");
+    const b = el.getBoundingClientRect(), t = bulle.getBoundingClientRect();
+    const x = Math.max(8, Math.min(window.innerWidth - t.width - 8,
+                                   b.left + b.width / 2 - t.width / 2));
+    // au-dessus si la place existe, sinon en dessous
+    const y = b.top - t.height - 8 < 8 ? b.bottom + 8 : b.top - t.height - 8;
+    bulle.style.transform = "translate(" + Math.round(x) + "px," + Math.round(y) + "px)";
+  }
+  function cacherBulle() { bulle.classList.remove("on"); clearTimeout(bulleTimer); }
+
+  document.addEventListener("pointerover", e => {
+    const el = e.target.closest("[data-info]");
+    if (!el) { cacherBulle(); return; }
+    montrerBulle(el);
+    clearTimeout(bulleTimer);
+    // au doigt, rien ne déclenche la sortie : on referme tout seul
+    if (e.pointerType === "touch") bulleTimer = setTimeout(cacherBulle, 4500);
+  });
+  document.addEventListener("focusin", e => {
+    const el = e.target.closest("[data-info]");
+    if (el) montrerBulle(el); else cacherBulle();
+  });
+  document.addEventListener("focusout", cacherBulle);
+  window.addEventListener("scroll", cacherBulle, true);
+  window.addEventListener("keydown", e => { if (e.key === "Escape") cacherBulle(); });
+
+  function poserBulles() {
+    Object.keys(INFOS).forEach(cle => {
+      const el = cle[0] === "." || cle[0] === "["
+        ? document.querySelector(cle) : document.getElementById(cle);
+      if (!el) return;
+      // sur un curseur, toute la ligne devient la cible : c'est plus facile à viser
+      const cible = el.closest(".row") || el;
+      cible.dataset.info = INFOS[cle];
+      // sinon le titre natif s'afficherait par-dessus, une seconde plus tard
+      cible.removeAttribute("title");
+      el.removeAttribute("title");
+    });
+    document.querySelectorAll("[data-wave]").forEach(b => {
+      const t = ONDES[b.dataset.wave];
+      if (t) { b.dataset.info = t; b.removeAttribute("title"); }
+    });
+  }
+
   // ------- Démarrage -------
   applySong(SONGS[0]);
   decodeState(decodeURIComponent(location.hash.slice(1)));
@@ -2327,6 +2444,7 @@
   loadPatchIntoControls();
   lastSnapshot = encodeState();
   refreshHistoryButtons();
+  poserBulles();
   drawIdleScope();
   window.addEventListener("pointerdown", initAudio, { once: false });
 
