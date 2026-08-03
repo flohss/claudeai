@@ -280,8 +280,18 @@
   .acc-cell.beat { background: rgba(255,255,255,.1); }
   .acc-cell.mesure { background: rgba(255,255,255,.16); }
   .acc-cell.on { background: var(--accent3); box-shadow: 0 0 7px var(--accent3); }
+  .hold-cell {
+    height: 10px; background: rgba(255,255,255,.045); border-radius: 3px;
+    cursor: pointer; margin-bottom: 5px;
+  }
+  .hold-cell.beat { background: rgba(255,255,255,.1); }
+  .hold-cell.mesure { background: rgba(255,255,255,.16); }
+  .hold-cell.on { background: var(--accent2); box-shadow: 0 0 7px var(--accent2); }
+  /* note prolongée : la couleur de la piste, en retrait */
+  .seq-cell.prolonge { background: var(--tc); opacity: .4; }
+  .ov-cell.tenu { background: var(--tc); opacity: .4; }
   .playhead { outline: 2px solid #fff; outline-offset: -1px; }
-  .seq-cell.curseur, .acc-cell.curseur { outline: 2px solid var(--accent3); outline-offset: -1px; }
+  .seq-cell.curseur, .acc-cell.curseur, .hold-cell.curseur { outline: 2px solid var(--accent3); outline-offset: -1px; }
 
   .keyboard-wrap { position: relative; height: 150px; user-select: none; touch-action: none; margin-top: 4px; }
   .keyboard { position: relative; height: 100%; display: flex; }
@@ -452,8 +462,10 @@
         Quatre motifs de 32 pas (deux mesures), <b>A</b> à <b>D</b>. Un clic pose une note,
         un second l'efface ; empilez-en plusieurs dans une colonne pour faire un
         <b>accord</b>, ou passez le bouton <b>Accords</b> sur <b>Mono</b> pour n'en garder
-        qu'une par pas. La rangée <b>Acc.</b> accentue le pas entier. <b>Espace</b> lance ou
-        arrête, <b>Ctrl+Z</b> annule. Les barres claires marquent les temps forts.
+        qu'une par pas. La rangée <b>Acc.</b> accentue le pas entier, la rangée <b>Tenue</b>
+        le fait prolonger la note précédente — c'est ainsi que les nappes tiennent sur
+        toute la mesure. <b>Espace</b> lance ou arrête, <b>Ctrl+Z</b> annule. Les barres
+        claires marquent les temps forts.
       </div>
     </fieldset>
 
@@ -482,7 +494,9 @@
   // Plusieurs bits allumés = un accord.
   const NOTE_BITS = 0x1FFF;
   const ACC_BIT = 1 << 13;
+  const HOLD_BIT = 1 << 14;     // le pas prolonge la note précédente au lieu d'en poser une
   const stepEmpty = m => !m || !(m & NOTE_BITS);
+  const stepHold = m => !!(m & HOLD_BIT);
   const stepAccent = m => !!(m & ACC_BIT);
   const stepHas = (m, n) => !!(m & (1 << n));
   const stepNotes = m => {
@@ -490,6 +504,13 @@
     for (let n = 0; n < PITCH_ROWS; n++) if (m & (1 << n)) o.push(n);
     return o;
   };
+  // Nombre de pas occupés par la note posée en s : elle-même, plus la suite de
+  // pas tenus qui la prolongent. Une tenue ne repasse pas la fin du motif.
+  function stepSpan(data, s) {
+    let k = 1;
+    while (s + k < STEPS && stepHold(data[s + k]) && stepEmpty(data[s + k])) k++;
+    return k;
+  }
 
   // La fréquence de coupure se règle à l'oreille, donc sur une échelle
   // logarithmique : 0 -> 80 Hz, 100 -> 16 kHz.
@@ -550,9 +571,9 @@
           "c---a---7---5---3---5---7---a---",
           ""] },
         { preset: "pad", octave: 3, vol: 0.5, pats: [
-          "(037)-------------------------------",
-          "(037)---------------(038)---------------",
-          "(058)---------------(37a)---------------",
+          "(037)===============================",
+          "(037)===============(038)===============",
+          "(058)===============(37a)===============",
           ""] },
         { preset: "bass", octave: 2, vol: 0.72, pats: [
           "--0---0---0---0---0---0---0---0-",
@@ -581,9 +602,9 @@
           "c-------a-------7-------5-------",
           ""] },
         { preset: "pad", octave: 3, vol: 0.58, attack: 1.4, pats: [
-          "(037)-------------------------------",
-          "(37a)-------------------------------",
-          "(038)-------------------------------",
+          "(037)===============================",
+          "(37a)===============================",
+          "(038)===============================",
           ""] },
         { preset: "bass", octave: 2, vol: 0.68, pats: [
           "0---0---0---0---0---0---0---0---",
@@ -612,9 +633,9 @@
           "--------------------------------",
           ""] },
         { preset: "pad", octave: 3, vol: 0.42, pats: [
-          "(037)---------------(27a)---------------",
-          "(038)---------------(058)---------------",
-          "(037)-------------------------------",
+          "(037)===============(27a)===============",
+          "(038)===============(058)===============",
+          "(037)===============================",
           ""] },
         { preset: "bass", octave: 1, vol: 0.8, pats: [
           "0-00-0-00-00-0-00-00-0-00-00-0-0",
@@ -1062,6 +1083,7 @@
   let seqCells = [];
   const ovCells = [];
   const accCells = [];
+  const holdCells = [];
 
   const gridCols = () => "84px repeat(" + STEPS + ", minmax(20px, 1fr))";
 
@@ -1095,6 +1117,7 @@
         const c = ovCells[i][s];
         const v = data[s];
         c.classList.toggle("on", !stepEmpty(v));
+        c.classList.toggle("tenu", stepEmpty(v) && stepHold(v));
         c.style.opacity = silent ? ".3" : "1";
       }
     });
@@ -1117,6 +1140,21 @@
       cell.dataset.acc = s;
       seqGridEl.appendChild(cell);
       accCells[s] = cell;
+    }
+    holdCells.length = 0;
+    if (!isDrum(currentTrack)) {
+      // rangée de tenue : le pas prolonge la note précédente au lieu d'en relancer une
+      const holdLabel = document.createElement("div");
+      holdLabel.className = "seq-label";
+      holdLabel.textContent = "Tenue";
+      seqGridEl.appendChild(holdLabel);
+      for (let s = 0; s < STEPS; s++) {
+        const cell = document.createElement("div");
+        cell.className = "hold-cell" + (s % 16 === 0 ? " mesure" : s % 4 === 0 ? " beat" : "");
+        cell.dataset.hold = s;
+        seqGridEl.appendChild(cell);
+        holdCells[s] = cell;
+      }
     }
     for (let r = 0; r < rows; r++) {
       const idx = rows - 1 - r;
@@ -1141,6 +1179,14 @@
   function refreshSeqGrid() {
     const rows = rowsOf(currentTrack);
     const data = editData(currentTrack);
+    // hauteurs qui sonnent encore à chaque pas, pour dessiner la prolongation
+    const tenues = [];
+    let courant = [];
+    for (let s = 0; s < STEPS; s++) {
+      if (!stepEmpty(data[s])) courant = stepNotes(data[s]);
+      else if (!stepHold(data[s])) courant = [];
+      tenues[s] = stepEmpty(data[s]) && stepHold(data[s]) ? courant : [];
+    }
     for (let s = 0; s < STEPS; s++) {
       // repères des autres pistes, seulement entre pistes de même nature
       const ghosts = new Set();
@@ -1152,13 +1198,18 @@
       const acc = stepAccent(v);
       accCells[s].classList.toggle("on", acc && !stepEmpty(v));
       accCells[s].classList.toggle("curseur", recArmed && !seqPlaying && s === writeStep);
+      if (holdCells[s]) {
+        holdCells[s].classList.toggle("on", stepHold(v));
+        holdCells[s].classList.toggle("curseur", recArmed && !seqPlaying && s === writeStep);
+      }
       for (let o = 0; o < rows; o++) {
         const cell = seqCells[s][o];
         if (!cell) continue;
         const on = stepHas(v, o);
         cell.classList.toggle("on", on);
         cell.classList.toggle("accent", on && acc);
-        cell.classList.toggle("ghost", !on && ghosts.has(o));
+        cell.classList.toggle("prolonge", !on && tenues[s].includes(o));
+        cell.classList.toggle("ghost", !on && !tenues[s].includes(o) && ghosts.has(o));
         cell.classList.toggle("curseur", recArmed && !seqPlaying && s === writeStep);
       }
     }
@@ -1174,9 +1225,19 @@
       refreshSeqGrid(); markDirty();
       return;
     }
+    const hold = e.target.closest(".hold-cell");
+    if (hold) {
+      const s = Number(hold.dataset.hold);
+      // un pas ne peut pas à la fois poser une note et en prolonger une
+      if (!stepEmpty(data[s])) { flashTool("Le pas porte une note"); return; }
+      data[s] = stepHold(data[s]) ? 0 : HOLD_BIT;
+      refreshSeqGrid(); markDirty();
+      return;
+    }
     const cell = e.target.closest(".seq-cell");
     if (!cell) return;
     const s = Number(cell.dataset.step), o = Number(cell.dataset.off);
+    data[s] &= ~HOLD_BIT;                 // poser une note annule la tenue du pas
     const avant = stepHas(data[s], o);
     if (accordsActifs) data[s] ^= (1 << o);      // une hauteur de plus ou de moins
     else data[s] = avant ? 0 : ((1 << o) | (data[s] & ACC_BIT));  // mono : elle remplace
@@ -1206,10 +1267,11 @@
       const sd = stepDur();
       const when = nextStepTime + (seqStep % 2 ? master.swing * sd : 0);
       tracks.forEach((tr, i) => {
-        const v = patterns[pat][i][seqStep % STEPS];
+        const suite = patterns[pat][i];
+        const v = suite[seqStep % STEPS];
         if (stepEmpty(v)) return;
         if (tr.mute || (solos && !tr.solo)) return;
-        playStep(rig, i, v, when, sd * 0.9);
+        playStep(rig, i, v, when, sd * (stepSpan(suite, seqStep % STEPS) - 1 + 0.9));
       });
       stepQueue.push({ step: seqStep % STEPS, time: when, pattern: pat, pos: chainPos });
       nextStepTime += sd;
@@ -1229,6 +1291,7 @@
     const col = seqCells[step];
     if (col) col.forEach(c => c && c.classList.add("playhead"));
     if (accCells[step]) accCells[step].classList.add("playhead");
+    if (holdCells[step]) holdCells[step].classList.add("playhead");
   }
 
   const seqPlayBtn = document.getElementById("seqPlay");
@@ -1596,10 +1659,11 @@
         ? chain[Math.floor(step / STEPS) % chain.length] : editPattern;
       const when = step * sd + (step % 2 ? master.swing * sd : 0);
       tracks.forEach((tr, i) => {
-        const v = patterns[pat][i][step % STEPS];
+        const suite = patterns[pat][i];
+        const v = suite[step % STEPS];
         if (stepEmpty(v)) return;
         if (tr.mute || (solos && !tr.solo)) return;
-        playStep(orig, i, v, when, sd * 0.9);
+        playStep(orig, i, v, when, sd * (stepSpan(suite, step % STEPS) - 1 + 0.9));
       });
     }
     return octx.startRendering();
@@ -1903,7 +1967,7 @@
   ];
 
   function encodeStep(m) {
-    if (stepEmpty(m)) return "-";
+    if (stepEmpty(m)) return stepHold(m) ? "=" : "-";
     const ns = stepNotes(m), acc = stepAccent(m);
     if (ns.length === 1) return acc ? ACC_CHARS[ns[0]] : LOW_CHARS[ns[0]];
     return (acc ? "!(" : "(") + ns.map(x => LOW_CHARS[x]).join("") + ")";
@@ -1917,6 +1981,7 @@
     while (i < str.length && s < STEPS) {
       let ch = str[i], acc = false;
       if (ch === "-") { i++; s++; continue; }
+      if (ch === "=") { out[s++] = HOLD_BIT; i++; continue; }
       if (ch === "!") { acc = true; ch = str[++i]; }
       if (ch === "(") {
         let m = acc ? ACC_BIT : 0;

@@ -94,6 +94,20 @@ C'est une préférence d'édition, pas une donnée du morceau : elle survit au c
 
 Dans les morceaux fournis, les nappes de *Ascension*, *Nébuleuse* et *Orage* sont désormais de vraies triades, et le piano électrique de *Rhodes* enchaîne une progression accordée. Le studio 8-bit garde ses lignes monophoniques : c'est ce que faisaient les consoles, une voix par canal.
 
+## La durée des notes
+
+Chaque pas jouait une note de longueur fixe, un peu plus courte que le pas lui-même. Une nappe retombait donc avant le pas suivant : impossible de tenir un accord.
+
+La rangée **Tenue**, sous la rangée d'accents, corrige ça. Un pas marqué *tenue* ne relance rien : il **prolonge la note précédente**. Trois pas tenus à la suite d'une note lui donnent quatre pas de long, et la grille dessine la note étirée sur toute sa durée, en retrait — on lit le rythme d'un coup d'œil.
+
+Un pas ne peut pas à la fois poser une note et en prolonger une : marquer *tenue* sur un pas occupé est refusé avec un message, et poser une note sur un pas tenu annule sa tenue. Une tenue ne franchit pas la fin du motif — ni, dans le studio 8-bit, la longueur de boucle de la piste.
+
+Une précision qui compte à l'oreille : la durée agit comme un **minimum**, pas comme un couperet. L'enveloppe de l'instrument va au bout de son déclin dans tous les cas ; la tenue ne peut qu'allonger une note, jamais l'écourter. Sur un timbre percussif — marimba, piano électrique — elle ne changera donc presque rien, ce qui est musicalement juste : un Rhodes décroît tout seul. Sur une nappe, un cuivre ou un orgue, la différence est franche. Mesurée sur le rendu WAV : le niveau efficace entre 1 et 1,4 seconde passe de 77 à 2083 avec douze pas tenus.
+
+La batterie du studio trance n'a pas de rangée *Tenue* — prolonger un charleston n'a pas de sens, la version ouverte est déjà une voix à part.
+
+Dans les liens partagés, un pas tenu s'écrit `=` : `(047)===` est un Do majeur qui dure quatre pas.
+
 ## Quatre motifs enchaînés
 
 Le séquenceur contient **quatre motifs de 16 pas**, nommés A à D. Les pistes gardent leurs instruments d'un motif à l'autre : changer de motif change ce qui est joué, jamais le son.
@@ -141,6 +155,7 @@ Le décodage est tolérant : un lien tronqué, altéré ou d'une version inconnu
 - **Séquenceur 4 motifs × 16 pas × 3 pistes** : mode boucle ou mode morceau avec chaîne de motifs, bande de résumé des trois pistes, piano-roll détaillé d'une octave avec les notes des autres pistes en repère, tempo 60–240 BPM et horloge audio précise (lookahead).
 - **Groove** : accents par pas, swing jusqu'à 50 %, et longueur de boucle réglable piste par piste pour des polyrythmies.
 - **Accords** : autant de hauteurs qu'on veut sur un même pas, à la souris ou au clavier — les touches encore tenues se groupent sur le pas courant. Un bouton **Accords / Mono** ramène le séquenceur à une note par pas quand on préfère.
+- **Durée de note** : une rangée **Tenue** prolonge une note sur les pas suivants, pour les nappes tenues et les basses legato.
 - **Balayage de hauteur** par piste : −24 à +24 demi-tons sur la durée de la note.
 - **5 presets** : Lead GB, Basse, Cristal, Percu, Sirène — applicables à la piste sélectionnée.
 - **Bibliothèque de 7 morceaux** prêts à jouer, plus un emplacement vierge, écrits en clair dans le source.
@@ -180,7 +195,7 @@ Le mappage utilise la position physique des touches, donc il fonctionne aussi bi
 - **Délai pointé de 3/16** — calé sur le tempo, avec retour réglable.
 - **Panoramique** par piste.
 
-**Motifs de 32 pas** (deux mesures), **accords** sur chaque pas — les nappes des trois morceaux en sont faites —, quatre motifs enchaînables, trois morceaux fournis — *Ascension* (138 BPM, uplifting), *Nébuleuse* (132, plus profond), *Orage* (142, agressif) — plus un emplacement vierge.
+**Motifs de 32 pas** (deux mesures), **accords** sur chaque pas et **notes tenues** — les nappes des trois morceaux sont des triades tenues sur la mesure entière —, quatre motifs enchaînables, trois morceaux fournis — *Ascension* (138 BPM, uplifting), *Nébuleuse* (132, plus profond), *Orage* (142, agressif) — plus un emplacement vierge.
 
 ## La boîte à rythmes 909
 
