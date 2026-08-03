@@ -84,6 +84,14 @@ Au clavier, avec **Enreg. clavier** armé, la règle est celle d'un musicien : *
 
 La transposition déplace l'accord entier, et refuse toujours plutôt que d'écraser : si une seule de ses notes devait sortir de la grille, rien ne bouge.
 
+### Accords ou Mono
+
+Le bouton **Accords**, dans la barre d'outils du séquenceur, bascule sur **Mono** : un pas ne retient plus qu'une hauteur, la note posée remplace celle qui occupait le pas, et les touches tenues ensemble ne se groupent plus. C'est le comportement d'avant, utile pour une ligne de basse ou de mélodie qu'on ne veut pas épaissir par mégarde.
+
+Le mode ne touche **qu'à la saisie**. Un motif déjà écrit garde ses accords et continue de les jouer — passer en Mono n'efface jamais rien, il empêche seulement d'en créer. L'accent, lui, reste attaché au pas dans les deux modes.
+
+C'est une préférence d'édition, pas une donnée du morceau : elle survit au chargement d'un titre de la bibliothèque, et elle voyage dans le lien partagé pour qu'un morceau rouvert reparte dans le mode où on l'a laissé.
+
 Dans les morceaux fournis, les nappes de *Ascension*, *Nébuleuse* et *Orage* sont désormais de vraies triades, et le piano électrique de *Rhodes* enchaîne une progression accordée. Le studio 8-bit garde ses lignes monophoniques : c'est ce que faisaient les consoles, une voix par canal.
 
 ## Quatre motifs enchaînés
@@ -132,7 +140,7 @@ Le décodage est tolérant : un lien tronqué, altéré ou d'une version inconnu
 - **Arpégiateur** : modes montant, descendant, aller-retour et aléatoire, vitesse réglable — maintenez plusieurs notes pour lancer l'arpège.
 - **Séquenceur 4 motifs × 16 pas × 3 pistes** : mode boucle ou mode morceau avec chaîne de motifs, bande de résumé des trois pistes, piano-roll détaillé d'une octave avec les notes des autres pistes en repère, tempo 60–240 BPM et horloge audio précise (lookahead).
 - **Groove** : accents par pas, swing jusqu'à 50 %, et longueur de boucle réglable piste par piste pour des polyrythmies.
-- **Accords** : autant de hauteurs qu'on veut sur un même pas, à la souris ou au clavier — les touches encore tenues se groupent sur le pas courant.
+- **Accords** : autant de hauteurs qu'on veut sur un même pas, à la souris ou au clavier — les touches encore tenues se groupent sur le pas courant. Un bouton **Accords / Mono** ramène le séquenceur à une note par pas quand on préfère.
 - **Balayage de hauteur** par piste : −24 à +24 demi-tons sur la durée de la note.
 - **5 presets** : Lead GB, Basse, Cristal, Percu, Sirène — applicables à la piste sélectionnée.
 - **Bibliothèque de 7 morceaux** prêts à jouer, plus un emplacement vierge, écrits en clair dans le source.

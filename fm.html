@@ -313,6 +313,9 @@
         <button id="trDown">&minus;½ ton</button>
         <button id="trUp">+½ ton</button>
         <button id="revBtn">Inverser</button>
+        <span class="sep"></span>
+        <span class="tag">Saisie</span>
+        <button id="polyBtn" class="selected" title="Plusieurs notes par pas — cliquez pour revenir au monophonique">Accords</button>
         <button id="seqClear">Effacer piste</button>
         <span class="sep"></span>
         <button id="undoBtn" disabled>Annuler</button>
@@ -342,8 +345,10 @@
         </div>
       </div>
       <div class="hint">
-        Un clic pose une note, un deuxième l'<b>accentue</b>, un troisième l'efface.
-        <b>Espace</b> lance ou arrête, <b>Ctrl+Z</b> annule.
+        Un clic pose une note, un second l'efface ; empilez-en plusieurs dans une
+        colonne pour faire un <b>accord</b>, ou passez le bouton <b>Accords</b> sur
+        <b>Mono</b> pour n'en garder qu'une par pas. La rangée <b>Acc.</b> accentue
+        le pas entier. <b>Espace</b> lance ou arrête, <b>Ctrl+Z</b> annule.
       </div>
     </fieldset>
 
@@ -509,6 +514,7 @@
 
   const patterns = Array.from({ length: PATTERN_COUNT }, () => tracks.map(() => emptySteps()));
   let editPattern = 0, chain = [0], songMode = false, followPlayback = true, chainPos = 0;
+  let accordsActifs = true;   // false = une seule note par pas à l'édition
   const livePattern = () => (songMode && chain.length) ? chain[chainPos % chain.length] : editPattern;
   const editData = i => patterns[editPattern][i];
 
@@ -970,7 +976,8 @@
     if (!cell) return;
     const s = Number(cell.dataset.step), o = Number(cell.dataset.off);
     const avant = stepHas(data[s], o);
-    data[s] ^= (1 << o);                 // une hauteur de plus ou de moins
+    if (accordsActifs) data[s] ^= (1 << o);      // une hauteur de plus ou de moins
+    else data[s] = avant ? 0 : ((1 << o) | (data[s] & ACC_BIT));  // mono : elle remplace
     if (stepEmpty(data[s])) data[s] = 0;  // plus aucune note : on efface l'accent
     refreshSeqGrid(); markDirty();
     if (!seqPlaying && !avant) {
@@ -1182,6 +1189,22 @@
   document.getElementById("trUp").addEventListener("click", () => transposePattern(1));
   document.getElementById("revBtn").addEventListener("click", reversePattern);
 
+  // ------- Accords ou monophonie -------
+  // Le mode ne touche qu'à l'édition : un motif déjà écrit garde ses accords et
+  // continue de les jouer. Il empêche d'en créer, il n'en détruit aucun.
+  const polyBtn = document.getElementById("polyBtn");
+  function setPoly(on) {
+    accordsActifs = on;
+    polyBtn.classList.toggle("selected", on);
+    polyBtn.textContent = on ? "Accords" : "Mono";
+    polyBtn.title = on
+      ? "Plusieurs notes par pas — cliquez pour revenir au monophonique"
+      : "Une seule note par pas — cliquez pour autoriser les accords";
+  }
+  polyBtn.addEventListener("click", () => { setPoly(!accordsActifs); markDirty(); });
+  setPoly(accordsActifs);
+
+
   let toolTimer = null;
   const toolMsg = document.getElementById("toolMsg");
   function flashTool(msg) {
@@ -1213,12 +1236,14 @@
     } else {
       // une note encore tenue : la suivante rejoint le même pas, et l'accord
       // se forme. Un critère de temps prendrait une mélodie rapide pour un accord.
-      const groupe = voices.size > 0;
+      const groupe = accordsActifs && voices.size > 0;
       s = groupe ? (writeStep - 1 + STEPS) % STEPS : writeStep;
       if (!groupe) writeStep = (writeStep + 1) % STEPS;
     }
     const k = ((s % STEPS) + STEPS) % STEPS;
-    editData(currentTrack)[k] |= (1 << note);
+    const data = editData(currentTrack);
+    if (accordsActifs) data[k] |= (1 << note);
+    else data[k] = (1 << note) | (data[k] & ACC_BIT);
     refreshSeqGrid(); markDirty();
   }
   function moveWriteStep(delta, erase) {
@@ -1286,6 +1311,7 @@
     modeLoopBtn.classList.toggle("selected", !songMode);
     modeSongBtn.classList.toggle("selected", songMode);
     followBtn.disabled = !songMode;
+    setPoly(accordsActifs);
     loadPatchIntoControls();
     refreshKeyLabels();
     refreshTrackGains();
@@ -1703,7 +1729,7 @@
   function encodeState() {
     const head = [URL_VERSION, master.bpm, master.volume * 100, master.chorus * 100,
                   master.reverb * 100, currentTrack, currentOp, editPattern,
-                  songMode ? 1 : 0].map(b36).join(".");
+                  songMode ? 1 : 0, accordsActifs ? 1 : 0].map(b36).join(".");
     const body = tracks.map((tr, i) => {
       const p = tr.patch;
       const nums = [p.algo, p.feedback, p.octave, tr.vol * 100,
@@ -1745,6 +1771,7 @@
     currentOp = clamp(p36(h[6], 0), 0, NOPS - 1);
     editPattern = clamp(p36(h[7], 0), 0, PATTERN_COUNT - 1);
     songMode = p36(h[8], 0) === 1;
+    accordsActifs = p36(h[9], 1) === 1;
 
     chain = (parts[1] || "").split("")
       .map(c => parseInt(c, 10))
@@ -1881,6 +1908,7 @@
   buildSeqGrid();
   refreshChain();
   setSongMode(songMode);
+  setPoly(accordsActifs);
   followBtn.classList.toggle("selected", followPlayback);
   loadPatchIntoControls();
   drawAlgo();

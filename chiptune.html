@@ -517,6 +517,9 @@
         <button id="trUp" title="Transposer d'un demi-ton vers le haut">+&frac12; ton</button>
         <button id="revBtn" title="Lire le motif à l'envers">Inverser</button>
         <span class="sep"></span>
+        <span class="tag">Saisie</span>
+        <button id="polyBtn" class="selected" title="Plusieurs notes par pas — cliquez pour revenir au monophonique">Accords</button>
+        <span class="sep"></span>
         <button id="undoBtn" title="Annuler (Ctrl+Z)" disabled>&#8630; Annuler</button>
         <button id="redoBtn" title="Rétablir (Ctrl+Maj+Z)" disabled>Rétablir &#8631;</button>
         <span class="tool-msg" id="toolMsg"></span>
@@ -550,8 +553,10 @@
       <div class="hint" style="text-align:left; margin-top:6px">
         Quatre motifs de 16 pas, <b>A</b> à <b>D</b> : les pistes gardent leurs
         instruments, seul le contenu des pas change. Cliquez une case pour poser
-        une note, une deuxième fois pour l'<b>accentuer</b>, une troisième pour
-        l'effacer. En <b>Boucle</b>, le motif affiché tourne en rond ; en
+        une note, une seconde fois pour l'effacer ; empilez-en plusieurs dans
+        une colonne pour faire un <b>accord</b>, ou passez le bouton
+        <b>Accords</b> sur <b>Mono</b> pour n'en garder qu'une par pas. La
+        rangée <b>Acc.</b> accentue le pas entier. En <b>Boucle</b>, le motif affiché tourne en rond ; en
         <b>Morceau</b>, la chaîne se déroule puis reprend — cliquez un maillon
         pour le retirer. <b>Espace</b> lance ou arrête la lecture, et
         <b>Partager</b> copie un lien qui contient tout.
@@ -737,6 +742,7 @@
   let editPattern = 0;        // motif affiché dans la grille
   let chain = [0];            // enchaînement en mode morceau
   let songMode = false;       // false = boucle le motif édité
+  let accordsActifs = true;   // false = une seule note par pas à l'édition
   let followPlayback = true;  // en mode morceau, la grille suit la lecture
   let chainPos = 0;
 
@@ -1248,7 +1254,8 @@
     if (!cell) return;
     const s = Number(cell.dataset.step), o = Number(cell.dataset.off);
     const avant = stepHas(data[s], o);
-    data[s] ^= (1 << o);                  // une hauteur de plus ou de moins
+    if (accordsActifs) data[s] ^= (1 << o);      // une hauteur de plus ou de moins
+    else data[s] = avant ? 0 : ((1 << o) | (data[s] & ACC_BIT));  // mono : elle remplace
     if (stepEmpty(data[s])) data[s] = 0;  // plus aucune note : l'accent tombe
     refreshSeqGrid();
     markDirty();
@@ -1507,6 +1514,7 @@
     modeLoopBtn.classList.toggle("selected", !songMode);
     modeSongBtn.classList.toggle("selected", songMode);
     followBtn.disabled = !songMode;
+    setPoly(accordsActifs);
     loadPatchIntoControls();
     refreshKeyLabels();
     refreshTrackGains();
@@ -1576,11 +1584,13 @@
     } else {
       // une note encore tenue : la suivante rejoint le même pas, et l'accord
       // se forme. Un critère de temps prendrait une mélodie rapide pour un accord.
-      const groupe = voices.size > 0 || held.length > 0;
+      const groupe = accordsActifs && (voices.size > 0 || held.length > 0);
       s = groupe ? (writeStep - 1 + len) % len : writeStep;
       if (!groupe) writeStep = (writeStep + 1) % len;
     }
-    data[((s % len) + len) % len] |= (1 << note);
+    const k = ((s % len) + len) % len;
+    if (accordsActifs) data[k] |= (1 << note);
+    else data[k] = (1 << note) | (data[k] & ACC_BIT);
     refreshSeqGrid();
     markDirty();
   }
@@ -1695,6 +1705,22 @@
   document.getElementById("trDown").addEventListener("click", () => transposePattern(-1));
   document.getElementById("trUp").addEventListener("click", () => transposePattern(1));
   document.getElementById("revBtn").addEventListener("click", reversePattern);
+
+  // ------- Accords ou monophonie -------
+  // Le mode ne touche qu'à l'édition : un motif déjà écrit garde ses accords et
+  // continue de les jouer. Il empêche d'en créer, il n'en détruit aucun.
+  const polyBtn = document.getElementById("polyBtn");
+  function setPoly(on) {
+    accordsActifs = on;
+    polyBtn.classList.toggle("selected", on);
+    polyBtn.textContent = on ? "Accords" : "Mono";
+    polyBtn.title = on
+      ? "Plusieurs notes par pas — cliquez pour revenir au monophonique"
+      : "Une seule note par pas — cliquez pour autoriser les accords";
+  }
+  polyBtn.addEventListener("click", () => { setPoly(!accordsActifs); markDirty(); });
+  setPoly(accordsActifs);
+
 
   // ------- Export WAV hors ligne -------
   // Le morceau est rendu plus vite que le temps réel dans un contexte hors
@@ -2146,7 +2172,8 @@
     const head = [URL_VERSION, master.bpm, master.volume * 100, master.echoMix * 100,
                   master.echoTime * 100, master.echoFb * 100, currentTrack,
                   Math.max(0, ARP_MODES.indexOf(master.arpMode)), master.arpRate * 2,
-                  editPattern, songMode ? 1 : 0, master.swing * 100].map(b36).join(".");
+                  editPattern, songMode ? 1 : 0, master.swing * 100,
+                  accordsActifs ? 1 : 0].map(b36).join(".");
     const body = tracks.map((tr, i) => {
       const nums = TRACK_FIELDS.map(f => b36(f.get(tr))).join(".");
       const blob = patterns.map(pat => encodeSteps(pat[i])).join("_");
@@ -2191,6 +2218,7 @@
     if (ver >= 2) {
       editPattern = clamp(p36(h[9], 0), 0, PATTERN_COUNT - 1);
       songMode = p36(h[10], 0) === 1;
+      accordsActifs = p36(h[12], 1) === 1;
       chain = (parts[1] || "").split("")
         .map(c => parseInt(c, 10))
         .filter(n => Number.isInteger(n) && n >= 0 && n < PATTERN_COUNT)
@@ -2353,6 +2381,7 @@
   buildSeqGrid();
   refreshChain();
   setSongMode(songMode);
+  setPoly(accordsActifs);
   followBtn.classList.toggle("selected", followPlayback);
   loadPatchIntoControls();
   lastSnapshot = encodeState();
