@@ -433,6 +433,15 @@ Le **tempo** du montage ne change aucun son : il sert seulement à exprimer les 
 
 Le mixage passe par un **limiteur** avec une attaque de 0,5 ms : quatre pistes qui s'additionnent dépassent vite le plein niveau, et sans lui le rendu saturerait. La lecture et l'export partagent exactement le même graphe audio, donc le fichier est ce qu'on a entendu.
 
+## Rejouer un morceau dans un vrai séquenceur
+
+Le dossier [`ableton/`](ableton/) contient de quoi reprendre *Éclipse* ailleurs que dans le navigateur :
+
+- **`Eclipse.mid`** — fichier MIDI de type 1, à glisser dans l'Arrangement. Cinq pistes nommées d'après l'instrument à y poser, 10 mesures, 90 notes, 126 BPM, batterie sur le canal 10 aux hauteurs General MIDI, et trois repères qui marquent la structure `A A B B C`. Tout y est modifiable, note à note.
+- **`Eclipse-Ableton.md`** — les sons, relevés dans le moteur de la page plutôt que reconstitués : oscillateurs, enveloppes, filtres, départs, faders, sidechain. Le morceau se rebâtit **avec l'édition de base** de Live : `Drift` et son mode Unison remplacent `Wavetable`, absent d'Intro et de Lite.
+- **`eclipse-midi.py`** — le générateur. Il relit le morceau directement dans `trance.html`, donc le MIDI ne peut pas diverger de ce que la page joue.
+- **`verif-midi.py`** — le vérificateur, qui relit le fichier produit sans rien supposer de la façon dont il a été écrit : hauteurs, durées, chevauchements, notes jamais relâchées.
+
 ## Structure
 
 Huit fichiers autonomes, sans dépendance ni build :
