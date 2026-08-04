@@ -204,6 +204,8 @@ Le mappage utilise la position physique des touches, donc il fonctionne aussi bi
 - **Ctrl+Z** / **Ctrl+Maj+Z** : annuler, rétablir
 - **← / →** (enregistrement armé) : reculer en effaçant, avancer sans écrire
 
+Le bouton **Lecture** figure deux fois : en tête de la section *Pistes*, et à sa place d'origine dans la barre du séquenceur, huit cents pixels plus bas. Les deux font la même chose et affichent toujours le même état — on ne remonte pas la page pour lancer la lecture.
+
 ## Le studio trance
 
 [`trance.html`](trance.html) reprend l'architecture du séquenceur mais change tout le reste.

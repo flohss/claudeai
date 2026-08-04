@@ -252,6 +252,9 @@
 
     <fieldset class="mixer">
       <legend>Pistes</legend>
+      <div class="bar">
+        <button id="seqPlay2">&#9654; Lecture</button>
+      </div>
       <div id="mixer"></div>
       <div class="hint">
         Cliquez un nom de piste pour l'éditer et la jouer au clavier (touches
@@ -867,7 +870,7 @@
     seqPlaying = true; seqStep = 0; chainPos = 0;
     nextStepTime = ctx.currentTime + 0.08;
     stepQueue = [];
-    seqPlayBtn.innerHTML = "&#9632; Arrêt";
+    majLecture("&#9632; Arrêt", true);
     seqScheduler();
     timer = setInterval(seqScheduler, 25);
     requestAnimationFrame(suivrePlayhead);
@@ -878,7 +881,7 @@
     setPlayhead(-1);
     livePat = -1;
     refreshChain(); refreshPatternButtons();
-    seqPlayBtn.innerHTML = "&#9654; Lecture";
+    majLecture("&#9654; Lecture", false);
   }
   function suivrePlayhead() {
     if (!seqPlaying) return;
@@ -1958,7 +1961,15 @@
   });
 
   const seqPlayBtn = document.getElementById("seqPlay");
-  seqPlayBtn.addEventListener("click", () => seqPlaying ? seqStop() : seqStart());
+  // Le séquenceur est loin en bas : ce second bouton fait exactement la même
+  // chose, et les deux affichent toujours le même état.
+  const seqPlayBtns = [seqPlayBtn, document.getElementById("seqPlay2")].filter(Boolean);
+  const majLecture = (html, actif) => seqPlayBtns.forEach(b => {
+    b.innerHTML = html;
+    b.classList.toggle("selected", actif);
+  });
+  seqPlayBtns.forEach(b =>
+    b.addEventListener("click", () => seqPlaying ? seqStop() : seqStart()));
 
   // ------- Info-bulles -------
   const INFOS = {
@@ -1978,6 +1989,7 @@
     "octUp": "Monte l'instrument de la piste d'une octave. Le motif ne bouge pas, seule sa hauteur change.",
     "octDown": "Descend l'instrument de la piste d'une octave.",
     "seqPlay": "Lance ou arrête le séquenceur. La barre d'espace fait la même chose.",
+    "seqPlay2": "Lance ou arrête le séquenceur. La barre d'espace fait la même chose.",
     "dupBtn": "Recopie le motif affiché dans le premier emplacement libre.",
     "trUp": "Transpose tout le motif d'un demi-ton vers le haut. Refuse plutôt que d'écraser si une note sortirait de la grille.",
     "trDown": "Transpose tout le motif d'un demi-ton vers le bas.",

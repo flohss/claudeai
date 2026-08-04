@@ -282,6 +282,9 @@
 
     <fieldset class="mixer">
       <legend>Pistes</legend>
+      <div class="bar">
+        <button id="seqPlay2">&#9654; Lecture</button>
+      </div>
       <div id="mixer"></div>
       <div class="hint">
         Cliquez un nom de piste pour l'éditer et la jouer au clavier (touches <b>1</b> à <b>3</b>).
@@ -1237,6 +1240,13 @@
   }
 
   const seqPlayBtn = document.getElementById("seqPlay");
+  // Le séquenceur est loin en bas : ce second bouton fait exactement la même
+  // chose, et les deux affichent toujours le même état.
+  const seqPlayBtns = [seqPlayBtn, document.getElementById("seqPlay2")].filter(Boolean);
+  const majLecture = (html, actif) => seqPlayBtns.forEach(b => {
+    b.innerHTML = html;
+    b.classList.toggle("selected", actif);
+  });
 
   function seqStart() {
     initAudio();
@@ -1246,8 +1256,7 @@
     stepQueue = [];
     seqTimer = setInterval(seqScheduler, 25);
     seqScheduler();
-    seqPlayBtn.innerHTML = "&#9632; Stop";
-    seqPlayBtn.classList.add("selected");
+    majLecture("&#9632; Stop", true);
     refreshSeqGrid();
   }
 
@@ -1258,11 +1267,11 @@
     setPlayhead(-1);
     livePat = -1;
     refreshChain(); refreshPatternButtons();
-    seqPlayBtn.innerHTML = "&#9654; Lecture";
-    seqPlayBtn.classList.remove("selected");
+    majLecture("&#9654; Lecture", false);
   }
 
-  seqPlayBtn.addEventListener("click", () => seqPlaying ? seqStop() : seqStart());
+  seqPlayBtns.forEach(b =>
+    b.addEventListener("click", () => seqPlaying ? seqStop() : seqStart()));
   document.getElementById("seqClear").addEventListener("click", () => {
     editData(currentTrack).fill(0); refreshSeqGrid(); markDirty();
   });
@@ -2242,6 +2251,7 @@
       "reverb": "Quantité de réverbération sur l'ensemble du mixage.",
       "bpm": "Tempo en pulsations par minute. Un pas de la grille vaut une double-croche.",
       "seqPlay": "Lance ou arrête le séquenceur. La barre d'espace fait la même chose.",
+      "seqPlay2": "Lance ou arrête le séquenceur. La barre d'espace fait la même chose.",
       "dupBtn": "Recopie le motif affiché dans le premier emplacement libre.",
       "polyBtn": "Accords : plusieurs hauteurs par pas. Mono : la note posée remplace celle qui occupait le pas.",
       "trUp": "Transpose tout le motif d'un demi-ton vers le haut. Refuse plutôt que d'écraser si une note sortirait de la grille.",
