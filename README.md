@@ -319,6 +319,22 @@ Deux détails de fabrication :
 
 La basse acide n'a pas ce bouton : elle est monophonique, il n'y a rien à séparer.
 
+## Sortir les notes en MIDI
+
+**Exporter MIDI** écrit le morceau en fichier **MIDI de type 1** : une piste par partie, plus une piste d'entête qui porte le tempo, la mesure en 4/4 et **un repère par maillon de la chaîne**. Déposé dans un séquenceur, il donne autant de pistes nommées, tout modifiable note à note.
+
+Ce qui s'y trouve :
+
+- Les **accords** deviennent des notes simultanées, les **tenues** des notes longues, les **accents** une vélocité de 112 contre 88.
+- Le **swing est écrit tel qu'on l'entend**, plutôt que laissé au séquenceur d'accueil.
+- Les batteries — la piste du studio trance et la 909 entière — partent sur le **canal 10** aux hauteurs General MIDI : elles tombent juste dans un Drum Rack sans rien régler. La 909 tient sur une seule piste, parce qu'un Drum Rack *est* déjà la vue multipiste d'une boîte à rythmes : un pad par voix.
+- Le **glissando** de la 303 s'écrit en liaison, la note débordant sur la suivante — ce que tout synthé monophonique en mode legato relit comme un portamento.
+- Les noms de piste sont ramenés à l'**ASCII** : la norme MIDI ne garantit pas l'UTF-8, et un accent mal lu donne une piste au nom illisible.
+
+Un fichier MIDI ne transporte **aucun son**. Pour les timbres, il y a l'export ZIP ci-dessus ; pour les rebâtir à la main, [`ableton/Eclipse-Ableton.md`](ableton/Eclipse-Ableton.md) montre la méthode sur un morceau.
+
+Une note de fabrication : ce même morceau avait déjà été écrit en MIDI par un script Python, hors navigateur, à partir du source de la page. Les deux implémentations produisent aujourd'hui **exactement les mêmes notes** — même tic, même hauteur, même vélocité, sur les 90 notes d'*Éclipse*. C'est la vérification qui compte, plus que n'importe quel test unitaire.
+
 ## Sauvegarder un morceau en JSON
 
 Le lien partagé est compact mais illisible. **Exporter JSON** enregistre le même morceau dans un fichier fait pour être ouvert : valeurs réelles au lieu de base 36, une entrée par piste, et les motifs dans la notation documentée plus haut.
@@ -454,7 +470,7 @@ Le dossier [`ableton/`](ableton/) contient de quoi reprendre *Éclipse* ailleurs
 
 - **`Eclipse.mid`** — fichier MIDI de type 1, à glisser dans l'Arrangement. Cinq pistes nommées d'après l'instrument à y poser, 10 mesures, 90 notes, 126 BPM, batterie sur le canal 10 aux hauteurs General MIDI, et trois repères qui marquent la structure `A A B B C`. Tout y est modifiable, note à note.
 - **`Eclipse-Ableton.md`** — les sons, relevés dans le moteur de la page plutôt que reconstitués : oscillateurs, enveloppes, filtres, départs, faders, sidechain. Le morceau se rebâtit **avec l'édition de base** de Live : `Drift` et son mode Unison remplacent `Wavetable`, absent d'Intro et de Lite.
-- **`eclipse-midi.py`** — le générateur. Il relit le morceau directement dans `trance.html`, donc le MIDI ne peut pas diverger de ce que la page joue.
+- **`eclipse-midi.py`** — le générateur d'origine, écrit avant que les studios sachent le faire eux-mêmes. Il relit le morceau directement dans `trance.html`. Il sert aujourd'hui de **contre-épreuve** au bouton *Exporter MIDI* : deux implémentations séparées, mêmes notes au tic près.
 - **`verif-midi.py`** — le vérificateur, qui relit le fichier produit sans rien supposer de la façon dont il a été écrit : hauteurs, durées, chevauchements, notes jamais relâchées.
 - **`eclipse-stems.js`** — rend le morceau **piste par piste** en solotant chaque piste tour à tour, plus le mixage complet. Les WAV ne sont pas versionnés — 27 Mo pour six fichiers — mais se regénèrent en une commande. Le studio sait maintenant le faire tout seul : voir **Exporter ZIP** plus haut.
 

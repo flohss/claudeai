@@ -328,6 +328,7 @@
         <button id="seqClear">Effacer</button>
         <button id="armBtn">Enreg. clavier</button>
         <button id="wavBtn">Exporter WAV</button>
+        <button id="midiBtn" title="Écrire le morceau en fichier MIDI, une piste par partie">Exporter MIDI</button>
         <button id="shareBtn">Partager</button>
         <button id="jsonOut">Exporter JSON</button>
         <button id="jsonIn">Importer JSON</button>
@@ -1580,6 +1581,102 @@
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 4000);
   }
+  // ------- Export MIDI -------
+  // Fichier de type 1 : une piste par partie, plus une piste d'entête qui porte
+  // le tempo, la mesure et un repère par maillon de la chaîne. Les noms sont
+  // ramenés à l'ASCII — la norme MIDI ne garantit pas l'UTF-8, et un accent mal
+  // lu donne une piste au nom illisible.
+  const MIDI_TPQ = 480, MIDI_PAS = MIDI_TPQ / 4;   // un pas = une double-croche
+  const sansAccent = s => (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "")
+                                   .replace(/[^\x20-\x7E]/g, "");
+  function midiVarlen(n) {
+    const o = [n & 0x7F]; n >>>= 7;
+    while (n) { o.unshift((n & 0x7F) | 0x80); n >>>= 7; }
+    return o;
+  }
+  const midiMot32 = n => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];
+  const midiMeta = (code, charge) => [0xFF, code].concat(midiVarlen(charge.length), charge);
+  const midiTexte = s => [...sansAccent(s)].map(c => c.charCodeAt(0));
+  const midiBloc = o => [0x4D, 0x54, 0x72, 0x6B].concat(midiMot32(o.length), o);
+  // notes : [{ t, note, velo, duree }], en tics
+  function midiPiste(nom, notes, canal, prog) {
+    let d = [0].concat(midiMeta(0x03, midiTexte(nom)));
+    if (prog !== null && prog !== undefined) d = d.concat([0, 0xC0 | canal, prog]);
+    const msgs = [];
+    for (const n of notes) {
+      msgs.push([n.t, 1, 0x90 | canal, n.note, n.velo]);
+      msgs.push([n.t + n.duree, 0, 0x80 | canal, n.note, 0]);
+    }
+    msgs.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    let prec = 0;
+    for (const m of msgs) { d = d.concat(midiVarlen(m[0] - prec), [m[2], m[3], m[4]]); prec = m[0]; }
+    return midiBloc(d.concat([0], midiMeta(0x2F, [])));
+  }
+  const midiSuite = () => (songMode && chain.length) ? chain.slice() : [editPattern];
+  // le swing est écrit tel qu'on l'entend, pas laissé au séquenceur d'accueil
+  const midiDecalage = step => step % 2 ? Math.round((master.swing || 0) * MIDI_PAS) : 0;
+  function faireMidi() {
+    const usec = Math.round(60000000 / master.bpm);
+    let t = [0].concat(midiMeta(0x03, midiTexte("Basse acide")));
+    t = t.concat([0], midiMeta(0x51, [(usec >> 16) & 255, (usec >> 8) & 255, usec & 255]));
+    t = t.concat([0], midiMeta(0x58, [4, 2, 24, 8]));
+    let prec = 0;
+    midiSuite().forEach((pat, k) => {
+      const q = k * STEPS * MIDI_PAS;
+      t = t.concat(midiVarlen(q - prec), midiMeta(0x06, midiTexte("Motif " + PATTERN_NAMES[pat])));
+      prec = q;
+    });
+    const pistes = [midiBloc(t.concat([0], midiMeta(0x2F, [])))].concat(midiPistes());
+    let tout = [0x4D, 0x54, 0x68, 0x64, 0, 0, 0, 6, 0, 1,
+                (pistes.length >> 8) & 255, pistes.length & 255,
+                (MIDI_TPQ >> 8) & 255, MIDI_TPQ & 255];
+    for (const p of pistes) tout = tout.concat(p);
+    return new Blob([new Uint8Array(tout)], { type: "audio/midi" });
+  }
+  function telechargerFichier(blob, nom) {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = nom;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  }
+  const midiBtn = document.getElementById("midiBtn");
+  midiBtn.addEventListener("click", () => {
+    const label = midiBtn.textContent;
+    try {
+      telechargerFichier(faireMidi(), "acid303.mid");
+      midiBtn.textContent = "Exporté !";
+    } catch (e) {
+      midiBtn.textContent = "Échec";
+    }
+    setTimeout(() => { midiBtn.textContent = label; }, 1600);
+  });
+
+  function midiPistes() {
+    const suite = midiSuite();
+    const total = suite.length * STEPS;
+    const lus = [], notes = [];
+    for (let step = 0; step < total; step++)
+      lus.push(patterns[suite[Math.floor(step / STEPS)]][step % STEPS]);
+    for (let step = 0; step < total; step++) {
+      const v = lus[step];
+      if (stepEmpty(v)) continue;
+      let fin = step + 1;
+      while (fin < total && stepEmpty(lus[fin]) && stepHold(lus[fin])) fin++;
+      const t = step * MIDI_PAS + midiDecalage(step);
+      const bout = fin * MIDI_PAS + midiDecalage(fin);
+      let duree = Math.max(24, bout - t - 12);
+      // un glissando s'écrit en liaison : la note déborde sur la suivante, ce que
+      // tout synthé monophonique en mode legato relit comme un portamento. Vers
+      // la même hauteur, la liaison ne ferait qu'un recouvrement illisible.
+      if (fin < total && !stepEmpty(lus[fin]) && stepSlide(lus[fin]) &&
+          stepNote(lus[fin]) !== stepNote(v)) duree = bout - t + 30;
+      const velo = stepAccent(v) ? 112 : 88;
+      notes.push({ t, note: trackBase() + stepNote(v), velo, duree });
+    }
+    return [midiPiste("Basse acide", notes, 0, 38)];
+  }
+
   const wavBtn = document.getElementById("wavBtn");
   wavBtn.addEventListener("click", async () => {
     wavBtn.disabled = true;
@@ -1716,6 +1813,7 @@
     "revBtn": "Lit le motif à l'envers, du dernier pas au premier.",
     "armBtn": "Écrit dans le motif ce que vous jouez au clavier : quantifié pendant la lecture, pas à pas à l'arrêt.",
     "wavBtn": "Rend le motif en fichier WAV, avec exactement le même graphe audio que le direct.",
+    "midiBtn": "Écrit le morceau en fichier MIDI de type 1 : une piste par partie, le tempo, la mesure et un repère par maillon de la chaîne. Les notes, pas les sons — un MIDI ne transporte aucun timbre.",
     "shareBtn": "Copie un lien qui contient tout : motifs, glissandos, accents, courbe de filtre et réglages.",
     "jsonOut": "Enregistre la ligne entière dans un fichier JSON lisible, qui s'ouvre et se modifie dans n'importe quel éditeur de texte.",
     "jsonIn": "Recharge une ligne depuis un fichier JSON exporté d'ici. Ctrl+Z annule l'import.",
