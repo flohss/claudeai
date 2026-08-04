@@ -335,6 +335,7 @@
         <button id="seqPlay">&#9654; Lecture</button>
         <button id="armBtn" title="Écrire aux pads dans le motif">Enreg. pads</button>
         <button id="wavBtn" title="Rendre le groove en fichier WAV">Exporter WAV</button>
+        <button id="zipBtn" title="Rendre chaque voix dans son fichier, réunis en archive ZIP">Exporter ZIP</button>
         <button id="shareBtn">Partager</button>
         <button id="jsonOut">Exporter JSON</button>
         <button id="jsonIn">Importer JSON</button>
@@ -1349,7 +1350,7 @@
   // ------- Export WAV -------
   const songBars = () => (songMode && chain.length) ? chain.length : 4;
 
-  async function renderSong() {
+  async function renderSong(seule = null) {
     const rate = 44100;
     const sd = 60 / master.bpm / 4;
     const bars = songBars();
@@ -1364,14 +1365,15 @@
       applySweep(orig, sweeps[pat][step % STEPS], step * sd, sd);
       insts.forEach((it, i) => {
         const v = patterns[pat][i][step % STEPS];
-        if (v === null || v === undefined || it.mute) return;
+        if (v === null || v === undefined) return;
+        if (seule === null ? it.mute : i !== seule) return;
         playVoice(orig, i, when, v === ACCENT);
       });
     }
     return octx.startRendering();
   }
 
-  function encodeWav(buffer) {
+  function encodeWavBytes(buffer) {
     const chans = buffer.numberOfChannels, frames = buffer.length;
     const bytes = 44 + frames * chans * 2;
     const view = new DataView(new ArrayBuffer(bytes));
@@ -1393,8 +1395,130 @@
         off += 2;
       }
     }
-    return new Blob([view], { type: "audio/wav" });
+    return new Uint8Array(view.buffer);
   }
+  function encodeWav(buffer) {
+    return new Blob([encodeWavBytes(buffer)], { type: "audio/wav" });
+  }
+
+  // ------- Export ZIP : une piste par fichier -------
+  // L'archive est fabriquée à la main. La norme ZIP tient en trois structures,
+  // et la page n'a ainsi aucune bibliothèque à charger.
+  const TABLE_CRC = (() => {
+    const t = new Uint32Array(256);
+    for (let i = 0; i < 256; i++) {
+      let c = i;
+      for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      t[i] = c >>> 0;
+    }
+    return t;
+  })();
+  function crc32(u8) {
+    let c = 0xFFFFFFFF;
+    for (let i = 0; i < u8.length; i++) c = TABLE_CRC[(c ^ u8[i]) & 0xFF] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  }
+  // Le navigateur sait dégonfler tout seul ; là où il ne sait pas, les fichiers
+  // sont rangés tels quels, ce qui reste une archive parfaitement valide.
+  async function degonfler(u8) {
+    if (typeof CompressionStream !== "function") return null;
+    try {
+      const flux = new Blob([u8]).stream().pipeThrough(new CompressionStream("deflate-raw"));
+      return new Uint8Array(await new Response(flux).arrayBuffer());
+    } catch (e) { return null; }
+  }
+  async function faireZip(fichiers) {
+    const enc = new TextEncoder();
+    const d = new Date();
+    const heureDos = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
+    const dateDos = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+    const corps = [], central = [];
+    let position = 0, tailleCentral = 0;
+    for (const f of fichiers) {
+      const nom = enc.encode(f.nom);
+      const crc = crc32(f.data);
+      let comp = await degonfler(f.data), methode = 8;
+      if (!comp || comp.length >= f.data.length) { comp = f.data; methode = 0; }
+      const en = new DataView(new ArrayBuffer(30));
+      en.setUint32(0, 0x04034b50, true); en.setUint16(4, 20, true);
+      en.setUint16(6, 0x0800, true);          // le nom de fichier est en UTF-8
+      en.setUint16(8, methode, true);
+      en.setUint16(10, heureDos, true); en.setUint16(12, dateDos, true);
+      en.setUint32(14, crc, true);
+      en.setUint32(18, comp.length, true); en.setUint32(22, f.data.length, true);
+      en.setUint16(26, nom.length, true);
+      corps.push(new Uint8Array(en.buffer), nom, comp);
+      const ce = new DataView(new ArrayBuffer(46));
+      ce.setUint32(0, 0x02014b50, true);
+      ce.setUint16(4, 20, true); ce.setUint16(6, 20, true);
+      ce.setUint16(8, 0x0800, true); ce.setUint16(10, methode, true);
+      ce.setUint16(12, heureDos, true); ce.setUint16(14, dateDos, true);
+      ce.setUint32(16, crc, true);
+      ce.setUint32(20, comp.length, true); ce.setUint32(24, f.data.length, true);
+      ce.setUint16(28, nom.length, true);
+      ce.setUint32(42, position, true);
+      central.push(new Uint8Array(ce.buffer), nom);
+      position += 30 + nom.length + comp.length;
+      tailleCentral += 46 + nom.length;
+    }
+    const fin = new DataView(new ArrayBuffer(22));
+    fin.setUint32(0, 0x06054b50, true);
+    fin.setUint16(8, fichiers.length, true); fin.setUint16(10, fichiers.length, true);
+    fin.setUint32(12, tailleCentral, true); fin.setUint32(16, position, true);
+    return new Blob([...corps, ...central, new Uint8Array(fin.buffer)],
+                    { type: "application/zip" });
+  }
+  function telechargerZip(blob, nom) {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = nom;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  }
+  const nomPropre = s => (s || "").replace(/[^0-9A-Za-zÀ-ÿ -]+/g, "").trim() || "piste";
+  function noticeZip(gardes) {
+    const suite = (songMode && chain.length)
+      ? chain.map(c => "ABCDEFGH"[c] || "?").join(" ") : "motif seul";
+    return ["Boîte à rythmes — voix séparées", "",
+      "Tempo   : " + master.bpm + " BPM",
+      "Mesures : " + songBars(),
+      "Chaîne  : " + suite, "",
+      "Un fichier par voix, plus le mixage complet. Tous font exactement",
+      "la même longueur : ils se calent à zéro dans n'importe quel séquenceur,",
+      "sans décalage à corriger. Les pistes muettes sont omises.", "",
+      gardes.map(x => "  " + (x.i + 1) + ". " + x.n).join("\n"), ""].join("\n");
+  }
+  // Une piste qui ne joue rien n'a pas à figurer dans l'archive : on regarde
+  // les motifs réellement employés, ceux de la chaîne ou celui en édition.
+  function pisteJoue(i) {
+    const pats = (songMode && chain.length) ? [...new Set(chain)] : [editPattern];
+    return pats.some(pat => patterns[pat][i].some(v => v !== null && v !== undefined));
+  }
+  const zipBtn = document.getElementById("zipBtn");
+  zipBtn.addEventListener("click", async () => {
+    const label = zipBtn.textContent;
+    zipBtn.disabled = true;
+    try {
+      const tous = INSTS.map(d => d.name);
+      // le numéro du fichier reste celui de la piste : les trous se lisent
+      const gardes = tous.map((n, i) => ({ n, i })).filter(x => pisteJoue(x.i));
+      const fichiers = [];
+      for (let k = 0; k < gardes.length; k++) {
+        zipBtn.textContent = (k + 1) + "/" + (gardes.length + 1) + "…";
+        fichiers.push({ nom: "909-" + (gardes[k].i + 1) + "-" + nomPropre(gardes[k].n) + ".wav",
+                        data: encodeWavBytes(await renderSong(gardes[k].i)) });
+      }
+      zipBtn.textContent = (gardes.length + 1) + "/" + (gardes.length + 1) + "…";
+      fichiers.push({ nom: "909-mixage.wav", data: encodeWavBytes(await renderSong()) });
+      fichiers.push({ nom: "lisez-moi.txt", data: new TextEncoder().encode(noticeZip(gardes)) });
+      zipBtn.textContent = "Archivage…";
+      telechargerZip(await faireZip(fichiers), "909-pistes.zip");
+      zipBtn.textContent = "Exporté !";
+    } catch (e) {
+      zipBtn.textContent = "Échec du rendu";
+    }
+    setTimeout(() => { zipBtn.textContent = label; zipBtn.disabled = false; }, 1800);
+  });
 
   const wavBtn = document.getElementById("wavBtn");
   wavBtn.addEventListener("click", async () => {
@@ -1709,6 +1833,7 @@
       "seqPlay": "Lance ou arrête le séquenceur. La barre d'espace fait la même chose.",
       "dupBtn": "Recopie le motif affiché dans le premier emplacement libre.",
       "wavBtn": "Rend le groove en fichier WAV, avec exactement le même graphe audio que le direct.",
+      "zipBtn": "Rend chaque voix dans son propre fichier WAV et les réunit dans une archive ZIP, avec le mixage complet. Tous les fichiers font la même longueur : ils se calent à zéro dans un séquenceur, sans décalage à corriger.",
       "shareBtn": "Copie un lien qui contient tout le groove : motifs, chaîne, voix et réglages.",
       "sweepOpen": "Ouvre le filtre à fond sur les 16 pas du motif affiché.",
       "sweepClear": "Retire tous les points de filtre du motif affiché : le filtre cesse de bouger."

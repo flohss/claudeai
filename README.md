@@ -304,6 +304,19 @@ Six presets — Piano él., Cloche, Marimba, Basse FM, Cuivre, Verre — et neuf
 
 C'est la page où les **accords** comptent le plus : un piano électrique qui ne sait pas plaquer une triade, ce n'est pas un piano électrique.
 
+## Sortir les pistes séparées
+
+**Exporter ZIP**, à côté d'Exporter WAV, rend le morceau **une piste à la fois** et réunit le tout dans une archive : un fichier par piste, plus le mixage complet, plus une notice qui rappelle le tempo, le nombre de mesures et la chaîne. C'est ce qu'il faut pour reprendre un morceau dans un vrai séquenceur — chaque piste sur sa propre voie, avec ses propres effets.
+
+Tous les fichiers font **exactement la même longueur**, y compris la traîne de réverbération : ils se calent à zéro dans n'importe quel logiciel, sans décalage à corriger.
+
+Deux détails de fabrication :
+
+- **Aucune bibliothèque n'est chargée.** L'archive est écrite à la main — la norme ZIP tient en trois structures, et le navigateur sait dégonfler tout seul avec `CompressionStream`. Là où il ne sait pas, les fichiers sont rangés tels quels, ce qui reste une archive parfaitement valide. Sur un morceau trance, la compression fait tomber 35 Mo à 19.
+- **Les pistes muettes sont omises.** Un groove qui n'emploie que sept voix sur dix ne livre pas trois fichiers silencieux. Le numéro du fichier reste celui de la voix, si bien que les trous se lisent : `909-1-Grosse caisse`, `909-3-Clap`, `909-5-Tom médium`.
+
+La basse acide n'a pas ce bouton : elle est monophonique, il n'y a rien à séparer.
+
 ## Sauvegarder un morceau en JSON
 
 Le lien partagé est compact mais illisible. **Exporter JSON** enregistre le même morceau dans un fichier fait pour être ouvert : valeurs réelles au lieu de base 36, une entrée par piste, et les motifs dans la notation documentée plus haut.
@@ -441,7 +454,7 @@ Le dossier [`ableton/`](ableton/) contient de quoi reprendre *Éclipse* ailleurs
 - **`Eclipse-Ableton.md`** — les sons, relevés dans le moteur de la page plutôt que reconstitués : oscillateurs, enveloppes, filtres, départs, faders, sidechain. Le morceau se rebâtit **avec l'édition de base** de Live : `Drift` et son mode Unison remplacent `Wavetable`, absent d'Intro et de Lite.
 - **`eclipse-midi.py`** — le générateur. Il relit le morceau directement dans `trance.html`, donc le MIDI ne peut pas diverger de ce que la page joue.
 - **`verif-midi.py`** — le vérificateur, qui relit le fichier produit sans rien supposer de la façon dont il a été écrit : hauteurs, durées, chevauchements, notes jamais relâchées.
-- **`eclipse-stems.js`** — rend le morceau **piste par piste** en solotant chaque piste tour à tour, plus le mixage complet. Les WAV ne sont pas versionnés — 27 Mo pour six fichiers — mais se regénèrent en une commande.
+- **`eclipse-stems.js`** — rend le morceau **piste par piste** en solotant chaque piste tour à tour, plus le mixage complet. Les WAV ne sont pas versionnés — 27 Mo pour six fichiers — mais se regénèrent en une commande. Le studio sait maintenant le faire tout seul : voir **Exporter ZIP** plus haut.
 
 Un fichier MIDI ne transporte aucun son : l'attaque de 900 ms de la nappe, la réverbération de 4,2 s et le délai pointé, qui font tout le caractère du morceau, n'y sont pas. Les stems servent de cible à l'oreille pendant qu'on rebâtit les instruments.
 
