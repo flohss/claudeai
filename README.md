@@ -441,6 +441,9 @@ Le dossier [`ableton/`](ableton/) contient de quoi reprendre *Éclipse* ailleurs
 - **`Eclipse-Ableton.md`** — les sons, relevés dans le moteur de la page plutôt que reconstitués : oscillateurs, enveloppes, filtres, départs, faders, sidechain. Le morceau se rebâtit **avec l'édition de base** de Live : `Drift` et son mode Unison remplacent `Wavetable`, absent d'Intro et de Lite.
 - **`eclipse-midi.py`** — le générateur. Il relit le morceau directement dans `trance.html`, donc le MIDI ne peut pas diverger de ce que la page joue.
 - **`verif-midi.py`** — le vérificateur, qui relit le fichier produit sans rien supposer de la façon dont il a été écrit : hauteurs, durées, chevauchements, notes jamais relâchées.
+- **`eclipse-stems.js`** — rend le morceau **piste par piste** en solotant chaque piste tour à tour, plus le mixage complet. Les WAV ne sont pas versionnés — 27 Mo pour six fichiers — mais se regénèrent en une commande.
+
+Un fichier MIDI ne transporte aucun son : l'attaque de 900 ms de la nappe, la réverbération de 4,2 s et le délai pointé, qui font tout le caractère du morceau, n'y sont pas. Les stems servent de cible à l'oreille pendant qu'on rebâtit les instruments.
 
 ## Structure
 

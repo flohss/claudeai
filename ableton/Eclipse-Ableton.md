@@ -6,6 +6,38 @@ document contient les sons.
 
 ---
 
+## 0. Si le MIDI seul sonne plat
+
+C'est normal, et ce n'est pas une déception à corriger : **un fichier MIDI ne
+transporte aucun son**. Il ne dit que quelle note, quand, et combien de temps.
+Tout ce qui fait le caractère d'Éclipse est justement ce qu'il ne transporte pas.
+
+Le morceau est volontairement pauvre en notes — 90 en dix mesures, une harmonie
+qui ne bouge pas pendant huit temps. Ce qui remplit ce vide, ce sont quatre
+réglages, et ils comptent dans cet ordre :
+
+1. **Une réverbération de 4,2 secondes** en départ, généreusement dosée. C'est le
+   plus gros écart à lui tout seul. Sans elle il ne reste que cinq lignes espacées.
+2. **L'attaque de 900 ms sur la nappe.** L'accord *entre* au lieu de se poser.
+   C'est ce qui fait qu'on ne sent plus le début des notes.
+3. **La relâche de 2,2 s sur la nappe**, qui fait déborder chaque accord sur le
+   suivant — l'harmonie devient continue.
+4. **Le délai en croche pointée, 357 ms, retour 55 %**, avec le pluck à 50 % de
+   départ. C'est le miroitement.
+
+Faites ces quatre-là avant tout le reste : vous aurez l'essentiel en cinq
+minutes. Les enveloppes de filtre, le sidechain et les faders affinent, ils ne
+fondent pas le morceau.
+
+Et pour ne pas travailler à l'aveugle, le dossier **`stems/`** contient le rendu
+audio du morceau, piste par piste, tel que la page le joue. Posez le stem sur une
+piste audio à côté de la piste MIDI correspondante : vous entendez la cible,
+vous réglez votre Drift jusqu'à ce que les deux se confondent, puis vous coupez
+le stem. C'est la façon la plus rapide d'approcher un son qu'on n'a pas construit
+soi-même.
+
+---
+
 ## 1. Le fichier MIDI
 
 Glissez `Eclipse.mid` dans la vue Arrangement : Live crée **cinq pistes**, règle
