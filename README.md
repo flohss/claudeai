@@ -230,7 +230,7 @@ Le bouton **Lecture** figure deux fois : en tête de la section *Pistes*, et à 
 | **Orage** | 142 | Agressif, filtre qui s'ouvre progressivement sur le motif B |
 | **Aurore** | 140 | Majeur lumineux, pluck en arpèges, balayage de filtre sur la reprise |
 | **Cavale** | 146 | Tendu, basse syncopée, le motif C referme le filtre avant la relance |
-| **Éclipse** | 126 | Mineur, très aéré, nappes tenues sur deux mesures entières |
+| **Éclipse** | 126 | Fa majeur ouvert sur son relatif mineur, très aéré, nappes tenues sur deux mesures |
 | **Falaise** | 136 | Lead descendant en notes longues, montée de filtre sur le motif C |
 | **Néon** | 144 | Rapide et sec, pluck en doubles-croches, filtre en creux |
 | **Aube** | 120 | Le plus lent de la page, dans la veine d'*Éclipse* : la nappe fait tout |
@@ -314,7 +314,7 @@ Le séquenceur savait éditer ; il ne savait rien suggérer. Deux commandes chan
 
 Choisissez une **tonique** et un **mode** — majeur, mineur naturel ou harmonique, les quatre modes anciens, pentatonique mineure, blues. Les rangées de la grille qui n'appartiennent pas à la gamme **s'effacent sans disparaître** : elles restent cliquables, et une note déjà écrite là garde toute sa couleur. Une note hors gamme n'est pas une faute, c'est une information.
 
-En *ré mineur*, il ne reste que huit rangées éclairées sur treize. Écrire juste devient une affaire de viser ce qui brille.
+En *fa majeur*, il ne reste que huit rangées éclairées sur treize. Écrire juste devient une affaire de viser ce qui brille.
 
 **Dans la gamme** ramène chaque note du motif sur le degré le plus proche — à égale distance, elle monte. Accents et tenues sont conservés : seules les hauteurs bougent. Ctrl+Z annule.
 

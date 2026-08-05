@@ -70,16 +70,31 @@ L'original enchaîne trois motifs de deux mesures dans l'ordre **A A B B C**.
 
 ### Harmonie
 
-**Ré mineur.** La nappe tient un accord entier par motif, deux mesures durant :
+**Fa majeur.** Les 62 notes mélodiques du morceau tiennent dans ses sept
+hauteurs, sans un seul accident. La nappe tient un accord entier par motif, deux
+mesures durant :
 
-| Mesures | Accord | Notes MIDI |
-| --- | --- | --- |
-| 1–4 | Ré mineur | 50, 53, 57 |
-| 5–8 | Si♭ majeur (1er renversement) | 50, 53, 58 |
-| 9–10 | Fa majeur puis Do majeur | 53, 57, 60 puis 48, 52, 55 |
+| Mesures | Accord | Degré | Notes MIDI |
+| --- | --- | --- | --- |
+| 1–4 | Ré mineur | **vi** | 50, 53, 57 |
+| 5–8 | Si♭ majeur (1er renversement) | **IV** | 50, 53, 58 |
+| 9 | Fa majeur | **I** | 53, 57, 60 |
+| 10 | Do majeur | **V** | 48, 52, 55 |
 
-C'est le cœur du morceau : **une seule harmonie qui ne bouge pas pendant huit
-temps**. Si vous ne deviez garder qu'une chose, c'est celle-là.
+Soit `vi – IV – I – V`, la basse en position fondamentale d'un bout à l'autre :
+Ré, Si♭, Fa, Do.
+
+Une note sur la tonalité, parce que le morceau ne la donne pas d'emblée : il
+**ouvre sur le relatif mineur** et n'atteint fa majeur qu'au sommet, mesure 9,
+là où tout s'éclaire. On peut donc le lire en ré mineur — ce sont exactement les
+mêmes sept notes — mais la suite s'y écrit `i – VI – III – VII`, et finir sur un
+VII n'explique rien. En fa majeur elle se lit `vi – IV – I – V`, et la dernière
+mesure devient ce qu'elle est vraiment : une **demi-cadence sur la dominante**,
+qui appelle un retour au fa sans jamais l'accorder. C'est de là que vient
+l'impression de suspension à la fin.
+
+Le cœur du morceau reste ceci : **une seule harmonie qui ne bouge pas pendant
+huit temps**. Si vous ne deviez garder qu'une chose, c'est celle-là.
 
 ---
 
