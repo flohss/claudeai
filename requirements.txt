@@ -1,0 +1,13 @@
+# Noyau
+litellm>=1.40          # abstraction multi-fournisseurs (Anthropic, OpenAI, Google, Ollama…)
+rich>=13.0             # interface terminal
+pyyaml>=6.0            # chargement de magi.yaml
+
+# Interface web (optionnelle : `pip install -e ".[web]"`)
+fastapi>=0.110
+uvicorn[standard]>=0.29
+
+# Développement (optionnel : `pip install -e ".[dev]"`)
+pytest>=8.0
+pytest-asyncio>=0.23
+httpx>=0.27

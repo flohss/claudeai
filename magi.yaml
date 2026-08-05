@@ -1,0 +1,90 @@
+# ---------------------------------------------------------------------------
+# Configuration du système MAGI
+#
+# Ce fichier est chargé automatiquement s'il se trouve dans le répertoire
+# courant. Toutes les valeurs sont facultatives : ce qui n'est pas défini ici
+# garde la valeur par défaut du code.
+#
+# Priorité : défauts intégrés < ce fichier < variables d'environnement.
+# ---------------------------------------------------------------------------
+
+# "litellm" pour interroger de vraies API, "simulated" pour une démonstration
+# hors ligne sans clé ni réseau.
+backend: litellm
+
+# Nombre maximal de tours de débat APRÈS l'analyse initiale.
+# 0 désactive le débat : les agents votent une fois, sans se répondre.
+max_debate_rounds: 2
+
+# Arrête le débat dès l'unanimité (inutile de continuer à payer des tokens).
+stop_on_unanimity: true
+
+# Arrête le débat si un tour complet n'a modifié aucun vote : les positions
+# sont figées, un tour de plus coûterait autant pour le même résultat.
+stop_on_convergence: true
+
+# Nombre de tentatives par appel LLM en cas d'erreur transitoire (429, 5xx).
+max_retries: 3
+
+agents:
+  # -- La raison scientifique -----------------------------------------------
+  # Température basse : on attend de la rigueur, pas de la créativité.
+  MELCHIOR-1:
+    model: anthropic/claude-opus-5
+    temperature: 0.2
+    max_tokens: 1400
+
+  # -- L'éthique et la sécurité humaine --------------------------------------
+  BALTHASAR-2:
+    model: openai/gpt-4o
+    temperature: 0.5
+    max_tokens: 1400
+
+  # -- L'esprit critique et le pragmatisme -----------------------------------
+  # Température haute : c'est l'agent chargé d'imaginer ce que les autres
+  # n'ont pas vu.
+  CASPER-3:
+    model: gemini/gemini-2.5-pro
+    temperature: 0.85
+    max_tokens: 1400
+
+# Le quatrième modèle. Il ne vote pas : il rédige la décision finale à partir
+# du débat et du statut calculé par le noyau.
+orchestrator:
+  model: anthropic/claude-sonnet-5
+  temperature: 0.3
+  max_tokens: 2000
+
+# ---------------------------------------------------------------------------
+# Variantes utiles
+# ---------------------------------------------------------------------------
+#
+# Un seul fournisseur (si vous n'avez qu'une clé d'API) — la divergence repose
+# alors uniquement sur les doctrines et les températures :
+#
+#   agents:
+#     MELCHIOR-1: { model: anthropic/claude-opus-5,   temperature: 0.1 }
+#     BALTHASAR-2:{ model: anthropic/claude-sonnet-5, temperature: 0.5 }
+#     CASPER-3:   { model: anthropic/claude-sonnet-5, temperature: 1.0 }
+#
+# Entièrement local via Ollama, sans aucun appel sortant :
+#
+#   agents:
+#     MELCHIOR-1: { model: ollama/llama3.1,  temperature: 0.2 }
+#     BALTHASAR-2:{ model: ollama/mistral,   temperature: 0.5 }
+#     CASPER-3:   { model: ollama/qwen2.5,   temperature: 0.9 }
+#   orchestrator: { model: ollama/llama3.1 }
+#
+# Spécialiser un agent sans réécrire toute sa doctrine :
+#
+#   agents:
+#     BALTHASAR-2:
+#       system_prompt_append: >
+#         Le contexte est un établissement de santé européen. Traite toute
+#         donnée patient comme relevant du RGPD, article 9.
+#
+# Remplacer entièrement une doctrine par un fichier :
+#
+#   agents:
+#     CASPER-3:
+#       system_prompt_file: ./prompts/casper_finance.txt
