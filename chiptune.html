@@ -197,6 +197,18 @@
     font-weight: bold;
   }
   .track-row.silent .track-pick { opacity: .45; }
+  .track-row .mix-etat {
+    flex: 0 0 auto; min-width: 54px; text-align: right;
+    font-size: 10px; font-variant-numeric: tabular-nums; color: var(--dim);
+    letter-spacing: .04em;
+  }
+  .track-row .mix-etat .cote { color: var(--tc); font-weight: 700; }
+  .track-row.sans-son .mix-etat { color: #ff4fd8; font-weight: 700; opacity: 1; }
+  /* un fader à zéro éteint la rangée comme le fait le bouton muet : c'est la
+     même surdité, elle doit se lire pareil */
+  .track-row.sans-son { opacity: .5; }
+  .track-row.sans-son .mix-etat { opacity: 1; }
+  @media (max-width: 560px) { .track-row .mix-etat { display: none; } }
   .track-row .mini-btn { flex: 0 0 34px; padding: 6px 0; text-align: center; }
   .track-row .mini-btn.on { background: var(--accent3); color: #000; border-color: var(--accent3); font-weight: bold; }
   .track-row .patch-name {
@@ -1176,12 +1188,15 @@
       vol.dataset.info = "Volume de cette piste dans le mixage. Cliquez son nom à gauche pour l'éditer et la jouer au clavier ; M la rend muette, S la met en solo.";
       vol.addEventListener("input", () => {
         tr.vol = Number(vol.value);
-        refreshTrackGains(); markDirty();
+        refreshTrackGains(); refreshMixer(); markDirty();
       });
 
-      row.append(pick, mute, solo, patchName, len, vol);
+      const etat = document.createElement("span");
+      etat.className = "mix-etat";
+      etat.dataset.info = "Ce que la piste envoie vraiment dans le mixage : son niveau en pour cent, et le côté si elle est calée franchement à droite ou à gauche. « Muet » veut dire qu'on ne l'entend pas du tout.";
+      row.append(pick, mute, solo, patchName, len, vol, etat);
       mixerEl.appendChild(row);
-      trackRows[i] = { row, mute, solo, patchName, len };
+      trackRows[i] = { row, mute, solo, patchName, len, etat };
     });
     refreshMixer();
   }
@@ -1194,6 +1209,11 @@
       r.row.classList.toggle("silent", tr.mute || (solos && !tr.solo));
       r.mute.classList.toggle("on", tr.mute);
       r.solo.classList.toggle("on", tr.solo);
+      const zero = tr.vol < 0.005;
+      r.row.classList.toggle("sans-son", zero);
+      const cote = "";
+      r.etat.innerHTML = zero ? "muet"
+        : Math.round(tr.vol * 100) + "&#8239;%" + (cote ? ' <span class="cote">' + cote + "</span>" : "");
       const preset = PRESETS[tr.patch.preset];
       r.patchName.textContent = preset ? preset.label : "Perso";
       r.len.value = tr.len;

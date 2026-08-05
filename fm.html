@@ -159,6 +159,18 @@
   .track-pick { flex: 0 0 104px; text-align: left; border-left: 4px solid var(--tc); padding-left: 9px; }
   .track-row.sel .track-pick { background: var(--tc); color: #fdf6ee; border-color: var(--tc); font-weight: 600; }
   .track-row.silent { opacity: .45; }
+  .track-row .mix-etat {
+    flex: 0 0 auto; min-width: 54px; text-align: right;
+    font-size: 10px; font-variant-numeric: tabular-nums; color: var(--dim);
+    letter-spacing: .04em;
+  }
+  .track-row .mix-etat .cote { color: var(--tc); font-weight: 700; }
+  .track-row.sans-son .mix-etat { color: #8f2f1c; font-weight: 700; opacity: 1; }
+  /* un fader à zéro éteint la rangée comme le fait le bouton muet : c'est la
+     même surdité, elle doit se lire pareil */
+  .track-row.sans-son { opacity: .5; }
+  .track-row.sans-son .mix-etat { opacity: 1; }
+  @media (max-width: 560px) { .track-row .mix-etat { display: none; } }
   .track-row .mini-btn { flex: 0 0 32px; padding: 6px 0; text-align: center; }
   .track-row .mini-btn.on { background: var(--accent3); color: #241a05; border-color: #8a5f0d; font-weight: 700; }
   .track-row .patch-name { flex: 0 0 auto; color: var(--dim); font-size: 10px; min-width: 72px; }
@@ -1000,11 +1012,14 @@
       vol.type = "range"; vol.min = 0; vol.max = 1; vol.step = 0.01; vol.value = tr.vol;
       vol.dataset.info = "Volume de cette piste dans le mixage. Cliquez son nom à gauche pour l'éditer et la jouer au clavier ; M la rend muette, S la met en solo.";
       vol.addEventListener("input", () => {
-        tr.vol = Number(vol.value); refreshTrackGains(); markDirty();
+        tr.vol = Number(vol.value); refreshTrackGains(); refreshMixer(); markDirty();
       });
-      row.append(pick, mute, solo, patchName, vol);
+      const etat = document.createElement("span");
+      etat.className = "mix-etat";
+      etat.dataset.info = "Ce que la piste envoie vraiment dans le mixage : son niveau en pour cent, et le côté si elle est calée franchement à droite ou à gauche. « Muet » veut dire qu'on ne l'entend pas du tout.";
+      row.append(pick, mute, solo, patchName, vol, etat);
       mixerEl.appendChild(row);
-      trackRows[i] = { row, mute, solo, patchName };
+      trackRows[i] = { row, mute, solo, patchName, etat };
     });
     refreshMixer();
   }
@@ -1017,6 +1032,11 @@
       r.row.classList.toggle("silent", tr.mute || (solos && !tr.solo));
       r.mute.classList.toggle("on", tr.mute);
       r.solo.classList.toggle("on", tr.solo);
+      const zero = tr.vol < 0.005;
+      r.row.classList.toggle("sans-son", zero);
+      const cote = "";
+      r.etat.innerHTML = zero ? "muet"
+        : Math.round(tr.vol * 100) + "&#8239;%" + (cote ? ' <span class="cote">' + cote + "</span>" : "");
       const preset = PRESETS[tr.patch.preset];
       r.patchName.textContent = preset ? preset.label : "Perso";
     });

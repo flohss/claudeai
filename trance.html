@@ -216,6 +216,27 @@
     font-weight: 600;
   }
   .track-row.silent { opacity: .45; }
+  /* Un panneau qui n'agit pas sur la piste choisie le dit et s'éteint, plutôt
+     que de laisser tourner des boutons sans effet. */
+  fieldset.sans-effet { opacity: .5; }
+  fieldset.sans-effet > legend .edit-target { color: var(--dim); }
+  fieldset.sans-effet > legend::after {
+    content: " — sans effet ici";
+    color: var(--accent4);
+    letter-spacing: .12em;
+  }
+  .track-row .mix-etat {
+    flex: 0 0 auto; min-width: 54px; text-align: right;
+    font-size: 10px; font-variant-numeric: tabular-nums; color: var(--dim);
+    letter-spacing: .04em;
+  }
+  .track-row .mix-etat .cote { color: var(--tc); font-weight: 700; }
+  .track-row.sans-son .mix-etat { color: #ff5fa2; font-weight: 700; opacity: 1; }
+  /* un fader à zéro éteint la rangée comme le fait le bouton muet : c'est la
+     même surdité, elle doit se lire pareil */
+  .track-row.sans-son { opacity: .5; }
+  .track-row.sans-son .mix-etat { opacity: 1; }
+  @media (max-width: 560px) { .track-row .mix-etat { display: none; } }
   .track-row .mini-btn { flex: 0 0 34px; padding: 7px 0; text-align: center; }
   .track-row .mini-btn.on { background: var(--accent4); color: #1a1200; border-color: transparent; font-weight: 700; }
   .track-row input[type=range] { flex: 1 1 90px; max-width: 150px; }
@@ -402,7 +423,7 @@
         </div>
       </fieldset>
 
-      <fieldset>
+      <fieldset id="panEnv">
         <legend>Enveloppe &mdash; <span class="edit-target" id="target2">Lead</span></legend>
         <div class="row"><label>Attaque</label><input type="range" id="attack" min="0.001" max="2" step="0.001" value="0.01"><output id="attackOut">10ms</output></div>
         <div class="row"><label>Déclin</label><input type="range" id="decay" min="0.01" max="2" step="0.01" value="0.2"><output id="decayOut">200ms</output></div>
@@ -410,7 +431,7 @@
         <div class="row"><label>Relâche</label><input type="range" id="release" min="0.01" max="4" step="0.01" value="0.3"><output id="releaseOut">300ms</output></div>
       </fieldset>
 
-      <fieldset>
+      <fieldset id="panFiltre">
         <legend>Filtre &mdash; <span class="edit-target" id="target3">Lead</span></legend>
         <div class="row"><label>Fréquence</label><input type="range" id="cutoff" min="0" max="100" step="1" value="70"><output id="cutoffOut">2k</output></div>
         <div class="row"><label>Résonance</label><input type="range" id="reso" min="0" max="24" step="0.5" value="8"><output id="resoOut">8</output></div>
@@ -1300,12 +1321,15 @@
       vol.dataset.info = "Volume de cette piste dans le mixage. Cliquez son nom à gauche pour l'éditer et la jouer au clavier ; M la rend muette, S la met en solo.";
       vol.addEventListener("input", () => {
         tr.vol = Number(vol.value);
-        refreshTrackGains(); markDirty();
+        refreshTrackGains(); refreshMixer(); markDirty();
       });
 
-      row.append(pick, mute, solo, kind, vol);
+      const etat = document.createElement("span");
+      etat.className = "mix-etat";
+      etat.dataset.info = "Ce que la piste envoie vraiment dans le mixage : son niveau en pour cent, et le côté si elle est calée franchement à droite ou à gauche. « Muet » veut dire qu'on ne l'entend pas du tout.";
+      row.append(pick, mute, solo, kind, vol, etat);
       mixerEl.appendChild(row);
-      trackRows[i] = { row, mute, solo, kind };
+      trackRows[i] = { row, mute, solo, kind, etat };
     });
     refreshMixer();
   }
@@ -1318,6 +1342,11 @@
       r.row.classList.toggle("silent", tr.mute || (solos && !tr.solo));
       r.mute.classList.toggle("on", tr.mute);
       r.solo.classList.toggle("on", tr.solo);
+      const zero = tr.vol < 0.005;
+      r.row.classList.toggle("sans-son", zero);
+      const cote = tr.patch.pan > 0.6 ? "D" : tr.patch.pan < -0.6 ? "G" : "";
+      r.etat.innerHTML = zero ? "muet"
+        : Math.round(tr.vol * 100) + "&#8239;%" + (cote ? ' <span class="cote">' + cote + "</span>" : "");
       const preset = PRESETS[tr.patch.preset];
       r.kind.textContent = preset ? preset.label : "Perso";
     });
@@ -2479,6 +2508,7 @@
     tracks[currentTrack].patch.wave = wave;
     document.querySelectorAll("#waves button").forEach(b =>
       b.classList.toggle("selected", b.dataset.wave === wave));
+    if (typeof majPanneauxBatterie === "function") majPanneauxBatterie();
     if (!silent) { markCustom(); markDirty(); }
   }
   document.getElementById("waves").addEventListener("click", e => {
@@ -2500,6 +2530,23 @@
   document.getElementById("octDown").addEventListener("click", () => shiftOctave(-1));
   document.getElementById("octUp").addEventListener("click", () => shiftOctave(1));
 
+  // La batterie a ses propres enveloppes, et elle ne traverse pas le filtre de
+  // piste : ces deux panneaux ne feraient rien du tout. Un morceau est arrivé
+  // avec une attaque de 2 s et une relâche de 4 s posées dessus, réglages qui
+  // n'ont jamais rien produit. Autant le dire.
+  const PANNEAUX_HORS_BATTERIE = ["panEnv", "panFiltre"];
+  function majPanneauxBatterie() {
+    const perc = tracks[currentTrack].patch.wave === "drums";
+    PANNEAUX_HORS_BATTERIE.forEach(id => {
+      const el = document.getElementById(id);
+      el.classList.toggle("sans-effet", perc);
+      el.querySelectorAll("input, button").forEach(x => x.disabled = perc);
+    });
+    // le désaccord et l'octave n'agissent pas non plus ; le choix d'onde, si :
+    // c'est lui qui fait sortir la piste du mode batterie
+    ["detune", "octDown", "octUp"].forEach(id => document.getElementById(id).disabled = perc);
+  }
+
   function loadPatchIntoControls() {
     const patch = tracks[currentTrack].patch;
     loadingPatch = true;
@@ -2509,6 +2556,7 @@
      "envAmt", "envDec", "sidechain", "revSend", "delSend", "pan"]
       .forEach(k => setSlider(k, patch[k]));
     loadingPatch = false;
+    majPanneauxBatterie();
     applyPatchToNodes(currentTrack);
   }
 

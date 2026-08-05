@@ -306,6 +306,15 @@ Six presets — Piano él., Cloche, Marimba, Basse FM, Cuivre, Verre — et neuf
 
 C'est la page où les **accords** comptent le plus : un piano électrique qui ne sait pas plaquer une triade, ce n'est pas un piano électrique.
 
+## L'interface dit ce qu'on entend
+
+Deux réglages pouvaient rendre un morceau méconnaissable sans que rien ne le signale. Un fichier réel l'a montré : deux pistes sur cinq à zéro, deux autres calées à fond à droite, et une console qui n'en laissait rien voir.
+
+- **Chaque rangée de la table de mixage affiche son niveau**, en pour cent. À zéro, elle affiche **muet** en couleur d'alerte et s'éteint comme une piste rendue muette — parce que c'est la même surdité. Là où les pistes ont un panoramique, un **G** ou un **D** apparaît dès qu'elle est calée franchement d'un côté.
+- **Les panneaux qui n'agissent pas sur la piste choisie le disent.** La batterie du studio trance a ses propres enveloppes et ne traverse pas le filtre de piste : ses panneaux *Enveloppe* et *Filtre* s'éteignent, leurs curseurs se bloquent, et la légende porte la mention « sans effet ici ». Le désaccord et l'octave aussi. Le choix d'onde reste actif : c'est lui qui fait sortir la piste du mode batterie.
+
+Le contraste de ces mentions est vérifié par test, y compris sur la rangée éteinte — un avertissement à demi effacé n'avertit personne.
+
 ## Sortir les pistes séparées
 
 **Exporter ZIP**, à côté d'Exporter WAV, rend le morceau **une piste à la fois** et réunit le tout dans une archive : un fichier par piste, plus le mixage complet, plus une notice qui rappelle le tempo, le nombre de mesures et la chaîne. C'est ce qu'il faut pour reprendre un morceau dans un vrai séquenceur — chaque piste sur sa propre voie, avec ses propres effets.
