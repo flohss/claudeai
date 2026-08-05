@@ -23,7 +23,7 @@ from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
 
-from .config import MagiConfig, find_default_config, load_config
+from .config import MagiConfig, find_default_config, load_config, load_env_file
 from .events import EventType, MagiEvent
 from .models import AGENT_ORDER, BALTHASAR, CASPER, MELCHIOR, MagiDecision, SystemStatus, Vote
 from .orchestrator import MagiSystem
@@ -409,6 +409,11 @@ def main(argv: list[str] | None = None) -> int:
         format="%(levelname)s %(name)s — %(message)s",
         stream=sys.stderr,
     )
+
+    # Les clés posées dans un .env doivent être visibles avant toute lecture de
+    # configuration — c'est ce qui rend le fichier utilisable tel quel, sans
+    # `export` manuel ni équivalent PowerShell.
+    load_env_file()
 
     config_path = args.config or find_default_config()
     try:

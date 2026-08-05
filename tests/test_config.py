@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from magi.config import config_from_dict, default_config, load_config
+from magi.config import config_from_dict, default_config, load_config, load_env_file
 from magi.models import BALTHASAR, CASPER, MELCHIOR
 
 
@@ -107,6 +107,68 @@ class TestYamlLoading:
     def test_backend_env_override(self, monkeypatch):
         monkeypatch.setenv("MAGI_BACKEND", "simulated")
         assert load_config(None).backend == "simulated"
+
+
+class TestEnvFile:
+    def test_keys_are_loaded_into_the_environment(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        env = tmp_path / ".env"
+        env.write_text("ANTHROPIC_API_KEY=sk-ant-test\n", encoding="utf-8")
+
+        assert load_env_file(env) == {"ANTHROPIC_API_KEY": "sk-ant-test"}
+        import os
+        assert os.environ["ANTHROPIC_API_KEY"] == "sk-ant-test"
+
+    def test_comments_blanks_and_export_prefix(self, tmp_path, monkeypatch):
+        for key in ("OPENAI_API_KEY", "GEMINI_API_KEY"):
+            monkeypatch.delenv(key, raising=False)
+        env = tmp_path / ".env"
+        env.write_text(
+            "# un commentaire\n\n"
+            "export OPENAI_API_KEY=sk-openai\n"
+            'GEMINI_API_KEY="sk-gemini"\n',
+            encoding="utf-8",
+        )
+        applied = load_env_file(env)
+        assert applied["OPENAI_API_KEY"] == "sk-openai"
+        assert applied["GEMINI_API_KEY"] == "sk-gemini", "les guillemets doivent être retirés"
+
+    def test_empty_values_are_ignored(self, tmp_path, monkeypatch):
+        # .env.example est livré avec des clés vides : les charger masquerait
+        # le diagnostic « clé absente » derrière une chaîne vide.
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        env = tmp_path / ".env"
+        env.write_text("OPENAI_API_KEY=\n", encoding="utf-8")
+
+        assert load_env_file(env) == {}
+        assert default_config().missing_api_keys()
+
+    def test_existing_environment_wins(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("OPENAI_API_KEY", "déjà-exportée")
+        env = tmp_path / ".env"
+        env.write_text("OPENAI_API_KEY=depuis-le-fichier\n", encoding="utf-8")
+
+        assert load_env_file(env) == {}
+        import os
+        assert os.environ["OPENAI_API_KEY"] == "déjà-exportée"
+
+    def test_missing_file_is_not_an_error(self, tmp_path):
+        assert load_env_file(tmp_path / "absent.env") == {}
+
+    def test_bom_is_tolerated(self, tmp_path, monkeypatch):
+        # Le Bloc-notes de Windows écrit volontiers un BOM en tête de fichier.
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        env = tmp_path / ".env"
+        env.write_bytes("OPENAI_API_KEY=sk-windows\n".encode("utf-8-sig"))
+
+        assert load_env_file(env) == {"OPENAI_API_KEY": "sk-windows"}
+
+    def test_malformed_lines_are_skipped(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        env = tmp_path / ".env"
+        env.write_text("ligne sans egal\nOPENAI_API_KEY=sk-ok\n", encoding="utf-8")
+
+        assert load_env_file(env) == {"OPENAI_API_KEY": "sk-ok"}
 
 
 class TestApiKeys:

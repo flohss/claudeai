@@ -17,7 +17,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 
-from .config import MagiConfig, find_default_config, load_config
+from .config import MagiConfig, find_default_config, load_config, load_env_file
 from .events import EventQueue, EventType, MagiEvent
 from .models import AGENT_ORDER
 from .orchestrator import MagiSystem
@@ -148,5 +148,9 @@ app = None  # rempli à la demande par `uvicorn magi.server:get_app`
 
 
 def get_app() -> FastAPI:
-    """Point d'entrée ASGI : `uvicorn 'magi.server:get_app' --factory`."""
+    """Point d'entrée ASGI : `uvicorn 'magi.server:get_app' --factory`.
+
+    Ce chemin ne passe pas par la CLI : il charge donc lui-même le .env.
+    """
+    load_env_file()
     return create_app()

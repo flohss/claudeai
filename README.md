@@ -25,21 +25,44 @@ conservé jusqu'au bout plutôt que moyenné.
 
 ## Démarrage rapide
 
-```bash
-pip install -e ".[web,dev]"
+**Linux / macOS**
 
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e ".[web]"
+```
+
+**Windows (PowerShell)**
+
+```powershell
+py -3 -m venv .venv
+.\.venv\Scripts\Activate.ps1     # si refusé : Set-ExecutionPolicy -Scope Process RemoteSigned
+pip install -e ".[web]"
+```
+
+Si vous préférez ne pas activer l'environnement, tout marche en préfixant :
+`.\.venv\Scripts\magi.exe "votre question"`.
+
+**Ensuite, identique partout**
+
+```bash
 # Aucune clé d'API requise : backend simulé, hors ligne
 magi "Faut-il déployer un correctif critique en production un vendredi soir ?" \
      --backend simulated
 
 # Avec de vraies API
-cp .env.example .env      # renseignez vos clés
+cp .env.example .env      # renseignez vos clés — le fichier est lu automatiquement
 magi check                # vérifie modèles et clés
 magi "Faut-il réécrire notre monolithe en microservices ?"
 
 # Interface graphique
 magi serve                # http://127.0.0.1:8000
 ```
+
+`.env` est chargé depuis le répertoire courant au démarrage. Les variables déjà
+présentes dans l'environnement priment sur le fichier, et les valeurs vides
+sont ignorées — `magi check` continue donc de signaler une clé non renseignée
+plutôt que de la faire passer pour définie.
 
 ---
 
@@ -246,7 +269,7 @@ LLM]` : la mécanique est réelle, le raisonnement ne l'est pas.
 ## Tests
 
 ```bash
-python -m pytest              # 146 tests
+python -m pytest              # 153 tests
 ```
 
 Couvrent les règles de vote (dont les cas où un agent en panne pourrait fausser

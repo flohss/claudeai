@@ -132,6 +132,48 @@ def default_config() -> MagiConfig:
     )
 
 
+def load_env_file(path: str | Path | None = None) -> dict[str, str]:
+    """Charge un fichier `.env` dans l'environnement du processus.
+
+    Écrit à la main plutôt que via python-dotenv : le besoin se limite à des
+    clés d'API, et une dépendance de plus pour quinze lignes se justifierait
+    mal — surtout sous Windows, où l'équivalent shell d'un `export` groupé
+    n'existe pas et où ce fichier est le seul moyen commode de fournir ses clés.
+
+    Les variables déjà définies dans l'environnement ne sont jamais écrasées :
+    une clé exportée à la main doit primer sur le fichier.
+
+    Retourne les variables effectivement posées.
+    """
+    file_path = Path(path) if path else Path.cwd() / ".env"
+    if not file_path.is_file():
+        return {}
+
+    applied: dict[str, str] = {}
+    for raw_line in file_path.read_text(encoding="utf-8-sig").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        if line.startswith("export "):
+            line = line[len("export "):].lstrip()
+
+        name, _, value = line.partition("=")
+        name = name.strip()
+        if not name.replace("_", "").isalnum():
+            continue
+
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        if not value or name in os.environ:
+            continue
+
+        os.environ[name] = value
+        applied[name] = value
+
+    return applied
+
+
 def _expand(value: Any) -> Any:
     """Résout `${VAR}` et `${VAR:-defaut}` dans les chaînes."""
     if isinstance(value, str):
@@ -258,6 +300,7 @@ __all__ = [
     "default_config",
     "config_from_dict",
     "load_config",
+    "load_env_file",
     "find_default_config",
     "AGENT_ORDER",
 ]
