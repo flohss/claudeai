@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MAGI SYSTEM — Conseil de délibération</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23050506'/%3E%3Cpath d='M16 4 L28 11 L28 21 L16 28 L4 21 L4 11 Z' fill='none' stroke='%23ff2b2b' stroke-width='3'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#050506;
+  --panel:#0a0a0d;
+  --red:#ff2b2b;
+  --red-dim:#7a1414;
+  --blue:#2b9bff;
+  --blue-dim:#123f6b;
+  --orange:#ff9d00;
+  --green:#31d67a;
+  --grey:#5a5a63;
+  --text:#e8e8ec;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:"Courier New",Consolas,monospace;
+  min-height:100vh;
+  padding:18px;
+  letter-spacing:.04em;
+  overflow-x:hidden;
+}
+/* Trame de balayage : la texture CRT du dispositif d'origine. */
+body::after{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:9999;
+  background:repeating-linear-gradient(180deg,rgba(255,255,255,.025) 0 1px,transparent 1px 3px);
+}
+.wrap{max-width:1500px;margin:0 auto}
+
+/* ---------- en-tête ---------- */
+header{
+  display:flex;justify-content:space-between;align-items:flex-end;
+  border-bottom:2px solid var(--red);padding-bottom:8px;margin-bottom:16px;
+}
+h1{font-size:26px;letter-spacing:.35em;color:var(--red);font-weight:700}
+h1 small{display:block;font-size:10px;letter-spacing:.3em;color:var(--grey);margin-top:4px}
+.sysmeta{text-align:right;font-size:11px;color:var(--grey);line-height:1.7}
+.sysmeta b{color:var(--blue)}
+
+/* ---------- bloc PROPOSAL ---------- */
+.proposal{border:2px solid var(--orange);background:#0c0803;margin-bottom:16px}
+.proposal .tag{
+  background:var(--orange);color:#000;font-weight:700;font-size:12px;
+  letter-spacing:.3em;padding:3px 12px;display:inline-block;
+}
+.proposal .body{display:flex;gap:10px;padding:12px;flex-wrap:wrap}
+textarea{
+  flex:1;min-width:280px;min-height:58px;resize:vertical;
+  background:#000;color:var(--text);border:1px solid var(--red-dim);
+  padding:10px;font-family:inherit;font-size:14px;letter-spacing:.03em;
+}
+textarea:focus{outline:none;border-color:var(--orange)}
+.controls{display:flex;flex-direction:column;gap:6px;min-width:190px}
+select,button{
+  background:#000;color:var(--text);border:1px solid var(--red-dim);
+  padding:7px 10px;font-family:inherit;font-size:11px;letter-spacing:.18em;cursor:pointer;
+}
+button.go{background:var(--red);color:#000;font-weight:700;border-color:var(--red);flex:1}
+button.go:hover:not(:disabled){background:#ff5555}
+button.go:disabled{background:#2a0a0a;color:var(--grey);border-color:var(--red-dim);cursor:wait}
+
+/* ---------- indicateurs d'état ---------- */
+.blocks{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
+.block{
+  border:2px solid #1a1a20;padding:14px;text-align:center;background:var(--panel);
+  transition:all .25s;
+}
+.block .label{font-size:13px;letter-spacing:.35em;font-weight:700;color:#2c2c34}
+.block .sub{font-size:10px;color:#2c2c34;margin-top:5px;letter-spacing:.2em}
+.block.on-proposal{border-color:var(--orange);background:#140d00}
+.block.on-proposal .label,.block.on-proposal .sub{color:var(--orange)}
+.block.on-agree{border-color:var(--blue);background:#001424;box-shadow:0 0 22px rgba(43,155,255,.28)}
+.block.on-agree .label,.block.on-agree .sub{color:var(--blue)}
+.block.on-deny{border-color:var(--red);background:#180000;box-shadow:0 0 22px rgba(255,43,43,.32)}
+.block.on-deny .label,.block.on-deny .sub{color:var(--red)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.42}}
+.block.pulsing{animation:pulse 1.1s infinite}
+
+/* ---------- disposition principale ---------- */
+.main{display:grid;grid-template-columns:1fr 340px;gap:16px;align-items:start}
+@media(max-width:1080px){.main{grid-template-columns:1fr}}
+
+.triad{position:relative;padding:6px}
+.triad svg.links{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.triad .row{display:grid;grid-template-columns:1fr 1fr;gap:26px;position:relative;z-index:2}
+/* La marge basse ménage la place du noyau hexagonal entre les deux rangées. */
+.triad .row.bottom{grid-template-columns:1fr;max-width:52%;margin:58px auto 0}
+
+/* ---------- unités MAGI ---------- */
+.unit{
+  border:2px solid var(--grey);background:var(--panel);position:relative;
+  transition:border-color .3s,box-shadow .3s;min-height:250px;
+  display:flex;flex-direction:column;
+}
+.unit .head{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:6px 10px;font-size:13px;font-weight:700;letter-spacing:.22em;
+  border-bottom:1px solid #1a1a20;
+}
+.unit .model{font-size:9px;color:var(--grey);letter-spacing:.08em;padding:3px 10px;
+  border-bottom:1px solid #131318;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.unit .verdict{
+  font-size:19px;font-weight:700;letter-spacing:.2em;text-align:center;
+  padding:14px 6px 10px;color:#25252c;
+}
+.unit .metrics{display:flex;justify-content:space-between;font-size:10px;
+  color:var(--grey);padding:0 10px 8px}
+.bar{height:4px;background:#15151a;margin:0 10px 10px}
+.bar i{display:block;height:100%;width:0;transition:width .5s ease}
+.unit ul{list-style:none;padding:0 10px 10px;font-size:11px;line-height:1.6;flex:1;
+  overflow-y:auto;max-height:130px}
+.unit ul li{margin-bottom:6px;padding-left:11px;position:relative;color:#b9b9c2}
+.unit ul li::before{content:"▸";position:absolute;left:0;color:inherit;opacity:.7}
+.unit .state{
+  font-size:9px;letter-spacing:.28em;text-align:center;padding:4px;
+  border-top:1px solid #1a1a20;color:var(--grey);
+}
+.unit.melchior{--c:var(--red)}
+.unit.balthasar{--c:var(--blue)}
+.unit.casper{--c:var(--orange)}
+.unit.active{border-color:var(--c);box-shadow:0 0 20px -6px var(--c)}
+.unit.active .head{color:var(--c)}
+.unit.thinking{animation:pulse 1s infinite}
+.unit.thinking .verdict::after{content:"ANALYSE…";color:var(--c)}
+.unit .verdict.approved{color:var(--green)}
+.unit .verdict.rejected{color:var(--red)}
+.unit .verdict.conditional{color:var(--orange)}
+.unit.err{border-color:var(--red);background:#120000}
+
+/* noyau central */
+/* L'hexagone est tracé en SVG plutôt qu'en clip-path : un clip découpe aussi
+   la bordure, ne laissant visibles que les deux côtés verticaux. */
+.core{
+  position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:3;
+  width:132px;height:104px;
+}
+.core svg{position:absolute;inset:0;width:100%;height:100%}
+.core .txt{
+  position:relative;z-index:1;height:100%;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;text-align:center;gap:2px;
+  color:var(--red);font-size:9px;letter-spacing:.14em;
+}
+.core b{font-size:14px;letter-spacing:.22em;display:block}
+.core span{color:var(--grey);font-size:8.5px;letter-spacing:.1em;
+  max-width:88px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ---------- journal ---------- */
+.log{border:1px solid var(--blue-dim);background:#00060d;height:100%;
+  display:flex;flex-direction:column;min-height:420px}
+.log h2{font-size:11px;letter-spacing:.3em;color:var(--blue);
+  padding:7px 10px;border-bottom:1px solid var(--blue-dim);font-weight:700}
+.log .lines{flex:1;overflow-y:auto;padding:8px 10px;font-size:10.5px;line-height:1.65;
+  max-height:520px}
+.log .lines div{margin-bottom:3px;word-break:break-word}
+.log .t{color:#2f5f8a;margin-right:6px}
+.log .m-info{color:#7f8f9f}
+.log .m-round{color:var(--orange)}
+.log .m-ok{color:var(--green)}
+.log .m-no{color:var(--red)}
+.log .m-cond{color:var(--orange)}
+.log .m-sys{color:var(--blue)}
+
+/* ---------- décision ---------- */
+.decision{margin-top:16px;border:2px solid #1a1a20;background:var(--panel);display:none}
+.decision.show{display:block}
+.decision .banner{padding:16px;text-align:center;border-bottom:1px solid #1a1a20}
+.decision .banner .st{font-size:28px;font-weight:700;letter-spacing:.28em}
+.decision .banner .meta{font-size:10px;color:var(--grey);margin-top:7px;letter-spacing:.2em}
+.decision .content{padding:16px;font-size:13.5px;line-height:1.85;white-space:pre-wrap;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+  letter-spacing:normal}
+.decision section{border-top:1px dashed #22222a;padding:12px 16px}
+.decision section h3{font-size:10px;letter-spacing:.3em;margin-bottom:8px}
+.decision section li{margin-left:16px;font-size:12.5px;line-height:1.7;margin-bottom:4px}
+.cond h3{color:var(--orange)}.cond li{color:#e0b46a}
+.diss h3{color:var(--red)}.diss p{color:#e08a8a;font-size:12.5px;line-height:1.7}
+.warn{background:#180000;border-top:1px solid var(--red);color:var(--red);
+  padding:10px 16px;font-size:11px;letter-spacing:.1em}
+.st.approved{color:var(--green)}.st.rejected{color:var(--red)}
+.st.majority{color:var(--blue)}.st.conditional{color:var(--orange)}
+
+/* ---------- tableau des tours ---------- */
+.history{margin-top:16px;border:1px solid #1a1a20;display:none}
+.history.show{display:block}
+.history h2{font-size:10px;letter-spacing:.3em;color:var(--grey);padding:7px 10px;
+  border-bottom:1px solid #1a1a20}
+table{width:100%;border-collapse:collapse;font-size:11px}
+th,td{padding:7px 10px;text-align:center;border-bottom:1px solid #131318}
+th{color:var(--grey);letter-spacing:.2em;font-weight:400;font-size:10px}
+td.v-approved{color:var(--green)}td.v-rejected{color:var(--red)}td.v-conditional{color:var(--orange)}
+footer{margin-top:20px;text-align:center;font-size:9.5px;color:#26262c;letter-spacing:.24em}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>MAGI<small>SYSTEM · TRIUMVIRAT DÉLIBÉRATIF</small></h1>
+  <div class="sysmeta">
+    BACKEND <b id="m-backend">—</b> · TOURS MAX <b id="m-rounds">—</b><br>
+    ORCHESTRATEUR <b id="m-orch">—</b><br>
+    ÉTAT <b id="m-state">STANDBY</b>
+  </div>
+</header>
+
+<div class="proposal">
+  <span class="tag">PROPOSAL</span>
+  <div class="body">
+    <textarea id="query" placeholder="Soumettez une proposition au conseil MAGI…">Faut-il autoriser le déploiement d'un correctif critique en production un vendredi soir ?</textarea>
+    <div class="controls">
+      <select id="backend">
+        <option value="">BACKEND PAR DÉFAUT</option>
+        <option value="simulated">SIMULATED (hors ligne)</option>
+        <option value="litellm">LITELLM (API réelles)</option>
+      </select>
+      <select id="rounds">
+        <option value="">TOURS PAR DÉFAUT</option>
+        <option value="0">0 — SANS DÉBAT</option>
+        <option value="1">1 TOUR DE DÉBAT</option>
+        <option value="2">2 TOURS DE DÉBAT</option>
+        <option value="3">3 TOURS DE DÉBAT</option>
+      </select>
+      <button class="go" id="submit">DÉLIBÉRER</button>
+    </div>
+  </div>
+</div>
+
+<div class="blocks">
+  <div class="block" id="b-proposal"><div class="label">PROPOSAL</div><div class="sub">REQUÊTE TRANSMISE</div></div>
+  <div class="block" id="b-agree"><div class="label">AGREEMENT</div><div class="sub">CONSENSUS ÉTABLI</div></div>
+  <div class="block" id="b-deny"><div class="label">DENIAL</div><div class="sub">REFUS DU CONSEIL</div></div>
+</div>
+
+<div class="main">
+  <div class="triad" id="triad">
+    <svg class="links" viewBox="0 0 100 100" preserveAspectRatio="none">
+      <!-- Les diagonales s'arrêtent derrière le noyau hexagonal (y≈54) : leur
+           point de convergence ne doit pas déborder sur la carte de CASPER. -->
+      <line x1="25" y1="24" x2="75" y2="24" stroke="#3a3a46" stroke-width=".45"/>
+      <line x1="25" y1="24" x2="50" y2="54" stroke="#3a3a46" stroke-width=".45"/>
+      <line x1="75" y1="24" x2="50" y2="54" stroke="#3a3a46" stroke-width=".45"/>
+    </svg>
+    <div class="row">
+      <div class="unit melchior" id="u-MELCHIOR-1">
+        <div class="head"><span>MELCHIOR·1</span><span>科学</span></div>
+        <div class="model">—</div>
+        <div class="verdict">STANDBY</div>
+        <div class="metrics"><span class="conf">CONF —</span><span class="lat">— ms</span></div>
+        <div class="bar"><i></i></div>
+        <ul></ul>
+        <div class="state">RAISON SCIENTIFIQUE</div>
+      </div>
+      <div class="unit balthasar" id="u-BALTHASAR-2">
+        <div class="head"><span>BALTHASAR·2</span><span>母</span></div>
+        <div class="model">—</div>
+        <div class="verdict">STANDBY</div>
+        <div class="metrics"><span class="conf">CONF —</span><span class="lat">— ms</span></div>
+        <div class="bar"><i></i></div>
+        <ul></ul>
+        <div class="state">ÉTHIQUE &amp; SÉCURITÉ HUMAINE</div>
+      </div>
+    </div>
+    <div class="core">
+      <svg viewBox="0 0 132 104" preserveAspectRatio="none" aria-hidden="true">
+        <polygon points="66,2 130,28 130,76 66,102 2,76 2,28" fill="#0d0000"
+                 stroke="#ff2b2b" stroke-width="2.5" stroke-linejoin="round"/>
+      </svg>
+      <div class="txt"><b>MAGI</b>CODE:707<span id="core-round">STANDBY</span></div>
+    </div>
+    <div class="row bottom">
+      <div class="unit casper" id="u-CASPER-3">
+        <div class="head"><span>CASPER·3</span><span>女</span></div>
+        <div class="model">—</div>
+        <div class="verdict">STANDBY</div>
+        <div class="metrics"><span class="conf">CONF —</span><span class="lat">— ms</span></div>
+        <div class="bar"><i></i></div>
+        <ul></ul>
+        <div class="state">ESPRIT CRITIQUE &amp; PRAGMATISME</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="log">
+    <h2>JOURNAL SYSTÈME</h2>
+    <div class="lines" id="log"></div>
+  </div>
+</div>
+
+<div class="decision" id="decision">
+  <div class="banner">
+    <div class="st" id="d-status">—</div>
+    <div class="meta" id="d-meta"></div>
+  </div>
+  <div class="content" id="d-answer"></div>
+  <section class="cond" id="d-cond-wrap" hidden><h3>CONDITIONS À REMPLIR</h3><ul id="d-cond"></ul></section>
+  <section class="diss" id="d-diss-wrap" hidden><h3>POSITION MINORITAIRE</h3><p id="d-diss"></p></section>
+  <div class="warn" id="d-warn" hidden></div>
+</div>
+
+<div class="history" id="history">
+  <h2>HISTORIQUE DES VOTES</h2>
+  <table><thead><tr><th>TOUR</th><th>MELCHIOR·1</th><th>BALTHASAR·2</th><th>CASPER·3</th><th>ISSUE</th></tr></thead>
+  <tbody id="hist-body"></tbody></table>
+</div>
+
+<footer>MAGI SYSTEM · NERV-STYLE DELIBERATION ENGINE · MELCHIOR-1 / BALTHASAR-2 / CASPER-3</footer>
+</div>
+
+<script>
+"use strict";
+const AGENTS = ["MELCHIOR-1", "BALTHASAR-2", "CASPER-3"];
+const VOTE_LABEL = { APPROVED: "AGREEMENT", REJECTED: "DENIAL", CONDITIONAL: "CONDITIONAL" };
+const $ = (id) => document.getElementById(id);
+
+let source = null;
+let rounds = [];
+
+/* ---------- journal ---------- */
+function logLine(message, kind = "info") {
+  const box = $("log");
+  const line = document.createElement("div");
+  const time = new Date().toLocaleTimeString("fr-FR", { hour12: false });
+  line.innerHTML = `<span class="t">${time}</span><span class="m-${kind}"></span>`;
+  line.lastChild.textContent = message;     // textContent : aucune injection possible
+  box.appendChild(line);
+  box.scrollTop = box.scrollHeight;
+}
+
+/* ---------- unités ---------- */
+function unitEl(name) { return $("u-" + name); }
+
+function resetUnits() {
+  rounds = [];
+  for (const name of AGENTS) {
+    const unit = unitEl(name);
+    unit.className = unit.className.replace(/ (active|thinking|err)/g, "");
+    unit.querySelector(".verdict").textContent = "STANDBY";
+    unit.querySelector(".verdict").className = "verdict";
+    unit.querySelector(".conf").textContent = "CONF —";
+    unit.querySelector(".lat").textContent = "— ms";
+    unit.querySelector(".bar i").style.width = "0";
+    unit.querySelector("ul").innerHTML = "";
+  }
+  for (const id of ["b-proposal", "b-agree", "b-deny"]) {
+    $(id).className = "block";
+  }
+  $("decision").classList.remove("show");
+  $("history").classList.remove("show");
+  $("hist-body").innerHTML = "";
+  $("log").innerHTML = "";
+}
+
+function setThinking(name) {
+  const unit = unitEl(name);
+  unit.classList.add("active", "thinking");
+  unit.classList.remove("err");
+  const verdict = unit.querySelector(".verdict");
+  verdict.textContent = "";
+  verdict.className = "verdict";
+}
+
+function applyVerdict(verdict) {
+  const unit = unitEl(verdict.agent);
+  if (!unit) return;
+  unit.classList.remove("thinking");
+  unit.classList.add("active");
+  unit.classList.toggle("err", !!verdict.degraded);
+
+  const vote = verdict.vote;
+  const el = unit.querySelector(".verdict");
+  el.textContent = verdict.degraded ? "OFFLINE" : VOTE_LABEL[vote] || vote;
+  el.className = "verdict " + vote.toLowerCase();
+
+  unit.querySelector(".conf").textContent = "CONF " + verdict.confidence_score.toFixed(2);
+  unit.querySelector(".lat").textContent = verdict.latency_ms + " ms";
+
+  const bar = unit.querySelector(".bar i");
+  bar.style.width = Math.round(verdict.confidence_score * 100) + "%";
+  bar.style.background = vote === "APPROVED" ? "var(--green)"
+                       : vote === "REJECTED" ? "var(--red)" : "var(--orange)";
+
+  const list = unit.querySelector("ul");
+  list.innerHTML = "";
+  for (const argument of verdict.key_arguments || []) {
+    const item = document.createElement("li");
+    item.textContent = argument;
+    list.appendChild(item);
+  }
+
+  const kind = vote === "APPROVED" ? "ok" : vote === "REJECTED" ? "no" : "cond";
+  logLine(`${verdict.agent} → ${vote} (confiance ${verdict.confidence_score.toFixed(2)})`, kind);
+}
+
+/* ---------- historique ---------- */
+function renderHistory(decision) {
+  const body = $("hist-body");
+  body.innerHTML = "";
+  decision.rounds.forEach((round) => {
+    const row = document.createElement("tr");
+    const votes = {};
+    round.verdicts.forEach((v) => { votes[v.agent] = v.vote; });
+    row.innerHTML = `<td>${round.index + 1}</td>`;
+    AGENTS.forEach((name) => {
+      const vote = votes[name] || "—";
+      const cell = document.createElement("td");
+      cell.className = "v-" + vote.toLowerCase();
+      cell.textContent = vote;
+      row.appendChild(cell);
+    });
+    const issue = document.createElement("td");
+    issue.textContent = round.unanimous ? "UNANIME" : "DÉSACCORD";
+    issue.style.color = round.unanimous ? "var(--green)" : "var(--orange)";
+    row.appendChild(issue);
+    body.appendChild(row);
+  });
+  $("history").classList.add("show");
+}
+
+/* ---------- décision ---------- */
+const STATUS_CLASS = {
+  "UNANIMOUS APPROVAL": "approved",
+  "MAJORITY APPROVAL": "majority",
+  "CONDITIONAL APPROVAL": "conditional",
+  "REJECTED": "rejected",
+};
+
+function showDecision(decision) {
+  $("d-status").textContent = decision.status;
+  $("d-status").className = "st " + (STATUS_CLASS[decision.status] || "");
+  $("d-meta").textContent =
+    `CONSENSUS ${Math.round(decision.consensus_confidence * 100)}% · `
+    + `${decision.rounds_used} TOUR(S) · ${decision.total_duration_ms} MS · `
+    + Object.entries(decision.tally).filter(([, n]) => n).map(([k, n]) => `${k} ${n}`).join(" / ");
+  $("d-answer").textContent = decision.final_answer;
+
+  const conditions = decision.conditions || [];
+  $("d-cond-wrap").hidden = conditions.length === 0;
+  $("d-cond").innerHTML = "";
+  conditions.forEach((condition) => {
+    const item = document.createElement("li");
+    item.textContent = condition;
+    $("d-cond").appendChild(item);
+  });
+
+  $("d-diss-wrap").hidden = !decision.dissent;
+  $("d-diss").textContent = decision.dissent || "";
+
+  $("d-warn").hidden = !decision.degraded;
+  $("d-warn").textContent = decision.degraded
+    ? "⚠ DÉCISION RENDUE EN MODE DÉGRADÉ — au moins une instance n'a pas répondu."
+    : "";
+
+  const approved = decision.status !== "REJECTED";
+  $("b-proposal").className = "block on-proposal";
+  $("b-agree").className = "block" + (approved ? " on-agree" : "");
+  $("b-deny").className = "block" + (approved ? "" : " on-deny");
+
+  $("decision").classList.add("show");
+  renderHistory(decision);
+  $("decision").scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+/* ---------- flux SSE ---------- */
+function stop(stateLabel) {
+  if (source) { source.close(); source = null; }
+  $("submit").disabled = false;
+  $("submit").textContent = "DÉLIBÉRER";
+  $("m-state").textContent = stateLabel;
+  $("b-proposal").classList.remove("pulsing");
+}
+
+function deliberate() {
+  const query = $("query").value.trim();
+  if (!query) { $("query").focus(); return; }
+
+  resetUnits();
+  $("submit").disabled = true;
+  $("submit").textContent = "EN COURS…";
+  $("b-proposal").className = "block on-proposal pulsing";
+  $("m-state").textContent = "DÉLIBÉRATION";
+  logLine("Proposition transmise au conseil MAGI.", "sys");
+
+  const params = new URLSearchParams({ q: query });
+  if ($("backend").value) params.set("backend", $("backend").value);
+  if ($("rounds").value !== "") params.set("rounds", $("rounds").value);
+
+  source = new EventSource("/api/deliberate?" + params.toString());
+
+  const on = (name, handler) => source.addEventListener(name, (e) => handler(JSON.parse(e.data)));
+
+  on("deliberation_started", (d) => {
+    $("m-backend").textContent = d.backend;
+    $("m-rounds").textContent = d.max_rounds;
+    (d.agents || []).forEach((agent) => {
+      const unit = unitEl(agent.name);
+      if (unit) unit.querySelector(".model").textContent = `${agent.model}  ·  T=${agent.temperature}`;
+    });
+    logLine(`Backend ${d.backend} · ${d.max_rounds} tour(s) de débat maximum.`, "sys");
+  });
+
+  on("round_started", (d) => {
+    $("core-round").textContent = "TOUR " + (d.round + 1);
+    logLine(d.round === 0 ? "TOUR 1 — analyse indépendante." : `TOUR ${d.round + 1} — débat contradictoire.`, "round");
+  });
+
+  on("agent_thinking", (d) => setThinking(d.agent));
+  on("agent_verdict", (d) => applyVerdict(d.verdict));
+  on("agent_error", (d) => {
+    applyVerdict(d.verdict);
+    logLine(`${d.verdict.agent} indisponible : ${d.verdict.error}`, "no");
+  });
+
+  on("round_completed", (d) => {
+    const tally = Object.entries(d.tally).filter(([, n]) => n).map(([k, n]) => `${k}×${n}`).join(", ");
+    logLine(`Tour ${d.round + 1} clos — ${tally} — ${d.unanimous ? "UNANIMITÉ" : "désaccord"} (${d.duration_ms} ms).`,
+            d.unanimous ? "ok" : "round");
+  });
+
+  on("debate_skipped", (d) => logLine("Débat inutile : " + d.reason + ".", "ok"));
+  on("converged", (d) => logLine("Débat clos : " + d.reason + ".", "ok"));
+  on("synthesis_started", (d) => {
+    $("core-round").textContent = "SYNTHÈSE";
+    logLine(`Statut système : ${d.status}. Synthèse par ${d.model}…`, "sys");
+  });
+
+  on("decision", (d) => {
+    showDecision(d.decision);
+    $("core-round").textContent = d.decision.status === "REJECTED" ? "DENIAL" : "AGREEMENT";
+    logLine("Décision rendue : " + d.decision.status, d.decision.status === "REJECTED" ? "no" : "ok");
+    stop("TERMINÉ");
+  });
+
+  on("failed", (d) => { logLine("ÉCHEC : " + d.error, "no"); stop("ÉCHEC"); });
+  source.addEventListener("close", () => stop("TERMINÉ"));
+
+  source.onerror = () => {
+    // EventSource signale aussi la fermeture normale du flux : on ne
+    // remonte une erreur que si la décision n'a jamais été reçue.
+    if (source && source.readyState === EventSource.CLOSED) {
+      if (!$("decision").classList.contains("show")) {
+        logLine("Connexion au serveur interrompue.", "no");
+        stop("ERREUR");
+      } else {
+        stop("TERMINÉ");
+      }
+    }
+  };
+}
+
+/* ---------- initialisation ---------- */
+$("submit").addEventListener("click", deliberate);
+$("query").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) deliberate();
+});
+
+fetch("/api/config").then((r) => r.json()).then((cfg) => {
+  $("m-backend").textContent = cfg.backend;
+  $("m-rounds").textContent = cfg.max_debate_rounds;
+  $("m-orch").textContent = cfg.orchestrator.model;
+  (cfg.agents || []).forEach((agent) => {
+    const unit = unitEl(agent.name);
+    if (unit) unit.querySelector(".model").textContent = `${agent.model}  ·  T=${agent.temperature}`;
+  });
+  const missing = Object.values(cfg.missing_api_keys || {});
+  if (missing.length) {
+    $("backend").value = "simulated";
+    logLine("Clés d'API absentes (" + [...new Set(missing)].join(", ") + ") — backend simulé sélectionné.", "cond");
+  }
+  logLine("Système MAGI initialisé. En attente d'une proposition.", "sys");
+}).catch(() => logLine("Configuration serveur illisible.", "no"));
+</script>
+</body>
+</html>
