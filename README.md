@@ -306,6 +306,30 @@ Six presets — Piano él., Cloche, Marimba, Basse FM, Cuivre, Verre — et neuf
 
 C'est la page où les **accords** comptent le plus : un piano électrique qui ne sait pas plaquer une triade, ce n'est pas un piano électrique.
 
+## Écrire avec une gamme, et faire proposer la suite
+
+Le séquenceur savait éditer ; il ne savait rien suggérer. Deux commandes changent ça, dans les quatre studios mélodiques.
+
+### Le guide de gamme
+
+Choisissez une **tonique** et un **mode** — majeur, mineur naturel ou harmonique, les quatre modes anciens, pentatonique mineure, blues. Les rangées de la grille qui n'appartiennent pas à la gamme **s'effacent sans disparaître** : elles restent cliquables, et une note déjà écrite là garde toute sa couleur. Une note hors gamme n'est pas une faute, c'est une information.
+
+En *ré mineur*, il ne reste que huit rangées éclairées sur treize. Écrire juste devient une affaire de viser ce qui brille.
+
+**Dans la gamme** ramène chaque note du motif sur le degré le plus proche — à égale distance, elle monte. Accents et tenues sont conservés : seules les hauteurs bougent. Ctrl+Z annule.
+
+Ce réglage est une paire de lunettes, pas de la musique : il n'entre **ni dans le lien partagé ni dans le JSON**, et se retient d'une visite à l'autre.
+
+### Réponse
+
+**Réponse** écrit dans un motif libre la phrase qui répond à celle en cours : même rythme, mêmes accents, mêmes tenues, mais le dessin mélodique **retourné autour de sa première note**, puis ramené dans la gamme, la dernière note revenant sur la tonique.
+
+C'est l'**inversion**, un procédé d'écriture, pas un tirage au sort : la réponse est toujours parente de la question. `Ré Sol Do` donne `Ré La Do` — le saut de quarte vers le haut devient un saut de quinte vers le bas.
+
+Un détail qui décide de tout : le miroir sort souvent de la grille de treize rangées. Il est **replié par octaves**, jamais rogné. Rogner ferait un unisson là où l'inversion demandait une sixte, et la réponse ne ressemblerait plus à rien.
+
+La 909 n'a pas ces commandes — elle n'a pas de hauteurs — et sur la piste de batterie du studio trance, les deux boutons répondent « piste rythmique » plutôt que d'abîmer le motif.
+
 ## L'interface dit ce qu'on entend
 
 Deux réglages pouvaient rendre un morceau méconnaissable sans que rien ne le signale. Un fichier réel l'a montré : deux pistes sur cinq à zéro, deux autres calées à fond à droite, et une console qui n'en laissait rien voir.

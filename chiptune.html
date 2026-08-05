@@ -368,6 +368,12 @@
     box-shadow: inset 0 0 0 2px rgba(255,255,255,.85);
   }
   .seq-cell.ghost { background: rgba(155, 142, 196, .22); }
+  /* Hors de la gamme choisie : la rangée s'efface sans disparaître. Une note
+     déjà écrite là reste pleinement visible — ce n'est pas une faute, c'est une
+     information. */
+  .seq-cell.hors-gamme { opacity: .3; }
+  .seq-cell.hors-gamme.on, .seq-cell.hors-gamme.prolonge { opacity: 1; }
+  .seq-label.hors-gamme { opacity: .38; }
   /* pas situé au-delà de la longueur de boucle de la piste : jamais joué */
   .seq-cell.hors { opacity: .3; }
   .seq-cell.hors.on { opacity: .45; }
@@ -566,6 +572,16 @@
         <button id="redoBtn" title="Rétablir (Ctrl+Maj+Z)" disabled>Rétablir &#8631;</button>
         <span class="tool-msg" id="toolMsg"></span>
       </div>
+      <div class="seq-row">
+        <span class="tag">Gamme</span>
+        <select id="tonique" title="La note sur laquelle la gamme se fonde"></select>
+        <select id="modeGamme" title="Quelles hauteurs appartiennent à la gamme"></select>
+        <button id="gammeSnap" title="Ramener les notes du motif sur les degrés de la gamme">Dans la gamme</button>
+        <span class="sep"></span>
+        <button id="reponseBtn" title="Écrire dans un motif libre la phrase qui répond à celle-ci">Réponse</button>
+        <span class="tool-msg" id="gammeMsg"></span>
+      </div>
+
 
       <div class="seq-row">
         <span class="tag">Chaîne</span>
@@ -1320,6 +1336,7 @@
       const off = ROWS - 1 - r;   // aigu en haut
       const label = document.createElement("div");
       label.className = "seq-label";
+      label.dataset.off = off;
       label.textContent = NOTE_NAMES[off % 12] + (off === 12 ? "+" : "");
       seqGridEl.appendChild(label);
       for (let s = 0; s < STEPS; s++) {
@@ -1331,6 +1348,7 @@
         (seqCells[s] = seqCells[s] || [])[off] = cell;
       }
     }
+    majGuideGamme();
     refreshSeqGrid();
   }
 
@@ -1858,6 +1876,143 @@
   document.getElementById("trDown").addEventListener("click", () => transposePattern(-1));
   document.getElementById("trUp").addEventListener("click", () => transposePattern(1));
   document.getElementById("revBtn").addEventListener("click", reversePattern);
+
+  // ------- La gamme : un guide d'écriture, pas une donnée du morceau -------
+  // Rien de ce qui suit n'entre dans le lien partagé ni dans le JSON : ce sont
+  // des lunettes, pas de la musique. Le choix se retient d'une visite à l'autre.
+  const GAMMES = {
+    chromatique: { nom: "Chromatique (libre)", pas: [0,1,2,3,4,5,6,7,8,9,10,11] },
+    majeur:      { nom: "Majeur",              pas: [0,2,4,5,7,9,11] },
+    mineur:      { nom: "Mineur naturel",      pas: [0,2,3,5,7,8,10] },
+    harmonique:  { nom: "Mineur harmonique",   pas: [0,2,3,5,7,8,11] },
+    dorien:      { nom: "Dorien",              pas: [0,2,3,5,7,9,10] },
+    phrygien:    { nom: "Phrygien",            pas: [0,1,3,5,7,8,10] },
+    lydien:      { nom: "Lydien",              pas: [0,2,4,6,7,9,11] },
+    mixolydien:  { nom: "Mixolydien",          pas: [0,2,4,5,7,9,10] },
+    penta:       { nom: "Pentatonique mineure", pas: [0,3,5,7,10] },
+    blues:       { nom: "Blues",               pas: [0,3,5,6,7,10] }
+  };
+  const CLE_GAMME = "synthes-virtuels/chiptune/gamme";
+  const gamme = { tonique: 0, mode: "chromatique" };
+  // Le try n'entoure que la lecture du stockage, celle qui peut légitimement
+  // échouer : l'étendre au décodage masquerait les fautes de frappe.
+  let brutGamme = null;
+  try { brutGamme = localStorage.getItem(CLE_GAMME); } catch (e) { brutGamme = null; }
+  if (brutGamme) {
+    const g = JSON.parse(brutGamme);
+    if (g && GAMMES[g.mode]) {
+      gamme.mode = g.mode;
+      gamme.tonique = Math.min(11, Math.max(0, Math.round(+g.tonique) || 0));
+    }
+  }
+
+  const gammeLibre = () => gamme.mode === "chromatique";
+  const dansGamme = o => gammeLibre() ||
+    GAMMES[gamme.mode].pas.includes((((o - gamme.tonique) % 12) + 12) % 12);
+  // le degré de la gamme le plus proche ; à égale distance, on monte
+  function versGamme(o) {
+    if (dansGamme(o)) return o;
+    for (let d = 1; d <= 12; d++) {
+      if (o + d <= 12 && dansGamme(o + d)) return o + d;
+      if (o - d >= 0 && dansGamme(o - d)) return o - d;
+    }
+    return o;
+  }
+
+  const gammeMsgEl = document.getElementById("gammeMsg");
+  let gammeMsgTimer = null;
+  function flashGamme(msg) {
+    gammeMsgEl.textContent = msg;
+    clearTimeout(gammeMsgTimer);
+    gammeMsgTimer = setTimeout(() => gammeMsgEl.textContent = "", 2600);
+  }
+
+  function majGuideGamme() {
+    seqGridEl.querySelectorAll("[data-off]").forEach(el =>
+      el.classList.toggle("hors-gamme", !dansGamme(+el.dataset.off)));
+  }
+
+  const toniqueEl = document.getElementById("tonique");
+  const modeEl = document.getElementById("modeGamme");
+  NOTE_NAMES.forEach((n, i) => toniqueEl.add(new Option(n, i)));
+  Object.entries(GAMMES).forEach(([k, g]) => modeEl.add(new Option(g.nom, k)));
+  function ecrireGamme() {
+    toniqueEl.value = gamme.tonique;
+    modeEl.value = gamme.mode;
+    toniqueEl.disabled = gammeLibre();
+    majGuideGamme();
+    try { localStorage.setItem(CLE_GAMME, JSON.stringify(gamme)); } catch (e) {}
+  }
+  toniqueEl.addEventListener("change", () => { gamme.tonique = +toniqueEl.value; ecrireGamme(); });
+  modeEl.addEventListener("change", () => { gamme.mode = modeEl.value; ecrireGamme(); });
+
+  // Ramener le motif dans la gamme : accents et tenues sont conservés, seules
+  // les hauteurs bougent, et du plus court chemin.
+  function appliquerGamme() {
+    if (gammeLibre()) { flashGamme("Choisissez d'abord une gamme"); return; }
+    const data = editData(currentTrack);
+    let bouges = 0;
+    for (let k = 0; k < STEPS; k++) {
+      const v = data[k];
+      if (stepEmpty(v)) continue;
+      let m = v & ~NOTE_BITS;
+      stepNotes(v).forEach(o => { const n = versGamme(o); if (n !== o) bouges++; m |= 1 << n; });
+      data[k] = m;
+    }
+    refreshSeqGrid(); refreshOverview(); markDirty();
+    flashGamme(bouges ? bouges + (bouges > 1 ? " notes ramenées" : " note ramenée") : "Déjà dans la gamme");
+  }
+  document.getElementById("gammeSnap").addEventListener("click", appliquerGamme);
+
+  // « Réponse » : la phrase qui répond à celle-ci. Même rythme, mêmes accents,
+  // mêmes tenues, mais le dessin mélodique retourné autour de sa première note.
+  // Le procédé s'appelle l'inversion ; il donne toujours quelque chose de
+  // parent, jamais un tirage au sort.
+  function proposerReponse() {
+    const src = editData(currentTrack);
+    const poses = [];
+    for (let k = 0; k < STEPS; k++) if (!stepEmpty(src[k])) poses.push(k);
+    if (!poses.length) { flashGamme("Ce motif est vide"); return; }
+
+    let cible = PATTERN_NAMES.findIndex((n, p) => p !== editPattern && patternIsEmpty(p));
+    const remplace = cible < 0;
+    if (remplace) cible = (editPattern + 1) % PATTERN_COUNT;
+
+    const pivot = stepNotes(src[poses[0]])[0];
+    const data = patterns[cible][currentTrack];
+    for (let k = 0; k < STEPS; k++) {
+      const v = src[k];
+      if (stepEmpty(v)) { data[k] = v & ~NOTE_BITS; continue; }
+      let m = v & ~NOTE_BITS;
+      // Le miroir sort volontiers de la grille : on le replie par octaves plutôt
+      // que de le rogner. Rogner ferait un unisson là où l'inversion demandait
+      // une sixte, et la réponse ne ressemblerait plus à rien.
+      stepNotes(v).forEach(o => {
+        let n = 2 * pivot - o;
+        while (n < 0) n += 12;
+        while (n > 12) n -= 12;
+        m |= 1 << versGamme(n);
+      });
+      data[k] = m;
+    }
+    // une phrase se pose : la dernière note revient sur la tonique
+    if (!gammeLibre()) {
+      const fin = poses[poses.length - 1];
+      const bas = stepNotes(data[fin])[0];
+      const choix = [gamme.tonique, gamme.tonique + 12]
+        .filter(t => t >= 0 && t <= 12)
+        .sort((a, b) => Math.abs(a - bas) - Math.abs(b - bas));
+      data[fin] = (data[fin] & ~NOTE_BITS) | (1 << choix[0]);
+    }
+
+    editPattern = cible;
+    refreshPatternButtons(); buildSeqGrid(); refreshOverview(); markDirty();
+    flashGamme((remplace ? "Réponse écrite par-dessus " : "Réponse écrite dans ")
+               + PATTERN_NAMES[cible] + (remplace ? " — Ctrl+Z annule" : ""));
+  }
+  document.getElementById("reponseBtn").addEventListener("click", proposerReponse);
+  ecrireGamme();
+
 
   // ------- Accords ou monophonie -------
   // Le mode ne touche qu'à l'édition : un motif déjà écrit garde ses accords et
@@ -2736,6 +2891,10 @@
   }
 
   const INFOS = {
+    "tonique": "La note sur laquelle la gamme se fonde. Les rangées qui ne lui appartiennent pas s'effacent dans la grille — elles restent cliquables, une note hors gamme n'est pas une faute.",
+    "modeGamme": "Quelles hauteurs appartiennent à la gamme. « Chromatique » n'efface rien. Ce choix est une aide à l'écriture : il n'entre ni dans le lien partagé ni dans le JSON, et se retient d'une visite à l'autre.",
+    "gammeSnap": "Ramène chaque note du motif sur le degré de gamme le plus proche, en gardant les accents et les tenues. Ctrl+Z annule.",
+    "reponseBtn": "Écrit dans un motif libre la phrase qui répond à celle-ci : même rythme, même accentuation, mais le dessin mélodique retourné autour de sa première note, et la dernière note ramenée sur la tonique.",
     "jsonOut": "Enregistre le morceau entier dans un fichier JSON lisible : pistes, instruments, motifs, chaîne et réglages. Il s'ouvre et se modifie dans n'importe quel éditeur de texte.",
     "jsonIn": "Recharge un morceau depuis un fichier JSON exporté d'ici. Ctrl+Z annule l'import.",
       "attack": "Temps que met la note à atteindre son volume plein. Très court pour l'attaque nette d'une console, long pour un son qui monte doucement.",
