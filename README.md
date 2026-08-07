@@ -368,6 +368,35 @@ La **batterie** ne passe pas par le réseau : sans hauteurs, il n'aurait rien à
 
 Trois motifs, donc, enchaînés **A A B B C B** : A pose le décor à la nappe et à la basse, B ouvre, C tend. Mesuré sur le rendu WAV, découpé au tempo, l'énergie suit : `0,060 · 0,073 · 0,078 · 0,079 · 0,082 · 0,079`. A est bien le plus léger, C bien le sommet.
 
+### Il tire une intention
+
+Premier jet, le bouton écrivait toujours **le même morceau**. Mesuré plutôt que supposé : six morceaux d'affilée donnaient une seule tonalité, une seule progression, un seul tempo, et — Jaccard sur les cases posées — une nappe identique à `1,00` et une batterie identique à `1,00`. Les couches mélodiques, elles, variaient déjà beaucoup (`0,03`) : le recuit explore. Mais elles reposaient toutes sur le même lit harmonique et rythmique, et c'est le lit qu'on entend.
+
+Avant d'écrire la moindre note, le bouton tire donc une **intention** : tonalité et mode (mineur, dorien, phrygien, harmonique, majeur, pondérés), progression, tempo, swing, forme de l'arrangement parmi six, style de nappe (tenue, pompe, stabs, relance), densités, et un **caractère rythmique par couche** — carré, croches, contretemps, galop, syncope. Ce caractère est un bonus par position dans les deux temps, ajouté au coût : c'est ce qui distingue une basse carrée d'une basse en galop à hauteurs et à densité égales, donc exactement ce que le réseau — qui juge le style *moyen* des neuf morceaux — ne saurait pas demander tout seul.
+
+S'y ajoute un terme d'**écart** : une couche est composée en s'éloignant de ce qui est déjà écrit — les autres couches du même motif, pour ne pas frapper toutes ensemble, et le même instrument dans les autres motifs, pour que B ne redise pas A. C'est de la recherche de nouveauté, au même titre que la recherche de style.
+
+La batterie est faite de **figures** — des listes de pas — et non de modulos, et son charley respire : quelques coups ôtés, quelques doubles ajoutés entre les temps.
+
+**Ce que vous avez réglé n'est pas tiré au sort.** Gamme, degrés, tempo, swing : si vous y avez touché, le bouton s'y plie, au premier clic comme au dixième.
+
+Il a fallu **deux mécanismes**, parce qu'aucun ne suffit seul.
+
+Une **trace de ce que le bouton a lui-même posé** : un réglage qui ne vaut plus ce qu'il y avait mis est le vôtre. C'est ce qui rattrape les liens partagés et les fichiers importés, qui changent la valeur sans déclencher le moindre événement. La trace ne retient que ce qu'il a *tiré*, jamais ce qu'il a respecté — sinon il le reprendrait pour sien au clic suivant, et votre choix ne durerait qu'un morceau.
+
+Et un **guet du geste**, parce qu'un geste ne change pas toujours la valeur : si le bouton tire `1 4 5 1` et que vous écrivez ensuite la même chose, il n'y voit que sa propre trace intacte. `setSlider` annonce donc qu'il écrit, pour que les valeurs qu'il pose lui-même ne repassent pas pour les vôtres — c'est ce qui manquait à la première version, qui guettait `input` sans réserve et croyait que vous aviez choisi le tempo qu'elle venait de tirer. Charger un morceau efface ces choix : ils portaient sur un autre morceau.
+
+| | avant | après |
+| --- | --- | --- |
+| tonalités distinctes sur 8 | 1 | 7 |
+| progressions distinctes | 1 | 4 |
+| tempos distincts | 1 | 7 |
+| ressemblance nappe | 1,00 | 0,17 |
+| ressemblance batterie | 1,00 | 0,49 |
+| **ressemblance d'ensemble** | **0,64** | **0,16** |
+
+La batterie reste la plus ressemblante, et c'est juste : la grosse caisse de trance est quatre au sol et le restera. Deux paires toutes deux muettes ne comptent pas comme identiques — ce serait tenir un accord parfait entre deux silences pour de la redite.
+
 **Sans gamme choisie, il en choisit une.** La première version refusait de travailler tant qu'on ne lui avait pas réglé une gamme à sept degrés — or la gamme par défaut est chromatique, si bien qu'un clic sur un onglet neuf ne faisait rien du tout et que le message d'alerte s'effaçait avant qu'on ait pu le lire. Il déduit désormais la tonalité de ce qui est déjà écrit : la gamme qui accueille le plus de notes, la tonique et sa quinte départageant les relatives, qui contiennent exactement les mêmes notes. Page blanche, ce sera mineur — le ton du genre.
 
 L'apprentissage, enfin, **rend compte au bouton qui l'a demandé**. `rEntrainer` datait du temps où *Variante* était seul à s'en servir et écrivait sa progression sur ce bouton-là, quel qu'ait été le clic. Un clic sur *Morceau* laissait donc *Variante* figé sur `Apprend 92 %` — la dernière valeur affichée, la douzième époque appelant la suite sans repasser par l'affichage — et rien ne le rendait, puisque seul son propre gestionnaire savait le faire. Le test regarde désormais les cinq boutons à la fois : celui qu'on clique, et les quatre autres, qui ne doivent pas bouger d'un caractère.

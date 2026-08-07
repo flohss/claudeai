@@ -517,7 +517,7 @@
 
       <div class="bar">
         <span class="tag">IA</span>
-        <button id="morceauBtn" title="Écrire un morceau entier : les cinq pistes, trois motifs, et la chaîne qui les enchaîne">Morceau</button>
+        <button id="morceauBtn" title="Écrire un morceau entier : intention tirée au sort, cinq pistes, trois motifs et la chaîne">Morceau</button>
         <button id="creerBtn" title="Écrire un motif entier à partir de rien, dans la gamme">Créer</button>
         <button id="completerBtn" title="Garder ce qui est écrit et remplir autour">Compléter</button>
         <button id="sublimerBtn" title="Reprendre le motif et chercher longuement mieux">Sublimer</button>
@@ -2503,7 +2503,11 @@
 
   // La note d'un motif : surprise du réseau, plus quelques préférences que le
   // réseau ne peut pas connaître — l'accord en cours et les sauts déraisonnables.
-  function rCout(data, accords) {
+  // Le « goût » est facultatif : Créer, Compléter et Sublimer s'en passent, et
+  // ne demandent au réseau que le style moyen des neuf morceaux. Morceau, lui,
+  // écrit plusieurs couches et plusieurs motifs d'un coup — il lui faut de quoi
+  // les distinguer, sans quoi ils convergent tous vers le même optimum.
+  function rCout(data, accords, gout) {
     let c = rNoter(data) * STEPS;
     let prec = -1;
     for (let s = 0; s < STEPS; s++) {
@@ -2513,15 +2517,20 @@
         c += accords[s].has(n % 12) ? -0.35 : 0.35;   // temps fort : l'accord tire
       if (prec >= 0 && Math.abs(n - prec) > 7) c += 0.25 * (Math.abs(n - prec) - 7);
       prec = n;
+      if (gout) {
+        c -= gout.profil[s % gout.profil.length];     // le caractère rythmique voulu
+        if (gout.occupes[s]) c += 0.10;               // ne pas frapper tous ensemble
+        gout.ecarter.forEach(d => { if (!stepEmpty(d[s])) c += 0.09; });  // ni redire l'autre motif
+      }
     }
     return c;
   }
 
-  function rRecuit(depart, geles, tours, alea, avance) {
+  function rRecuit(depart, geles, tours, alea, avance, gout) {
     const permises = rPermises();
     const accords = [];
     for (let s = 0; s < STEPS; s++) accords[s] = s % 4 === 0 ? rAccordA(s) : null;
-    let cour = depart.slice(), coutCour = rCout(cour, accords);
+    let cour = depart.slice(), coutCour = rCout(cour, accords, gout);
     let best = cour.slice(), coutBest = coutCour;
 
     for (let t = 0; t < tours; t++) {
@@ -2556,7 +2565,7 @@
         essai[b] = (essai[b] & ~NOTE_BITS) | ma;
       } else continue;
 
-      const c = rCout(essai, accords);
+      const c = rCout(essai, accords, gout);
       if (c < coutCour || alea() < Math.exp((coutCour - c) / temp)) {
         cour = essai; coutCour = c;
         if (c < coutBest) { best = essai.slice(); coutBest = c; }
@@ -2653,32 +2662,262 @@
   }
 
   // ------- Un morceau entier, toutes les couches -------
-  // L'ordre d'écriture n'est pas indifférent : chaque couche est composée en
-  // voyant les précédentes, parce que rCout récompense les notes de l'accord
-  // du moment. La nappe passe donc en premier et donne son cadre à tout le
-  // reste ; la basse ensuite, qui s'y appuie ; le pluck et le lead enfin.
+  // L'ordre d'écriture est celui d'un arrangeur : la nappe pose le cadre, la
+  // basse s'y amarre, le pluck et le lead brodent en voyant ce qui est là.
+
   const R_PISTES = { nappe: 1, basse: 2, pluck: 3, lead: 0 };
 
-  // Un plan par motif. densite = part des pas occupés, 0 = la couche se tait.
-  // A pose le décor, B ouvre, C tend avant de retomber sur B.
-  const R_PLAN = [
-    { basse: 0.20, pluck: 0,    lead: 0,
-      batterie: { gc: 8, clap: 0, ch: 4, oh: 0, crash: false } },
-    { basse: 0.32, pluck: 0.34, lead: 0.22,
-      batterie: { gc: 4, clap: 8, ch: 2, oh: 8, crash: true } },
-    { basse: 0.32, pluck: 0.46, lead: 0.34,
-      batterie: { gc: 4, clap: 8, ch: 2, oh: 4, crash: true } }
+  // Le caractère rythmique d'une couche : un bonus par position dans les deux
+  // temps. C'est ce qui distingue une basse carrée d'une basse en galop, à
+  // hauteurs et à densité égales — donc ce que le réseau, qui juge le style
+  // moyen des neuf morceaux, ne saurait pas demander tout seul.
+  // Des figures, non des modulos : une liste de pas sur les trente-deux. C'est
+  // ce qui distingue une boîte à rythmes d'un métronome, et ce qui permet à la
+  // grosse caisse de se déhancher sans cesser de tenir le sol.
+  const R_GC = [
+    [0, 4, 8, 12, 16, 20, 24, 28],
+    [0, 4, 8, 12, 16, 20, 24, 28, 30],
+    [0, 4, 8, 12, 14, 16, 20, 24, 28],
+    [0, 4, 8, 12, 16, 20, 22, 24, 28, 30],
+    [0, 6, 8, 12, 16, 22, 24, 28]
   ];
-  const R_CHAINE = [0, 0, 1, 1, 2, 1];
-  // Combien chercher, par couche, en part de l'ambition choisie. Le lead est
-  // celui qu'on entend le mieux : il mérite le plus de tours.
+  const R_GC_MAIGRE = [
+    [0, 8, 16, 24], [0, 8, 16, 24, 28], [0, 4, 8, 16, 20, 24], [0, 8, 12, 16, 24, 28]
+  ];
+  const R_CLAP = [
+    [4, 12, 20, 28], [4, 12, 20, 28, 26], [4, 12, 20, 28, 14], [12, 28], [4, 12, 20, 28, 31]
+  ];
+  const R_CH = [
+    [2, 6, 10, 14, 18, 22, 26, 30],
+    [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30],
+    [2, 6, 10, 14, 18, 22, 26, 30, 1, 9, 17, 25],
+    [0, 4, 8, 12, 16, 20, 24, 28],
+    [2, 6, 10, 14, 18, 22, 26, 30, 29, 31]
+  ];
+  const R_CH_MAIGRE = [[0, 8, 16, 24], [2, 10, 18, 26], [0, 4, 8, 12, 16, 20, 24, 28], []];
+  const R_OH = [[], [6, 14, 22, 30], [2, 6, 10, 14, 18, 22, 26, 30], [14, 30], [6, 22]];
+  const R_FILLS = [[28, 29, 30, 31], [26, 28, 30, 31], [24, 28, 30, 31], [29, 30, 31]];
+
+  const R_PROFILS = {
+    carre:       [0.30, 0, 0.05, 0, 0.22, 0, 0.05, 0],
+    croches:     [0.20, 0, 0.18, 0, 0.20, 0, 0.18, 0],
+    contretemps: [0.04, 0, 0.30, 0, 0.04, 0, 0.30, 0],
+    galop:       [0.28, 0, 0, 0.22, 0.10, 0, 0, 0.22],
+    syncope:     [0.06, 0.24, 0, 0.20, 0.06, 0.24, 0, 0.20],
+    libre:       [0, 0, 0, 0, 0, 0, 0, 0]
+  };
+  // Ce qui va à chaque couche. Le lead a droit au silence rythmique — « libre »
+  // le laisse suivre le seul réseau.
+  const R_CARACTERES = {
+    basse: ["carre", "croches", "galop", "contretemps"],
+    pluck: ["contretemps", "croches", "syncope", "galop"],
+    lead:  ["libre", "carre", "syncope", "croches"]
+  };
+  // Les modes à sept degrés, avec leur poids : la trance vit dans le mineur,
+  // mais un phrygien ou un dorien change tout sans dépayser.
+  const R_MODES = [["mineur", 5], ["dorien", 2], ["phrygien", 2], ["harmonique", 1], ["majeur", 2]];
+  // Quelques formes d'arrangement. Toutes commencent posément et finissent
+  // ailleurs qu'au sommet.
+  const R_FORMES = ["AABBCB", "AABBCC", "ABABCB", "AABCBC", "AABBCBB", "ABBCBC"];
+  const R_NAPPES = ["tenue", "pompe", "stabs", "relance"];
   const R_EFFORT = { basse: 0.45, pluck: 0.55, lead: 0.75 };
 
-  // Quand aucune gamme n'est choisie, on la déduit de ce qui est écrit : la
-  // tonalité qui accueille le plus de notes. Deux gammes relatives contiennent
-  // exactement les mêmes notes, seul l'appui les départage — d'où le bonus à
-  // la tonique et à sa quinte. Page vierge, on prend la mineure sur la tonique
-  // affichée : c'est le ton du genre.
+  // Vrai dès que ce bouton a écrit la page : ce qui s'y trouve vient de lui, et
+  // ne doit donc pas lui servir de consigne au clic suivant.
+  let rEcritIci = false;
+  const rTire = (t, alea) => t[Math.floor(alea() * t.length)];
+  function rTirePese(t, alea) {
+    let tot = 0;
+    t.forEach(([, w]) => tot += w);
+    let x = alea() * tot;
+    for (const [v, w] of t) { x -= w; if (x < 0) return v; }
+    return t[0][0];
+  }
+
+  // Ce que le bouton a posé la dernière fois — au départ, ce que la page affiche
+  // à l'ouverture. Un réglage encore égal à cette trace n'est pas un choix : le
+  // bouton peut le retirer et en tirer un autre. S'il en diffère — votre main,
+  // un lien partagé, un morceau chargé — il est respecté.
+  //
+  // On compare à une trace et non à un événement. Guetter « input » ne marchait
+  // pas : setSlider en déclenche un pour rafraîchir son afficheur, si bien que
+  // le bouton croyait que vous aviez choisi le tempo qu'il venait de tirer. Et
+  // filtrer sur isTrusted aurait laissé passer les gestes, mais ignoré tout ce
+  // qui arrive par un lien ou un fichier — qui sont pourtant des choix.
+  const rActuel = () => ({ bpm: +sliders.bpm.value, swing: +sliders.swing.value,
+                           degres: degresEl.value,
+                           tonique: gamme.tonique, mode: gamme.mode });
+  // La trace ne retient que ce que le bouton a TIRÉ. Un réglage qu'il a
+  // respecté n'y entre pas : sans quoi il le reprendrait pour sien au clic
+  // suivant, et votre choix ne durerait qu'un morceau.
+  let rPose = null;
+  function rTracer(o) { rPose = o || rActuel(); }
+  const rIntact = cle =>
+    !!rPose && Object.prototype.hasOwnProperty.call(rPose, cle) && rPose[cle] === rActuel()[cle];
+
+  // La trace seule ne suffit pas : si le bouton tire « 1 4 5 1 » et que vous
+  // écrivez ensuite la même chose, il n'y voit que sa propre trace intacte et
+  // se croit libre de la retirer. On guette donc aussi le geste — et pour que
+  // les valeurs qu'il pose lui-même ne repassent pas pour des vôtres, setSlider
+  // annonce qu'il écrit.
+  const rChoisi = new Set();
+  let rEcrivant = false;
+  [["degres", "degres"], ["bpm", "bpm"], ["swing", "swing"],
+   ["tonique", "tonique"], ["mode", "modeGamme"]].forEach(([cle, id]) =>
+    ["input", "change"].forEach(ev =>
+      document.getElementById(id).addEventListener(ev, () => { if (!rEcrivant) rChoisi.add(cle); })));
+  // Le vôtre : celui auquel vous avez touché, ou celui qui ne vaut plus ce que
+  // le bouton y avait mis. Un lien partagé et un fichier importé ne déclenchent
+  // aucun événement mais changent bien la valeur ; un geste ne change pas
+  // toujours la valeur. Il faut les deux.
+  const rVotre = cle => rChoisi.has(cle) || !rIntact(cle);
+
+  // L'intention : tout ce qui vaut pour le morceau entier, décidé d'un coup et
+  // avant d'écrire la moindre note.
+  function rIntention(alea, gammeFixee) {
+    const it = { tire: [] };
+
+    // Une gamme posée par le bouton au clic précédent n'est pas un choix : on
+    // la retire. Seule celle que vous avez réglée à la main est respectée.
+    const pose = {};
+    if (!gammeFixee) {
+      gamme.mode = rTirePese(R_MODES, alea);
+      gamme.tonique = Math.floor(alea() * 12);
+      ecrireGamme();
+      pose.tonique = gamme.tonique; pose.mode = gamme.mode;
+      it.tire.push(nomNote(gamme.tonique) + " " + GAMMES[gamme.mode].nom.toLowerCase());
+    }
+
+    if (rVotre("degres") && /[1-7]/.test(degresEl.value)) {
+      it.degres = degresEl.value.match(/[1-7]/g).map(Number).slice(0, 8);
+    } else {
+      it.degres = rTire(PROGRESSIONS, alea)[0].match(/[1-7]/g).map(Number);
+      degresEl.value = it.degres.join(" ");
+      progChoixEl.value = it.degres.join(" ");
+      pose.degres = degresEl.value;
+    }
+
+    if (!rVotre("bpm")) {
+      setSlider("bpm", 128 + Math.floor(alea() * 15));
+      pose.bpm = +sliders.bpm.value;
+    }
+    // le swing reste rare : c'est un parfum, pas un réglage par défaut
+    if (!rVotre("swing")) {
+      setSlider("swing", alea() < 0.25 ? 0.04 + alea() * 0.08 : 0);
+      pose.swing = +sliders.swing.value;
+    }
+
+    it.forme = rTire(R_FORMES, alea);
+    it.nappe = rTire(R_NAPPES, alea);
+    it.profils = {};
+    ["basse", "pluck", "lead"].forEach(c => it.profils[c] = rTire(R_CARACTERES[c], alea));
+
+    // Les densités bougent aussi : deux morceaux de même forme n'ont pas la
+    // même épaisseur.
+    const d = (base, ecart) => base + (alea() - 0.5) * ecart;
+    it.plan = [
+      { basse: d(0.20, 0.10), pluck: 0, lead: 0 },
+      { basse: d(0.32, 0.10), pluck: d(0.34, 0.12), lead: d(0.22, 0.10) },
+      { basse: d(0.32, 0.10), pluck: d(0.46, 0.14), lead: d(0.34, 0.12) }
+    ];
+    // Toutes les intros ne se ressemblent pas : la basse se tait parfois, et
+    // une couche de dessus entre parfois dès A, discrètement. Sans ce tirage,
+    // le motif A de deux morceaux quelconques était rigoureusement le même.
+    if (alea() < 0.4) it.plan[0].basse = 0;
+    if (alea() < 0.45) it.plan[0][alea() < 0.5 ? "pluck" : "lead"] = d(0.15, 0.06);
+    it.batterie = rPlansBatterie(alea);
+    rTracer(pose);
+    return it;
+  }
+
+  // ------- La nappe -------
+  // Quatre façons de tenir la même harmonie. « tenue » est la nappe classique ;
+  // « pompe » la relance sur les contretemps ; « stabs » la hache ; « relance »
+  // la refrappe au milieu de sa case.
+  function rNappe(data, degres, style, ouvert) {
+    for (let s = 0; s < STEPS; s++) data[s] = 0;
+    degres.forEach((deg, i) => {
+      const debut = Math.round(i * STEPS / degres.length);
+      const fin = i === degres.length - 1 ? STEPS : Math.round((i + 1) * STEPS / degres.length);
+      let m = 0;
+      rangeesAccord(triade(deg)).forEach(r => m |= 1 << r);
+      const poser = s => { data[s] = m; };
+      const tenir = (a, b) => { for (let k = a; k < b; k++) data[k] = HOLD_BIT; };
+      if (style === "pompe") {
+        for (let s = debut; s < fin; s += 4) { poser(s); tenir(s + 1, Math.min(s + 3, fin)); }
+      } else if (style === "stabs") {
+        for (let s = debut; s < fin; s += 8) { poser(s); poser(s + 4 < fin ? s + 4 : s); }
+      } else if (style === "relance" && fin - debut >= 8) {
+        const mi = debut + ((fin - debut) >> 1);
+        poser(debut); tenir(debut + 1, mi); poser(mi); tenir(mi + 1, fin);
+      } else {
+        poser(debut); tenir(debut + 1, fin);
+      }
+      // en A la nappe reste tenue quoi qu'il arrive : c'est le décor
+      if (ouvert) { poser(debut); tenir(debut + 1, fin); }
+    });
+  }
+
+  // ------- La batterie -------
+  // Elle ne passe pas par le réseau : sans hauteurs, il n'aurait rien à
+  // apprendre. Mais elle n'est plus recopiée d'une table non plus — les trois
+  // motifs sont tirés ensemble, pour que la montée reste cohérente.
+  // La grosse caisse de trance est quatre au sol et le restera : deux figures
+  // tirées au hasard s'y ressemblent forcément, et c'est très bien ainsi. La
+  // variété d'une boîte à rythmes se joue au charley — quelques coups ôtés,
+  // quelques doubles ajoutés entre les temps. C'est aussi ce qui l'empêche de
+  // sonner comme une grille.
+  function rRespirer(liste, alea, part) {
+    const out = liste.filter(() => alea() > part);
+    const n = Math.floor(alea() * 4);
+    for (let k = 0; k < n; k++) {
+      const s = 1 + 2 * Math.floor(alea() * (STEPS / 2));   // sur les doubles
+      if (!out.includes(s)) out.push(s);
+    }
+    return out.sort((a, b) => a - b);
+  }
+  function rPlansBatterie(alea) {
+    // Le plein est tiré une fois et vaut pour B et C : on monte, on ne change
+    // pas de morceau au milieu. Le charley, lui, respire à chaque motif.
+    const gc = rTire(R_GC, alea), ch = rTire(R_CH, alea), oh = rTire(R_OH, alea);
+    const clap = rTire(R_CLAP, alea);
+    const chB = rRespirer(ch, alea, 0.15);
+    return [
+      { gc: rTire(R_GC_MAIGRE, alea), clap: [], ch: rRespirer(rTire(R_CH_MAIGRE, alea), alea, 0.15),
+        oh: [], crash: false, fill: [] },
+      { gc, clap, ch: chB, oh: oh.length > 4 ? [14, 30] : oh, crash: true, fill: [] },
+      // C part du charley de B et ne fait qu'y ajouter : on monte, on ne
+      // s'allège pas. Deux respirations indépendantes pouvaient rendre le
+      // sommet plus maigre que ce qui le précède.
+      { gc, clap, ch: rRespirer(chB, alea, 0), oh: oh.length ? oh : [6, 14, 22, 30],
+        crash: true, fill: alea() < 0.6 ? rTire(R_FILLS, alea) : [] }
+    ];
+  }
+  function rBatterie(data, plan) {
+    for (let s = 0; s < STEPS; s++) data[s] = 0;
+    plan.gc.forEach(s => data[s] |= (1 << 0) | ACC_BIT);
+    plan.clap.forEach(s => data[s] |= 1 << 1);
+    plan.ch.forEach(s => data[s] |= 1 << 2);
+    plan.oh.forEach(s => data[s] |= 1 << 3);
+    plan.fill.forEach(s => data[s] |= 1 << 1);      // un roulement qui relance
+    if (plan.crash) data[0] |= 1 << 4;              // la cymbale marque l'arrivée
+  }
+
+  // La fondamentale posée puis gelée sur chaque changement d'accord : la basse
+  // ne cherche qu'autour. C'est la machinerie de « Compléter », réemployée.
+  function rAmarres(data, geles, degres) {
+    for (let s = 0; s < STEPS; s++) { data[s] = 0; geles[s] = false; }
+    degres.forEach((d, i) => {
+      const s = Math.round(i * STEPS / degres.length);
+      data[s] = 1 << (triade(d)[0] % 12);
+      geles[s] = true;
+    });
+  }
+
+  // Quand aucune gamme n'est choisie et qu'il y a déjà des notes, on ne tire
+  // pas au hasard : on déduit la tonalité de ce qui est écrit. Deux gammes
+  // relatives contiennent les mêmes notes, seul l'appui les départage — d'où
+  // le bonus à la tonique et à sa quinte.
   function rDeduireGamme() {
     const poids = new Array(12).fill(0);
     let total = 0;
@@ -2689,7 +2928,7 @@
         for (let s = 0; s < STEPS; s++)
           if (!stepEmpty(d[s])) stepNotes(d[s]).forEach(n => { poids[n % 12]++; total++; });
       }
-    if (!total) return { tonique: +toniqueEl.value || 0, mode: "mineur" };
+    if (!total) return null;
     let best = null;
     ["mineur", "majeur"].forEach(mode => {
       for (let t = 0; t < 12; t++) {
@@ -2702,102 +2941,65 @@
     return best;
   }
 
-  // La nappe tient la progression sur la longueur du motif, comme le bouton
-  // « Accords » — le dernier accord absorbe le reste pour finir pile à la fin.
-  function rNappe(data, degres) {
-    for (let s = 0; s < STEPS; s++) data[s] = 0;
-    degres.forEach((d, i) => {
-      const debut = Math.round(i * STEPS / degres.length);
-      const fin = i === degres.length - 1 ? STEPS : Math.round((i + 1) * STEPS / degres.length);
-      let m = 0;
-      rangeesAccord(triade(d)).forEach(r => m |= 1 << r);
-      data[debut] = m;
-      for (let k = debut + 1; k < fin; k++) data[k] = HOLD_BIT;
-    });
-  }
-
-  // Batterie : quatre au sol, le clap sur les contretemps, les charleys qui se
-  // densifient d'un motif à l'autre. C'est le squelette du genre, il n'y a rien
-  // à apprendre là-dedans et le réseau n'aurait de toute façon pas de hauteurs.
-  function rBatterie(data, plan) {
-    for (let s = 0; s < STEPS; s++) data[s] = 0;
-    for (let s = 0; s < STEPS; s += plan.gc) data[s] |= (1 << 0) | ACC_BIT;
-    if (plan.clap) for (let s = plan.clap / 2 | 0; s < STEPS; s += plan.clap) data[s] |= 1 << 1;
-    for (let s = 2; s < STEPS; s += plan.ch) data[s] |= 1 << 2;
-    if (plan.oh) for (let s = plan.oh - 1; s < STEPS; s += plan.oh) data[s] |= 1 << 3;
-    if (plan.crash) data[0] |= 1 << 4;   // la cymbale marque l'arrivée du motif
-  }
-
-  // La fondamentale posée sur chaque changement d'accord, et gelée : la basse
-  // ne cherche qu'autour. C'est la machinerie de « Compléter », réemployée.
-  function rAmarres(data, geles, degres) {
-    for (let s = 0; s < STEPS; s++) { data[s] = 0; geles[s] = false; }
-    degres.forEach((d, i) => {
-      const s = Math.round(i * STEPS / degres.length);
-      data[s] = 1 << (triade(d)[0] % 12);
-      geles[s] = true;
-    });
-  }
-
   function rMorceau(bouton) {
-    // Pas de gamme utilisable ? On en choisit une plutôt que de renvoyer
-    // l'utilisateur à ses réglages.
-    let choisie = null;
-    if (gammeLibre() || GAMMES[gamme.mode].pas.length !== 7) {
-      const g = rDeduireGamme();
-      gamme.tonique = g.tonique;
-      gamme.mode = g.mode;
-      ecrireGamme();
-      choisie = nomNote(gamme.tonique) + " " + GAMMES[gamme.mode].nom.toLowerCase();
-    }
-    let degres = (degresEl.value.match(/[1-7]/g) || []).map(Number).slice(0, 8);
-    if (!degres.length) { degres = [6, 4, 1, 5]; degresEl.value = degres.join(" "); }
-
     let g = (Date.now() ^ 0x85ebca6b) >>> 0;
     const alea = () => (g = (g * 1664525 + 1013904223) >>> 0) / 4294967296;
+
+    // Une page déjà écrite impose sa tonalité — mais seulement si elle n'a pas
+    // été écrite par ce bouton-ci : sinon le premier tirage se répéterait à
+    // l'infini, chaque morceau imposant sa gamme au suivant.
+    // Votre gamme si vous l'avez choisie, celle qu'on devine si la page est
+    // déjà écrite, une nouvelle sinon.
+    let gammeFixee = !gammeLibre() && GAMMES[gamme.mode].pas.length === 7
+                     && (rVotre("tonique") || rVotre("mode"));
+    if (!gammeFixee && !rEcritIci) {
+      const d = rDeduireGamme();
+      if (d) { gamme.tonique = d.tonique; gamme.mode = d.mode; ecrireGamme(); gammeFixee = true; }
+    }
+    const it = rIntention(alea, gammeFixee);
+    rEcritIci = true;
     const tours = AMBITIONS[clampIdx(+ambitionEl.value, AMBITIONS)][1];
 
-    // Les tâches, déroulées une par une pour que la page reste vivante. La
-    // nappe d'abord sur tous les motifs, puis la basse, le pluck, le lead : au
-    // moment où le lead est écrit, tout le reste du motif existe déjà.
     const taches = [];
-    R_PLAN.forEach((_, p) => taches.push({ i: R_PISTES.nappe, p, quoi: "nappe" }));
-    ["basse", "pluck", "lead"].forEach(quoi => {
-      R_PLAN.forEach((plan, p) => taches.push({ i: R_PISTES[quoi], p, quoi, densite: plan[quoi] }));
-    });
-    R_PLAN.forEach((_, p) => taches.push({ i: DRUM_TRACK, p, quoi: "batterie" }));
+    it.plan.forEach((_, p) => taches.push({ p, i: R_PISTES.nappe, quoi: "nappe" }));
+    ["basse", "pluck", "lead"].forEach(quoi =>
+      it.plan.forEach((plan, p) => taches.push({ p, i: R_PISTES[quoi], quoi, densite: plan[quoi] })));
+    it.plan.forEach((_, p) => taches.push({ p, i: DRUM_TRACK, quoi: "batterie" }));
 
     let k = 0;
     const suite = () => {
       if (k >= taches.length) {
-        chain = R_CHAINE.slice();
+        chain = it.forme.split("").map(c => c.charCodeAt(0) - 65);
         setSongMode(true);
         editPattern = 0;
         refreshChain(); refreshPatternButtons();
         refreshSeqGrid(); refreshSweepGrid(); refreshOverview(); markDirty();
         rRendre(bouton);
-        flashIa("Morceau écrit — " + (choisie ? choisie + ", " : "") +
-                degres.map(d => nomAccord(triade(d))).join(" ") + " — Ctrl+Z annule");
+        flashIa("Morceau écrit — " + (it.tire.length ? it.tire.join(", ") + ", " : "") +
+                it.degres.map(d => nomAccord(triade(d))).join(" ") +
+                ", nappe " + it.nappe + ", basse " + it.profils.basse +
+                " — Ctrl+Z annule");
         return;
       }
       const t = taches[k];
       const data = patterns[t.p][t.i];
       if (t.quoi === "nappe") {
-        rNappe(data, degres);
+        rNappe(data, it.degres, it.nappe, t.p === 0);
       } else if (t.quoi === "batterie") {
-        rBatterie(data, R_PLAN[t.p].batterie);
+        rBatterie(data, it.batterie[t.p]);
       } else if (!t.densite) {
-        for (let s = 0; s < STEPS; s++) data[s] = 0;   // la couche se tait sur ce motif
+        for (let s = 0; s < STEPS; s++) data[s] = 0;   // la couche se tait ici
       } else {
         // La couche voit les autres DANS SON MOTIF, pas dans celui à l'écran.
         rPatCible = t.p;
         const geles = new Array(STEPS).fill(false);
         let depart = data.slice();
-        if (t.quoi === "basse") rAmarres(depart, geles, degres);
+        if (t.quoi === "basse") rAmarres(depart, geles, it.degres);
         else for (let s = 0; s < STEPS; s++) depart[s] = 0;
         const cible = Math.max(3, Math.round(STEPS * t.densite));
         depart = rSemer(depart, geles, cible, alea);
-        const r = rRecuit(depart, geles, Math.round(tours * R_EFFORT[t.quoi]), alea, null);
+        const r = rRecuit(depart, geles, Math.round(tours * R_EFFORT[t.quoi]), alea,
+                          null, rGout(t));
         for (let s = 0; s < STEPS; s++) data[s] = r.motif[s];
         rPatCible = -1;
       }
@@ -2805,6 +3007,21 @@
       bouton.textContent = Math.round(k / taches.length * 100) + " %";
       setTimeout(suite, 0);
     };
+
+    // Le goût d'une couche : son caractère rythmique, et ce dont elle s'écarte.
+    function rGout(t) {
+      const occupes = new Array(STEPS).fill(false);
+      tracks.forEach((tr, i) => {
+        if (i === t.i) return;
+        const d = patterns[t.p][i];
+        for (let s = 0; s < STEPS; s++) if (!stepEmpty(d[s])) occupes[s] = true;
+      });
+      const ecarter = [];
+      for (let p = 0; p < it.plan.length; p++)
+        if (p !== t.p) ecarter.push(patterns[p][t.i]);
+      return { profil: R_PROFILS[it.profils[t.quoi]], occupes, ecarter };
+    }
+
     setTimeout(suite, 0);
   }
 
@@ -2999,6 +3216,10 @@
       } catch (e) { urlBroken = true; }
     }
     if (wasPlaying) seqStart();
+    // Le morceau chargé devient la nouvelle référence : ce qu'il apporte n'est
+    // pas un réglage de votre part, et vos réglages d'avant portaient sur un
+    // autre morceau. On repart à neuf, le bouton retrouve sa liberté.
+    rEcritIci = false; rChoisi.clear(); rTracer();
   }
 
   const songsEl = document.getElementById("songs");
@@ -3429,8 +3650,12 @@
     update();
   }
   function setSlider(id, value) {
+    // l'événement sert à rafraîchir l'afficheur ; ce n'est pas un geste, et ce
+    // qui guette les gestes ne doit pas s'y tromper
+    rEcrivant = true;
     sliders[id].value = value;
     sliders[id].dispatchEvent(new Event("input"));
+    rEcrivant = false;
   }
 
   const ms = v => v < 1 ? Math.round(v * 1000) + "ms" : v.toFixed(2) + "s";
@@ -3839,7 +4064,7 @@
     "lfoDest": "Ce que le LFO fait bouger : la coupure du filtre, la hauteur — c'est le vibrato — ou le volume, ce qui donne un trémolo. Éteint, les deux réglages du dessous ne pilotent rien.",
     "lfoRate": "La vitesse, en valeurs de note plutôt qu'en hertz : elle suit le tempo. « 2 mesures » est le mouvement lent qui ouvre une nappe ; « 1/8 » est un battement rythmique.",
     "lfoDepth": "L'amplitude du mouvement. Sur le filtre elle va jusqu'à deux octaves, sur la hauteur jusqu'à un demi-ton, sur le volume jusqu'à l'extinction complète.",
-    "morceauBtn": "Écrit un morceau entier, les cinq pistes d'un coup. La nappe pose la progression de la case des degrés, la basse s'amarre aux fondamentales, le pluck et le lead brodent en voyant ce qui est déjà écrit, la batterie monte d'un motif à l'autre. Sans gamme choisie, elle est déduite de ce qui est là. La chaîne A A B B C B est posée et le mode Morceau enclenché. Ctrl+Z annule.",
+    "morceauBtn": "Écrit un morceau entier, les cinq pistes d'un coup. Il tire d'abord une intention — tonalité, progression, tempo, forme de l'arrangement, et un caractère rythmique pour chaque couche — puis compose : la nappe pose l'harmonie, la basse s'amarre aux fondamentales, le pluck et le lead brodent en s'écartant de ce qui est déjà écrit. Ce que vous avez réglé vous-même — gamme, degrés, tempo, swing — n'est pas tiré au sort. Ctrl+Z annule.",
     "creerBtn": "Écrit un motif entier à partir de rien : le réseau cherche, par recuit simulé, la suite de notes la plus proche du style des neuf morceaux, dans la gamme choisie et à la densité du corpus. Ctrl+Z annule.",
     "completerBtn": "Garde intactes les notes déjà écrites et remplit autour d'elles. C'est la même recherche, avec ce que vous avez posé pour point fixe.",
     "sublimerBtn": "Reprend le motif tel quel, à nombre de notes constant, et cherche longuement une meilleure disposition. Contrairement à Variante, la recherche accepte de passer par du moins bon pour trouver mieux.",
@@ -4082,6 +4307,7 @@
   decodeState(decodeURIComponent(location.hash.slice(1)));
 
   ["volume", "bpm", "swing", "revSize", "delFb", "duck", "filtQ"].forEach(k => setSlider(k, master[k]));
+  rTracer();
   applyTrackSelectionUI();
   buildSongBar();
   buildMixer();
