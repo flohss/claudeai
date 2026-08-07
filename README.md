@@ -358,6 +358,18 @@ Le réseau note chaque proposition. Deux préférences s'ajoutent, que le résea
 
 En ré mineur, *Créer* sort par exemple `Ré Ré Si♭ Ré Si♭ La Si♭ La` — tonique, sixte bémol, quinte. Chercher trois fois plus longtemps fait tomber la note de 0,41 à 0,29 : la recherche progresse vraiment, elle ne tourne pas en rond.
 
+### Un morceau entier
+
+Un quatrième bouton, **Morceau**, écrit tout : les cinq pistes, trois motifs, et la chaîne qui les enchaîne. Un clic sur un onglet vierge et il y a une musique.
+
+L'ordre d'écriture est celui d'un arrangeur, et il n'est pas décoratif. La **nappe** passe en premier et pose la progression de la case des degrés — la même dans les trois motifs, c'est ce qui en fait un morceau plutôt que trois idées côte à côte. La **basse** vient ensuite : la fondamentale est posée puis **gelée** sur chaque changement d'accord, et le recuit ne cherche qu'autour. Le **pluck** et le **lead** enfin, qui brodent dessus. Comme la fonction de coût récompense les notes de l'accord du moment sur les temps forts, chaque couche est composée **en entendant les précédentes** — dans son propre motif, pas dans celui qui se trouve à l'écran.
+
+La **batterie** ne passe pas par le réseau : sans hauteurs, il n'aurait rien à apprendre. Elle suit les règles du genre et monte d'un motif à l'autre — grosse caisse une mesure sur deux puis quatre au sol, clap sur les contretemps, charleys qui se densifient, cymbale à l'arrivée des motifs pleins.
+
+Trois motifs, donc, enchaînés **A A B B C B** : A pose le décor à la nappe et à la basse, B ouvre, C tend. Mesuré sur le rendu WAV, découpé au tempo, l'énergie suit : `0,060 · 0,073 · 0,078 · 0,079 · 0,082 · 0,079`. A est bien le plus léger, C bien le sommet.
+
+**Sans gamme choisie, il en choisit une.** La première version refusait de travailler tant qu'on ne lui avait pas réglé une gamme à sept degrés — or la gamme par défaut est chromatique, si bien qu'un clic sur un onglet neuf ne faisait rien du tout et que le message d'alerte s'effaçait avant qu'on ait pu le lire. Il déduit désormais la tonalité de ce qui est déjà écrit : la gamme qui accueille le plus de notes, la tonique et sa quinte départageant les relatives, qui contiennent exactement les mêmes notes. Page blanche, ce sera mineur — le ton du genre.
+
 ### Il apprend de vous
 
 Le corpus n'est pas seulement les neuf morceaux fournis : **vos propres motifs y entrent, à poids triple**. Neuf morceaux contre quatre motifs à vous, la moyenne les noierait — ce serait apprendre le style de la page et pas le vôtre.
