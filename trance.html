@@ -516,6 +516,16 @@
       </div>
 
       <div class="bar">
+        <span class="tag">IA</span>
+        <button id="creerBtn" title="Écrire un motif entier à partir de rien, dans la gamme">Créer</button>
+        <button id="completerBtn" title="Garder ce qui est écrit et remplir autour">Compléter</button>
+        <button id="sublimerBtn" title="Reprendre le motif et chercher longuement mieux">Sublimer</button>
+        <select id="ambition" title="Combien de temps chercher"></select>
+        <span class="tool-msg" id="iaMsg"></span>
+      </div>
+
+
+      <div class="bar">
         <span class="tag">Accords</span>
         <select id="progChoix" title="Une suite de degrés toute prête"></select>
         <input id="degres" size="8" value="6 4 1 5" title="Les degrés à écrire, de 1 à 7">
@@ -2419,6 +2429,190 @@
     flashGamme("Meilleure de " + variantes.length + " variantes : " +
                depart.toFixed(2) + " → " + note.toFixed(2) + " — Ctrl+Z annule");
   }
+  // ------- Créer, compléter, sublimer : recuit simulé sous contraintes -------
+  // « Variante » présentait quinze retouches et gardait la meilleure : elle
+  // s'arrêtait donc au premier creux venu, et ne trouvait qu'un seizième de
+  // déplacement. Ici l'on cherche des milliers de fois, et l'on accepte parfois
+  // ce qui dégrade — de moins en moins souvent à mesure que la température
+  // baisse. C'est ce qui permet de traverser une vallée pour trouver mieux.
+  //
+  // Le réseau ne décide jamais s'il faut une note : la densité est fixée avant
+  // la recherche et aucune retouche ne la change. Son biais vers le silence,
+  // mesuré dans recherche/, s'annule alors entre propositions comparables.
+  const AMBITIONS = [["Rapide", 1200], ["Normale", 4000], ["Longue", 12000]];
+
+  function rPermises() {
+    const out = [];
+    for (let n = 0; n <= 12; n++) if (gammeLibre() || dansGamme(n)) out.push(n);
+    return out;
+  }
+  // Les hauteurs de l'accord en cours, s'il y en a un sur une autre piste : on
+  // ne les impose pas, on les récompense sur les temps forts.
+  function rAccordA(s) {
+    const cl = new Set();
+    tracks.forEach((tr, i) => {
+      if (i === currentTrack || isDrum(i)) return;
+      const d = editData(i);
+      let courant = -1;
+      for (let k = 0; k <= s; k++) if (!stepEmpty(d[k])) courant = k;
+      if (courant >= 0 && stepNotes(d[courant]).length >= 3)
+        stepNotes(d[courant]).forEach(n => cl.add(n % 12));
+    });
+    return cl;
+  }
+
+  // La note d'un motif : surprise du réseau, plus quelques préférences que le
+  // réseau ne peut pas connaître — l'accord en cours et les sauts déraisonnables.
+  function rCout(data, accords) {
+    let c = rNoter(data) * STEPS;
+    let prec = -1;
+    for (let s = 0; s < STEPS; s++) {
+      if (stepEmpty(data[s])) continue;
+      const n = stepNotes(data[s])[0];
+      if (s % 4 === 0 && accords[s] && accords[s].size)
+        c += accords[s].has(n % 12) ? -0.35 : 0.35;   // temps fort : l'accord tire
+      if (prec >= 0 && Math.abs(n - prec) > 7) c += 0.25 * (Math.abs(n - prec) - 7);
+      prec = n;
+    }
+    return c;
+  }
+
+  function rRecuit(depart, geles, tours, alea, avance) {
+    const permises = rPermises();
+    const accords = [];
+    for (let s = 0; s < STEPS; s++) accords[s] = s % 4 === 0 ? rAccordA(s) : null;
+    let cour = depart.slice(), coutCour = rCout(cour, accords);
+    let best = cour.slice(), coutBest = coutCour;
+
+    for (let t = 0; t < tours; t++) {
+      const temp = 1.4 * Math.pow(0.02 / 1.4, t / tours);   // refroidissement géométrique
+      const essai = cour.slice();
+      const poses = [], libres = [];
+      for (let s = 0; s < STEPS; s++) {
+        if (geles[s]) continue;
+        if (stepEmpty(essai[s])) libres.push(s); else poses.push(s);
+      }
+      if (!poses.length) break;
+      const s = poses[Math.floor(alea() * poses.length)];
+      const geste = alea();
+      if (geste < 0.45) {                               // changer la hauteur d'un degré
+        const n = stepNotes(essai[s])[0];
+        let i = permises.indexOf(n);
+        if (i < 0) i = 0;
+        const d = [-2, -1, 1, 2][Math.floor(alea() * 4)];
+        let j = i + d;
+        while (j < 0) j += permises.length;
+        while (j >= permises.length) j -= permises.length;
+        essai[s] = (essai[s] & ~NOTE_BITS) | (1 << permises[j]);
+      } else if (geste < 0.85 && libres.length) {       // déplacer la note dans le temps
+        const d = libres[Math.floor(alea() * libres.length)];
+        essai[d] = essai[s];
+        essai[s] = essai[s] & ~NOTE_BITS;
+      } else if (poses.length > 1) {                    // échanger deux hauteurs
+        const b = poses[Math.floor(alea() * poses.length)];
+        if (b === s) continue;
+        const ma = essai[s] & NOTE_BITS, mb = essai[b] & NOTE_BITS;
+        essai[s] = (essai[s] & ~NOTE_BITS) | mb;
+        essai[b] = (essai[b] & ~NOTE_BITS) | ma;
+      } else continue;
+
+      const c = rCout(essai, accords);
+      if (c < coutCour || alea() < Math.exp((coutCour - c) / temp)) {
+        cour = essai; coutCour = c;
+        if (c < coutBest) { best = essai.slice(); coutBest = c; }
+      }
+      if (avance && (t & 255) === 0) avance(t / tours);
+    }
+    return { motif: best, cout: coutBest / STEPS };
+  }
+
+  // Densité : celle du motif s'il en a une, sinon celle du corpus.
+  const R_DENSITE = 0.26;
+  function rSemer(depart, geles, cible, alea) {
+    const permises = rPermises();
+    const out = depart.slice();
+    let n = 0;
+    for (let s = 0; s < STEPS; s++) if (!stepEmpty(out[s])) n++;
+    const libres = [];
+    for (let s = 0; s < STEPS; s++) if (!geles[s] && stepEmpty(out[s])) libres.push(s);
+    while (n < cible && libres.length) {
+      const k = Math.floor(alea() * libres.length);
+      const s = libres.splice(k, 1)[0];
+      out[s] = (out[s] & ~NOTE_BITS) | (1 << permises[Math.floor(alea() * permises.length)]);
+      n++;
+    }
+    return out;
+  }
+
+  const iaMsgEl = document.getElementById("iaMsg");
+  let iaMsgTimer = null;
+  function flashIa(msg) {
+    iaMsgEl.textContent = msg;
+    clearTimeout(iaMsgTimer);
+    iaMsgTimer = setTimeout(() => iaMsgEl.textContent = "", 4000);
+  }
+  const ambitionEl = document.getElementById("ambition");
+  AMBITIONS.forEach(([nom, n], i) => ambitionEl.add(new Option(nom, i)));
+  ambitionEl.value = 1;
+
+  function rLancer(mode, bouton) {
+    if (isDrum(currentTrack)) { flashIa("Piste rythmique"); return; }
+    const src = editData(currentTrack).slice();
+    const posesSrc = src.filter(m => !stepEmpty(m)).length;
+    if (mode !== "creer" && !posesSrc) { flashIa("Ce motif est vide — essayez Créer"); return; }
+
+    const geles = new Array(STEPS).fill(false);
+    let depart = src.slice(), cible;
+    if (mode === "creer") {
+      depart = src.map(m => m & ~NOTE_BITS);
+      cible = Math.max(3, Math.round(STEPS * R_DENSITE));
+    } else if (mode === "completer") {
+      for (let s = 0; s < STEPS; s++) geles[s] = !stepEmpty(src[s]);
+      cible = Math.max(posesSrc + 2, Math.round(STEPS * R_DENSITE));
+    } else {
+      cible = posesSrc;
+    }
+
+    let g = (Date.now() ^ 0x9e3779b9) >>> 0;
+    const alea = () => (g = (g * 1664525 + 1013904223) >>> 0) / 4294967296;
+    depart = rSemer(depart, geles, cible, alea);
+    const tours = AMBITIONS[clampIdx(+ambitionEl.value, AMBITIONS)][1];
+    const label = bouton.textContent;
+    bouton.disabled = true;
+
+    // la recherche est découpée : la page reste vivante et le bouton avance
+    const morceaux = 8, parMorceau = Math.ceil(tours / morceaux);
+    let etat = { motif: depart, cout: Infinity }, fait = 0;
+    const suite = () => {
+      const r = rRecuit(etat.motif, geles, parMorceau, alea, null);
+      if (r.cout * STEPS < etat.cout * STEPS || fait === 0) etat = r;
+      fait++;
+      bouton.textContent = Math.round(fait / morceaux * 100) + " %";
+      if (fait < morceaux) { setTimeout(suite, 0); return; }
+      const data = editData(currentTrack);
+      for (let s = 0; s < STEPS; s++) data[s] = etat.motif[s];
+      refreshSeqGrid(); refreshOverview(); markDirty();
+      bouton.textContent = label;
+      bouton.disabled = false;
+      const nb = etat.motif.filter(m => !stepEmpty(m)).length;
+      flashIa({ creer: "Créé", completer: "Complété", sublimer: "Sublimé" }[mode] +
+               " : " + nb + " notes, note " + etat.cout.toFixed(2) + " — Ctrl+Z annule");
+    };
+    setTimeout(suite, 0);
+  }
+
+  [["creerBtn", "creer"], ["completerBtn", "completer"], ["sublimerBtn", "sublimer"]]
+    .forEach(([id, mode]) => {
+      const b = document.getElementById(id);
+      b.addEventListener("click", () => {
+        if (rCharger()) { rLancer(mode, b); return; }
+        const label = b.textContent;
+        b.disabled = true;
+        b.textContent = "Apprend…";
+        rEntrainer(() => { b.textContent = label; b.disabled = false; rLancer(mode, b); });
+      });
+    });
+
   styleBtn.addEventListener("click", () => {
     if (rCharger()) { rJuger(); return; }
     const label = styleBtn.textContent;
@@ -3434,6 +3628,10 @@
     "lfoDest": "Ce que le LFO fait bouger : la coupure du filtre, la hauteur — c'est le vibrato — ou le volume, ce qui donne un trémolo. Éteint, les deux réglages du dessous ne pilotent rien.",
     "lfoRate": "La vitesse, en valeurs de note plutôt qu'en hertz : elle suit le tempo. « 2 mesures » est le mouvement lent qui ouvre une nappe ; « 1/8 » est un battement rythmique.",
     "lfoDepth": "L'amplitude du mouvement. Sur le filtre elle va jusqu'à deux octaves, sur la hauteur jusqu'à un demi-ton, sur le volume jusqu'à l'extinction complète.",
+    "creerBtn": "Écrit un motif entier à partir de rien : le réseau cherche, par recuit simulé, la suite de notes la plus proche du style des neuf morceaux, dans la gamme choisie et à la densité du corpus. Ctrl+Z annule.",
+    "completerBtn": "Garde intactes les notes déjà écrites et remplit autour d'elles. C'est la même recherche, avec ce que vous avez posé pour point fixe.",
+    "sublimerBtn": "Reprend le motif tel quel, à nombre de notes constant, et cherche longuement une meilleure disposition. Contrairement à Variante, la recherche accepte de passer par du moins bon pour trouver mieux.",
+    "ambition": "Combien de fois la recherche essaie une retouche. Longue trouve mieux et prend quelques secondes de plus.",
     "styleBtn": "Le réseau, entraîné sur les neuf morceaux de la page, note des variantes du motif — une note déplacée d'un degré, le motif décalé, une note ôtée — et garde la plus proche de leur style. Il ne compose pas : il choisit. Le premier clic l'entraîne, quelques secondes, et les poids sont ensuite gardés dans le navigateur.",
     "reponseBtn": "Écrit dans un motif libre la phrase qui répond à celle-ci : même rythme, même accentuation, mais le dessin mélodique retourné autour de sa première note, et la dernière note ramenée sur la tonique.",
       "detune": "Écart entre les sept dents de scie du supersaw. À zéro elles se superposent ; au maximum, c'est la nappe très large du genre.",

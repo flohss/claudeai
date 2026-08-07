@@ -340,6 +340,24 @@ Les altérations s'écrivent selon la tonalité : en fa majeur, la note entre La
 
 La progression se répartit sur toute la longueur du motif, en triades tenues, et remplace ce qui s'y trouvait — Ctrl+Z annule.
 
+## Créer, compléter, sublimer
+
+Le studio trance a trois boutons qui écrivent. Ce sont **le même algorithme**, un recuit simulé sous contraintes ; seuls changent le point de départ et ce qu'on s'interdit de toucher.
+
+| Bouton | Point de départ | Gelé |
+| --- | --- | --- |
+| **Créer** | rien | rien |
+| **Compléter** | ce que vous avez écrit | vos notes |
+| **Sublimer** | le motif entier | rien, la densité est la sienne |
+
+La recherche essaie des milliers de retouches — une hauteur déplacée d'un degré, une note glissée dans le temps, deux hauteurs échangées — garde ce qui améliore, et **accepte parfois ce qui dégrade**, de moins en moins souvent à mesure que la température baisse. C'est ce qui lui permet de traverser une vallée pour trouver mieux, là où l'ancien bouton *Variante* s'arrêtait au premier creux.
+
+Le réseau note chaque proposition. Deux préférences s'ajoutent, que le réseau ne peut pas connaître : les hauteurs de **l'accord en cours sur les autres pistes** tirent les temps forts, et les sauts de plus d'une quinte sont pénalisés.
+
+**Le biais vers le silence est neutralisé par construction** : la densité est fixée avant la recherche et aucune retouche ne la change, si bien que toutes les propositions comparées ont le même nombre de notes. C'est la leçon de [`recherche/`](recherche/), appliquée.
+
+En ré mineur, *Créer* sort par exemple `Ré Ré Si♭ Ré Si♭ La Si♭ La` — tonique, sixte bémol, quinte. Chercher trois fois plus longtemps fait tomber la note de 0,41 à 0,29 : la recherche progresse vraiment, elle ne tourne pas en rond.
+
 ## Le réseau qui juge
 
 Le studio trance a un bouton **Variante**. Il ne compose pas : il **choisit**.
