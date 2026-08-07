@@ -370,6 +370,8 @@ Trois motifs, donc, enchaînés **A A B B C B** : A pose le décor à la nappe e
 
 **Sans gamme choisie, il en choisit une.** La première version refusait de travailler tant qu'on ne lui avait pas réglé une gamme à sept degrés — or la gamme par défaut est chromatique, si bien qu'un clic sur un onglet neuf ne faisait rien du tout et que le message d'alerte s'effaçait avant qu'on ait pu le lire. Il déduit désormais la tonalité de ce qui est déjà écrit : la gamme qui accueille le plus de notes, la tonique et sa quinte départageant les relatives, qui contiennent exactement les mêmes notes. Page blanche, ce sera mineur — le ton du genre.
 
+L'apprentissage, enfin, **rend compte au bouton qui l'a demandé**. `rEntrainer` datait du temps où *Variante* était seul à s'en servir et écrivait sa progression sur ce bouton-là, quel qu'ait été le clic. Un clic sur *Morceau* laissait donc *Variante* figé sur `Apprend 92 %` — la dernière valeur affichée, la douzième époque appelant la suite sans repasser par l'affichage — et rien ne le rendait, puisque seul son propre gestionnaire savait le faire. Le test regarde désormais les cinq boutons à la fois : celui qu'on clique, et les quatre autres, qui ne doivent pas bouger d'un caractère.
+
 ### Il apprend de vous
 
 Le corpus n'est pas seulement les neuf morceaux fournis : **vos propres motifs y entrent, à poids triple**. Neuf morceaux contre quatre motifs à vous, la moyenne les noierait — ce serait apprendre le style de la page et pas le vôtre.

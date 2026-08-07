@@ -2285,7 +2285,10 @@
 
   // Entraînement découpé en époques, rendues une par une : la page reste
   // vivante et le bouton affiche l'avancement.
-  function rEntrainer(fini) {
+  // « bouton » est celui qui a demandé l'apprentissage : c'est lui qui en
+  // affiche la progression, et lui seul. Sans cet argument, la barre d'un
+  // bouton se retrouvait sur un autre, qui ne savait pas la retirer.
+  function rEntrainer(fini, bouton) {
     const { X, Y } = rCorpus();
     let g = 987654321;
     const alea = () => (g = (g * 1664525 + 1013904223) >>> 0) / 4294967296;
@@ -2334,7 +2337,7 @@
         }
       }
       if (ep < EPOQUES) {
-        styleBtn.textContent = "Apprend " + Math.round(ep / EPOQUES * 100) + " %";
+        if (bouton) bouton.textContent = "Apprend " + Math.round(ep / EPOQUES * 100) + " %";
         setTimeout(() => epoque(ep + 1), 0);
       } else {
         reseau = r;
@@ -2810,8 +2813,8 @@
     b.addEventListener("click", () => {
       rPrendre(b);
       if (rCharger()) { rMorceau(b); return; }
-      b.textContent = "Apprend…";
-      rEntrainer(() => rMorceau(b));
+      b.textContent = "Apprend 0 %";
+      rEntrainer(() => rMorceau(b), b);
     });
   }
 
@@ -2821,21 +2824,16 @@
       b.addEventListener("click", () => {
         rPrendre(b);
         if (rCharger()) { rLancer(mode, b); return; }
-        b.textContent = "Apprend…";
-        rEntrainer(() => rLancer(mode, b));
+        b.textContent = "Apprend 0 %";
+        rEntrainer(() => rLancer(mode, b), b);
       });
     });
 
   styleBtn.addEventListener("click", () => {
-    if (rCharger()) { rJuger(); return; }
-    const label = styleBtn.textContent;
-    styleBtn.disabled = true;
+    rPrendre(styleBtn);
+    if (rCharger()) { rRendre(styleBtn); rJuger(); return; }
     styleBtn.textContent = "Apprend 0 %";
-    rEntrainer(() => {
-      styleBtn.textContent = label;
-      styleBtn.disabled = false;
-      rJuger();
-    });
+    rEntrainer(() => { rRendre(styleBtn); rJuger(); }, styleBtn);
   });
 
 
