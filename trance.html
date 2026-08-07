@@ -511,6 +511,7 @@
         <button id="gammeSnap" title="Ramener les notes du motif sur les degrés de la gamme">Dans la gamme</button>
         <span class="sep"></span>
         <button id="reponseBtn" title="Écrire dans un motif libre la phrase qui répond à celle-ci">Réponse</button>
+        <button id="styleBtn" title="Le réseau note des variantes du motif et garde la plus proche du style des morceaux fournis">Variante</button>
         <span class="tool-msg" id="gammeMsg"></span>
       </div>
 
@@ -2156,6 +2157,263 @@
   }
   document.getElementById("reponseBtn").addEventListener("click", proposerReponse);
 
+  // ------- Le style : un réseau entraîné sur les morceaux de la page -------
+  // Perceptron à une couche cachée, écrit à la main. Rien n'est téléchargé : le
+  // corpus, ce sont les neuf morceaux déjà présents, augmentés par transposition
+  // — un motif transposé garde ses intervalles, et ce sont eux le style.
+  // Il ne compose pas : livré à lui-même il prédit « silence », qui est majoritaire,
+  // et n'en sort plus. Il note.
+  const R_K = 8, R_S = 16, R_ENT = R_K * R_S + 16 + 28, R_CACHE = 32;
+  const CLE_POIDS = "synthes-virtuels/trance/reseau/1";
+  let reseau = null;
+
+  const rVecteur = m => {
+    const x = new Float64Array(R_S);
+    if (stepEmpty(m)) x[13] = 1; else stepNotes(m).forEach(n => { if (n < 13) x[n] = 1; });
+    if (stepHold(m)) x[14] = 1;
+    if (stepAccent(m)) x[15] = 1;
+    return x;
+  };
+  // On stocke les cases actives, pas le vecteur plein : une trentaine sur cent
+  // soixante-douze. C'est ce qui fait tenir l'entraînement en quelques secondes.
+  function rEntree(data, s) {
+    const e = new Float64Array(R_ENT);
+    for (let k = 0; k < R_K; k++) {
+      const i = s - R_K + k;
+      if (i >= 0) e.set(rVecteur(data[i]), k * R_S);
+    }
+    e[R_K * R_S + (s % 16)] = 1;
+    let der = -1;
+    for (let k = s - 1; k >= 0 && der < 0; k--) if (!stepEmpty(data[k])) der = stepNotes(data[k])[0];
+    const cour = stepEmpty(data[s]) ? -1 : stepNotes(data[s])[0];
+    const b = R_K * R_S + 16;
+    // l'intervalle depuis la dernière note : sans lui, le réseau perd contre une
+    // simple chaîne de Markov — mesuré
+    if (der >= 0 && cour >= 0) e[b + clamp(cour - der + 12, 0, 24)] = 1; else e[b + 25] = 1;
+    if (s % 4 === 0) e[b + 26] = 1;
+    if (s % 16 === 0) e[b + 27] = 1;
+    const actifs = [];
+    for (let i = 0; i < R_ENT; i++) if (e[i]) actifs.push(i);
+    return actifs;
+  }
+
+  function rCreer(alea) {
+    const mk = (a, b) => {
+      const w = new Float64Array(a * b), lim = Math.sqrt(6 / (a + b));
+      for (let i = 0; i < w.length; i++) w[i] = (alea() * 2 - 1) * lim;
+      return w;
+    };
+    return { W1: mk(R_ENT, R_CACHE), b1: new Float64Array(R_CACHE),
+             W2: mk(R_CACHE, R_S), b2: new Float64Array(R_S) };
+  }
+  function rAvant(r, x) {
+    const h = new Float64Array(R_CACHE);
+    h.set(r.b1);
+    for (const i of x) {
+      const d = i * R_CACHE;
+      for (let j = 0; j < R_CACHE; j++) h[j] += r.W1[d + j];
+    }
+    for (let j = 0; j < R_CACHE; j++) h[j] = Math.tanh(h[j]);
+    const y = new Float64Array(R_S);
+    for (let k = 0; k < R_S; k++) {
+      let s = r.b2[k];
+      for (let j = 0; j < R_CACHE; j++) s += h[j] * r.W2[j * R_S + k];
+      y[k] = 1 / (1 + Math.exp(-s));
+    }
+    return { h, y };
+  }
+
+  const rTranspose = (m, t) => {
+    if (stepEmpty(m)) return m;
+    let out = m & ~NOTE_BITS;
+    stepNotes(m).forEach(n => out |= 1 << ((n + t) % 12));
+    return out;
+  };
+  function rCorpus() {
+    const X = [], Y = [];
+    SONGS.forEach(song => song.tracks.forEach(t => {
+      if (t.preset === "drums") return;             // la batterie n'a pas de hauteurs
+      t.pats.forEach(p => {
+        const base = decodeSteps(p);
+        if (base.every(stepEmpty)) return;
+        for (let tr = 0; tr < 12; tr += 2) {
+          const d = base.map(m => rTranspose(m, tr));
+          for (let s = 0; s < STEPS; s++) { X.push(rEntree(d, s)); Y.push(rVecteur(d[s])); }
+        }
+      });
+    }));
+    return { X, Y };
+  }
+
+  // Entraînement découpé en époques, rendues une par une : la page reste
+  // vivante et le bouton affiche l'avancement.
+  function rEntrainer(fini) {
+    const { X, Y } = rCorpus();
+    let g = 987654321;
+    const alea = () => (g = (g * 1664525 + 1013904223) >>> 0) / 4294967296;
+    const r = rCreer(alea);
+    const z = t => ({ m: new Float64Array(t.length), v: new Float64Array(t.length) });
+    const opt = { W1: z(r.W1), b1: z(r.b1), W2: z(r.W2), b2: z(r.b2), t: 0 };
+    const idx = X.map((_, i) => i);
+    const EPOQUES = 12, TAILLE = 64, LR = 0.004, FREIN = 3e-4;
+
+    const epoque = ep => {
+      for (let i = idx.length - 1; i > 0; i--) {
+        const j = Math.floor(alea() * (i + 1));
+        [idx[i], idx[j]] = [idx[j], idx[i]];
+      }
+      for (let d0 = 0; d0 + TAILLE <= idx.length; d0 += TAILLE) {
+        const gr = { W1: new Float64Array(r.W1.length), b1: new Float64Array(R_CACHE),
+                     W2: new Float64Array(r.W2.length), b2: new Float64Array(R_S) };
+        for (let q = d0; q < d0 + TAILLE; q++) {
+          const n = idx[q], x = X[n], t = Y[n];
+          const { h, y } = rAvant(r, x);
+          const dy = new Float64Array(R_S);
+          for (let k = 0; k < R_S; k++) dy[k] = y[k] - t[k];
+          const dh = new Float64Array(R_CACHE);
+          for (let j = 0; j < R_CACHE; j++) {
+            let s = 0;
+            for (let k = 0; k < R_S; k++) { gr.W2[j * R_S + k] += h[j] * dy[k]; s += r.W2[j * R_S + k] * dy[k]; }
+            dh[j] = s * (1 - h[j] * h[j]);
+          }
+          for (let k = 0; k < R_S; k++) gr.b2[k] += dy[k];
+          for (let j = 0; j < R_CACHE; j++) gr.b1[j] += dh[j];
+          for (const i of x) {
+            const d = i * R_CACHE;
+            for (let j = 0; j < R_CACHE; j++) gr.W1[d + j] += dh[j];
+          }
+        }
+        opt.t++;
+        const B1 = 0.9, B2 = 0.999, c1 = 1 - Math.pow(B1, opt.t), c2 = 1 - Math.pow(B2, opt.t);
+        for (const nom of ["W1", "b1", "W2", "b2"]) {
+          const p = r[nom], gg = opt[nom], frein = nom[0] === "W" ? FREIN : 0;
+          for (let i = 0; i < p.length; i++) {
+            const gi = gr[nom][i] / TAILLE + frein * p[i];
+            gg.m[i] = B1 * gg.m[i] + (1 - B1) * gi;
+            gg.v[i] = B2 * gg.v[i] + (1 - B2) * gi * gi;
+            p[i] -= LR * (gg.m[i] / c1) / (Math.sqrt(gg.v[i] / c2) + 1e-8);
+          }
+        }
+      }
+      if (ep < EPOQUES) {
+        styleBtn.textContent = "Apprend " + Math.round(ep / EPOQUES * 100) + " %";
+        setTimeout(() => epoque(ep + 1), 0);
+      } else {
+        reseau = r;
+        try {
+          localStorage.setItem(CLE_POIDS, JSON.stringify({
+            W1: [...r.W1].map(v => +v.toFixed(4)), b1: [...r.b1].map(v => +v.toFixed(4)),
+            W2: [...r.W2].map(v => +v.toFixed(4)), b2: [...r.b2].map(v => +v.toFixed(4)) }));
+        } catch (e) { /* stockage plein ou refusé : on garde le réseau en mémoire */ }
+        fini();
+      }
+    };
+    setTimeout(() => epoque(1), 0);
+  }
+
+  function rCharger() {
+    if (reseau) return true;
+    let brut = null;
+    try { brut = localStorage.getItem(CLE_POIDS); } catch (e) { brut = null; }
+    if (!brut) return false;
+    const o = JSON.parse(brut);
+    if (!o || !o.W1 || o.W1.length !== R_ENT * R_CACHE) return false;
+    reseau = { W1: Float64Array.from(o.W1), b1: Float64Array.from(o.b1),
+               W2: Float64Array.from(o.W2), b2: Float64Array.from(o.b2) };
+    return true;
+  }
+
+  // La note d'un motif : la surprise moyenne du réseau, par pas. Plus bas veut
+  // dire « plus proche de ce que font les neuf morceaux ».
+  function rNoter(data) {
+    let p = 0;
+    for (let s = 0; s < STEPS; s++) {
+      const { y } = rAvant(reseau, rEntree(data, s));
+      const t = rVecteur(data[s]);
+      for (let k = 0; k < R_S; k++) {
+        const q = Math.min(1 - 1e-9, Math.max(1e-9, y[k]));
+        p -= t[k] * Math.log(q) + (1 - t[k]) * Math.log(1 - q);
+      }
+    }
+    return p / STEPS;
+  }
+
+  // Des variantes musicales, pas du bruit : une note déplacée d'un degré, le
+  // motif décalé dans le temps, une note avancée ou retardée. Toutes restent
+  // dans la gamme, et toutes gardent le MÊME NOMBRE DE NOTES que l'original.
+  //
+  // Ce dernier point n'est pas un détail. La note du réseau est une surprise
+  // moyenne, et le silence est ce qu'il prédit le mieux : une variante à qui
+  // l'on retire une note gagne donc toujours, quelle que soit sa musique. La
+  // première version proposait « une note en moins » et le réseau la choisissait
+  // à tous les coups. À densité constante, la comparaison redevient honnête.
+  function rVariantes(src) {
+    const out = [], vu = new Set([src.join(",")]);
+    const ajoute = d => { const c = d.join(","); if (!vu.has(c)) { vu.add(c); out.push(d); } };
+    const poses = [];
+    for (let s = 0; s < STEPS; s++) if (!stepEmpty(src[s])) poses.push(s);
+    const bouger = (d, s, delta) => {
+      let m = d[s] & ~NOTE_BITS;
+      stepNotes(d[s]).forEach(n => {
+        let v = n + delta;
+        while (v < 0) v += 12;
+        while (v > 12) v -= 12;
+        m |= 1 << versGamme(v);
+      });
+      d[s] = m;
+    };
+    for (const s of poses) for (const delta of [-2, -1, 1, 2]) {
+      const c = src.slice(); bouger(c, s, delta); ajoute(c);
+    }
+    for (const r of [1, 2, -1, -2]) {
+      const c = new Array(STEPS).fill(0);
+      for (let s = 0; s < STEPS; s++) c[(s + r + STEPS) % STEPS] = src[s];
+      ajoute(c);
+    }
+    for (const s of poses) for (const r of [-1, 1]) {
+      const t = s + r;
+      if (t < 0 || t >= STEPS || !stepEmpty(src[t])) continue;
+      const c = src.slice(); c[t] = c[s]; c[s] = c[s] & ~NOTE_BITS; ajoute(c);
+    }
+    return out;
+  }
+
+  const styleBtn = document.getElementById("styleBtn");
+  function rJuger() {
+    if (isDrum(currentTrack)) { flashGamme("Piste rythmique"); return; }
+    const src = editData(currentTrack).slice();
+    if (src.every(stepEmpty)) { flashGamme("Ce motif est vide"); return; }
+    const variantes = rVariantes(src);
+    if (!variantes.length) { flashGamme("Aucune variante possible"); return; }
+    const depart = rNoter(src);
+    let meilleure = null, note = depart;
+    for (const v of variantes) {
+      const n = rNoter(v);
+      if (n < note) { note = n; meilleure = v; }
+    }
+    if (!meilleure) {
+      flashGamme("Aucune des " + variantes.length + " variantes ne fait mieux");
+      return;
+    }
+    const data = editData(currentTrack);
+    for (let s = 0; s < STEPS; s++) data[s] = meilleure[s];
+    refreshSeqGrid(); refreshOverview(); markDirty();
+    flashGamme("Meilleure de " + variantes.length + " variantes : " +
+               depart.toFixed(2) + " → " + note.toFixed(2) + " — Ctrl+Z annule");
+  }
+  styleBtn.addEventListener("click", () => {
+    if (rCharger()) { rJuger(); return; }
+    const label = styleBtn.textContent;
+    styleBtn.disabled = true;
+    styleBtn.textContent = "Apprend 0 %";
+    rEntrainer(() => {
+      styleBtn.textContent = label;
+      styleBtn.disabled = false;
+      rJuger();
+    });
+  });
+
+
   // ------- Une progression d'accords, en degrés de la gamme -------
   // Les triades s'empilent en tierces de la gamme : le degré porte sa qualité
   // tout seul — mineure sur ii, iii et vi d'un majeur, diminuée sur vii. Aucune
@@ -3158,6 +3416,7 @@
     "lfoDest": "Ce que le LFO fait bouger : la coupure du filtre, la hauteur — c'est le vibrato — ou le volume, ce qui donne un trémolo. Éteint, les deux réglages du dessous ne pilotent rien.",
     "lfoRate": "La vitesse, en valeurs de note plutôt qu'en hertz : elle suit le tempo. « 2 mesures » est le mouvement lent qui ouvre une nappe ; « 1/8 » est un battement rythmique.",
     "lfoDepth": "L'amplitude du mouvement. Sur le filtre elle va jusqu'à deux octaves, sur la hauteur jusqu'à un demi-ton, sur le volume jusqu'à l'extinction complète.",
+    "styleBtn": "Le réseau, entraîné sur les neuf morceaux de la page, note des variantes du motif — une note déplacée d'un degré, le motif décalé, une note ôtée — et garde la plus proche de leur style. Il ne compose pas : il choisit. Le premier clic l'entraîne, quelques secondes, et les poids sont ensuite gardés dans le navigateur.",
     "reponseBtn": "Écrit dans un motif libre la phrase qui répond à celle-ci : même rythme, même accentuation, mais le dessin mélodique retourné autour de sa première note, et la dernière note ramenée sur la tonique.",
       "detune": "Écart entre les sept dents de scie du supersaw. À zéro elles se superposent ; au maximum, c'est la nappe très large du genre.",
       "attack": "Temps que met la note à atteindre son volume plein. Long, c'est une nappe qui entre en fondu.",

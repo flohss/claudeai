@@ -340,6 +340,18 @@ Les altérations s'écrivent selon la tonalité : en fa majeur, la note entre La
 
 La progression se répartit sur toute la longueur du motif, en triades tenues, et remplace ce qui s'y trouvait — Ctrl+Z annule.
 
+## Le réseau qui juge
+
+Le studio trance a un bouton **Variante**. Il ne compose pas : il **choisit**.
+
+Un perceptron à une couche cachée — propagation avant, rétropropagation et Adam écrits à la main, aucune bibliothèque — s'entraîne sur les **neuf morceaux déjà dans la page**, augmentés par transposition. Rien n'est téléchargé, rien n'est appelé au dehors. Quatre secondes au premier clic, puis les poids restent dans le navigateur.
+
+Le bouton fabrique une quinzaine de variantes musicales du motif — une note déplacée d'un degré, le motif décalé dans le temps, une note avancée ou retardée — et garde celle que le réseau trouve la plus proche du style du corpus. Sur le motif A d'*Ascension*, il avance la note du temps fort d'un seizième : une syncope, figure fréquente dans les neuf morceaux. Au clic suivant il annonce qu'aucune variante ne fait mieux — il a convergé.
+
+**Pourquoi juger et non composer**, c'est [`recherche/`](recherche/) qui l'explique, mesures à l'appui : le réseau bat nettement une chaîne de Markov en prédiction, mais laissé à écrire seul il pose une note puis se tait. Les trois quarts des pas d'un motif sont des silences, donc prédire « silence » suffit à bien mesurer, et le modèle s'y enfonce.
+
+Le même biais a resurgi dans le juge : la première version proposait « une note en moins » parmi les variantes, et le réseau la choisissait à tous les coups — retirer une note améliore toujours une surprise moyenne. **Toutes les variantes gardent maintenant le même nombre de notes**, et la comparaison redevient honnête.
+
 ## Un LFO par piste
 
 Dans le studio trance, chaque piste a son oscillateur lent, **calé sur le tempo** : la vitesse se donne en valeurs de note, de la double-croche à quatre mesures, et suit le morceau si le tempo change.
