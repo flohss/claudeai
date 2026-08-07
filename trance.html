@@ -2352,18 +2352,36 @@
     const ajoute = d => { const c = d.join(","); if (!vu.has(c)) { vu.add(c); out.push(d); } };
     const poses = [];
     for (let s = 0; s < STEPS; s++) if (!stepEmpty(src[s])) poses.push(s);
+    // Les hauteurs permises : les degrés de la gamme si l'on en a choisi une,
+    // sinon les seules hauteurs déjà présentes dans le motif. Dans les deux cas
+    // on se déplace DANS cette liste, par degrés — jamais d'un demi-ton, qui
+    // sortirait de la gamme une fois sur deux.
+    const permises = [];
+    for (let n = 0; n <= 12; n++) {
+      if (!gammeLibre()) { if (dansGamme(n)) permises.push(n); }
+      else if (src.some(m => !stepEmpty(m) && stepNotes(m).includes(n))) permises.push(n);
+    }
     const bouger = (d, s, delta) => {
-      let m = d[s] & ~NOTE_BITS;
-      stepNotes(d[s]).forEach(n => {
-        let v = n + delta;
-        while (v < 0) v += 12;
-        while (v > 12) v -= 12;
-        m |= 1 << versGamme(v);
-      });
+      if (permises.length < 2) return false;
+      let m = d[s] & ~NOTE_BITS, bouge = false;
+      for (const n of stepNotes(d[s])) {
+        let i = permises.indexOf(n);
+        if (i < 0) {                            // note étrangère : on la laisse
+          m |= 1 << n;
+          continue;
+        }
+        let j = i + delta;
+        while (j < 0) j += permises.length;
+        while (j >= permises.length) j -= permises.length;
+        if (j !== i) bouge = true;
+        m |= 1 << permises[j];
+      }
       d[s] = m;
+      return bouge;
     };
     for (const s of poses) for (const delta of [-2, -1, 1, 2]) {
-      const c = src.slice(); bouger(c, s, delta); ajoute(c);
+      const c = src.slice();
+      if (bouger(c, s, delta)) ajoute(c);
     }
     for (const r of [1, 2, -1, -2]) {
       const c = new Array(STEPS).fill(0);

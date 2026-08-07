@@ -348,6 +348,8 @@ Un perceptron à une couche cachée — propagation avant, rétropropagation et 
 
 Le bouton fabrique une quinzaine de variantes musicales du motif — une note déplacée d'un degré, le motif décalé dans le temps, une note avancée ou retardée — et garde celle que le réseau trouve la plus proche du style du corpus. Sur le motif A d'*Ascension*, il avance la note du temps fort d'un seizième : une syncope, figure fréquente dans les neuf morceaux. Au clic suivant il annonce qu'aucune variante ne fait mieux — il a convergé.
 
+Les variantes se déplacent **par degrés de la gamme**, jamais par demi-tons : une note monte au degré suivant, pas au demi-ton suivant. Sans gamme choisie, elles se limitent aux hauteurs déjà présentes dans le motif. Une première version déplaçait d'un demi-ton puis « recollait » sur la gamme — sans gamme active, elle posait donc des notes étrangères à tous les coups. Vérifié depuis sur quatre gammes et trois morceaux : zéro note hors gamme après trois passages, densité conservée.
+
 **Pourquoi juger et non composer**, c'est [`recherche/`](recherche/) qui l'explique, mesures à l'appui : le réseau bat nettement une chaîne de Markov en prédiction, mais laissé à écrire seul il pose une note puis se tait. Les trois quarts des pas d'un motif sont des silences, donc prédire « silence » suffit à bien mesurer, et le modèle s'y enfonce.
 
 Le même biais a resurgi dans le juge : la première version proposait « une note en moins » parmi les variantes, et le réseau la choisissait à tous les coups — retirer une note améliore toujours une surprise moyenne. **Toutes les variantes gardent maintenant le même nombre de notes**, et la comparaison redevient honnête.
