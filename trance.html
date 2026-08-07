@@ -406,7 +406,7 @@
       <div id="mixer"></div>
       <div class="hint">
         Cliquez un nom de piste pour l'éditer et la jouer au clavier (touches <b>1</b> à <b>5</b>).
-        <b>M</b> muet, <b>S</b> solo.
+        <b>M</b> muet, <b>S</b> solo, <b>V</b> vide la piste dans le motif affiché.
       </div>
     </fieldset>
 
@@ -544,7 +544,6 @@
 
       <div class="bar">
         <button id="seqPlay">&#9654; Lecture</button>
-        <button id="seqClear">Effacer piste</button>
         <button id="armBtn" title="Écrire au clavier dans le motif">Enreg. clavier</button>
         <button id="wavBtn" title="Rendre le morceau en fichier WAV">Exporter WAV</button>
         <button id="zipBtn" title="Rendre chaque piste dans son fichier, réunis en archive ZIP">Exporter ZIP</button>
@@ -1423,7 +1422,7 @@
 
       const vol = document.createElement("input");
       vol.type = "range"; vol.min = 0; vol.max = 1; vol.step = 0.01; vol.value = tr.vol;
-      vol.dataset.info = "Volume de cette piste dans le mixage. Cliquez son nom à gauche pour l'éditer et la jouer au clavier ; M la rend muette, S la met en solo.";
+      vol.dataset.info = "Volume de cette piste dans le mixage. Cliquez son nom à gauche pour l'éditer et la jouer au clavier ; M la rend muette, S la met en solo, V vide ses notes dans le motif affiché.";
       vol.addEventListener("input", () => {
         tr.vol = Number(vol.value);
         refreshTrackGains(); refreshMixer(); markDirty();
@@ -1432,9 +1431,21 @@
       const etat = document.createElement("span");
       etat.className = "mix-etat";
       etat.dataset.info = "Ce que la piste envoie vraiment dans le mixage : son niveau en pour cent, et le côté si elle est calée franchement à droite ou à gauche. « Muet » veut dire qu'on ne l'entend pas du tout.";
-      row.append(pick, mute, solo, kind, vol, etat);
+
+      // Vider la piste là où l'on pense à elle. Le bouton n'agit que sur le
+      // motif affiché : son infobulle le nomme, faute de quoi on ne saurait pas
+      // ce qu'on efface.
+      const vide = document.createElement("button");
+      vide.className = "mini-btn"; vide.textContent = "V";
+      vide.addEventListener("click", () => {
+        patterns[editPattern][i] = emptySteps();
+        if (i === currentTrack) refreshSeqGrid();
+        refreshOverview(); markDirty();
+      });
+
+      row.append(pick, mute, solo, vide, kind, vol, etat);
       mixerEl.appendChild(row);
-      trackRows[i] = { row, mute, solo, kind, etat };
+      trackRows[i] = { row, mute, solo, vide, kind, etat };
     });
     refreshMixer();
   }
@@ -1446,6 +1457,10 @@
       r.row.classList.toggle("sel", i === currentTrack);
       r.row.classList.toggle("silent", tr.mute || (solos && !tr.solo));
       r.mute.classList.toggle("on", tr.mute);
+      // La bulle nomme le motif, et suit donc le motif affiché. Pas de « title »
+      // à côté : les deux info-bulles se superposeraient.
+      r.vide.dataset.info = "Vide cette piste dans le motif " + PATTERN_NAMES[editPattern]
+        + " — les autres motifs ne bougent pas. Ctrl+Z annule.";
       r.solo.classList.toggle("on", tr.solo);
       const zero = tr.vol < 0.005;
       r.row.classList.toggle("sans-son", zero);
@@ -1798,10 +1813,6 @@
 
   seqPlayBtns.forEach(b =>
     b.addEventListener("click", () => seqPlaying ? seqStop() : seqStart()));
-  document.getElementById("seqClear").addEventListener("click", () => {
-    editData(currentTrack).fill(null);
-    refreshSeqGrid(); markDirty();
-  });
 
   // ------- Motifs et chaîne -------
   let livePat = -1, livePos = -1;
