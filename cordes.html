@@ -356,6 +356,14 @@
         <span class="tool-msg" id="gammeMsg"></span>
       </div>
 
+      <div class="bar">
+        <span class="tag">Accords</span>
+        <select id="progChoix" title="Une suite de degrés toute prête"></select>
+        <input id="degres" size="8" value="6 4 1 5" title="Les degrés à écrire, de 1 à 7">
+        <button id="accordsBtn" title="Écrire cette suite d'accords sur la piste choisie">Écrire les accords</button>
+      </div>
+
+
 
       <div class="bar">
         <span class="tag">Chaîne</span>
@@ -1469,6 +1477,77 @@
                + PATTERN_NAMES[cible] + (remplace ? " — Ctrl+Z annule" : ""));
   }
   document.getElementById("reponseBtn").addEventListener("click", proposerReponse);
+
+  // ------- Une progression d'accords, en degrés de la gamme -------
+  // Les triades s'empilent en tierces de la gamme : le degré porte sa qualité
+  // tout seul — mineure sur ii, iii et vi d'un majeur, diminuée sur vii. Aucune
+  // table à tenir, aucune exception à prévoir.
+  const PROGRESSIONS = [
+    ["6 4 1 5", "vi IV I V — Éclipse, et la moitié de la pop"],
+    ["1 5 6 4", "I V vi IV"],
+    ["1 6 4 5", "I vi IV V — les années cinquante"],
+    ["1 4 5 1", "I IV V I — cadence parfaite"],
+    ["2 5 1",   "ii V I — le tour de jazz"],
+    ["6 5 4 5", "vi V IV V — la tension qui ne retombe pas"],
+    ["1 7 6 5", "I VII vi V — basse qui descend"]
+  ];
+  const QUALITES = { "0,4,7": "", "0,3,7": "m", "0,3,6": "dim", "0,4,8": "+" };
+  // Une altération s'écrit bémol ou dièse selon la tonalité : en fa majeur, la
+  // note entre La et Si est un Si bémol, jamais un La dièse. On ramène le mode
+  // à son majeur relatif, puis on regarde de quel côté du cycle des quintes il
+  // tombe.
+  const NOMS_BEMOL = ["Do","Ré♭","Ré","Mi♭","Mi","Fa","Sol♭","Sol","La♭","La","Si♭","Si"];
+  const VERS_MAJEUR = { majeur: 0, mineur: 3, harmonique: 3, dorien: 10, phrygien: 8,
+                        lydien: 7, mixolydien: 5, penta: 3, blues: 3, chromatique: 0 };
+  const COTE_BEMOL = new Set([5, 10, 3, 8, 1, 6]);   // fa, si♭, mi♭, la♭, ré♭, sol♭
+  const nomNote = c => (COTE_BEMOL.has((gamme.tonique + (VERS_MAJEUR[gamme.mode] || 0)) % 12)
+    ? NOMS_BEMOL : NOTE_NAMES)[c % 12];
+
+  function triade(degre) {
+    const pas = GAMMES[gamme.mode].pas, i = degre - 1;
+    return [0, 2, 4].map(k => (gamme.tonique + pas[(i + k) % 7]) % 12);
+  }
+  // La grille ne fait qu'une octave : l'accord est resserré dedans, quitte à se
+  // présenter en renversement. C'est exactement la façon dont les nappes des
+  // morceaux fournis sont écrites.
+  const rangeesAccord = cl => [...new Set(cl.map(c => c % 12))];
+  function nomAccord(cl) {
+    const forme = cl.map(c => (c - cl[0] + 12) % 12).sort((a, b) => a - b).join(",");
+    return nomNote(cl[0]) + (QUALITES[forme] !== undefined ? QUALITES[forme] : " ?");
+  }
+
+  const progChoixEl = document.getElementById("progChoix");
+  const degresEl = document.getElementById("degres");
+  PROGRESSIONS.forEach(([d, nom]) => progChoixEl.add(new Option(nom, d)));
+  progChoixEl.addEventListener("change", () => { degresEl.value = progChoixEl.value; });
+
+  function ecrireAccords() {
+    if (gammeLibre() || GAMMES[gamme.mode].pas.length !== 7) {
+      flashGamme("Il faut une gamme à sept degrés"); return;
+    }
+    const degres = (degresEl.value.match(/[1-7]/g) || []).map(Number);
+    if (!degres.length) { flashGamme("Donnez des degrés de 1 à 7"); return; }
+    if (degres.length > STEPS) { flashGamme("Trop d'accords pour ce motif"); return; }
+
+    const data = editData(currentTrack);
+    for (let k = 0; k < STEPS; k++) data[k] = 0;
+    const noms = [];
+    degres.forEach((d, i) => {
+      // le dernier accord absorbe le reste, pour finir pile sur la fin du motif
+      const debut = Math.round(i * STEPS / degres.length);
+      const fin = i === degres.length - 1 ? STEPS : Math.round((i + 1) * STEPS / degres.length);
+      const cl = triade(d);
+      noms.push(nomAccord(cl));
+      let m = 0;
+      rangeesAccord(cl).forEach(r => m |= 1 << r);
+      data[debut] = m;
+      for (let k = debut + 1; k < fin; k++) data[k] = 0;
+    });
+    refreshSeqGrid(); refreshOverview(); markDirty();
+    flashGamme(noms.join(" ") + " — Ctrl+Z annule");
+  }
+  document.getElementById("accordsBtn").addEventListener("click", ecrireAccords);
+
   ecrireGamme();
 
   document.getElementById("seqClear").addEventListener("click", () => {
@@ -2243,6 +2322,9 @@
 
   // ------- Info-bulles -------
   const INFOS = {
+    "progChoix": "Des suites de degrés toutes prêtes. Le choix remplit la case à côté, qui reste modifiable.",
+    "degres": "Les degrés de la gamme à écrire, de 1 à 7, dans l'ordre : « 6 4 1 5 » donne vi IV I V. La qualité de chaque accord vient de la gamme elle-même.",
+    "accordsBtn": "Remplace le motif de la piste choisie par cette suite d'accords, répartie sur toute sa longueur, en triades tenues. Ctrl+Z annule.",
     "tonique": "La note sur laquelle la gamme se fonde. Les rangées qui ne lui appartiennent pas s'effacent dans la grille — elles restent cliquables, une note hors gamme n'est pas une faute.",
     "modeGamme": "Quelles hauteurs appartiennent à la gamme. « Chromatique » n'efface rien. Ce choix est une aide à l'écriture : il n'entre ni dans le lien partagé ni dans le JSON, et se retient d'une visite à l'autre.",
     "gammeSnap": "Ramène chaque note du motif sur le degré de gamme le plus proche, en gardant les accents et les tenues. Ctrl+Z annule.",

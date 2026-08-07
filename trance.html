@@ -453,6 +453,16 @@
         <div class="row"><label>Panorama</label><input type="range" id="pan" min="-1" max="1" step="0.05" value="0"><output id="panOut">C</output></div>
       </fieldset>
 
+      <fieldset id="panLfo">
+        <legend>LFO &mdash; <span class="edit-target" id="target6">Lead</span></legend>
+        <div class="row"><label>Cible</label>
+          <select id="lfoDest"></select><output id="lfoDestOut">&nbsp;</output></div>
+        <div class="row"><label>Vitesse</label>
+          <select id="lfoRate"></select><output id="lfoRateOut">&nbsp;</output></div>
+        <div class="row"><label>Profondeur</label>
+          <input type="range" id="lfoDepth" min="0" max="100" step="1" value="0"><output id="lfoDepthOut">0</output></div>
+      </fieldset>
+
       <fieldset>
         <legend>Master</legend>
         <div class="row"><label>Volume</label><input type="range" id="volume" min="0" max="1" step="0.01" value="0.55"><output id="volumeOut">55%</output></div>
@@ -503,6 +513,14 @@
         <button id="reponseBtn" title="Écrire dans un motif libre la phrase qui répond à celle-ci">Réponse</button>
         <span class="tool-msg" id="gammeMsg"></span>
       </div>
+
+      <div class="bar">
+        <span class="tag">Accords</span>
+        <select id="progChoix" title="Une suite de degrés toute prête"></select>
+        <input id="degres" size="8" value="6 4 1 5" title="Les degrés à écrire, de 1 à 7">
+        <button id="accordsBtn" title="Écrire cette suite d'accords sur la piste choisie">Écrire les accords</button>
+      </div>
+
 
       <div class="bar">
         <span class="tag">Chaîne</span>
@@ -608,27 +626,39 @@
     lead:    { label: "Lead", wave: "supersaw", octave: 4, detune: 22,
                attack: 0.01, decay: 0.25, sustain: 0.55, release: 0.35,
                cutoff: 72, reso: 9, envAmt: 45, envDec: 0.35,
-               sidechain: 0.55, revSend: 0.32, delSend: 0.28, pan: 0 },
+               sidechain: 0.55, revSend: 0.32, delSend: 0.28, pan: 0, lfoRate: 4, lfoDepth: 0, lfoDest: 0 },
     pad:     { label: "Nappe", wave: "supersaw", octave: 3, detune: 32,
                attack: 0.9, decay: 1.2, sustain: 0.8, release: 2.2,
                cutoff: 52, reso: 4, envAmt: 18, envDec: 1.4,
-               sidechain: 0.75, revSend: 0.6, delSend: 0.12, pan: 0 },
+               sidechain: 0.75, revSend: 0.6, delSend: 0.12, pan: 0, lfoRate: 4, lfoDepth: 0, lfoDest: 0 },
     bass:    { label: "Basse", wave: "saw", octave: 2, detune: 0,
                attack: 0.004, decay: 0.16, sustain: 0.1, release: 0.08,
                cutoff: 38, reso: 11, envAmt: 34, envDec: 0.14,
-               sidechain: 0.85, revSend: 0.05, delSend: 0, pan: 0 },
+               sidechain: 0.85, revSend: 0.05, delSend: 0, pan: 0, lfoRate: 4, lfoDepth: 0, lfoDest: 0 },
     pluck:   { label: "Pluck", wave: "saw", octave: 5, detune: 8,
                attack: 0.002, decay: 0.18, sustain: 0, release: 0.14,
                cutoff: 58, reso: 14, envAmt: 55, envDec: 0.16,
-               sidechain: 0.5, revSend: 0.45, delSend: 0.5, pan: 0 },
+               sidechain: 0.5, revSend: 0.45, delSend: 0.5, pan: 0, lfoRate: 4, lfoDepth: 0, lfoDest: 0 },
     drums:   { label: "Batterie", wave: "drums", octave: 3, detune: 0,
                attack: 0.001, decay: 0.2, sustain: 0, release: 0.1,
                cutoff: 100, reso: 0, envAmt: 0, envDec: 0.1,
-               sidechain: 0, revSend: 0.12, delSend: 0.05, pan: 0 }
+               sidechain: 0, revSend: 0.12, delSend: 0.05, pan: 0, lfoRate: 4, lfoDepth: 0, lfoDest: 0 }
   };
 
   const PATCH_KEYS = ["wave", "octave", "detune", "attack", "decay", "sustain", "release",
-                      "cutoff", "reso", "envAmt", "envDec", "sidechain", "revSend", "delSend", "pan"];
+                      "cutoff", "reso", "envAmt", "envDec", "sidechain", "revSend", "delSend", "pan",
+                      "lfoRate", "lfoDepth", "lfoDest"];
+
+  // Un LFO calé sur le tempo : la vitesse se donne en valeurs de note, pas en
+  // hertz. Une nappe qui s'ouvre sur deux mesures ne se règle pas autrement.
+  const LFO_RATES = [
+    { nom: "1/16", temps: 0.25 }, { nom: "1/8", temps: 0.5 }, { nom: "1/4", temps: 1 },
+    { nom: "1/2", temps: 2 }, { nom: "1 mesure", temps: 4 },
+    { nom: "2 mesures", temps: 8 }, { nom: "4 mesures", temps: 16 }
+  ];
+  const LFO_DESTS = ["Éteint", "Filtre", "Hauteur", "Volume"];
+  const lfoHz = i => master.bpm / (60 * LFO_RATES[clampIdx(i, LFO_RATES)].temps);
+  const clampIdx = (i, t) => Math.min(t.length - 1, Math.max(0, Math.round(i) || 0));
 
   function patchFrom(name) {
     const p = PRESETS[name], out = { preset: name };
@@ -1069,7 +1099,19 @@
       const delSend = actx.createGain();
       delSend.gain.value = tr.patch.delSend;
 
-      sc.connect(gain);
+      // Le trémolo est toujours dans la chaîne, à gain 1 tant que le LFO ne
+      // vise pas le volume : brancher un nœud à la volée coûterait un clic.
+      const trem = actx.createGain();
+      const lfo = actx.createOscillator();
+      lfo.type = "sine";
+      lfo.frequency.value = lfoHz(tr.patch.lfoRate);
+      const lfoGain = actx.createGain();
+      lfoGain.gain.value = 0;
+      lfo.connect(lfoGain);
+      lfo.start(0);
+
+      sc.connect(trem);
+      trem.connect(gain);
       const out = panner || gain;
       if (panner) gain.connect(panner);
       out.connect(r.bus);
@@ -1078,9 +1120,36 @@
       revSend.connect(r.revBus);
       delSend.connect(r.delBus);
 
-      r.trackNodes[i] = { sc, gain, panner, revSend, delSend };
+      r.trackNodes[i] = { sc, gain, panner, revSend, delSend, trem, lfo, lfoGain };
+      poserLfo(r, i);
     });
     return r;
+  }
+
+  // Profondeur et destination du LFO. Le filtre et la hauteur se modulent en
+  // centièmes de ton, ce qui reste musical d'un bout à l'autre du clavier ;
+  // le volume passe par le trémolo, dont le repos descend d'autant que la
+  // profondeur monte, pour que le sommet reste le niveau nominal.
+  function poserLfo(r, i) {
+    const n = r.trackNodes[i];
+    if (!n || !n.lfo) return;
+    const p = tracks[i].patch;
+    const d = clamp(p.lfoDepth, 0, 100) / 100;
+    const dest = clampIdx(p.lfoDest, LFO_DESTS);
+    n.lfo.frequency.value = lfoHz(p.lfoRate);
+    // Rien de branché par défaut : le filtre et la hauteur sont créés par note,
+    // et c'est la voix qui vient se brancher ici. Une première version reliait
+    // le LFO à son propre désaccord « pour lui donner une cible neutre » — elle
+    // ne l'était pas du tout : à pleine profondeur, l'oscillateur se modulait
+    // lui-même de deux octaves et n'avait plus rien d'une sinusoïde lente.
+    try { n.lfoGain.disconnect(); } catch (e) {}
+    n.lfoGain.gain.value = dest === 0 ? 0
+      : dest === 1 ? d * 2400 : dest === 2 ? d * 100 : d / 2;
+    n.trem.gain.value = 1;
+    if (dest === 3) {
+      n.trem.gain.value = 1 - d / 2;
+      n.lfoGain.connect(n.trem.gain);
+    }
   }
 
   function dottedDelay() { return (60 / master.bpm) * 0.75; }
@@ -1123,6 +1192,7 @@
     n.revSend.gain.setTargetAtTime(p.revSend, ctx.currentTime, 0.02);
     n.delSend.gain.setTargetAtTime(p.delSend, ctx.currentTime, 0.02);
     if (n.panner) n.panner.pan.setTargetAtTime(p.pan, ctx.currentTime, 0.02);
+    poserLfo(rig, i);
   }
 
   // Voix mélodique : oscillateurs -> filtre résonant à enveloppe -> VCA
@@ -1142,6 +1212,12 @@
     filter.frequency.setValueAtTime(top, when);
     filter.frequency.exponentialRampToValueAtTime(Math.max(60, base), when + p.envDec);
 
+    // le LFO se branche sur ce que la voix vient de fabriquer : le filtre est
+    // créé par note, il n'existait pas au moment du réglage
+    const lfoVers = r.trackNodes[i] && r.trackNodes[i].lfoGain
+      ? clampIdx(p.lfoDest, LFO_DESTS) : 0;
+    if (lfoVers === 1) r.trackNodes[i].lfoGain.connect(filter.detune);
+
     const oscs = [];
     const voicesN = p.wave === "supersaw" ? 7 : 1;
     for (let v = 0; v < voicesN; v++) {
@@ -1159,6 +1235,7 @@
         o.detune.value = p.detune * 0.5;
       }
       o.connect(filter);
+      if (lfoVers === 2) r.trackNodes[i].lfoGain.connect(o.detune);
       oscs.push(o);
     }
     // plusieurs oscillateurs additionnés : on compense pour garder le même niveau
@@ -2078,6 +2155,78 @@
                + PATTERN_NAMES[cible] + (remplace ? " — Ctrl+Z annule" : ""));
   }
   document.getElementById("reponseBtn").addEventListener("click", proposerReponse);
+
+  // ------- Une progression d'accords, en degrés de la gamme -------
+  // Les triades s'empilent en tierces de la gamme : le degré porte sa qualité
+  // tout seul — mineure sur ii, iii et vi d'un majeur, diminuée sur vii. Aucune
+  // table à tenir, aucune exception à prévoir.
+  const PROGRESSIONS = [
+    ["6 4 1 5", "vi IV I V — Éclipse, et la moitié de la pop"],
+    ["1 5 6 4", "I V vi IV"],
+    ["1 6 4 5", "I vi IV V — les années cinquante"],
+    ["1 4 5 1", "I IV V I — cadence parfaite"],
+    ["2 5 1",   "ii V I — le tour de jazz"],
+    ["6 5 4 5", "vi V IV V — la tension qui ne retombe pas"],
+    ["1 7 6 5", "I VII vi V — basse qui descend"]
+  ];
+  const QUALITES = { "0,4,7": "", "0,3,7": "m", "0,3,6": "dim", "0,4,8": "+" };
+  // Une altération s'écrit bémol ou dièse selon la tonalité : en fa majeur, la
+  // note entre La et Si est un Si bémol, jamais un La dièse. On ramène le mode
+  // à son majeur relatif, puis on regarde de quel côté du cycle des quintes il
+  // tombe.
+  const NOMS_BEMOL = ["Do","Ré♭","Ré","Mi♭","Mi","Fa","Sol♭","Sol","La♭","La","Si♭","Si"];
+  const VERS_MAJEUR = { majeur: 0, mineur: 3, harmonique: 3, dorien: 10, phrygien: 8,
+                        lydien: 7, mixolydien: 5, penta: 3, blues: 3, chromatique: 0 };
+  const COTE_BEMOL = new Set([5, 10, 3, 8, 1, 6]);   // fa, si♭, mi♭, la♭, ré♭, sol♭
+  const nomNote = c => (COTE_BEMOL.has((gamme.tonique + (VERS_MAJEUR[gamme.mode] || 0)) % 12)
+    ? NOMS_BEMOL : NOTE_NAMES)[c % 12];
+
+  function triade(degre) {
+    const pas = GAMMES[gamme.mode].pas, i = degre - 1;
+    return [0, 2, 4].map(k => (gamme.tonique + pas[(i + k) % 7]) % 12);
+  }
+  // La grille ne fait qu'une octave : l'accord est resserré dedans, quitte à se
+  // présenter en renversement. C'est exactement la façon dont les nappes des
+  // morceaux fournis sont écrites.
+  const rangeesAccord = cl => [...new Set(cl.map(c => c % 12))];
+  function nomAccord(cl) {
+    const forme = cl.map(c => (c - cl[0] + 12) % 12).sort((a, b) => a - b).join(",");
+    return nomNote(cl[0]) + (QUALITES[forme] !== undefined ? QUALITES[forme] : " ?");
+  }
+
+  const progChoixEl = document.getElementById("progChoix");
+  const degresEl = document.getElementById("degres");
+  PROGRESSIONS.forEach(([d, nom]) => progChoixEl.add(new Option(nom, d)));
+  progChoixEl.addEventListener("change", () => { degresEl.value = progChoixEl.value; });
+
+  function ecrireAccords() {
+    if (isDrum(currentTrack)) { flashGamme("Piste rythmique"); return; }
+    if (gammeLibre() || GAMMES[gamme.mode].pas.length !== 7) {
+      flashGamme("Il faut une gamme à sept degrés"); return;
+    }
+    const degres = (degresEl.value.match(/[1-7]/g) || []).map(Number);
+    if (!degres.length) { flashGamme("Donnez des degrés de 1 à 7"); return; }
+    if (degres.length > STEPS) { flashGamme("Trop d'accords pour ce motif"); return; }
+
+    const data = editData(currentTrack);
+    for (let k = 0; k < STEPS; k++) data[k] = 0;
+    const noms = [];
+    degres.forEach((d, i) => {
+      // le dernier accord absorbe le reste, pour finir pile sur la fin du motif
+      const debut = Math.round(i * STEPS / degres.length);
+      const fin = i === degres.length - 1 ? STEPS : Math.round((i + 1) * STEPS / degres.length);
+      const cl = triade(d);
+      noms.push(nomAccord(cl));
+      let m = 0;
+      rangeesAccord(cl).forEach(r => m |= 1 << r);
+      data[debut] = m;
+      for (let k = debut + 1; k < fin; k++) data[k] = HOLD_BIT;
+    });
+    refreshSeqGrid(); refreshOverview(); markDirty();
+    flashGamme(noms.join(" ") + " — Ctrl+Z annule");
+  }
+  document.getElementById("accordsBtn").addEventListener("click", ecrireAccords);
+
   ecrireGamme();
 
   // ------- Accords ou monophonie -------
@@ -2634,6 +2783,7 @@
   patchSlider("delSend", pct, "delSend", () => applyPatchToNodes(currentTrack));
   patchSlider("pan", v => v === 0 ? "C" : (v < 0 ? "G" : "D") + Math.round(Math.abs(v) * 100),
               "pan", () => applyPatchToNodes(currentTrack));
+  patchSlider("lfoDepth", v => String(v), "lfoDepth", () => applyPatchToNodes(currentTrack));
 
   bindSlider("volume", pct, v => {
     master.volume = v;
@@ -2706,14 +2856,39 @@
     ["detune", "octDown", "octUp"].forEach(id => document.getElementById(id).disabled = perc);
   }
 
+  const lfoDestEl = document.getElementById("lfoDest");
+  const lfoRateEl = document.getElementById("lfoRate");
+  LFO_DESTS.forEach((n, i) => lfoDestEl.add(new Option(n, i)));
+  LFO_RATES.forEach((r, i) => lfoRateEl.add(new Option(r.nom, i)));
+  function majLfoUI() {
+    const p = tracks[currentTrack].patch;
+    lfoDestEl.value = clampIdx(p.lfoDest, LFO_DESTS);
+    lfoRateEl.value = clampIdx(p.lfoRate, LFO_RATES);
+    // sans cible, la vitesse et la profondeur ne pilotent rien
+    const eteint = clampIdx(p.lfoDest, LFO_DESTS) === 0;
+    lfoRateEl.disabled = eteint;
+    document.getElementById("lfoDepth").disabled = eteint;
+    document.getElementById("panLfo").classList.toggle("sans-effet", eteint);
+  }
+  [[lfoDestEl, "lfoDest"], [lfoRateEl, "lfoRate"]].forEach(([el, cle]) => {
+    el.addEventListener("change", () => {
+      tracks[currentTrack].patch[cle] = +el.value;
+      majLfoUI(); applyPatchToNodes(currentTrack);
+      if (!loadingPatch) { markCustom(); markDirty(); }
+    });
+  });
+
   function loadPatchIntoControls() {
     const patch = tracks[currentTrack].patch;
     loadingPatch = true;
     selectWave(patch.wave, true);
     document.getElementById("octValue").textContent = patch.octave;
     ["detune", "attack", "decay", "sustain", "release", "cutoff", "reso",
-     "envAmt", "envDec", "sidechain", "revSend", "delSend", "pan"]
+     "envAmt", "envDec", "sidechain", "revSend", "delSend", "pan", "lfoDepth"]
       .forEach(k => setSlider(k, patch[k]));
+    lfoDestEl.value = clampIdx(patch.lfoDest, LFO_DESTS);
+    lfoRateEl.value = clampIdx(patch.lfoRate, LFO_RATES);
+    majLfoUI();
     loadingPatch = false;
     majPanneauxBatterie();
     applyPatchToNodes(currentTrack);
@@ -2754,7 +2929,10 @@
     { get: t => (t.patch.pan + 1) * 50, set: (t, n) => t.patch.pan = clamp(n, 0, 100) / 50 - 1 },
     { get: t => t.vol * 100,           set: (t, n) => t.vol = clamp(n, 0, 100) / 100 },
     { get: t => (t.mute ? 1 : 0) | (t.solo ? 2 : 0),
-      set: (t, n) => { t.mute = !!(n & 1); t.solo = !!(n & 2); } }
+      set: (t, n) => { t.mute = !!(n & 1); t.solo = !!(n & 2); } },
+    { get: t => t.patch.lfoRate,  set: (t, n) => t.patch.lfoRate = clamp(n, 0, LFO_RATES.length - 1) },
+    { get: t => t.patch.lfoDepth, set: (t, n) => t.patch.lfoDepth = clamp(n, 0, 100) },
+    { get: t => t.patch.lfoDest,  set: (t, n) => t.patch.lfoDest = clamp(n, 0, LFO_DESTS.length - 1) }
   ];
 
   function encodeStep(m) {
@@ -2853,12 +3031,19 @@
 
     tracks.forEach((tr, i) => {
       const f = trackParts[i].split(".");
-      if (f.length < TRACK_FIELDS.length + 1) return;
+      // Le seuil ne peut pas dépendre du nombre de champs du jour : à chaque
+      // réglage ajouté, tous les liens déjà partagés deviendraient trop courts
+      // et seraient rejetés en bloc. Il suffit d'un champ et d'un bloc.
+      if (f.length < 2) return;
+      // Le bloc de motifs est toujours le dernier morceau, quel que soit le
+      // nombre de champs : un lien d'avant, plus court, se relit sans perdre
+      // ses motifs, et un lien d'après ne prend pas le bloc pour un nombre.
+      const nums = f.slice(0, Math.max(0, f.length - 1));
       TRACK_FIELDS.forEach((field, k) => {
-        const n = p36(f[k], NaN);
+        const n = p36(nums[k], NaN);
         if (Number.isFinite(n)) field.set(tr, n);
       });
-      const blob = f[TRACK_FIELDS.length] || "";
+      const blob = f[f.length - 1] || "";
       // sans séparateur, c'est un lien d'avant les accords : découpage fixe
       const morceaux = blob.indexOf("_") >= 0
         ? blob.split("_")
@@ -2962,11 +3147,17 @@
   }
 
   const INFOS = {
+    "progChoix": "Des suites de degrés toutes prêtes. Le choix remplit la case à côté, qui reste modifiable.",
+    "degres": "Les degrés de la gamme à écrire, de 1 à 7, dans l'ordre : « 6 4 1 5 » donne vi IV I V. La qualité de chaque accord vient de la gamme elle-même.",
+    "accordsBtn": "Remplace le motif de la piste choisie par cette suite d'accords, répartie sur toute sa longueur, en triades tenues. Ctrl+Z annule.",
     "jsonOut": "Enregistre le morceau entier dans un fichier JSON lisible : pistes, instruments, motifs, chaîne et réglages. Il s'ouvre et se modifie dans n'importe quel éditeur de texte.",
     "jsonIn": "Recharge un morceau depuis un fichier JSON exporté d'ici. Ctrl+Z annule l'import.",
     "tonique": "La note sur laquelle la gamme se fonde. Les rangées qui ne lui appartiennent pas s'effacent dans la grille — elles restent cliquables, une note hors gamme n'est pas une faute.",
     "modeGamme": "Quelles hauteurs appartiennent à la gamme. « Chromatique » n'efface rien. Ce choix est une aide à l'écriture : il n'entre ni dans le lien partagé ni dans le JSON, et se retient d'une visite à l'autre.",
     "gammeSnap": "Ramène chaque note du motif sur le degré de gamme le plus proche, en gardant les accents et les tenues. Ctrl+Z annule.",
+    "lfoDest": "Ce que le LFO fait bouger : la coupure du filtre, la hauteur — c'est le vibrato — ou le volume, ce qui donne un trémolo. Éteint, les deux réglages du dessous ne pilotent rien.",
+    "lfoRate": "La vitesse, en valeurs de note plutôt qu'en hertz : elle suit le tempo. « 2 mesures » est le mouvement lent qui ouvre une nappe ; « 1/8 » est un battement rythmique.",
+    "lfoDepth": "L'amplitude du mouvement. Sur le filtre elle va jusqu'à deux octaves, sur la hauteur jusqu'à un demi-ton, sur le volume jusqu'à l'extinction complète.",
     "reponseBtn": "Écrit dans un motif libre la phrase qui répond à celle-ci : même rythme, même accentuation, mais le dessin mélodique retourné autour de sa première note, et la dernière note ramenée sur la tonique.",
       "detune": "Écart entre les sept dents de scie du supersaw. À zéro elles se superposent ; au maximum, c'est la nappe très large du genre.",
       "attack": "Temps que met la note à atteindre son volume plein. Long, c'est une nappe qui entre en fondu.",

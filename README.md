@@ -330,6 +330,30 @@ Un détail qui décide de tout : le miroir sort souvent de la grille de treize r
 
 La 909 n'a pas ces commandes — elle n'a pas de hauteurs — et sur la piste de batterie du studio trance, les deux boutons répondent « piste rythmique » plutôt que d'abîmer le motif.
 
+## Une suite d'accords en degrés
+
+À côté du guide de gamme, un menu de progressions toutes prêtes, une case de degrés modifiable et un bouton. `6 4 1 5` en fa majeur écrit `vi IV I V` — c'est-à-dire, note pour note, l'harmonie d'*Éclipse*.
+
+Les triades ne viennent pas d'une table de qualités : elles s'**empilent en tierces de la gamme**. Le degré porte donc sa qualité tout seul — mineure sur ii, iii et vi d'un majeur, diminuée sur vii — et changer de mode change les accords sans qu'une ligne de code s'en occupe. Les mêmes `1 4 5` donnent Fa Si♭ Do en fa majeur et Rém Solm Lam en ré mineur.
+
+Les altérations s'écrivent selon la tonalité : en fa majeur, la note entre La et Si s'affiche **Si♭**, pas La#.
+
+La progression se répartit sur toute la longueur du motif, en triades tenues, et remplace ce qui s'y trouvait — Ctrl+Z annule.
+
+## Un LFO par piste
+
+Dans le studio trance, chaque piste a son oscillateur lent, **calé sur le tempo** : la vitesse se donne en valeurs de note, de la double-croche à quatre mesures, et suit le morceau si le tempo change.
+
+Trois destinations :
+
+- **Filtre** — jusqu'à deux octaves de balayage, en centièmes de ton pour rester musical d'un bout à l'autre du clavier. C'est le geste signature du genre, celui qui demandait jusqu'ici de dessiner la bande d'automation à la main, motif par motif.
+- **Hauteur** — jusqu'à un demi-ton : le vibrato.
+- **Volume** — le trémolo, dont le repos descend d'autant que la profondeur monte, pour que le sommet reste le niveau nominal.
+
+Éteint, il ne laisse aucune trace : le rendu retrouve l'échantillon près le fichier d'origine.
+
+Le réglage voyage dans le lien partagé et dans le JSON, et un lien d'avant se relit sans perdre quoi que ce soit.
+
 ## L'interface dit ce qu'on entend
 
 Deux réglages pouvaient rendre un morceau méconnaissable sans que rien ne le signale. Un fichier réel l'a montré : deux pistes sur cinq à zéro, deux autres calées à fond à droite, et une console qui n'en laissait rien voir.
