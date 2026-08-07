@@ -2174,7 +2174,8 @@
   // Il ne compose pas : livré à lui-même il prédit « silence », qui est majoritaire,
   // et n'en sort plus. Il note.
   const R_K = 8, R_S = 16, R_ENT = R_K * R_S + 16 + 28, R_CACHE = 32;
-  const CLE_POIDS = "synthes-virtuels/trance/reseau/1";
+  const CLE_BASE = "synthes-virtuels/trance/reseau/2";
+  const clePoids = () => CLE_BASE + "/" + rEmpreinte();
   let reseau = null;
 
   const rVecteur = m => {
@@ -2239,19 +2240,45 @@
     stepNotes(m).forEach(n => out |= 1 << ((n + t) % 12));
     return out;
   };
+  // Vos motifs comptent triple. Neuf morceaux fournis contre quatre motifs à
+  // vous, la moyenne les noierait : ce serait apprendre le style de la page et
+  // pas le vôtre. Le poids se règle ici, et nulle part ailleurs.
+  const R_POIDS_VOUS = 3;
+  function rMiens() {
+    const out = [];
+    for (let p = 0; p < PATTERN_COUNT; p++)
+      for (let i = 0; i < tracks.length; i++) {
+        if (isDrum(i)) continue;
+        const d = patterns[p][i];
+        if (!d.every(stepEmpty)) out.push(d.slice());
+      }
+    return out;
+  }
+  // Une empreinte de ce que vous avez écrit : elle entre dans la clé de rangement
+  // des poids, si bien que changer de matériel redemande un apprentissage, et que
+  // revenir à un motif d'avant retrouve les poids d'avant sans rien recalculer.
+  function rEmpreinte() {
+    let h = 2166136261;
+    for (const d of rMiens()) for (const m of d) {
+      h ^= m; h = Math.imul(h, 16777619);
+    }
+    return (h >>> 0).toString(36);
+  }
   function rCorpus() {
     const X = [], Y = [];
-    SONGS.forEach(song => song.tracks.forEach(t => {
-      if (t.preset === "drums") return;             // la batterie n'a pas de hauteurs
-      t.pats.forEach(p => {
-        const base = decodeSteps(p);
-        if (base.every(stepEmpty)) return;
+    const verser = (base, poids) => {
+      if (base.every(stepEmpty)) return;
+      for (let r = 0; r < poids; r++)
         for (let tr = 0; tr < 12; tr += 2) {
           const d = base.map(m => rTranspose(m, tr));
           for (let s = 0; s < STEPS; s++) { X.push(rEntree(d, s)); Y.push(rVecteur(d[s])); }
         }
-      });
+    };
+    SONGS.forEach(song => song.tracks.forEach(t => {
+      if (t.preset === "drums") return;             // la batterie n'a pas de hauteurs
+      t.pats.forEach(p => verser(decodeSteps(p), 1));
     }));
+    rMiens().forEach(d => verser(d, R_POIDS_VOUS));
     return { X, Y };
   }
 
@@ -2310,8 +2337,9 @@
         setTimeout(() => epoque(ep + 1), 0);
       } else {
         reseau = r;
+        empreinteApprise = rEmpreinte();
         try {
-          localStorage.setItem(CLE_POIDS, JSON.stringify({
+          localStorage.setItem(clePoids(), JSON.stringify({
             W1: [...r.W1].map(v => +v.toFixed(4)), b1: [...r.b1].map(v => +v.toFixed(4)),
             W2: [...r.W2].map(v => +v.toFixed(4)), b2: [...r.b2].map(v => +v.toFixed(4)) }));
         } catch (e) { /* stockage plein ou refusé : on garde le réseau en mémoire */ }
@@ -2321,15 +2349,18 @@
     setTimeout(() => epoque(1), 0);
   }
 
+  let empreinteApprise = null;
   function rCharger() {
-    if (reseau) return true;
+    if (reseau && empreinteApprise === rEmpreinte()) return true;
+    reseau = null;
     let brut = null;
-    try { brut = localStorage.getItem(CLE_POIDS); } catch (e) { brut = null; }
+    try { brut = localStorage.getItem(clePoids()); } catch (e) { brut = null; }
     if (!brut) return false;
     const o = JSON.parse(brut);
     if (!o || !o.W1 || o.W1.length !== R_ENT * R_CACHE) return false;
     reseau = { W1: Float64Array.from(o.W1), b1: Float64Array.from(o.b1),
                W2: Float64Array.from(o.W2), b2: Float64Array.from(o.b2) };
+    empreinteApprise = rEmpreinte();
     return true;
   }
 

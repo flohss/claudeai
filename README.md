@@ -358,6 +358,12 @@ Le réseau note chaque proposition. Deux préférences s'ajoutent, que le résea
 
 En ré mineur, *Créer* sort par exemple `Ré Ré Si♭ Ré Si♭ La Si♭ La` — tonique, sixte bémol, quinte. Chercher trois fois plus longtemps fait tomber la note de 0,41 à 0,29 : la recherche progresse vraiment, elle ne tourne pas en rond.
 
+### Il apprend de vous
+
+Le corpus n'est pas seulement les neuf morceaux fournis : **vos propres motifs y entrent, à poids triple**. Neuf morceaux contre quatre motifs à vous, la moyenne les noierait — ce serait apprendre le style de la page et pas le vôtre.
+
+Les poids sont rangés sous une **empreinte de ce que vous avez écrit**. Changer de matériel redemande donc un apprentissage de quelques secondes ; revenir à un motif d'avant retrouve les poids d'avant sans rien recalculer.
+
 ## Le réseau qui juge
 
 Le studio trance a un bouton **Variante**. Il ne compose pas : il **choisit**.
