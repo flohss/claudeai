@@ -1,3 +1,11 @@
+Deux logiciels dans ce dépôt :
+
+- **`labyrinthe3d.html`** — le jeu de labyrinthe 3D à la première personne, décrit ci-dessous.
+- **`labo-algorithmes.html`** — un laboratoire pour comprendre les algorithmes qui font
+  tourner le jeu, décrit [à la fin](#laboratoire-dalgorithmes-de-graphe).
+
+---
+
 # Labyrinthe 3D — conception en direct
 
 Un jeu de labyrinthe à la première personne, en 3D, qui **montre d'abord l'ordinateur
@@ -164,3 +172,85 @@ au biais de l'algorithme.
   plafonné à 50 ms pour protéger les collisions, et s'en servir pour compter le temps
   ferait retarder la montre sur tout appareil qui descend sous 20 images par seconde.
 - Sons synthétisés à la volée en WebAudio, aucun fichier audio.
+
+---
+
+# Laboratoire d'algorithmes de graphe
+
+`labo-algorithmes.html` — un second logiciel, sans jeu, pour comprendre les algorithmes
+du labyrinthe dans leurs autres usages. Ouvrable hors ligne, aucune dépendance.
+
+L'idée directrice : **un « algorithme de labyrinthe » n'existe pas.** Ce sont des
+algorithmes de graphe, et le labyrinthe n'est qu'un de leurs terrains. Le logiciel est
+bâti là-dessus — un terrain produit un graphe, les algorithmes sont écrits une seule
+fois, génériques. C'est donc littéralement le **même code** qui creuse un labyrinthe sur
+une grille, dessine un réseau de câblage minimal sur un nuage de points, et segmente une
+image.
+
+## La matrice terrain × algorithme
+
+| | Grille | Nuage de points | Image | Plan |
+|---|---|---|---|---|
+| **Profondeur** | labyrinthe à longs couloirs | arbre d'exploration | | |
+| **Prim** | labyrinthe ramifié | réseau de câblage minimal | | |
+| **Kruskal** | labyrinthe par îlots | réseau de câblage minimal | segmentation | |
+| **Largeur** | plus court chemin | plus court chemin | remplissage par diffusion | |
+| **Dijkstra / A\*** | chemin pondéré | chemin pondéré | | |
+| **Main au mur** | navigation sans mémoire | | | |
+| **Division récursive** | labyrinthe en salles | | | découpage en pièces (BSP) |
+
+Sur une grille aux poids tirés au hasard, l'arbre couvrant minimal **est** un labyrinthe
+parfait : c'est le pont entre les deux mondes.
+
+## Trois modes
+
+**Observer** — un algorithme, pas à pas, avec la délibération visible (les arêtes
+envisagées avant le choix), le journal de raisonnement, les compteurs, et surtout **la
+structure de données dessinée en direct** : la pile qui monte et descend, la file qui
+défile, le tas dont la racine est toujours le minimum, la forêt union-find dont les
+îlots fusionnent. C'est elle, et elle seule, qui distingue ces algorithmes — ils font
+sinon tous la même chose.
+
+**Course** — deux à quatre algorithmes côte à côte, même terrain, même graine,
+synchronisés, avec les compteurs en vis-à-vis et un verdict chiffré.
+
+**Mesurer** — rejoue jusqu'à 1000 fois sans affichage, produit un tableau de moyennes et
+d'étendues, et trace les distributions. C'est ce qui fait passer de « je sens la
+différence » à « je la mesure ».
+
+## Quelques résultats à retrouver soi-même
+
+- **Prim et Kruskal donnent toujours exactement le même poids total.** Deux démarches
+  opposées — croissance locale contre tri global — qui convergent vers le même optimum.
+- **La profondeur produit des chemins bien plus longs que Prim**, à nombre d'arêtes
+  identique. Le biais de l'algorithme, et rien d'autre, décide de la difficulté.
+- **Le gain d'A\* sur Dijkstra dépend entièrement du terrain** : environ 4× sur un nuage
+  de points, 1,8× sur une grille à obstacles, mais à peine 1,1× dans un labyrinthe. Un
+  labyrinthe est un arbre : il n'existe qu'un chemin, donc l'heuristique n'a presque rien
+  à guider. Une bonne heuristique ne sert que là où il y a un choix.
+- **Sur l'image synthétique, qui contient 7 régions, Kruskal en retrouve exactement 7**
+  au seuil par défaut.
+
+## Vérification automatique
+
+Le bouton « Vérifier les invariantes » contrôle sur une douzaine de graines que :
+
+- tout arbre couvrant a exactement n−1 arêtes et laisse tous les sommets atteignables ;
+- Prim et Kruskal donnent le même poids total ;
+- A\* n'examine jamais plus de sommets que Dijkstra, pour un chemin de même coût ;
+- la main sur le mur échoue bel et bien sur un domaine à boucles — comportement attendu
+  et annoncé, pas un défaut masqué.
+
+## Notes de conception
+
+- Chaque algorithme est un **générateur** (`function*`) : une itération = une étape
+  observable. Le réglage de vitesse, la pause, l'avance pas à pas et l'exécution
+  instantanée en découlent sans dupliquer une ligne de logique.
+- Le hasard passe par un générateur à graine, jamais par `Math.random` directement.
+  Chaque configuration porte un code court qui rejoue exactement la même scène.
+- Sur le terrain image, la photo est une **entrée** et non un tirage : la graine ne la
+  change pas. Une image peut être chargée depuis l'appareil, elle ne quitte jamais le
+  navigateur.
+- L'heuristique d'A\* utilise la distance de Manhattan sur une grille et la distance
+  euclidienne sur un nuage, toujours multipliée par le coût minimal d'un pas : c'est la
+  condition d'admissibilité, sans laquelle A\* cesserait de garantir le plus court chemin.

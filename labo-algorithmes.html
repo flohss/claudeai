@@ -1,0 +1,1834 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#05050a">
+<title>Laboratoire d'algorithmes de graphe</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{background:#05050a;color:#eae6ff;
+    font-family:'Segoe UI',system-ui,-apple-system,sans-serif;min-height:100%;}
+  body{padding:calc(14px + env(safe-area-inset-top)) 14px calc(24px + env(safe-area-inset-bottom));
+    background:radial-gradient(ellipse at 50% 0%,#161428 0%,#05050a 70%);background-attachment:fixed;}
+  .wrap{max-width:940px;margin:0 auto;}
+
+  h1{font-size:1.5rem;text-align:center;letter-spacing:1.5px;font-weight:800;
+    background:linear-gradient(90deg,#8f7bff,#ff7ba6,#7bd9ff);-webkit-background-clip:text;
+    background-clip:text;color:transparent;margin-bottom:4px;}
+  .sub{text-align:center;color:#9d94c8;font-size:.82rem;margin-bottom:18px;line-height:1.5;}
+  .panel{background:rgba(20,18,35,.72);border:1px solid rgba(150,130,255,.22);
+    border-radius:16px;padding:16px;margin-bottom:14px;}
+  .panel>h2{font-size:.72rem;text-transform:uppercase;letter-spacing:1.6px;
+    color:#a89bff;margin-bottom:10px;font-weight:700;}
+
+  .opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(104px,1fr));gap:7px;}
+  .opt{padding:9px 6px;text-align:center;border-radius:10px;font-size:.8rem;line-height:1.3;
+    border:1px solid rgba(150,130,255,.22);background:rgba(255,255,255,.03);
+    color:#cfc8ff;cursor:pointer;user-select:none;}
+  .opt small{display:block;font-size:.62rem;opacity:.75;margin-top:2px;}
+  .opt.sel{background:linear-gradient(135deg,#7b5bff,#ff5ba0);border-color:transparent;
+    color:#fff;font-weight:600;}
+  .opt.dis{opacity:.28;cursor:not-allowed;}
+  .opt.chk{border-color:#7b5bff;}
+
+  label.fld{display:block;font-size:.7rem;text-transform:uppercase;letter-spacing:1.3px;
+    color:#a89bff;margin:12px 0 6px;}
+  input[type=range]{width:100%;accent-color:#7b5bff;}
+  input[type=text]{width:100%;padding:9px 11px;border-radius:9px;background:rgba(0,0,0,.32);
+    border:1px solid rgba(150,130,255,.25);color:#eae6ff;font-family:ui-monospace,monospace;
+    font-size:.85rem;letter-spacing:1px;}
+  input[type=text]:focus{outline:none;border-color:#7b5bff;}
+  .btn{padding:12px;border:none;border-radius:11px;background:linear-gradient(135deg,#7b5bff,#ff5ba0);
+    color:#fff;font-size:.95rem;font-weight:700;cursor:pointer;font-family:inherit;width:100%;}
+  .btn.ghost{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);font-weight:600;}
+  .btn:disabled{opacity:.35;cursor:default;}
+  .row{display:flex;gap:8px;flex-wrap:wrap;}
+  .row>*{flex:1 1 120px;}
+
+  .stage{display:grid;gap:12px;grid-template-columns:1fr;}
+  @media(min-width:760px){ .stage{grid-template-columns:1fr 300px;} }
+  .board{position:relative;width:100%;aspect-ratio:1/1;border-radius:12px;overflow:hidden;
+    border:1px solid rgba(150,130,255,.25);background:#05050a;}
+  .board canvas{width:100%;height:100%;display:block;}
+  .structBox{border-radius:12px;border:1px solid rgba(150,130,255,.2);background:rgba(0,0,0,.28);
+    padding:10px;}
+  .structBox canvas{width:100%;display:block;border-radius:8px;}
+
+  .bar{height:6px;border-radius:4px;background:rgba(255,255,255,.09);overflow:hidden;margin:8px 0 10px;}
+  .bar i{display:block;height:100%;background:linear-gradient(90deg,#7b5bff,#ff5ba0);width:0;}
+  .phase{display:flex;justify-content:space-between;font-size:.76rem;color:#a89bff;}
+  .phase b{color:#eae6ff;}
+
+  .log{height:74px;overflow:hidden;font-size:.73rem;line-height:1.5;color:#b9b1e6;
+    background:rgba(0,0,0,.3);border-radius:10px;padding:8px 10px;margin-bottom:10px;
+    font-family:ui-monospace,Consolas,monospace;}
+  .log div{opacity:.5;} .log div:last-child{opacity:1;color:#fff;}
+  .log .k1{color:#7bd9ff;} .log .k2{color:#ffb04d;} .log .k3{color:#6cff8f;} .log .k4{color:#ff7ba6;}
+
+  .counters{display:grid;grid-template-columns:repeat(auto-fit,minmax(66px,1fr));gap:7px;}
+  .ct{background:rgba(255,255,255,.04);border:1px solid rgba(150,130,255,.15);border-radius:9px;
+    padding:6px 3px;text-align:center;}
+  .ct b{display:block;font-size:.95rem;color:#fff;}
+  .ct span{font-size:.56rem;text-transform:uppercase;letter-spacing:.7px;color:#9d94c8;}
+
+  .raceGrid{display:grid;gap:10px;grid-template-columns:1fr 1fr;}
+  .raceCell{border:1px solid rgba(150,130,255,.2);border-radius:12px;overflow:hidden;
+    background:rgba(0,0,0,.25);}
+  .raceCell h3{font-size:.72rem;padding:7px 9px;background:rgba(123,91,255,.16);
+    letter-spacing:.5px;display:flex;justify-content:space-between;align-items:center;}
+  .raceCell h3 em{font-style:normal;color:#9d94c8;font-size:.66rem;}
+  .raceCell .board{aspect-ratio:1/1;border:none;border-radius:0;}
+  .raceCell .mini{font-size:.62rem;color:#b9b1e6;padding:6px 9px;line-height:1.5;
+    font-family:ui-monospace,monospace;}
+
+  table{width:100%;border-collapse:collapse;font-size:.76rem;}
+  th,td{padding:6px 5px;text-align:right;border-bottom:1px solid rgba(150,130,255,.12);}
+  th:first-child,td:first-child{text-align:left;}
+  th{color:#a89bff;font-size:.64rem;text-transform:uppercase;letter-spacing:.9px;}
+  td b{color:#fff;}
+
+  .note{font-size:.78rem;line-height:1.6;color:#c9c2ea;background:rgba(123,91,255,.1);
+    border:1px solid rgba(150,130,255,.22);border-radius:10px;padding:10px 12px;margin-top:10px;}
+  .note b{color:#fff;}
+  .ok{color:#6cff8f;} .ko{color:#ff7ba6;}
+  .hidden{display:none;}
+  .tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:14px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>LABORATOIRE D'ALGORITHMES</h1>
+  <div class="sub">Un « algorithme de labyrinthe » n'existe pas.<br>
+    Ce sont des algorithmes de graphe — le labyrinthe n'est qu'un de leurs terrains.</div>
+
+  <div class="tabs">
+    <div class="opt sel" data-tab="observer">🔬 Observer</div>
+    <div class="opt" data-tab="course">🏁 Course</div>
+    <div class="opt" data-tab="stats">📊 Mesurer</div>
+  </div>
+
+  <!-- ================= CONFIGURATION ================= -->
+  <div class="panel">
+    <h2>Terrain</h2>
+    <div class="opts" id="terrainOpts"></div>
+
+    <h2 style="margin-top:14px">Algorithme</h2>
+    <div class="opts" id="algoOpts"></div>
+
+    <label class="fld" id="sizeLabel">Taille</label>
+    <input type="range" id="sizeRange" min="6" max="22" value="12">
+
+    <div id="loopWrap">
+      <label class="fld">Sur quoi chercher le chemin</label>
+      <div class="opts">
+        <div class="opt" id="modeMaze">🧱 Labyrinthe<small>un arbre : un seul chemin</small></div>
+        <div class="opt" id="modeOpen">🗺 Grille ouverte<small>pondérée : mille chemins</small></div>
+        <div class="opt" id="loopOpt">➰ Ajouter des boucles<small>casse la règle de la main au mur</small></div>
+      </div>
+    </div>
+
+    <div id="imgWrap" class="hidden">
+      <label class="fld">Image à segmenter</label>
+      <div class="row">
+        <button class="btn ghost" id="imgPickBtn">🖼 Choisir une photo</button>
+        <button class="btn ghost" id="imgGenBtn">🎲 Image synthétique</button>
+      </div>
+      <input type="file" id="imgFile" accept="image/*" class="hidden">
+      <label class="fld">Seuil de fusion : <span id="thrVal">28</span></label>
+      <input type="range" id="thrRange" min="4" max="90" value="28">
+      <div class="note" style="margin-top:8px">Sur ce terrain, l'image est une
+      <b>entrée</b> et non un tirage : la graine ne la change pas. Utilise
+      « Image synthétique » pour en obtenir une autre. L'image générée contient
+      7 régions — vois à quel seuil Kruskal les retrouve exactement.</div>
+    </div>
+
+    <label class="fld">Graine — même code, même scène</label>
+    <div class="row">
+      <input type="text" id="seedInput" placeholder="ex. GR-12-4F2A" autocomplete="off">
+      <button class="btn ghost" id="seedBtn" style="flex:0 0 92px">Charger</button>
+      <button class="btn ghost" id="seedNewBtn" style="flex:0 0 92px">🎲 Tirer</button>
+    </div>
+  </div>
+
+  <!-- ================= OBSERVER ================= -->
+  <div id="tab-observer">
+    <div class="panel">
+      <div class="stage">
+        <div>
+          <div class="board"><canvas id="board"></canvas></div>
+          <div class="phase" style="margin-top:10px"><b id="phase">Prêt</b><span id="pct">0 %</span></div>
+          <div class="bar"><i id="barFill"></i></div>
+          <div class="log" id="log"></div>
+          <div class="counters" id="counters"></div>
+        </div>
+        <div>
+          <div class="structBox">
+            <div style="font-size:.66rem;text-transform:uppercase;letter-spacing:1.2px;
+                 color:#a89bff;margin-bottom:7px" id="structName">Structure</div>
+            <canvas id="structCv"></canvas>
+            <div style="font-size:.68rem;color:#9d94c8;margin-top:7px;line-height:1.5"
+                 id="structHint"></div>
+          </div>
+        </div>
+      </div>
+
+      <label class="fld">Vitesse</label>
+      <div class="opts" id="speedOpts"></div>
+
+      <div class="row" style="margin-top:12px">
+        <button class="btn" id="runBtn">▶ Lancer</button>
+        <button class="btn ghost" id="pauseBtn" disabled>⏸ Pause</button>
+        <button class="btn ghost" id="stepBtn" disabled>⏭ Une étape</button>
+        <button class="btn ghost" id="endBtn" disabled>⏩ Terminer</button>
+      </div>
+      <div class="note" id="lesson"></div>
+    </div>
+  </div>
+
+  <!-- ================= COURSE ================= -->
+  <div id="tab-course" class="hidden">
+    <div class="panel">
+      <h2>Algorithmes en lice — même terrain, même graine</h2>
+      <div class="opts" id="raceOpts"></div>
+      <div class="row" style="margin-top:12px">
+        <button class="btn" id="raceRunBtn">🏁 Départ</button>
+        <button class="btn ghost" id="racePauseBtn" disabled>⏸ Pause</button>
+        <button class="btn ghost" id="raceEndBtn" disabled>⏩ Terminer</button>
+      </div>
+      <div class="raceGrid" id="raceGrid" style="margin-top:12px"></div>
+      <div class="note" id="raceVerdict"></div>
+    </div>
+  </div>
+
+  <!-- ================= MESURER ================= -->
+  <div id="tab-stats" class="hidden">
+    <div class="panel">
+      <h2>Mesurer — rejouer sans affichage et comparer</h2>
+      <div class="opts" id="statsOpts"></div>
+      <label class="fld">Nombre de tirages : <span id="runsVal">200</span></label>
+      <input type="range" id="runsRange" min="20" max="1000" step="20" value="200">
+      <div class="row" style="margin-top:12px">
+        <button class="btn" id="statsRunBtn">📊 Lancer les tirages</button>
+        <button class="btn ghost" id="checkBtn">✔ Vérifier les invariantes</button>
+      </div>
+      <div id="statsOut" style="margin-top:14px"></div>
+      <div class="board" id="histBoard" style="aspect-ratio:16/9;margin-top:12px;display:none">
+        <canvas id="histCv"></canvas>
+      </div>
+      <div id="checkOut"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+
+/* ============================================================================
+   0. OUTILS — hasard reproductible, tas binaire, union-find
+   ============================================================================ */
+function mulberry32(a){
+  return function(){
+    a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/* Tas binaire minimal : c'est LA structure qui fait la différence entre Prim et
+   Kruskal, on l'expose donc entièrement pour pouvoir la dessiner. */
+class MinHeap {
+  constructor(){ this.a = []; }
+  get size(){ return this.a.length; }
+  push(item){
+    const a = this.a; a.push(item);
+    let i = a.length - 1;
+    while(i > 0){
+      const p = (i - 1) >> 1;
+      if(a[p].w <= a[i].w) break;
+      [a[p], a[i]] = [a[i], a[p]]; i = p;
+    }
+  }
+  pop(){
+    const a = this.a;
+    if(!a.length) return null;
+    const top = a[0], last = a.pop();
+    if(a.length){
+      a[0] = last;
+      let i = 0;
+      for(;;){
+        const l = 2*i+1, r = l+1;
+        let m = i;
+        if(l < a.length && a[l].w < a[m].w) m = l;
+        if(r < a.length && a[r].w < a[m].w) m = r;
+        if(m === i) break;
+        [a[m], a[i]] = [a[i], a[m]]; i = m;
+      }
+    }
+    return top;
+  }
+}
+
+/* Union-find avec compression de chemin : le cœur de Kruskal. */
+class UnionFind {
+  constructor(n){
+    this.p = new Int32Array(n); this.sz = new Int32Array(n).fill(1);
+    for(let i=0;i<n;i++) this.p[i] = i;
+    this.count = n;
+  }
+  find(x){ while(this.p[x] !== x){ this.p[x] = this.p[this.p[x]]; x = this.p[x]; } return x; }
+  union(a,b){
+    a = this.find(a); b = this.find(b);
+    if(a === b) return false;
+    if(this.sz[a] < this.sz[b]) [a,b] = [b,a];
+    this.p[b] = a; this.sz[a] += this.sz[b]; this.count--;
+    return true;
+  }
+}
+
+function shuffle(arr, rnd){
+  for(let i=arr.length-1;i>0;i--){ const j=(rnd()*(i+1))|0; [arr[i],arr[j]]=[arr[j],arr[i]]; }
+  return arr;
+}
+
+/* ============================================================================
+   1. TERRAINS — chacun produit un graphe { nodes, edges, adj }
+   ============================================================================ */
+function makeGraph(nodes, edges){
+  const adj = nodes.map(() => []);
+  edges.forEach((e,i) => { adj[e.a].push({to:e.b, e:i}); adj[e.b].push({to:e.a, e:i}); });
+  return { nodes, edges, adj, n: nodes.length };
+}
+
+/* --- Grille : sommets = cases, arêtes = murs franchissables, poids au hasard.
+   Point clé : l'arbre couvrant minimal d'une grille aux poids aléatoires
+   EST un labyrinthe parfait. --- */
+function terrainGrille(size, rnd, openMode){
+  const nodes = [], edges = [];
+  for(let r=0;r<size;r++) for(let c=0;c<size;c++)
+    nodes.push({ r, c, x:(c+0.5)/size, y:(r+0.5)/size });
+  const id = (r,c) => r*size + c;
+  // Grille ouverte : le montage classique de la recherche de chemin — des
+  // obstacles et un coût de 1 par pas. La distance de Manhattan devient alors
+  // une estimation serrée du coût restant, et A* peut vraiment s'en servir.
+  if(openMode){
+    for(let i=0;i<nodes.length;i++) nodes[i].blocked = rnd() < 0.28;
+    nodes[0].blocked = false;
+    for(let r=0;r<size;r++) for(let c=0;c<size;c++){
+      if(nodes[id(r,c)].blocked) continue;
+      if(c < size-1 && !nodes[id(r,c+1)].blocked) edges.push({ a:id(r,c), b:id(r,c+1), w:1 });
+      if(r < size-1 && !nodes[id(r+1,c)].blocked) edges.push({ a:id(r,c), b:id(r+1,c), w:1 });
+    }
+  } else {
+    for(let r=0;r<size;r++) for(let c=0;c<size;c++){
+      if(c < size-1) edges.push({ a:id(r,c), b:id(r,c+1), w:rnd() });
+      if(r < size-1) edges.push({ a:id(r,c), b:id(r+1,c), w:rnd() });
+    }
+  }
+  const g = makeGraph(nodes, edges);
+  g.kind = 'grille'; g.size = size; g.openGrid = !!openMode;
+  return g;
+}
+
+/* Cible d'une grille à obstacles : le sommet accessible le plus proche du coin
+   opposé — garantit qu'un chemin existe quelle que soit la disposition tirée. */
+function cornerTarget(g){
+  const seen = new Uint8Array(g.n); seen[0] = 1;
+  const q = [0]; let head = 0, best = 0, bestScore = -1;
+  while(head < q.length){
+    const v = q[head++];
+    const nd = g.nodes[v], score = nd.r + nd.c;
+    if(score > bestScore){ bestScore = score; best = v; }
+    for(const a of g.adj[v]) if(!seen[a.to]){ seen[a.to] = 1; q.push(a.to); }
+  }
+  return best;
+}
+
+/* --- Nuage de points : sommets dispersés, arêtes vers les plus proches voisins,
+   poids = distance. Le même Prim y dessine un réseau de câblage minimal. --- */
+function terrainNuage(count, rnd){
+  const nodes = [];
+  for(let i=0;i<count;i++) nodes.push({ x:0.04 + rnd()*0.92, y:0.04 + rnd()*0.92 });
+  const K = 6, seen = new Set(), edges = [];
+  for(let i=0;i<count;i++){
+    const d = [];
+    for(let j=0;j<count;j++) if(j !== i)
+      d.push([Math.hypot(nodes[i].x-nodes[j].x, nodes[i].y-nodes[j].y), j]);
+    d.sort((p,q) => p[0]-q[0]);
+    for(let k=0;k<Math.min(K, d.length);k++){
+      const j = d[k][1], a = Math.min(i,j), b = Math.max(i,j), key = a*count+b;
+      if(seen.has(key)) continue;
+      seen.add(key); edges.push({ a, b, w:d[k][0] });
+    }
+  }
+  // le graphe des k plus proches voisins peut être morcelé : on le recolle
+  const uf = new UnionFind(count);
+  for(const e of edges) uf.union(e.a, e.b);
+  if(uf.count > 1){
+    for(let i=1;i<count;i++){
+      if(uf.find(i) === uf.find(0)) continue;
+      let best = -1, bw = Infinity;
+      for(let j=0;j<count;j++){
+        if(uf.find(j) !== uf.find(0)) continue;
+        const w = Math.hypot(nodes[i].x-nodes[j].x, nodes[i].y-nodes[j].y);
+        if(w < bw){ bw = w; best = j; }
+      }
+      if(best >= 0){ edges.push({ a:Math.min(i,best), b:Math.max(i,best), w:bw }); uf.union(i,best); }
+    }
+  }
+  const g = makeGraph(nodes, edges);
+  g.kind = 'nuage';
+  return g;
+}
+
+/* --- Image : sommets = pixels, poids = écart de couleur. Kruskal y devient
+   un segmenteur d'image. --- */
+let imageData = null, imageRes = 56;
+
+/* Image synthétique en régions de Voronoï : des zones franches séparées par de
+   vraies frontières. Un simple dégradé n'aurait aucune frontière à trouver — tous
+   les écarts entre pixels voisins passeraient sous le seuil et Kruskal fondrait
+   l'image entière en une seule région. */
+function synthImage(res, rnd){
+  const K = 7, seeds = [];
+  for(let i=0;i<K;i++)
+    seeds.push({ x:rnd()*res, y:rnd()*res, h:(rnd()*360)|0,
+                 s:45 + rnd()*35, l:32 + rnd()*34 });
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = res;
+  const g = cv.getContext('2d');
+  for(let y=0;y<res;y++) for(let x=0;x<res;x++){
+    let best = 0, bd = Infinity;
+    for(let i=0;i<K;i++){
+      const d = (x-seeds[i].x)**2 + (y-seeds[i].y)**2;
+      if(d < bd){ bd = d; best = i; }
+    }
+    const sd = seeds[best];
+    // légère variation interne : assez pour être réaliste, pas assez pour
+    // dépasser le seuil et fragmenter la région
+    const jitter = (rnd() - 0.5) * 5 + Math.sin(x*0.14) * 2.2 + Math.cos(y*0.14) * 2.2;
+    g.fillStyle = 'hsl(' + sd.h + ',' + sd.s + '%,' +
+                  Math.max(6, Math.min(92, sd.l + jitter)) + '%)';
+    g.fillRect(x, y, 1, 1);
+  }
+  return g.getImageData(0,0,res,res);
+}
+
+function terrainImage(res, rnd){
+  if(!imageData || imageData.width !== res) imageData = synthImage(res, rnd);
+  const d = imageData.data, nodes = [], edges = [];
+  for(let y=0;y<res;y++) for(let x=0;x<res;x++){
+    const i = (y*res+x)*4;
+    nodes.push({ x:(x+0.5)/res, y:(y+0.5)/res, px:x, py:y, r:d[i], g:d[i+1], b:d[i+2] });
+  }
+  const id = (x,y) => y*res + x;
+  const diff = (p,q) => Math.hypot(nodes[p].r-nodes[q].r, nodes[p].g-nodes[q].g, nodes[p].b-nodes[q].b);
+  for(let y=0;y<res;y++) for(let x=0;x<res;x++){
+    if(x < res-1){ const a=id(x,y), b=id(x+1,y); edges.push({a,b,w:diff(a,b)}); }
+    if(y < res-1){ const a=id(x,y), b=id(x,y+1); edges.push({a,b,w:diff(a,b)}); }
+  }
+  const g = makeGraph(nodes, edges);
+  g.kind = 'image'; g.res = res;
+  return g;
+}
+
+/* --- Plan : pas de graphe, un rectangle que la division récursive découpe. --- */
+function terrainPlan(size){
+  const g = makeGraph([], []);
+  g.kind = 'plan'; g.size = size;
+  return g;
+}
+
+const TERRAINS = {
+  grille: { name:'Grille',  icon:'▦', desc:'le labyrinthe', min:6,  max:22,  def:12 },
+  nuage:  { name:'Nuage',   icon:'✳', desc:'points et distances', min:30, max:220, def:90 },
+  image:  { name:'Image',   icon:'🖼', desc:'pixels et couleurs', min:32, max:80, def:56 },
+  plan:   { name:'Plan',    icon:'▭', desc:'espace à découper', min:8, max:26, def:16 }
+};
+
+/* ============================================================================
+   2. ALGORITHMES — écrits UNE fois, génériques sur le graphe
+   ============================================================================ */
+const ALGOS = {
+  dfs: { name:'Profondeur', icon:'🧵', kind:'arbre', struct:'pile',
+    terrains:['grille','nuage'],
+    lesson:"La pile impose de s'enfoncer avant d'explorer ailleurs : l'arbre obtenu est " +
+           "long et filiforme. Sur une grille, c'est le labyrinthe aux longs couloirs. " +
+           "Ailleurs : retour sur trace, détection de cycles, tri topologique." },
+  prim: { name:'Prim', icon:'🌿', kind:'arbre', struct:'tas',
+    terrains:['grille','nuage'],
+    lesson:"Prim fait grandir UNE zone : le tas lui donne toujours l'arête la moins " +
+           "chère qui sort de cette zone. Sur un nuage de points, c'est un réseau de " +
+           "câblage au coût minimal ; sur une grille, un labyrinthe très ramifié." },
+  kruskal: { name:'Kruskal', icon:'✨', kind:'arbre', struct:'uf',
+    terrains:['grille','nuage','image'],
+    lesson:"Kruskal n'a pas de point de départ : il trie toutes les arêtes et fusionne " +
+           "des îlots épars. L'union-find répond en temps quasi constant à « ces deux " +
+           "sommets sont-ils déjà reliés ? ». Sur une image, c'est de la segmentation." },
+  bfs: { name:'Largeur', icon:'💧', kind:'chemin', struct:'file',
+    terrains:['grille','nuage','image'],
+    lesson:"La file fait avancer un front régulier : le premier chemin trouvé est le plus " +
+           "court en nombre d'arêtes. Sur une image, la même boucle devient un remplissage " +
+           "par diffusion (le pot de peinture)." },
+  dijkstra: { name:'Dijkstra', icon:'⚖', kind:'chemin', struct:'tas',
+    terrains:['grille','nuage'],
+    lesson:"Dijkstra est un parcours en largeur où la file devient un tas : il traite " +
+           "toujours le sommet le moins coûteux. Il explore dans toutes les directions, " +
+           "car sans indice il ne sait pas où est l'arrivée." },
+  astar: { name:'A*', icon:'🎯', kind:'chemin', struct:'tas',
+    terrains:['grille','nuage'],
+    lesson:"A* est Dijkstra plus une estimation de la distance restante, qui oriente la " +
+           "recherche vers l'arrivée. Le gain dépend du terrain : environ 4× sur un nuage, " +
+           "1,8× sur une grille à obstacles, mais à peine 1,1× dans un labyrinthe — un " +
+           "labyrinthe est un arbre, il n'y a qu'un chemin, donc presque rien à guider. " +
+           "Une bonne heuristique ne sert que là où il y a un choix." },
+  mur: { name:'Main au mur', icon:'🤚', kind:'chemin', struct:'aucune',
+    terrains:['grille'],
+    lesson:"Aucune structure, aucune mémoire : longer le mur de gauche suffit à sortir " +
+           "d'un labyrinthe sans boucle. Ajoute des boucles au terrain et la méthode " +
+           "peut tourner indéfiniment — c'est sa limite, pas un bug." },
+  division: { name:'Division', icon:'🏰', kind:'arbre', struct:'zones',
+    terrains:['grille','plan'],
+    lesson:"Seul algorithme à travailler par le haut : il ne relie pas, il sépare. " +
+           "C'est le principe des arbres BSP et des quadtrees, utilisé pour découper " +
+           "un donjon ou indexer l'espace." }
+};
+
+/* --- État partagé, lu par les afficheurs --- */
+function newState(g){
+  return {
+    nodeState: new Uint8Array(g.n),      // 0 vierge, 1 frontière, 2 traité, 3 courant
+    chosen: new Uint8Array(g.edges.length),
+    candidates: [], current: -1, target: -1,
+    dist: new Float64Array(g.n).fill(Infinity),
+    parent: new Int32Array(g.n).fill(-1),
+    comp: null, rooms: [], region: null, path: [],
+    struct: { kind:'aucune' },
+    counters: { examines:0, aretes:0, retenues:0, retours:0 },
+    logs: [], phase: '', progress: 0,
+    note(msg, cls){
+      const last = this.logs[this.logs.length-1];
+      if(last && last.msg === msg) return;
+      this.logs.push({ msg, cls: cls || '' });
+      if(this.logs.length > 30) this.logs.shift();
+    }
+  };
+}
+
+/* ---------- Parcours en profondeur : arbre couvrant ---------- */
+function* algoDFS(run){
+  const { g, st } = run;
+  const visited = new Uint8Array(g.n);
+  const stack = [run.start];
+  visited[run.start] = 1; st.nodeState[run.start] = 3;
+  st.struct = { kind:'pile', items:stack, nodes:g.nodes };
+  st.phase = 'Parcours en profondeur';
+  st.note('Je pars du sommet de départ et je m’enfonce tant que je peux.', 'k1');
+
+  while(stack.length){
+    const v = stack[stack.length-1];
+    st.current = v;
+    st.progress = st.counters.retenues / (g.n - 1);
+    const opts = g.adj[v].filter(a => !visited[a.to]);
+    st.counters.examines++;
+
+    if(!opts.length){
+      st.candidates = [];
+      st.note('Plus aucune voisine vierge : je dépile.', 'k4');
+      stack.pop(); st.counters.retours++;
+      st.nodeState[v] = 2;
+      yield;
+      continue;
+    }
+    st.candidates = opts.map(a => a.e);
+    st.note(opts.length + (opts.length > 1 ? ' voisines vierges : je tire au sort.'
+                                           : ' seule voisine vierge.'), 'k2');
+    yield;
+
+    const pick = opts[(run.rnd() * opts.length) | 0];
+    st.counters.aretes++;
+    st.chosen[pick.e] = 1; st.counters.retenues++;
+    visited[pick.to] = 1;
+    st.nodeState[v] = 2; st.nodeState[pick.to] = 3;
+    st.parent[pick.to] = v;
+    stack.push(pick.to);
+    st.candidates = [];
+    st.note('Je retiens cette arête et j’avance.', 'k1');
+    yield;
+  }
+  st.current = -1; st.progress = 1;
+  st.note('Pile vide : ' + st.counters.retenues + ' arêtes retenues.', 'k3');
+}
+
+/* ---------- Prim : croissance d'une zone, tas de priorité ---------- */
+function* algoPrim(run){
+  const { g, st } = run;
+  const inTree = new Uint8Array(g.n);
+  const heap = new MinHeap();
+  st.struct = { kind:'tas', heap, nodes:g.nodes };
+  st.phase = 'Prim — arbre couvrant minimal';
+  st.note('Une seule zone grandit. Le tas me donne l’arête la moins chère qui en sort.', 'k1');
+
+  const add = v => {
+    inTree[v] = 1; st.nodeState[v] = 2;
+    for(const a of g.adj[v]) if(!inTree[a.to]){
+      heap.push({ w:g.edges[a.e].w, e:a.e, from:v, to:a.to });
+      st.nodeState[a.to] = Math.max(st.nodeState[a.to], 1);
+    }
+  };
+  add(run.start);
+
+  while(heap.size){
+    st.progress = st.counters.retenues / (g.n - 1);
+    const top = heap.a[0];
+    st.candidates = [top.e]; st.current = top.to;
+    st.note('Sommet du tas : arête de coût ' + top.w.toFixed(3) + '. Je l’examine.', 'k2');
+    yield;
+
+    const best = heap.pop();
+    st.counters.aretes++; st.counters.examines++;
+    if(inTree[best.to]){
+      st.candidates = [];
+      st.note('Ce sommet a déjà rejoint la zone : arête inutile, je jette.', 'k4');
+      yield;
+      continue;
+    }
+    st.chosen[best.e] = 1; st.counters.retenues++;
+    st.parent[best.to] = best.from;
+    add(best.to);
+    st.candidates = [];
+    st.note('Sommet rattaché pour ' + best.w.toFixed(3) + '.', 'k1');
+    yield;
+  }
+  st.current = -1; st.progress = 1;
+  st.note('Tas vide : arbre couvrant minimal terminé.', 'k3');
+}
+
+/* ---------- Kruskal : tri global + union-find ---------- */
+function* algoKruskal(run){
+  const { g, st } = run;
+  const uf = new UnionFind(g.n);
+  st.comp = uf;
+  st.struct = { kind:'uf', uf, nodes:g.nodes };
+  st.phase = 'Kruskal — fusion d’îlots';
+  const order = g.edges.map((e,i) => i).sort((i,j) => g.edges[i].w - g.edges[j].w);
+  const seg = run.terrain === 'image';
+  st.note(seg ? 'Je trie les arêtes du plus faible écart de couleur au plus fort.'
+              : 'Je trie toutes les arêtes par coût croissant, sans point de départ.', 'k1');
+  for(let i=0;i<g.n;i++) st.nodeState[i] = 2;
+
+  let tested = 0;
+  for(const ei of order){
+    const e = g.edges[ei];
+    tested++;
+    st.progress = tested / order.length;
+    if(seg && e.w > run.threshold){
+      st.note('Écart trop grand : je m’arrête, les régions restantes sont distinctes.', 'k3');
+      break;
+    }
+    st.candidates = [ei];
+    st.counters.aretes++;
+    st.note('Arête nº ' + tested + ' (coût ' + e.w.toFixed(3) + ') : deux côtés déjà reliés ?', 'k2');
+    yield;
+
+    st.counters.examines++;
+    if(uf.find(e.a) === uf.find(e.b)){
+      st.note('Oui, même îlot : je la rejette, sinon je créerais un cycle.', 'k4');
+      st.candidates = [];
+      yield;
+      continue;
+    }
+    uf.union(e.a, e.b);
+    st.chosen[ei] = 1; st.counters.retenues++;
+    st.note('Non : deux îlots distincts, je fusionne. Reste ' + uf.count + ' îlots.', 'k1');
+    st.candidates = [];
+    yield;
+    if(!seg && uf.count === 1) break;
+  }
+  st.progress = 1;
+  st.note(seg ? uf.count + ' régions distinctes.' : 'Un seul îlot : arbre couvrant minimal.', 'k3');
+}
+
+/* ---------- Parcours en largeur ---------- */
+function* algoBFS(run){
+  const { g, st } = run;
+  const queue = [run.start]; let head = 0;
+  st.dist[run.start] = 0; st.nodeState[run.start] = 1;
+  st.struct = { kind:'file', items:queue, head:() => head, nodes:g.nodes };
+  st.phase = 'Parcours en largeur';
+  st.note('Un front régulier avance : toutes les arêtes comptent pour 1.', 'k1');
+
+  while(head < queue.length){
+    const v = queue[head++];
+    st.current = v; st.nodeState[v] = 2; st.counters.examines++;
+    st.progress = st.counters.examines / g.n;
+    if(v === run.target){ st.note('Arrivée atteinte : le chemin est le plus court.', 'k3'); break; }
+    const news = [];
+    for(const a of g.adj[v]){
+      st.counters.aretes++;
+      if(st.dist[a.to] !== Infinity) continue;
+      st.dist[a.to] = st.dist[v] + 1;
+      st.parent[a.to] = v; st.nodeState[a.to] = 1;
+      queue.push(a.to); news.push(a.e);
+    }
+    st.candidates = news;
+    if(news.length) st.note('Distance ' + st.dist[v] + ' : ' + news.length + ' nouveaux sommets en file.', 'k2');
+    yield;
+    st.candidates = [];
+  }
+  rebuildPath(run);
+  st.progress = 1;
+}
+
+/* ---------- Dijkstra et A* : même code, une heuristique en plus ---------- */
+function* algoDijkstra(run){ yield* dijkstraLike(run, false); }
+function* algoAstar(run){ yield* dijkstraLike(run, true); }
+
+function* dijkstraLike(run, useH){
+  const { g, st } = run;
+  const done = new Uint8Array(g.n);
+  const heap = new MinHeap();
+  // Sur une grille on ne se déplace qu'en croix : la distance de Manhattan est
+  // la bonne estimation, et elle ne surestime jamais le coût réel restant.
+  const h = v => {
+    if(!useH || run.target < 0) return 0;
+    const a = g.nodes[v], b = g.nodes[run.target];
+    if(g.kind === 'grille') return (Math.abs(a.r-b.r) + Math.abs(a.c-b.c)) * run.hMin;
+    return Math.hypot(a.x-b.x, a.y-b.y) * run.hScale;
+  };
+  st.struct = { kind:'tas', heap, nodes:g.nodes };
+  st.phase = useH ? 'A* — Dijkstra guidé' : 'Dijkstra';
+  st.note(useH ? 'À chaque sommet j’ajoute une estimation de la distance restante.'
+               : 'Je traite toujours le sommet de coût cumulé le plus faible.', 'k1');
+  st.dist[run.start] = 0;
+  heap.push({ w:h(run.start), v:run.start, e:-1 });
+
+  while(heap.size){
+    const top = heap.pop();
+    st.counters.aretes++;
+    if(done[top.v]) continue;
+    done[top.v] = 1; st.nodeState[top.v] = 2;
+    st.current = top.v; st.counters.examines++;
+    st.progress = st.counters.examines / g.n;
+    if(top.v === run.target){ st.note('Arrivée figée : plus court chemin garanti.', 'k3'); break; }
+
+    const news = [];
+    for(const a of g.adj[top.v]){
+      const nd = st.dist[top.v] + g.edges[a.e].w;
+      if(nd < st.dist[a.to]){
+        st.dist[a.to] = nd; st.parent[a.to] = top.v;
+        heap.push({ w:nd + h(a.to), v:a.to, e:a.e });
+        if(st.nodeState[a.to] === 0) st.nodeState[a.to] = 1;
+        news.push(a.e);
+      }
+    }
+    st.candidates = news;
+    st.note('Coût ' + st.dist[top.v].toFixed(3) + ' figé. ' + heap.size + ' sommets en attente.', 'k2');
+    yield;
+    st.candidates = [];
+  }
+  rebuildPath(run);
+  st.progress = 1;
+}
+
+function rebuildPath(run){
+  const { st } = run;
+  if(run.target < 0 || st.parent[run.target] === -1 && run.target !== run.start) return;
+  const p = []; let v = run.target, guard = 1e6;
+  while(v !== -1 && guard-- > 0){ p.push(v); if(v === run.start) break; v = st.parent[v]; }
+  st.path = p.reverse();
+}
+
+/* ---------- Main sur le mur : aucune structure ---------- */
+function* algoMur(run){
+  const { g, st } = run;
+  const size = g.size;
+  st.struct = { kind:'aucune' };
+  st.phase = 'Main gauche sur le mur';
+  st.note('Aucune mémoire, aucune carte : je longe le mur de gauche.', 'k1');
+  const DIRS = [[-1,0],[0,1],[1,0],[0,-1]];
+  const open = (r,c,d) => {
+    const nr = r + DIRS[d][0], nc = c + DIRS[d][1];
+    if(nr<0||nr>=size||nc<0||nc>=size) return -1;
+    const a = r*size+c, b = nr*size+nc;
+    for(const x of g.adj[a]) if(x.to === b) return b;
+    return -1;
+  };
+  let v = run.start, facing = 1, steps = 0;
+  const limit = g.n * 12;
+  st.nodeState[v] = 2;
+  const trail = new Uint16Array(g.n);
+
+  while(steps < limit){
+    if(v === run.target){ st.note('Sortie atteinte en ' + steps + ' pas.', 'k3'); break; }
+    const r = (v / size) | 0, c = v % size;
+    let moved = false;
+    for(const turn of [3,0,1,2]){
+      const d = (facing + turn) % 4;
+      const nv = open(r, c, d);
+      st.counters.aretes++;
+      if(nv < 0) continue;
+      facing = d; v = nv; moved = true; break;
+    }
+    if(!moved) break;
+    steps++; st.counters.examines++;
+    trail[v] = Math.min(3, trail[v] + 1);
+    st.nodeState[v] = 2; st.current = v;
+    st.dist[v] = trail[v];               // réutilisé pour colorer les repassages
+    st.progress = Math.min(0.99, steps / (g.n * 2));
+    if(steps % 7 === 0) st.note('Je longe… ' + steps + ' pas effectués.', 'k2');
+    yield;
+  }
+  if(v !== run.target)
+    st.note('Abandon après ' + steps + ' pas : la règle tourne en rond (boucles).', 'k4');
+  st.progress = 1;
+}
+
+/* ---------- Division récursive ---------- */
+function* algoDivision(run){
+  const { g, st } = run;
+  const size = g.size;
+  st.phase = 'Division récursive';
+  st.struct = { kind:'zones', items:[], nodes:g.nodes };
+  const plan = run.terrain === 'plan';
+  st.note(plan ? 'Je pars d’une salle unique et je la coupe en deux, encore et encore.'
+               : 'Je pars d’une grille entièrement ouverte, puis je cloisonne.', 'k1');
+
+  if(!plan) st.chosen.fill(1), st.counters.retenues = g.edges.length;
+  for(let i=0;i<g.n;i++) st.nodeState[i] = 2;
+
+  const edgeBetween = (a,b) => { for(const x of g.adj[a]) if(x.to === b) return x.e; return -1; };
+  const regions = [[0,0,size-1,size-1]];
+  st.struct.items = regions;
+  st.rooms = [];
+  let built = 0;
+  const estimate = Math.max(1, size * 2.2);
+
+  while(regions.length){
+    const [r0,c0,r1,c1] = regions.pop();
+    const h = r1-r0+1, w = c1-c0+1;
+    if(h < 2 && w < 2){ if(plan) st.rooms.push([r0,c0,r1,c1]); continue; }
+
+    st.region = [r0,c0,r1,c1];
+    st.note('Zone de ' + h + ' sur ' + w + ' : encore divisible.', 'k2');
+    st.progress = Math.min(0.98, built / estimate);
+    yield;
+
+    const horiz = (h === w) ? run.rnd() < 0.5 : h > w;
+    st.note(horiz ? 'Plus haute que large : coupe horizontale.'
+                  : 'Plus large que haute : coupe verticale.', 'k1');
+    if(horiz){
+      const wr = r0 + ((run.rnd()*(h-1))|0), gap = c0 + ((run.rnd()*w)|0);
+      for(let c=c0;c<=c1;c++){
+        if(c === gap) continue;
+        if(!plan){
+          const e = edgeBetween(wr*size+c, (wr+1)*size+c);
+          if(e >= 0 && st.chosen[e]){ st.chosen[e] = 0; st.counters.retenues--; }
+        }
+        st.counters.aretes++;
+      }
+      st.note('Mur posé, une porte laissée ouverte.', 'k3');
+      yield;
+      regions.push([r0,c0,wr,c1], [wr+1,c0,r1,c1]);
+    } else {
+      const wc = c0 + ((run.rnd()*(w-1))|0), gap = r0 + ((run.rnd()*h)|0);
+      for(let r=r0;r<=r1;r++){
+        if(r === gap) continue;
+        if(!plan){
+          const e = edgeBetween(r*size+wc, r*size+wc+1);
+          if(e >= 0 && st.chosen[e]){ st.chosen[e] = 0; st.counters.retenues--; }
+        }
+        st.counters.aretes++;
+      }
+      st.note('Mur posé, une porte laissée ouverte.', 'k3');
+      yield;
+      regions.push([r0,c0,r1,wc], [r0,wc+1,r1,c1]);
+    }
+    built++;
+  }
+  st.region = null; st.progress = 1;
+  st.note(plan ? st.rooms.length + ' pièces obtenues.'
+               : st.counters.retenues + ' passages conservés.', 'k3');
+}
+
+const RUNNERS = { dfs:algoDFS, prim:algoPrim, kruskal:algoKruskal, bfs:algoBFS,
+                  dijkstra:algoDijkstra, astar:algoAstar, mur:algoMur, division:algoDivision };
+
+/* ============================================================================
+   3. UNE EXÉCUTION
+   ============================================================================ */
+class Run {
+  constructor(terrain, algoKey, size, seed, opts){
+    opts = opts || {};
+    this.terrain = terrain; this.algoKey = algoKey; this.size = size;
+    this.seed = seed >>> 0; this.rnd = mulberry32(this.seed);
+    this.threshold = opts.threshold != null ? opts.threshold : 28;
+    this.loops = !!opts.loops;
+
+    this.gridMode = opts.gridMode || 'maze';
+    const openGrid = terrain === 'grille' && ALGOS[algoKey].kind === 'chemin'
+                     && this.gridMode === 'open';
+    let g;
+    if(terrain === 'grille') g = terrainGrille(size, this.rnd, openGrid);
+    else if(terrain === 'nuage') g = terrainNuage(size, this.rnd);
+    else if(terrain === 'image') g = terrainImage(size, this.rnd);
+    else g = terrainPlan(size);
+
+    const algo = ALGOS[algoKey];
+    // Les algorithmes de chemin sur une grille ont besoin d'un labyrinthe :
+    // on le creuse d'abord avec la même graine, puis on ne garde que ses passages.
+    if(algo.kind === 'chemin' && terrain === 'grille' && !openGrid){
+      g = carveMaze(g, mulberry32(this.seed ^ 0x9e3779b9), this.loops);
+    }
+    this.openGrid = openGrid;
+    this.g = g;
+    this.st = newState(g);
+    this.st.struct = { kind: algo.struct };   // connue avant même le premier pas
+    this.start = 0;
+    this.target = -1;
+    if(algo.kind === 'chemin'){
+      this.target = terrain === 'grille' ? (openGrid ? cornerTarget(g) : g.n - 1)
+                  : farthestNode(g, 0);
+      this.st.target = this.target;
+    }
+    // Les coordonnées vivent dans [0,1] : sans remise à l'échelle, l'heuristique
+    // serait négligeable devant des poids d'arête de l'ordre de 1, et A* se
+    // comporterait exactement comme Dijkstra.
+    this.hScale = 1;
+    this.hMin = 1;              // coût minimal d'un pas, pour rester admissible
+    this.it = RUNNERS[algoKey](this);
+    this.done = false;
+  }
+  step(){
+    if(this.done) return true;
+    if(this.it.next().done){ this.done = true; }
+    return this.done;
+  }
+  finish(cap){
+    let guard = cap || 4e6;
+    while(!this.done && guard-- > 0) this.step();
+    return this.done;
+  }
+  treeWeight(){
+    let w = 0;
+    for(let i=0;i<this.g.edges.length;i++) if(this.st.chosen[i]) w += this.g.edges[i].w;
+    return w;
+  }
+}
+
+/* Creuse un labyrinthe parfait (profondeur) et renvoie le graphe de ses passages. */
+function carveMaze(g, rnd, addLoops){
+  const visited = new Uint8Array(g.n), keep = new Uint8Array(g.edges.length);
+  const stack = [0]; visited[0] = 1;
+  while(stack.length){
+    const v = stack[stack.length-1];
+    const opts = g.adj[v].filter(a => !visited[a.to]);
+    if(!opts.length){ stack.pop(); continue; }
+    const pick = opts[(rnd()*opts.length)|0];
+    keep[pick.e] = 1; visited[pick.to] = 1; stack.push(pick.to);
+  }
+  if(addLoops){
+    const extra = Math.max(2, Math.round(g.n * 0.06));
+    for(let k=0;k<extra;k++){
+      const i = (rnd()*g.edges.length)|0;
+      keep[i] = 1;
+    }
+  }
+  const edges = [];
+  g.edges.forEach((e,i) => { if(keep[i]) edges.push({ a:e.a, b:e.b, w:1 }); });
+  const ng = makeGraph(g.nodes, edges);
+  ng.kind = g.kind; ng.size = g.size; ng.isMaze = true;
+  return ng;
+}
+
+function farthestNode(g, from){
+  const d = new Int32Array(g.n).fill(-1); d[from] = 0;
+  const q = [from]; let head = 0, best = from;
+  while(head < q.length){
+    const v = q[head++];
+    if(d[v] > d[best]) best = v;
+    for(const a of g.adj[v]) if(d[a.to] === -1){ d[a.to] = d[v]+1; q.push(a.to); }
+  }
+  return best;
+}
+
+/* ============================================================================
+   4. AFFICHAGE DES TERRAINS
+   ============================================================================ */
+function fitCanvas(cv){
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const r = cv.getBoundingClientRect();
+  if(!r.width || !r.height) return null;
+  cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr);
+  const ctx = cv.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  return { ctx, W:r.width, H:r.height };
+}
+
+const COL = { wall:'#241f3d', open:'rgba(255,255,255,0.07)', done:'rgba(150,130,255,0.30)',
+              front:'rgba(255,176,77,0.6)', cur:'#ffffff', chosen:'#7bd9ff',
+              cand:'#ffffff', path:'#6cff8f' };
+
+function drawRun(cv, run, compact){
+  const f = fitCanvas(cv); if(!f) return;
+  const { ctx, W, H } = f;
+  const g = run.g, st = run.st;
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle = '#05050a'; ctx.fillRect(0,0,W,H);
+  if(g.kind === 'grille') drawGrille(ctx, W, H, run, compact);
+  else if(g.kind === 'nuage') drawNuage(ctx, W, H, run, compact);
+  else if(g.kind === 'image') drawImageTerrain(ctx, W, H, run);
+  else drawPlan(ctx, W, H, run);
+}
+
+function drawGrille(ctx, W, H, run, compact){
+  const g = run.g, st = run.st, size = g.size;
+  const S = Math.min(W,H), cell = S / size, ox = (W-S)/2, oy = (H-S)/2;
+  const px = (c) => ox + c*cell, py = (r) => oy + r*cell;
+  const pad = Math.max(0.8, cell*0.16);
+
+  // cases
+  for(let i=0;i<g.n;i++){
+    const nd = g.nodes[i];
+    if(nd.blocked){
+      ctx.fillStyle = '#1a1630';
+      ctx.fillRect(px(nd.c), py(nd.r), cell, cell);
+      continue;
+    }
+    let col = COL.open;
+    if(st.dist[i] !== Infinity && ALGOS[run.algoKey].kind === 'chemin'){
+      const m = run.algoKey === 'mur' ? 3 : Math.max(1, maxFinite(st.dist));
+      const t = Math.min(1, st.dist[i]/m);
+      col = run.algoKey === 'mur'
+        ? ['rgba(255,176,77,.5)','rgba(255,123,166,.7)','rgba(255,60,120,.9)'][Math.min(2,st.dist[i]-1)] || COL.done
+        : mix(0x2b1f6b, 0x7bd9ff, t);
+    } else if(st.nodeState[i] === 2) col = COL.done;
+    else if(st.nodeState[i] === 1) col = COL.front;
+    ctx.fillStyle = col;
+    ctx.fillRect(px(nd.c)+pad, py(nd.r)+pad, cell-2*pad, cell-2*pad);
+  }
+  // passages retenus
+  ctx.fillStyle = COL.done;
+  for(let i=0;i<g.edges.length;i++){
+    if(!st.chosen[i] && !g.isMaze) continue;
+    const a = g.nodes[g.edges[i].a], b = g.nodes[g.edges[i].b];
+    const x = Math.min(a.c,b.c), y = Math.min(a.r,b.r);
+    if(a.r === b.r) ctx.fillRect(px(x)+cell-pad, py(y)+pad, 2*pad, cell-2*pad);
+    else ctx.fillRect(px(x)+pad, py(y)+cell-pad, cell-2*pad, 2*pad);
+  }
+  // chemin
+  if(st.path.length > 1){
+    ctx.strokeStyle = COL.path; ctx.lineWidth = Math.max(1.5, cell*0.3);
+    ctx.lineJoin = ctx.lineCap = 'round'; ctx.beginPath();
+    st.path.forEach((v,k) => { const n = g.nodes[v];
+      const x = px(n.c)+cell/2, y = py(n.r)+cell/2; k?ctx.lineTo(x,y):ctx.moveTo(x,y); });
+    ctx.stroke();
+  }
+  // zone en cours de découpe
+  if(st.region){
+    const [r0,c0,r1,c1] = st.region;
+    ctx.strokeStyle = '#7bd9ff'; ctx.lineWidth = 2;
+    ctx.strokeRect(px(c0)+1, py(r0)+1, (c1-c0+1)*cell-2, (r1-r0+1)*cell-2);
+  }
+  // arêtes envisagées
+  ctx.strokeStyle = COL.cand; ctx.lineWidth = Math.max(1, cell*0.18);
+  for(const ei of st.candidates){
+    const e = g.edges[ei]; if(!e) continue;
+    const a = g.nodes[e.a], b = g.nodes[e.b];
+    ctx.beginPath();
+    ctx.moveTo(px(a.c)+cell/2, py(a.r)+cell/2);
+    ctx.lineTo(px(b.c)+cell/2, py(b.r)+cell/2);
+    ctx.stroke();
+  }
+  if(st.current >= 0){
+    const n = g.nodes[st.current];
+    ctx.fillStyle = COL.cur;
+    ctx.fillRect(px(n.c)+pad, py(n.r)+pad, cell-2*pad, cell-2*pad);
+  }
+  if(!compact) markNode(ctx, g.nodes[run.start], px, py, cell, '#6cff8f', 'D');
+  if(!compact && run.target >= 0) markNode(ctx, g.nodes[run.target], px, py, cell, '#ffcf5c', 'A');
+}
+function markNode(ctx, n, px, py, cell, col, label){
+  const x = px(n.c)+cell/2, y = py(n.r)+cell/2;
+  ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x,y,Math.max(2.5,cell*0.42),0,6.3); ctx.fill();
+  if(cell > 11){
+    ctx.fillStyle = '#05050a'; ctx.font = 'bold ' + Math.floor(cell*0.6) + 'px system-ui';
+    ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(label, x, y+0.5);
+  }
+}
+function maxFinite(arr){ let m = 1; for(const v of arr) if(v !== Infinity && v > m) m = v; return m; }
+function mix(a,b,t){
+  const ar=(a>>16)&255, ag=(a>>8)&255, ab=a&255, br=(b>>16)&255, bg=(b>>8)&255, bb=b&255;
+  return 'rgb('+((ar+(br-ar)*t)|0)+','+((ag+(bg-ag)*t)|0)+','+((ab+(bb-ab)*t)|0)+')';
+}
+
+function drawNuage(ctx, W, H, run, compact){
+  const g = run.g, st = run.st;
+  const S = Math.min(W,H), ox = (W-S)/2, oy = (H-S)/2;
+  const X = n => ox + n.x*S, Y = n => oy + n.y*S;
+  // toutes les arêtes, en gris
+  ctx.strokeStyle = 'rgba(150,130,255,0.13)'; ctx.lineWidth = 1;
+  ctx.beginPath();
+  for(const e of g.edges){ ctx.moveTo(X(g.nodes[e.a]),Y(g.nodes[e.a])); ctx.lineTo(X(g.nodes[e.b]),Y(g.nodes[e.b])); }
+  ctx.stroke();
+  // arêtes retenues
+  ctx.strokeStyle = COL.chosen; ctx.lineWidth = 2; ctx.lineCap='round';
+  ctx.beginPath();
+  for(let i=0;i<g.edges.length;i++){
+    if(!st.chosen[i]) continue;
+    const e = g.edges[i];
+    ctx.moveTo(X(g.nodes[e.a]),Y(g.nodes[e.a])); ctx.lineTo(X(g.nodes[e.b]),Y(g.nodes[e.b]));
+  }
+  ctx.stroke();
+  // chemin
+  if(st.path.length > 1){
+    ctx.strokeStyle = COL.path; ctx.lineWidth = 3; ctx.beginPath();
+    st.path.forEach((v,k) => { const n = g.nodes[v]; k?ctx.lineTo(X(n),Y(n)):ctx.moveTo(X(n),Y(n)); });
+    ctx.stroke();
+  }
+  // arêtes envisagées
+  ctx.strokeStyle = COL.cand; ctx.lineWidth = 2.4; ctx.beginPath();
+  for(const ei of st.candidates){
+    const e = g.edges[ei]; if(!e) continue;
+    ctx.moveTo(X(g.nodes[e.a]),Y(g.nodes[e.a])); ctx.lineTo(X(g.nodes[e.b]),Y(g.nodes[e.b]));
+  }
+  ctx.stroke();
+  // sommets
+  const R = Math.max(1.8, S/ (Math.sqrt(g.n) * 14));
+  for(let i=0;i<g.n;i++){
+    const s = st.nodeState[i];
+    ctx.fillStyle = s===2 ? '#a89bff' : s===1 ? '#ffb04d' : 'rgba(180,170,230,0.35)';
+    ctx.beginPath(); ctx.arc(X(g.nodes[i]),Y(g.nodes[i]),R,0,6.3); ctx.fill();
+  }
+  if(st.current >= 0){
+    ctx.fillStyle = COL.cur;
+    ctx.beginPath(); ctx.arc(X(g.nodes[st.current]),Y(g.nodes[st.current]),R*2,0,6.3); ctx.fill();
+  }
+  if(!compact){
+    ctx.fillStyle='#6cff8f'; ctx.beginPath(); ctx.arc(X(g.nodes[run.start]),Y(g.nodes[run.start]),R*2.2,0,6.3); ctx.fill();
+    if(run.target>=0){ ctx.fillStyle='#ffcf5c';
+      ctx.beginPath(); ctx.arc(X(g.nodes[run.target]),Y(g.nodes[run.target]),R*2.2,0,6.3); ctx.fill(); }
+  }
+}
+
+function drawImageTerrain(ctx, W, H, run){
+  const g = run.g, st = run.st, res = g.res;
+  const S = Math.min(W,H), ox = (W-S)/2, oy = (H-S)/2, px = S/res;
+  const uf = st.comp;
+  const sums = uf ? new Map() : null;
+  if(uf){
+    for(let i=0;i<g.n;i++){
+      const root = uf.find(i);
+      let s = sums.get(root);
+      if(!s){ s = [0,0,0,0]; sums.set(root, s); }
+      const n = g.nodes[i];
+      s[0]+=n.r; s[1]+=n.g; s[2]+=n.b; s[3]++;
+    }
+  }
+  for(let y=0;y<res;y++) for(let x=0;x<res;x++){
+    const i = y*res+x, n = g.nodes[i];
+    let r=n.r, gg=n.g, b=n.b;
+    if(uf){ const s = sums.get(uf.find(i)); r=s[0]/s[3]; gg=s[1]/s[3]; b=s[2]/s[3]; }
+    ctx.fillStyle = 'rgb('+(r|0)+','+(gg|0)+','+(b|0)+')';
+    ctx.fillRect(ox+x*px, oy+y*px, px+0.6, px+0.6);
+  }
+  if(st.dist && ALGOS[run.algoKey].kind === 'chemin'){
+    for(let i=0;i<g.n;i++){
+      if(st.dist[i] === Infinity) continue;
+      const n = g.nodes[i];
+      ctx.fillStyle = 'rgba(123,217,255,0.35)';
+      ctx.fillRect(ox+n.px*px, oy+n.py*px, px+0.6, px+0.6);
+    }
+  }
+  for(const ei of st.candidates){
+    const e = g.edges[ei]; if(!e) continue;
+    const n = g.nodes[e.a];
+    ctx.fillStyle = '#fff'; ctx.fillRect(ox+n.px*px, oy+n.py*px, px+0.6, px+0.6);
+  }
+}
+
+function drawPlan(ctx, W, H, run){
+  const st = run.st, size = run.g.size;
+  const S = Math.min(W,H), ox = (W-S)/2, oy = (H-S)/2, u = S/size;
+  ctx.fillStyle = '#0d0b1a'; ctx.fillRect(ox,oy,S,S);
+  st.rooms.forEach((rm,i) => {
+    const [r0,c0,r1,c1] = rm;
+    ctx.fillStyle = 'hsl(' + ((i*47)%360) + ',55%,42%)';
+    ctx.fillRect(ox+c0*u+1.5, oy+r0*u+1.5, (c1-c0+1)*u-3, (r1-r0+1)*u-3);
+  });
+  if(st.region){
+    const [r0,c0,r1,c1] = st.region;
+    ctx.strokeStyle = '#7bd9ff'; ctx.lineWidth = 2;
+    ctx.strokeRect(ox+c0*u+1, oy+r0*u+1, (c1-c0+1)*u-2, (r1-r0+1)*u-2);
+  }
+  ctx.strokeStyle = 'rgba(150,130,255,0.35)'; ctx.lineWidth = 1;
+  ctx.strokeRect(ox+0.5, oy+0.5, S-1, S-1);
+}
+
+/* ============================================================================
+   5. AFFICHAGE DE LA STRUCTURE VIVANTE
+   ============================================================================ */
+const STRUCT_NAME = { pile:'La pile', file:'La file', tas:'Le tas de priorité',
+                      uf:'Union-find', zones:'Zones en attente', aucune:'Structure' };
+const STRUCT_HINT = {
+  pile:"Dernier entré, premier sorti. C'est elle qui force l'algorithme à s'enfoncer " +
+       "avant d'explorer ailleurs.",
+  file:"Premier entré, premier sorti. C'est elle qui fait avancer un front régulier.",
+  tas:"Le minimum est toujours à la racine. Chaque insertion et chaque retrait " +
+      "réordonnent l'arbre en log(n).",
+  uf:"Chaque case pointe vers un représentant. Répondre à « déjà reliés ? » coûte " +
+     "presque rien, même après des milliers de fusions.",
+  zones:"Une pile de rectangles restant à découper.",
+  aucune:"Aucune structure, aucune mémoire : c'est tout l'intérêt de la méthode."
+};
+
+function drawStruct(cv, st){
+  cv.style.height = '188px';
+  const f = fitCanvas(cv); if(!f) return;
+  const { ctx, W, H } = f;
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(0,0,W,H);
+  const s = st.struct || { kind:'aucune' };
+  ctx.font = '10px ui-monospace,monospace'; ctx.textBaseline = 'middle';
+
+  if(s.kind === 'pile'){
+    const items = s.items || [];
+    const show = items.slice(-14);
+    const bh = Math.min(13, (H-16)/Math.max(1,show.length));
+    show.forEach((v,k) => {
+      const y = H - 8 - (k+1)*bh;
+      ctx.fillStyle = k === show.length-1 ? '#7bd9ff' : 'rgba(150,130,255,0.45)';
+      ctx.fillRect(10, y, W-20, bh-2);
+      ctx.fillStyle = k === show.length-1 ? '#05050a' : '#eae6ff';
+      ctx.textAlign = 'left'; ctx.fillText('#'+v, 15, y+bh/2);
+    });
+    ctx.fillStyle = '#9d94c8'; ctx.textAlign = 'right';
+    ctx.fillText('hauteur ' + items.length, W-12, 10);
+    if(show.length) { ctx.textAlign='right'; ctx.fillStyle='#7bd9ff';
+      ctx.fillText('sommet ▲', W-12, H-8-show.length*bh-8); }
+  }
+  else if(s.kind === 'file'){
+    const items = s.items || [], head = s.head ? s.head() : 0;
+    const live = items.slice(head, head+16);
+    const bw = Math.min(30, (W-20)/Math.max(1,live.length));
+    live.forEach((v,k) => {
+      ctx.fillStyle = k === 0 ? '#7bd9ff' : 'rgba(150,130,255,0.45)';
+      ctx.fillRect(10+k*bw, H/2-12, bw-2, 24);
+      ctx.fillStyle = k === 0 ? '#05050a' : '#eae6ff';
+      ctx.textAlign='center'; ctx.fillText(v, 10+k*bw+bw/2-1, H/2);
+    });
+    ctx.fillStyle='#9d94c8'; ctx.textAlign='left';
+    ctx.fillText('sortie ▶', 10, H/2-24);
+    ctx.textAlign='right'; ctx.fillText((items.length-head) + ' en attente', W-12, H/2+28);
+  }
+  else if(s.kind === 'tas'){
+    const a = (s.heap && s.heap.a) || [];
+    const levels = 4;
+    let idx = 0;
+    for(let L=0; L<levels; L++){
+      const count = 1 << L;
+      const y = 18 + L*((H-30)/levels);
+      for(let k=0;k<count && idx<a.length;k++, idx++){
+        const x = W*(k+0.5)/count;
+        ctx.fillStyle = idx === 0 ? '#7bd9ff' : 'rgba(150,130,255,0.5)';
+        const rw = Math.min(38, W/count - 4);
+        ctx.fillRect(x-rw/2, y-8, rw, 16);
+        ctx.fillStyle = idx === 0 ? '#05050a' : '#eae6ff';
+        ctx.textAlign='center';
+        ctx.fillText(a[idx].w.toFixed(2), x, y);
+      }
+    }
+    ctx.fillStyle='#9d94c8'; ctx.textAlign='right';
+    ctx.fillText(a.length + ' en attente', W-10, H-9);
+    ctx.textAlign='left'; ctx.fillStyle='#7bd9ff'; ctx.fillText('racine = minimum', 10, 9);
+  }
+  else if(s.kind === 'uf'){
+    const uf = s.uf;
+    if(uf){
+      const sizes = new Map();
+      for(let i=0;i<uf.p.length;i++){
+        const r = uf.find(i); sizes.set(r, (sizes.get(r)||0)+1);
+      }
+      const top = [...sizes.entries()].sort((a,b)=>b[1]-a[1]).slice(0,10);
+      const maxS = top.length ? top[0][1] : 1;
+      top.forEach(([root,sz],k) => {
+        const y = 16 + k*((H-26)/10);
+        const w = (W-70) * sz/maxS;
+        ctx.fillStyle = 'hsl(' + ((root*47)%360) + ',60%,52%)';
+        ctx.fillRect(10, y-6, Math.max(3,w), 12);
+        ctx.fillStyle = '#eae6ff'; ctx.textAlign='left';
+        ctx.fillText(sz, 14+Math.max(3,w), y);
+      });
+      ctx.fillStyle='#9d94c8'; ctx.textAlign='right';
+      ctx.fillText(uf.count + ' îlots', W-10, H-9);
+    }
+  }
+  else if(s.kind === 'zones'){
+    const items = s.items || [];
+    ctx.fillStyle='#eae6ff'; ctx.textAlign='center';
+    ctx.font='26px system-ui'; ctx.fillText(items.length, W/2, H/2-6);
+    ctx.font='10px ui-monospace,monospace'; ctx.fillStyle='#9d94c8';
+    ctx.fillText('zones à découper', W/2, H/2+16);
+  }
+  else {
+    ctx.fillStyle='#6f679b'; ctx.textAlign='center';
+    ctx.fillText('— aucune structure —', W/2, H/2);
+  }
+}
+
+/* ============================================================================
+   6. ÉTAT DE L'INTERFACE
+   ============================================================================ */
+const SPEEDS = { lent:{name:'🐢 Lent',mult:0.25}, normal:{name:'▶ Normal',mult:1},
+                 rapide:{name:'⏩ Rapide',mult:4}, eclair:{name:'⚡ Éclair',mult:60} };
+
+const ui = { tab:'observer', terrain:'grille', algo:'dfs', size:12, speed:'normal',
+             seed:(Math.random()*0xffffff)|0, loops:false, threshold:28, gridMode:'maze',
+             race:['dfs','prim','kruskal'], stats:['dfs','prim','kruskal'] };
+
+let run = null, raf = 0, running = false, paused = false;
+
+function terrainSupports(t, a){ return ALGOS[a].terrains.indexOf(t) >= 0; }
+
+function buildOptions(){
+  const tEl = $('terrainOpts'); tEl.innerHTML = '';
+  for(const k of Object.keys(TERRAINS)){
+    const t = TERRAINS[k];
+    const d = document.createElement('div');
+    d.className = 'opt' + (ui.terrain === k ? ' sel' : '');
+    d.innerHTML = t.icon + ' ' + t.name + '<small>' + t.desc + '</small>';
+    d.onclick = () => {
+      ui.terrain = k;
+      if(!terrainSupports(k, ui.algo))
+        ui.algo = Object.keys(ALGOS).find(a => terrainSupports(k, a));
+      ui.size = TERRAINS[k].def;
+      buildOptions(); syncFields(); resetRun();
+    };
+    tEl.appendChild(d);
+  }
+  const aEl = $('algoOpts'); aEl.innerHTML = '';
+  for(const k of Object.keys(ALGOS)){
+    const a = ALGOS[k], ok = terrainSupports(ui.terrain, k);
+    const d = document.createElement('div');
+    d.className = 'opt' + (ui.algo === k ? ' sel' : '') + (ok ? '' : ' dis');
+    d.innerHTML = a.icon + ' ' + a.name + '<small>' + a.kind + '</small>';
+    if(ok) d.onclick = () => { ui.algo = k; buildOptions(); syncFields(); resetRun(); };
+    aEl.appendChild(d);
+  }
+  const sEl = $('speedOpts'); sEl.innerHTML = '';
+  for(const k of Object.keys(SPEEDS)){
+    const d = document.createElement('div');
+    d.className = 'opt' + (ui.speed === k ? ' sel' : '');
+    d.textContent = SPEEDS[k].name;
+    d.onclick = () => { ui.speed = k; buildOptions(); };
+    sEl.appendChild(d);
+  }
+  const mk = (host, list, key) => {
+    const el = $(host); el.innerHTML = '';
+    for(const k of Object.keys(ALGOS)){
+      if(!terrainSupports(ui.terrain, k)) continue;
+      const on = ui[key].indexOf(k) >= 0;
+      const d = document.createElement('div');
+      d.className = 'opt' + (on ? ' sel' : '');
+      d.innerHTML = ALGOS[k].icon + ' ' + ALGOS[k].name;
+      d.onclick = () => {
+        const i = ui[key].indexOf(k);
+        if(i >= 0) ui[key].splice(i,1);
+        else if(ui[key].length < (key === 'race' ? 4 : 6)) ui[key].push(k);
+        buildOptions();
+      };
+      el.appendChild(d);
+    }
+  };
+  mk('raceOpts','race','race');
+  mk('statsOpts','stats','stats');
+  $('loopOpt').className = 'opt' + (ui.loops ? ' sel' : '') + (ui.gridMode === 'open' ? ' dis' : '');
+  $('modeMaze').className = 'opt' + (ui.gridMode === 'maze' ? ' sel' : '');
+  $('modeOpen').className = 'opt' + (ui.gridMode === 'open' ? ' sel' : '') +
+                            (ui.algo === 'mur' ? ' dis' : '');
+}
+
+function syncFields(){
+  const t = TERRAINS[ui.terrain];
+  $('sizeRange').min = t.min; $('sizeRange').max = t.max; $('sizeRange').value = ui.size;
+  $('sizeLabel').textContent = ui.terrain === 'nuage' ? 'Nombre de points : ' + ui.size
+                             : ui.terrain === 'image' ? 'Résolution : ' + ui.size + '×' + ui.size
+                             : 'Taille : ' + ui.size + '×' + ui.size;
+  $('imgWrap').className = ui.terrain === 'image' ? '' : 'hidden';
+  $('loopWrap').className = (ui.terrain === 'grille' && ALGOS[ui.algo].kind === 'chemin') ? '' : 'hidden';
+  $('seedInput').value = seedCode();
+  $('lesson').innerHTML = '<b>' + ALGOS[ui.algo].name + '.</b> ' + ALGOS[ui.algo].lesson;
+
+}
+
+function seedCode(){
+  const t = Object.keys(TERRAINS).indexOf(ui.terrain);
+  const a = Object.keys(ALGOS).indexOf(ui.algo);
+  return 'L' + t + a.toString(36).toUpperCase() + '-' + ui.size.toString(36).toUpperCase() +
+         '-' + (ui.seed >>> 0).toString(36).toUpperCase();
+}
+function applyCode(str){
+  const m = String(str||'').trim().toUpperCase().match(/^L(\d)([0-9A-Z])-([0-9A-Z]+)-([0-9A-Z]+)$/);
+  if(!m) return false;
+  const t = Object.keys(TERRAINS)[+m[1]], a = Object.keys(ALGOS)[parseInt(m[2],36)];
+  if(!t || !a || !terrainSupports(t,a)) return false;
+  ui.terrain = t; ui.algo = a;
+  ui.size = Math.max(TERRAINS[t].min, Math.min(TERRAINS[t].max, parseInt(m[3],36)));
+  ui.seed = parseInt(m[4],36) >>> 0;
+  buildOptions(); syncFields(); resetRun();
+  return true;
+}
+
+/* ============================================================================
+   7. ONGLET OBSERVER
+   ============================================================================ */
+function resetRun(){
+  cancelAnimationFrame(raf); running = false; paused = false;
+  run = new Run(ui.terrain, ui.algo, ui.size, ui.seed, { loops:ui.loops, threshold:ui.threshold, gridMode:ui.gridMode });
+  $('runBtn').textContent = '▶ Lancer';
+  $('pauseBtn').disabled = $('stepBtn').disabled = $('endBtn').disabled = true;
+  paint();
+}
+
+function paint(){
+  if(!run) return;
+  drawRun($('board'), run);
+  drawStruct($('structCv'), run.st);
+  const sk = (run.st.struct && run.st.struct.kind) || 'aucune';
+  $('structName').textContent = STRUCT_NAME[sk] || 'Structure';
+  $('structHint').textContent = STRUCT_HINT[sk] || '';
+  $('lesson').innerHTML = '<b>' + ALGOS[run.algoKey].name + '.</b> ' + ALGOS[run.algoKey].lesson;
+  const st = run.st;
+  $('phase').textContent = st.phase || ALGOS[ui.algo].name;
+  const pct = Math.round(Math.max(0, Math.min(1, st.progress))*100);
+  $('pct').textContent = pct + ' %';
+  $('barFill').style.width = pct + '%';
+  $('log').innerHTML = st.logs.slice(-4).map(l => '<div class="'+l.cls+'">› '+l.msg+'</div>').join('');
+  const c = st.counters;
+  const boxes = [['sommets vus', c.examines], ['arêtes testées', c.aretes],
+                 ['arêtes retenues', c.retenues], ['retours', c.retours]];
+  if(run.target >= 0 && st.path.length) boxes.push(['chemin', st.path.length-1]);
+  if(ALGOS[ui.algo].kind === 'arbre') boxes.push(['poids total', run.treeWeight().toFixed(2)]);
+  $('counters').innerHTML = boxes.map(([l,v]) => '<div class="ct"><b>'+v+'</b><span>'+l+'</span></div>').join('');
+}
+
+function loop(){
+  raf = requestAnimationFrame(loop);
+  if(running && !paused){
+    const base = Math.max(1, Math.round(run.g.n / 45));
+    let steps = Math.max(1, Math.round(base * SPEEDS[ui.speed].mult));
+    if(ui.speed === 'eclair') steps = 200000;
+    let guard = steps;
+    while(guard-- > 0 && !run.done) run.step();
+    if(run.done){ running = false; onFinish(); }
+  }
+  paint();
+}
+
+function onFinish(){
+  $('runBtn').textContent = '↻ Relancer';
+  $('pauseBtn').disabled = $('stepBtn').disabled = $('endBtn').disabled = true;
+  const st = run.st;
+  if(ALGOS[ui.algo].kind === 'arbre' && run.terrain !== 'plan' && run.terrain !== 'image'){
+    const n = run.g.n, k = st.counters.retenues;
+    st.note('Vérification : ' + k + ' arêtes pour ' + n + ' sommets — ' +
+      (k === n-1 ? 'c’est bien un arbre couvrant (n−1).' : 'ATTENTION, ce n’est pas un arbre.'),
+      k === n-1 ? 'k3' : 'k4');
+  }
+}
+
+$('runBtn').onclick = () => {
+  if(run.done || !running) resetRun();
+  running = true; paused = false;
+  $('runBtn').textContent = '⏹ En cours…';
+  $('pauseBtn').disabled = $('endBtn').disabled = false;
+  $('stepBtn').disabled = true;
+  cancelAnimationFrame(raf); loop();
+};
+$('pauseBtn').onclick = () => {
+  paused = !paused;
+  $('pauseBtn').textContent = paused ? '▶ Reprendre' : '⏸ Pause';
+  $('stepBtn').disabled = !paused;
+};
+$('stepBtn').onclick = () => { if(!run.done){ run.step(); if(run.done){ running=false; onFinish(); } paint(); } };
+$('endBtn').onclick = () => { run.finish(); running = false; onFinish(); paint(); };
+
+/* ============================================================================
+   8. ONGLET COURSE
+   ============================================================================ */
+let racers = [], raceRaf = 0, raceRunning = false, racePaused = false;
+
+function buildRace(){
+  racers = ui.race.map(k => new Run(ui.terrain, k, ui.size, ui.seed,
+                                    { loops:ui.loops, threshold:ui.threshold, gridMode:ui.gridMode }));
+  const grid = $('raceGrid'); grid.innerHTML = '';
+  racers.forEach((r,i) => {
+    const cell = document.createElement('div');
+    cell.className = 'raceCell';
+    cell.innerHTML = '<h3>' + ALGOS[r.algoKey].icon + ' ' + ALGOS[r.algoKey].name +
+                     '<em id="rst'+i+'">—</em></h3>' +
+                     '<div class="board"><canvas id="rc'+i+'"></canvas></div>' +
+                     '<div class="mini" id="rm'+i+'"></div>';
+    grid.appendChild(cell);
+  });
+  $('raceVerdict').innerHTML = '';
+  paintRace();
+}
+
+function paintRace(){
+  racers.forEach((r,i) => {
+    const cv = $('rc'+i); if(!cv) return;
+    drawRun(cv, r, true);
+    const c = r.st.counters;
+    $('rm'+i).innerHTML = 'sommets ' + c.examines + ' · arêtes ' + c.aretes +
+      ' · retenues ' + c.retenues +
+      (r.st.path.length ? ' · chemin ' + (r.st.path.length-1) : '') +
+      (ALGOS[r.algoKey].kind === 'arbre' ? '<br>poids ' + r.treeWeight().toFixed(3) : '');
+    $('rst'+i).textContent = r.done ? 'terminé' : Math.round(r.st.progress*100) + ' %';
+  });
+}
+
+function raceLoop(){
+  raceRaf = requestAnimationFrame(raceLoop);
+  if(raceRunning && !racePaused){
+    const base = Math.max(1, Math.round(racers[0].g.n / 45));
+    let steps = Math.max(1, Math.round(base * SPEEDS[ui.speed].mult));
+    if(ui.speed === 'eclair') steps = 200000;
+    let alive = false;
+    for(const r of racers){
+      let guard = steps;
+      while(guard-- > 0 && !r.done) r.step();
+      if(!r.done) alive = true;
+    }
+    if(!alive){ raceRunning = false; raceVerdict(); }
+  }
+  paintRace();
+}
+
+function raceVerdict(){
+  const trees = racers.filter(r => ALGOS[r.algoKey].kind === 'arbre');
+  const paths = racers.filter(r => ALGOS[r.algoKey].kind === 'chemin');
+  let html = '';
+  if(trees.length > 1){
+    const ws = trees.map(r => r.treeWeight());
+    const same = Math.max(...ws) - Math.min(...ws) < 1e-9;
+    html += '<b>Poids total des arbres :</b> ' +
+      trees.map((r,i) => ALGOS[r.algoKey].name + ' ' + ws[i].toFixed(4)).join(' · ') + '.<br>';
+    const mstOnly = trees.filter(r => r.algoKey === 'prim' || r.algoKey === 'kruskal');
+    if(mstOnly.length > 1){
+      const w2 = mstOnly.map(r => r.treeWeight());
+      const eq = Math.max(...w2) - Math.min(...w2) < 1e-9;
+      html += eq
+        ? 'Prim et Kruskal donnent <b>exactement le même poids</b> — ils cherchent le même optimum par deux chemins opposés.<br>'
+        : '<span class="ko">Prim et Kruskal diffèrent : anormal pour un arbre couvrant minimal.</span><br>';
+    }
+    if(trees.some(r => r.algoKey === 'dfs'))
+      html += 'La profondeur, elle, ne cherche aucun optimum : son arbre est plus lourd, ' +
+              'mais c’est ce qui donne les longs couloirs.<br>';
+    if(same && trees.length === trees.filter(r=>r.algoKey!=='dfs').length) html += '';
+  }
+  if(paths.length > 1){
+    html += '<b>Sommets examinés :</b> ' +
+      paths.map(r => ALGOS[r.algoKey].name + ' ' + r.st.counters.examines).join(' · ') + '. ';
+    const d = paths.find(r => r.algoKey === 'dijkstra'), a = paths.find(r => r.algoKey === 'astar');
+    if(d && a){
+      const g1 = d.st.counters.examines / Math.max(1, a.st.counters.examines);
+      html += a.st.counters.examines <= d.st.counters.examines
+        ? 'A* en examine <b>' + g1.toFixed(2) + '× moins</b> que Dijkstra, pour un chemin de même coût.'
+        : '<span class="ko">A* en examine plus que Dijkstra — heuristique mal calibrée.</span>';
+      if(d.terrain === 'grille' && d.gridMode === 'maze')
+        html += ' Le gain est faible ici : un labyrinthe est un arbre, il n’existe qu’un ' +
+                'chemin, donc l’heuristique n’a presque rien à guider. Essaie la grille ouverte.';
+    }
+    const lens = paths.filter(r => r.st.path.length).map(r => r.st.path.length-1);
+    if(lens.length > 1 && Math.max(...lens) !== Math.min(...lens))
+      html += '<br>Longueurs trouvées : ' + paths.filter(r=>r.st.path.length)
+        .map(r => ALGOS[r.algoKey].name + ' ' + (r.st.path.length-1)).join(' · ') + '.';
+  }
+  $('raceVerdict').innerHTML = html || 'Course terminée.';
+}
+
+$('raceRunBtn').onclick = () => {
+  buildRace();
+  raceRunning = true; racePaused = false;
+  $('racePauseBtn').disabled = $('raceEndBtn').disabled = false;
+  cancelAnimationFrame(raceRaf); raceLoop();
+};
+$('racePauseBtn').onclick = () => {
+  racePaused = !racePaused;
+  $('racePauseBtn').textContent = racePaused ? '▶ Reprendre' : '⏸ Pause';
+};
+$('raceEndBtn').onclick = () => {
+  racers.forEach(r => r.finish());
+  raceRunning = false; raceVerdict(); paintRace();
+};
+
+/* ============================================================================
+   9. ONGLET MESURER
+   ============================================================================ */
+function measure(r){
+  const g = r.g, st = r.st;
+  const out = { poids: r.treeWeight(), retenues: st.counters.retenues,
+                examines: st.counters.examines, aretes: st.counters.aretes };
+  if(ALGOS[r.algoKey].kind === 'arbre' && g.n){
+    // longueur du plus long chemin depuis le sommet 0 dans l'arbre obtenu
+    const edges = [];
+    for(let i=0;i<g.edges.length;i++) if(st.chosen[i]) edges.push(g.edges[i]);
+    const tg = makeGraph(g.nodes, edges);
+    const d = new Int32Array(tg.n).fill(-1); d[0] = 0;
+    const q = [0]; let head = 0, far = 0, leaves = 0;
+    while(head < q.length){
+      const v = q[head++];
+      if(d[v] > d[far]) far = v;
+      for(const a of tg.adj[v]) if(d[a.to] === -1){ d[a.to] = d[v]+1; q.push(a.to); }
+    }
+    for(let i=0;i<tg.n;i++) if(tg.adj[i].length === 1) leaves++;
+    out.chemin = d[far]; out.impasses = leaves;
+  }
+  if(st.path.length) out.chemin = st.path.length - 1;
+  return out;
+}
+
+$('statsRunBtn').onclick = () => {
+  const runs = +$('runsRange').value;
+  const keys = ui.stats.filter(k => terrainSupports(ui.terrain, k));
+  if(!keys.length){ $('statsOut').innerHTML = '<div class="note">Choisis au moins un algorithme.</div>'; return; }
+  $('statsOut').innerHTML = '<div class="note">Calcul en cours…</div>';
+  setTimeout(() => {
+    const data = {};
+    for(const k of keys) data[k] = [];
+    for(let i=0;i<runs;i++){
+      const seed = (ui.seed + i*2654435761) >>> 0;
+      for(const k of keys){
+        const r = new Run(ui.terrain, k, ui.size, seed, { loops:ui.loops, threshold:ui.threshold, gridMode:ui.gridMode });
+        r.finish();
+        data[k].push(measure(r));
+      }
+    }
+    renderStats(data, keys, runs);
+  }, 30);
+};
+
+function stat(arr, f){
+  const v = arr.map(f).filter(x => typeof x === 'number' && isFinite(x));
+  if(!v.length) return null;
+  const m = v.reduce((a,b)=>a+b,0)/v.length;
+  const sd = Math.sqrt(v.reduce((a,b)=>a+(b-m)*(b-m),0)/v.length);
+  return { moy:m, min:Math.min(...v), max:Math.max(...v), sd, vals:v };
+}
+
+function renderStats(data, keys, runs){
+  const cols = [['chemin','Chemin'],['impasses','Impasses'],['poids','Poids'],
+                ['examines','Sommets vus'],['aretes','Arêtes testées']];
+  let html = '<table><tr><th>Algorithme</th>' +
+    cols.map(c => '<th>'+c[1]+'</th>').join('') + '</tr>';
+  for(const k of keys){
+    html += '<tr><td>' + ALGOS[k].icon + ' ' + ALGOS[k].name + '</td>';
+    for(const [f] of cols){
+      const s = stat(data[k], d => d[f]);
+      html += '<td>' + (s ? '<b>'+s.moy.toFixed(f==='poids'?3:1)+'</b><br>' +
+        '<span style="font-size:.66rem;color:#9d94c8">'+s.min.toFixed(f==='poids'?2:0)+'–'+
+        s.max.toFixed(f==='poids'?2:0)+'</span>' : '—') + '</td>';
+    }
+    html += '</tr>';
+  }
+  html += '</table><div class="note">Moyenne en gras, étendue min–max dessous, sur ' +
+          runs + ' tirages de graines différentes.';
+  const p = keys.indexOf('prim') >= 0 ? stat(data.prim, d=>d.poids) : null;
+  const kr = keys.indexOf('kruskal') >= 0 ? stat(data.kruskal, d=>d.poids) : null;
+  if(p && kr){
+    const same = Math.abs(p.moy - kr.moy) < 1e-9;
+    html += '<br><br>' + (same
+      ? 'Prim et Kruskal affichent <b>le même poids moyen à la décimale près</b> : sur un graphe donné, l’arbre couvrant minimal est unique en poids, quel que soit le chemin pris pour l’atteindre.'
+      : '<span class="ko">Prim et Kruskal divergent en poids — c’est un défaut à corriger.</span>');
+  }
+  const dd = keys.indexOf('dfs') >= 0 ? stat(data.dfs, d=>d.chemin) : null;
+  const pp = keys.indexOf('prim') >= 0 ? stat(data.prim, d=>d.chemin) : null;
+  if(dd && pp) html += '<br><br>Chemin le plus long : <b>' + dd.moy.toFixed(1) +
+    '</b> en profondeur contre <b>' + pp.moy.toFixed(1) + '</b> chez Prim, soit ' +
+    (dd.moy/pp.moy).toFixed(1) + '× — même nombre d’arêtes, biais radicalement différent.';
+  html += '</div>';
+  $('statsOut').innerHTML = html;
+  drawHist(data, keys);
+}
+
+function drawHist(data, keys){
+  const board = $('histBoard'); board.style.display = 'block';
+  const cv = $('histCv');
+  const f = fitCanvas(cv); if(!f) return;
+  const { ctx, W, H } = f;
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#05050a'; ctx.fillRect(0,0,W,H);
+  const series = keys.map(k => ({ k, vals: data[k].map(d=>d.chemin).filter(v=>isFinite(v)) }))
+                     .filter(s => s.vals.length);
+  if(!series.length) return;
+  const all = series.flatMap(s=>s.vals);
+  const lo = Math.min(...all), hi = Math.max(...all) || 1;
+  const B = 22, bins = series.map(s => {
+    const b = new Array(B).fill(0);
+    for(const v of s.vals) b[Math.min(B-1, Math.floor((v-lo)/((hi-lo)||1)*B))]++;
+    return b;
+  });
+  const peak = Math.max(1, ...bins.flat());
+  const pal = ['#7bd9ff','#ff7ba6','#6cff8f','#ffb04d','#a89bff','#ffffff'];
+  const pad = 26;
+  series.forEach((s,si) => {
+    ctx.strokeStyle = pal[si % pal.length]; ctx.lineWidth = 2; ctx.beginPath();
+    bins[si].forEach((v,i) => {
+      const x = pad + (W-2*pad)*i/(B-1), y = H-pad - (H-2*pad)*v/peak;
+      i ? ctx.lineTo(x,y) : ctx.moveTo(x,y);
+    });
+    ctx.stroke();
+    ctx.fillStyle = pal[si % pal.length];
+    ctx.font='11px system-ui'; ctx.textAlign='left';
+    ctx.fillText(ALGOS[s.k].name, pad + si*82, 14);
+  });
+  ctx.strokeStyle='rgba(150,130,255,0.3)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(pad,H-pad); ctx.lineTo(W-pad,H-pad); ctx.stroke();
+  ctx.fillStyle='#9d94c8'; ctx.font='10px system-ui';
+  ctx.textAlign='left'; ctx.fillText(lo.toFixed(0), pad, H-pad+13);
+  ctx.textAlign='right'; ctx.fillText(hi.toFixed(0), W-pad, H-pad+13);
+  ctx.textAlign='center'; ctx.fillText('longueur du plus long chemin', W/2, H-pad+13);
+}
+
+/* ---- vérification automatique des invariantes ---- */
+$('checkBtn').onclick = () => {
+  $('checkOut').innerHTML = '<div class="note">Vérification…</div>';
+  setTimeout(() => {
+    const res = [];
+    const SEEDS = 12;
+
+    for(const t of ['grille','nuage']){
+      for(const k of ['dfs','prim','kruskal']){
+        let ok = true, detail = '';
+        for(let i=0;i<SEEDS;i++){
+          const r = new Run(t, k, TERRAINS[t].def, (1000+i*7919)>>>0, {});
+          r.finish();
+          const n = r.g.n, kept = r.st.counters.retenues;
+          if(kept !== n-1){ ok = false; detail = kept + ' arêtes pour ' + n + ' sommets'; break; }
+          if(!allReachable(r)){ ok = false; detail = 'sommets isolés'; break; }
+        }
+        res.push({ label:'Arbre couvrant — ' + ALGOS[k].name + ' sur ' + TERRAINS[t].name +
+                   ' : n−1 arêtes et tout atteignable', ok, detail });
+      }
+      let ok = true, detail = '';
+      for(let i=0;i<SEEDS;i++){
+        const seed = (1000+i*7919)>>>0;
+        const a = new Run(t,'prim',TERRAINS[t].def,seed,{}); a.finish();
+        const b = new Run(t,'kruskal',TERRAINS[t].def,seed,{}); b.finish();
+        if(Math.abs(a.treeWeight()-b.treeWeight()) > 1e-9){
+          ok = false; detail = a.treeWeight().toFixed(6)+' contre '+b.treeWeight().toFixed(6); break;
+        }
+      }
+      res.push({ label:'Prim et Kruskal donnent le même poids total sur ' + TERRAINS[t].name, ok, detail });
+    }
+
+    let ok = true, detail = '';
+    for(let i=0;i<SEEDS;i++){
+      const seed = (1000+i*7919)>>>0;
+      const d = new Run('grille','dijkstra',12,seed,{}); d.finish();
+      const a = new Run('grille','astar',12,seed,{}); a.finish();
+      if(a.st.counters.examines > d.st.counters.examines){
+        ok = false; detail = 'A* ' + a.st.counters.examines + ' contre Dijkstra ' + d.st.counters.examines; break;
+      }
+    }
+    res.push({ label:'A* n’examine jamais plus de sommets que Dijkstra', ok, detail });
+
+    let fails = 0;
+    for(let i=0;i<SEEDS;i++){
+      const r = new Run('grille','mur',12,(1000+i*7919)>>>0,{ loops:true });
+      r.finish();
+      const last = r.st.logs[r.st.logs.length-1];
+      if(last && last.msg.indexOf('Abandon') === 0) fails++;
+    }
+    res.push({ label:'Main au mur sur domaine à boucles : échecs attendus',
+               ok:true, detail: fails + ' échecs sur ' + SEEDS + ' — comportement normal, pas un bug' });
+
+    $('checkOut').innerHTML = '<div class="note">' + res.map(r =>
+      (r.ok ? '<span class="ok">✔</span> ' : '<span class="ko">✘</span> ') + r.label +
+      (r.detail ? ' <span style="color:#9d94c8">(' + r.detail + ')</span>' : '')).join('<br>') +
+      '</div>';
+  }, 30);
+};
+
+function allReachable(r){
+  const edges = [];
+  for(let i=0;i<r.g.edges.length;i++) if(r.st.chosen[i]) edges.push(r.g.edges[i]);
+  const tg = makeGraph(r.g.nodes, edges);
+  const seen = new Uint8Array(tg.n); seen[0] = 1;
+  const q = [0]; let head = 0, c = 1;
+  while(head < q.length){
+    const v = q[head++];
+    for(const a of tg.adj[v]) if(!seen[a.to]){ seen[a.to] = 1; c++; q.push(a.to); }
+  }
+  return c === tg.n;
+}
+
+/* ============================================================================
+   10. CÂBLAGE GÉNÉRAL
+   ============================================================================ */
+document.querySelectorAll('[data-tab]').forEach(el => {
+  el.onclick = () => {
+    ui.tab = el.dataset.tab;
+    document.querySelectorAll('[data-tab]').forEach(x => x.classList.toggle('sel', x === el));
+    for(const t of ['observer','course','stats'])
+      $('tab-'+t).className = (t === ui.tab) ? '' : 'hidden';
+    if(ui.tab === 'course' && !racers.length) buildRace();
+  };
+});
+
+$('sizeRange').oninput = e => { ui.size = +e.target.value; syncFields(); resetRun(); };
+$('loopOpt').onclick = () => {
+  if(ui.gridMode === 'open') return;
+  ui.loops = !ui.loops; buildOptions(); resetRun();
+};
+$('modeMaze').onclick = () => { ui.gridMode = 'maze'; buildOptions(); resetRun(); };
+$('modeOpen').onclick = () => {
+  if(ui.algo === 'mur') return;          // longer un mur n'a de sens que dans un labyrinthe
+  ui.gridMode = 'open'; buildOptions(); resetRun();
+};
+$('thrRange').oninput = e => { ui.threshold = +e.target.value; $('thrVal').textContent = ui.threshold; resetRun(); };
+$('runsRange').oninput = e => { $('runsVal').textContent = e.target.value; };
+$('seedBtn').onclick = () => {
+  if(!applyCode($('seedInput').value)) $('seedInput').value = seedCode();
+};
+$('seedNewBtn').onclick = () => { ui.seed = (Math.random()*0xffffff)|0; syncFields(); resetRun(); };
+$('imgGenBtn').onclick = () => {
+  imageData = synthImage(ui.size, mulberry32((Math.random()*1e9)|0));
+  resetRun();
+};
+$('imgPickBtn').onclick = () => $('imgFile').click();
+$('imgFile').onchange = e => {
+  const file = e.target.files && e.target.files[0];
+  if(!file) return;
+  const img = new Image();
+  img.onload = () => {
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = ui.size;
+    const c = cv.getContext('2d');
+    const s = Math.min(img.width, img.height);
+    c.drawImage(img, (img.width-s)/2, (img.height-s)/2, s, s, 0, 0, ui.size, ui.size);
+    imageData = c.getImageData(0,0,ui.size,ui.size);
+    URL.revokeObjectURL(img.src);
+    resetRun();
+  };
+  img.src = URL.createObjectURL(file);
+};
+
+window.addEventListener('resize', () => { paint(); if(racers.length) paintRace(); });
+
+buildOptions();
+syncFields();
+resetRun();
+
+/* accès pour la console et les tests */
+window.LABO = { ui, get run(){ return run; }, get racers(){ return racers; },
+                Run, ALGOS, TERRAINS, measure, allReachable, applyCode, seedCode,
+                buildRace, resetRun };
+</script>
+</body>
+</html>
