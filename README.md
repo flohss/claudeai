@@ -27,7 +27,16 @@ L'écran de génération affiche en temps réel :
 - un **journal de réflexion** en français (« Impasse, je remonte sur mes pas… ») ;
 - les compteurs : cases visitées, murs ouverts, retours en arrière ;
 - une **vitesse réglable** : 🐢 Lent, ▶ Normal, ⏩ Rapide, ⚡ Éclair — ou le bouton
-  « Terminer tout de suite ».
+  « Terminer tout de suite » ;
+- une **sonorisation du travail en cours** : chaque type d'étape a son timbre —
+  creusement, impasse, fusion d'îlots, pose de mur, inondation, tracé du chemin.
+
+Les notes sont calées sur une gamme pentatonique, si bien que n'importe quelle suite
+reste consonante, et la cadence est bridée à environ 14 sons par seconde : aux vitesses
+rapides, des milliers d'étapes passent par image et seule une poignée est sonorisée.
+Les impasses sonnent grave, autour de 100 Hz, et se distinguent nettement du reste. Le
+bouton 🔊 en haut du plateau coupe le son ; le réglage est retenu d'une partie à
+l'autre.
 
 Puis viennent deux phases bonus, tout aussi visibles :
 

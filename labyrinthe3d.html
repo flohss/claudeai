@@ -56,6 +56,11 @@
     border-radius:14px;overflow:hidden;border:1px solid rgba(150,130,255,.25);
     background:#05050a;display:flex;align-items:center;justify-content:center;}
   #genCanvas{width:100%;height:100%;display:block;image-rendering:auto;}
+  .soundToggle{position:absolute;top:8px;right:8px;width:34px;height:34px;border-radius:50%;
+    background:rgba(10,10,20,.62);border:1px solid rgba(255,255,255,.22);color:#fff;
+    font-size:.85rem;cursor:pointer;display:flex;align-items:center;justify-content:center;
+    padding:0;line-height:1;}
+  .soundToggle.off{opacity:.45;}
   #phaseRow{display:flex;justify-content:space-between;align-items:baseline;
     font-size:.76rem;color:#a89bff;margin-bottom:6px;letter-spacing:.5px;}
   #phaseRow b{color:#eae6ff;font-weight:600;}
@@ -203,7 +208,8 @@
     <h1 style="font-size:1.3rem">CONCEPTION EN DIRECT</h1>
     <div class="subtitle" id="genSub">L'ordinateur réfléchit…</div>
 
-    <div id="genWrap"><canvas id="genCanvas"></canvas></div>
+    <div id="genWrap"><canvas id="genCanvas"></canvas>
+      <button class="soundToggle" id="genSound" title="Couper le son">🔊</button></div>
 
     <div id="phaseRow"><b id="phaseName">Initialisation</b><span id="phasePct">0 %</span></div>
     <div id="bar"><div id="barFill"></div></div>
@@ -240,7 +246,8 @@
     <h1 style="font-size:1.3rem">L'ORDINATEUR CHERCHE</h1>
     <div class="subtitle" id="solveSub">Deux méthodes, le même labyrinthe.</div>
 
-    <div id="solveWrap"><canvas id="solveCanvas"></canvas></div>
+    <div id="solveWrap"><canvas id="solveCanvas"></canvas>
+      <button class="soundToggle" id="solveSound" title="Couper le son">🔊</button></div>
 
     <div id="phaseRow"><b id="solvePhase">Préparation</b><span id="solvePct">0 %</span></div>
     <div id="bar"><div id="solveBar"></div></div>
@@ -466,6 +473,7 @@ class MazeBuilder {
     this.dist = new Int32Array(size * size).fill(-1);  // distances (phase inondation)
     this.maxDist = 1;
     this.flash = [];        // cases bitmap à faire clignoter
+    this.tone = null;       // son à jouer pour l'étape en cours
     this.logs = [];
     this.progress = 0;
     this.phase = 'Initialisation';
@@ -544,6 +552,7 @@ class MazeBuilder {
           if(this.backs % 7 === 1) this.note('Impasse. Je remonte chercher une autre issue…', 'k4');
         }
         this.flash = [[2*r+1, 2*c+1]];
+        this.tone = { k:'back', v:this.progress };
         yield;
         continue;
       }
@@ -560,6 +569,7 @@ class MazeBuilder {
       if(this.cells % Math.max(3, (this.total/14)|0) === 0)
         this.note('Je perce un mur vers ' + this.dirName(nr-r, nc-c) + '.', 'k1');
       this.flash = [[r+nr+1, c+nc+1], [2*nr+1, 2*nc+1]];
+      this.tone = { k:'carve', v:this.progress };
       yield;
     }
     this.note('Toutes les cases sont reliées : ' + this.cells + ' cases visitées.', 'k3');
@@ -599,6 +609,7 @@ class MazeBuilder {
       if(this.cells % Math.max(3,(this.total/14)|0) === 0)
         this.note('Frontière : ' + frontier.length + ' passages possibles. J’en tire un au hasard.', 'k2');
       this.flash = [[r+nr+1, c+nc+1]];
+      this.tone = { k:'carve', v:this.progress };
       yield;
       this.mark[this.ci(nr,nc)] = MARK.VISITED;
     }
@@ -632,6 +643,7 @@ class MazeBuilder {
       this.flash = [[r+nr+1, c+nc+1]];
       if(a === b){
         if(tested % 11 === 0) this.note('Ces deux cases sont déjà reliées : je garde le mur.', 'k4');
+        this.tone = null;          // rien à sonoriser : aucun mur n'est tombé
         yield;
         continue;
       }
@@ -645,6 +657,7 @@ class MazeBuilder {
       for(let i=0;i<this.total;i++) if(this.setId[i] === src) this.setId[i] = target;
       if(merged % Math.max(3,(needed/12)|0) === 0)
         this.note('Fusion de deux îlots. Encore ' + (needed - merged) + ' à relier.', 'k2');
+      this.tone = { k:'merge', v:this.progress };
       yield;
       if(merged >= needed) break;
     }
@@ -685,6 +698,7 @@ class MazeBuilder {
           if(c === gap) continue;
           this.bitmap[this.bi(2*wr+2, 2*c+1)] = 1;
           this.flash = [[2*wr+2, 2*c+1]];
+          this.tone = { k:'wall', v:this.progress };
           yield;
         }
         regions.push([r0,c0,wr,c1], [wr+1,c0,r1,c1]);
@@ -697,6 +711,7 @@ class MazeBuilder {
           if(r === gap) continue;
           this.bitmap[this.bi(2*r+1, 2*wc+2)] = 1;
           this.flash = [[2*r+1, 2*wc+2]];
+          this.tone = { k:'wall', v:this.progress };
           yield;
         }
         regions.push([r0,c0,r1,wc], [r0,wc+1,r1,c1]);
@@ -730,6 +745,7 @@ class MazeBuilder {
       this.carveWall(r,c,nr,nc);
       this.mark[this.ci(r,c)] = MARK.CURRENT;
       this.flash = [[r+nr+1, c+nc+1]];
+      this.tone = { k:'merge', v:this.progress };
       yield;
       this.mark[this.ci(r,c)] = MARK.VISITED;
     }
@@ -762,6 +778,7 @@ class MazeBuilder {
       this.flash = [[2*r+1, 2*c+1]];
       if(seen % Math.max(4,(this.total/8)|0) === 0)
         this.note('Distance maximale actuelle : ' + best + ' cases.', 'k2');
+      this.tone = { k:'flood', v:this.progress };
       yield;
     }
     this.exit = { r: far[0], c: far[1] };
@@ -788,6 +805,7 @@ class MazeBuilder {
       this.mark[this.ci(r,c)] = MARK.PATH;
       this.path = path.slice();
       this.progress = path.length / Math.max(1, this.dist[this.ci(this.exit.r,this.exit.c)] + 1);
+      this.tone = { k:'path', v:this.progress };
       yield;
     }
     this.path = path;
@@ -820,6 +838,7 @@ class MazeSolver {
     this.bfs = null; this.hand = null;                 // résultats des deux méthodes
     this.done = false;
     this.mode = 'bfs';
+    this.tone = null;
   }
   ci(r,c){ return r * this.size + c; }
   isOpenBetween(r1,c1,r2,c2){
@@ -874,6 +893,7 @@ class MazeSolver {
       }
       if(this.explored % Math.max(4,(this.total/9)|0) === 0)
         this.note('Vague ' + d + ' : ' + this.explored + ' cases déjà vues.', 'k2');
+      this.tone = { k:'flood', v:this.progress };
       yield;
     }
 
@@ -887,7 +907,11 @@ class MazeSolver {
     this.bfs = { explored: this.explored, len: this.len };
     this.note('Chemin le plus court : ' + this.len + ' cases, après avoir examiné ' +
               this.explored + ' cases.', 'k3');
-    for(let i=0;i<path.length;i++){ this.progress = i/path.length; yield; }
+    for(let i=0;i<path.length;i++){
+      this.progress = i/path.length;
+      this.tone = { k:'path', v:this.progress };
+      yield;
+    }
   }
 
   /* ---- Méthode 2 : la main gauche sur le mur ---- */
@@ -926,6 +950,8 @@ class MazeSolver {
       this.progress = Math.min(0.99, this.steps / Math.max(4, (this.bfs.len || 1) * 4));
       if(this.steps % Math.max(5,(this.total/6)|0) === 0)
         this.note('Je longe le mur vers ' + DIR_NAMES[this.facing] + '… ' + this.steps + ' pas.', 'k2');
+      // la note suit la direction : on entend le promeneur tourner
+      this.tone = { k:'walk', v:this.facing / 4 };
       yield;
     }
 
@@ -1119,11 +1145,14 @@ function genLoop(){
     const base = Math.max(1, Math.round(builder.total / 60));
     let steps = Math.max(1, Math.round(base * SPEEDS[state.speed].mult));
     if(state.speed === 'instant') steps = 100000;
-    let guard = steps;
+    let guard = steps, tone = null;
     while(guard-- > 0){
+      builder.tone = null;
       const r = genIter.next();
-      if(r.done){ genRunning = false; onGenerationDone(); break; }
+      if(builder.tone) tone = builder.tone;   // on retient le dernier son du lot
+      if(r.done){ genRunning = false; tone = null; onGenerationDone(); break; }
     }
+    if(tone) sfx.work(tone.k, tone.v);
   }
   drawGen();
   if(builder) renderGenUI();
@@ -1287,10 +1316,14 @@ function solveLoop(){
     const base = Math.max(1, Math.round(solver.total / 55));
     let steps = Math.max(1, Math.round(base * SPEEDS[state.speed].mult));
     if(state.speed === 'instant') steps = 100000;
-    let guard = steps;
+    let guard = steps, tone = null;
     while(guard-- > 0){
-      if(solveIter.next().done){ solveRunning = false; onSolveDone(); break; }
+      solver.tone = null;
+      const done = solveIter.next().done;
+      if(solver.tone) tone = solver.tone;
+      if(done){ solveRunning = false; tone = null; onSolveDone(); break; }
     }
+    if(tone) sfx.work(tone.k, tone.v);
   }
   drawSolve();
   renderSolveUI();
@@ -1307,7 +1340,9 @@ function onSolveDone(){
    5. SONS (WebAudio, très légers)
    ============================================================================ */
 const sfx = (() => {
-  let ctx = null, enabled = true;
+  let ctx = null;
+  let enabled = true;
+  try { enabled = localStorage.getItem('laby3d.sound') !== '0'; } catch(_){}
   const ensure = () => {
     if(!enabled) return null;
     if(!ctx){
@@ -1328,10 +1363,48 @@ const sfx = (() => {
     o.connect(g); g.connect(c.destination);
     o.start(); o.stop(c.currentTime + dur + 0.02);
   };
+  /* Notes d'une gamme pentatonique : n'importe quelle suite reste consonante,
+     ce qui évite le crépitement désagréable d'un bruitage par étape. */
+  const STEPS = [0,2,4,7,9,12,14,16,19,21,24,26];
+  const scale = (t, base) => {
+    const i = Math.max(0, Math.min(STEPS.length-1, Math.floor(t * STEPS.length)));
+    return (base || 196) * Math.pow(2, STEPS[i] / 12);
+  };
+  let lastTone = 0;
+
   return {
     unlock(){ ensure(); },
-    toggle(){ enabled = !enabled; if(!enabled && ctx) ctx.suspend(); else ensure(); return enabled; },
+    toggle(){
+      enabled = !enabled;
+      try { localStorage.setItem('laby3d.sound', enabled ? '1' : '0'); } catch(_){}
+      if(!enabled && ctx) ctx.suspend(); else ensure();
+      return enabled;
+    },
     isOn(){ return enabled; },
+
+    /* Sonorisation du travail de l'ordinateur.
+       Cadence bridée à ~14 sons par seconde : aux vitesses rapides des milliers
+       d'étapes passent par image, on n'en sonorise qu'une poignée. */
+    work(kind, t){
+      if(!enabled) return;
+      const now = performance.now();
+      if(now - lastTone < 70) return;
+      lastTone = now;
+      const v = Math.max(0, Math.min(1, t || 0));
+      switch(kind){
+        case 'carve': beep(scale(v, 196), 0.07, 'triangle', 0.030); break;
+        case 'back':  beep(88 + v * 18,   0.10, 'sine',     0.026); break;
+        // deux notes : la seconde est programmée, on réserve donc sa place
+        // dans le limiteur, sinon la cadence double pendant les fusions
+        case 'merge': beep(scale(v, 262), 0.06, 'square', 0.018);
+                      setTimeout(() => beep(scale(v, 392), 0.05, 'square', 0.014), 55);
+                      lastTone = now + 60; break;
+        case 'wall':  beep(70 + v * 30,   0.09, 'square',   0.022); break;
+        case 'flood': beep(scale(v, 262), 0.06, 'sine',     0.028); break;
+        case 'path':  beep(scale(v, 330), 0.09, 'triangle', 0.038); break;
+        case 'walk':  beep(scale(v, 220), 0.06, 'triangle', 0.026); break;
+      }
+    },
     click(){ beep(520, 0.05, 'square', 0.03); },
     ready(){ beep(660, 0.12, 'triangle', 0.06); setTimeout(()=>beep(880,0.16,'triangle',0.06), 110); },
     step(){ beep(90 + Math.random()*25, 0.06, 'sine', 0.035); },
@@ -2187,11 +2260,18 @@ $('compassBtn').onclick = () => {
   $('compassBtn').classList.toggle('off', !compassOn);
   sfx.click();
 };
-$('soundBtn').onclick = () => {
-  const on = sfx.toggle();
-  $('soundBtn').textContent = on ? '🔊' : '🔇';
-  $('soundBtn').classList.toggle('off', !on);
-};
+function updateSoundButtons(){
+  const on = sfx.isOn();
+  for(const id of ['soundBtn','genSound','solveSound']){
+    const el = $(id);
+    el.textContent = on ? '🔊' : '🔇';
+    el.classList.toggle('off', !on);
+  }
+}
+function toggleSound(){ sfx.toggle(); updateSoundButtons(); }
+$('soundBtn').onclick = toggleSound;
+$('genSound').onclick = toggleSound;
+$('solveSound').onclick = toggleSound;
 
 function pauseGame(){
   if(gameState !== 'playing') return;
@@ -2398,6 +2478,7 @@ window.addEventListener('resize', onResize);
 window.addEventListener('orientationchange', () => setTimeout(onResize, 250));
 
 refreshMenu();
+updateSoundButtons();
 
 /* Une adresse du type ...labyrinthe3d.html#NEON-5D5PGS charge la graine partagée */
 if(location.hash.length > 2){
