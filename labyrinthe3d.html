@@ -676,6 +676,7 @@ class MazeBuilder {
       this.mark[this.ci(r,c)] = MARK.VISITED;
     }
     this.cells = this.total;
+    this.walls = 2 * this.size * (this.size - 1);   // tout est ouvert au départ
     this.flash = [];
     yield;
 
@@ -697,6 +698,7 @@ class MazeBuilder {
         for(let c=c0;c<=c1;c++){
           if(c === gap) continue;
           this.bitmap[this.bi(2*wr+2, 2*c+1)] = 1;
+          this.walls--;
           this.flash = [[2*wr+2, 2*c+1]];
           this.tone = { k:'wall', v:this.progress };
           yield;
@@ -710,6 +712,7 @@ class MazeBuilder {
         for(let r=r0;r<=r1;r++){
           if(r === gap) continue;
           this.bitmap[this.bi(2*r+1, 2*wc+2)] = 1;
+          this.walls--;
           this.flash = [[2*r+1, 2*wc+2]];
           this.tone = { k:'wall', v:this.progress };
           yield;
