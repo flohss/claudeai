@@ -180,12 +180,11 @@ au biais de l'algorithme.
 `labo-algorithmes.html` — un second logiciel, sans jeu, pour comprendre les algorithmes
 du labyrinthe dans leurs autres usages. Ouvrable hors ligne, aucune dépendance.
 
-L'idée directrice : **un « algorithme de labyrinthe » n'existe pas.** Ce sont des
-algorithmes de graphe, et le labyrinthe n'est qu'un de leurs terrains. Le logiciel est
-bâti là-dessus — un terrain produit un graphe, les algorithmes sont écrits une seule
-fois, génériques. C'est donc littéralement le **même code** qui creuse un labyrinthe sur
-une grille, dessine un réseau de câblage minimal sur un nuage de points, et segmente une
-image.
+Le logiciel est bâti sur une idée simple : un terrain produit un **graphe**, et les
+algorithmes sont écrits une seule fois, de façon générique. C'est donc littéralement le
+**même code** qui creuse un labyrinthe sur une grille, dessine un réseau de câblage
+minimal sur un nuage de points, et segmente une image. Changer de terrain suffit à
+révéler un autre usage du même raisonnement.
 
 ## La matrice terrain × algorithme
 
@@ -202,7 +201,7 @@ image.
 Sur une grille aux poids tirés au hasard, l'arbre couvrant minimal **est** un labyrinthe
 parfait : c'est le pont entre les deux mondes.
 
-## Trois modes
+## Quatre modes
 
 **Observer** — un algorithme, pas à pas, avec la délibération visible (les arêtes
 envisagées avant le choix), le journal de raisonnement, les compteurs, et surtout **la
@@ -218,6 +217,16 @@ synchronisés, avec les compteurs en vis-à-vis et un verdict chiffré.
 d'étendues, et trace les distributions. C'est ce qui fait passer de « je sens la
 différence » à « je la mesure ».
 
+**Comprendre** — une fiche par algorithme : l'idée en une phrase, une démonstration
+animée en boucle sur le terrain qui lui va le mieux, le pseudo-code, la structure de
+données et pourquoi c'est elle qui décide du comportement, ce qu'il garantit **et ce
+qu'il ne garantit pas**, le coût en temps et en mémoire, ses usages réels, et des liens
+vers les algorithmes à lui comparer.
+
+Chaque fiche se termine par une affirmation et un bouton qui la **vérifie en la
+mesurant** sur-le-champ. Aucun chiffre n'est écrit en dur : ils sont tous calculés au
+moment où tu cliques.
+
 ## Quelques résultats à retrouver soi-même
 
 - **Prim et Kruskal donnent toujours exactement le même poids total.** Deux démarches
@@ -225,9 +234,9 @@ différence » à « je la mesure ».
 - **La profondeur produit des chemins bien plus longs que Prim**, à nombre d'arêtes
   identique. Le biais de l'algorithme, et rien d'autre, décide de la difficulté.
 - **Le gain d'A\* sur Dijkstra dépend entièrement du terrain** : environ 4× sur un nuage
-  de points, 1,8× sur une grille à obstacles, mais à peine 1,1× dans un labyrinthe. Un
-  labyrinthe est un arbre : il n'existe qu'un chemin, donc l'heuristique n'a presque rien
-  à guider. Une bonne heuristique ne sert que là où il y a un choix.
+  de points, 1,8× sur une grille à obstacles, mais à peine mieux que Dijkstra dans un
+  labyrinthe. Un labyrinthe est un arbre : il n'existe qu'un chemin, donc l'heuristique
+  n'a presque rien à guider. Une bonne heuristique ne sert que là où il y a un choix.
 - **Sur l'image synthétique, qui contient 7 régions, Kruskal en retrouve exactement 7**
   au seuil par défaut.
 

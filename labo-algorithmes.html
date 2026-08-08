@@ -93,20 +93,45 @@
   .note b{color:#fff;}
   .ok{color:#6cff8f;} .ko{color:#ff7ba6;}
   .hidden{display:none;}
-  .tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:14px;}
+  .tabs{display:grid;grid-template-columns:repeat(auto-fit,minmax(104px,1fr));
+    gap:7px;margin-bottom:14px;}
+
+  /* écran explicatif */
+  #tab-comprendre .panel h2{margin-top:18px;}
+  #tab-comprendre .panel h2:first-of-type{margin-top:0;}
+  .idee{font-size:1rem;line-height:1.6;color:#eae6ff;border-left:3px solid #7b5bff;
+    padding-left:12px;margin-bottom:14px;}
+  pre{background:rgba(0,0,0,.42);border:1px solid rgba(150,130,255,.2);border-radius:10px;
+    padding:12px 13px;overflow-x:auto;font-family:ui-monospace,Consolas,monospace;
+    font-size:.74rem;line-height:1.65;color:#cfc8ff;white-space:pre;}
+  pre b{color:#7bd9ff;font-weight:600;}
+  pre i{color:#6f679b;font-style:normal;}
+  ul.pts{list-style:none;font-size:.8rem;line-height:1.65;color:#c9c2ea;}
+  ul.pts li{padding-left:18px;position:relative;margin-bottom:5px;}
+  ul.pts li:before{content:'▹';position:absolute;left:2px;color:#7b5bff;}
+  ul.pts li b{color:#fff;}
+  .costGrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .demoWrap{display:grid;gap:12px;grid-template-columns:1fr;}
+  @media(min-width:700px){ .demoWrap{grid-template-columns:1fr 280px;} }
+  .verifBox{border:1px solid rgba(108,255,143,.3);background:rgba(108,255,143,.07);
+    border-radius:10px;padding:12px;margin-top:10px;}
+  .verifBox .claim{font-size:.82rem;line-height:1.6;color:#eae6ff;margin-bottom:9px;}
+  .verifOut{font-size:.76rem;line-height:1.7;color:#c9c2ea;margin-top:9px;
+    font-family:ui-monospace,monospace;}
 </style>
 </head>
 <body>
 <div class="wrap">
 
   <h1>LABORATOIRE D'ALGORITHMES</h1>
-  <div class="sub">Un « algorithme de labyrinthe » n'existe pas.<br>
-    Ce sont des algorithmes de graphe — le labyrinthe n'est qu'un de leurs terrains.</div>
+  <div class="sub">Observer, comparer et mesurer les algorithmes de graphe,<br>
+    sur des terrains variés : grille, nuage de points, image, plan à découper.</div>
 
   <div class="tabs">
     <div class="opt sel" data-tab="observer">🔬 Observer</div>
     <div class="opt" data-tab="course">🏁 Course</div>
     <div class="opt" data-tab="stats">📊 Mesurer</div>
+    <div class="opt" data-tab="comprendre">📖 Comprendre</div>
   </div>
 
   <!-- ================= CONFIGURATION ================= -->
@@ -184,6 +209,7 @@
         <button class="btn ghost" id="endBtn" disabled>⏩ Terminer</button>
       </div>
       <div class="note" id="lesson"></div>
+      <button class="btn ghost" id="toDocBtn" style="margin-top:10px">📖 Comprendre cet algorithme en détail</button>
     </div>
   </div>
 
@@ -200,6 +226,15 @@
       <div class="raceGrid" id="raceGrid" style="margin-top:12px"></div>
       <div class="note" id="raceVerdict"></div>
     </div>
+  </div>
+
+  <!-- ================= COMPRENDRE ================= -->
+  <div id="tab-comprendre" class="hidden">
+    <div class="panel">
+      <h2>Choisir l'algorithme à expliquer</h2>
+      <div class="opts" id="docOpts"></div>
+    </div>
+    <div class="panel" id="docPanel"></div>
   </div>
 
   <!-- ================= MESURER ================= -->
@@ -334,18 +369,30 @@ function terrainGrille(size, rnd, openMode){
   return g;
 }
 
-/* Cible d'une grille à obstacles : le sommet accessible le plus proche du coin
-   opposé — garantit qu'un chemin existe quelle que soit la disposition tirée. */
-function cornerTarget(g){
-  const seen = new Uint8Array(g.n); seen[0] = 1;
-  const q = [0]; let head = 0, best = 0, bestScore = -1;
-  while(head < q.length){
-    const v = q[head++];
-    const nd = g.nodes[v], score = nd.r + nd.c;
-    if(score > bestScore){ bestScore = score; best = v; }
-    for(const a of g.adj[v]) if(!seen[a.to]){ seen[a.to] = 1; q.push(a.to); }
+/* Départ et arrivée d'une grille à obstacles. On les prend aux deux extrémités de
+   la PLUS GRANDE zone accessible : le coin haut-gauche peut très bien se retrouver
+   emmuré par le tirage, et l'algorithme n'aurait alors rien à chercher. */
+function openGridEnds(g){
+  const comp = new Int32Array(g.n).fill(-1);
+  let bestId = -1, bestSize = 0, id = 0;
+  for(let i=0;i<g.n;i++){
+    if(g.nodes[i].blocked || comp[i] !== -1) continue;
+    const q = [i]; comp[i] = id; let head = 0, size = 1;
+    while(head < q.length){
+      const v = q[head++];
+      for(const a of g.adj[v]) if(comp[a.to] === -1){ comp[a.to] = id; size++; q.push(a.to); }
+    }
+    if(size > bestSize){ bestSize = size; bestId = id; }
+    id++;
   }
-  return best;
+  let start = 0, target = 0, lo = Infinity, hi = -1;
+  for(let i=0;i<g.n;i++){
+    if(comp[i] !== bestId) continue;
+    const sc = g.nodes[i].r + g.nodes[i].c;
+    if(sc < lo){ lo = sc; start = i; }
+    if(sc > hi){ hi = sc; target = i; }
+  }
+  return { start, target };
 }
 
 /* --- Nuage de points : sommets dispersés, arêtes vers les plus proches voisins,
@@ -482,10 +529,11 @@ const ALGOS = {
   astar: { name:'A*', icon:'🎯', kind:'chemin', struct:'tas',
     terrains:['grille','nuage'],
     lesson:"A* est Dijkstra plus une estimation de la distance restante, qui oriente la " +
-           "recherche vers l'arrivée. Le gain dépend du terrain : environ 4× sur un nuage, " +
-           "1,8× sur une grille à obstacles, mais à peine 1,1× dans un labyrinthe — un " +
-           "labyrinthe est un arbre, il n'y a qu'un chemin, donc presque rien à guider. " +
-           "Une bonne heuristique ne sert que là où il y a un choix." },
+           "recherche vers l'arrivée. Le gain dépend entièrement du terrain : environ 4× " +
+           "sur un nuage de points, 1,8× sur une grille à obstacles, mais à peine mieux " +
+           "que Dijkstra dans un labyrinthe — un labyrinthe est un arbre, il n'existe " +
+           "qu'un chemin, donc presque rien à guider. Une bonne heuristique ne sert que " +
+           "là où il y a un choix." },
   mur: { name:'Main au mur', icon:'🤚', kind:'chemin', struct:'aucune',
     terrains:['grille'],
     lesson:"Aucune structure, aucune mémoire : longer le mur de gauche suffit à sortir " +
@@ -891,8 +939,14 @@ class Run {
     this.start = 0;
     this.target = -1;
     if(algo.kind === 'chemin'){
-      this.target = terrain === 'grille' ? (openGrid ? cornerTarget(g) : g.n - 1)
-                  : farthestNode(g, 0);
+      if(openGrid){
+        const ends = openGridEnds(g);
+        this.start = ends.start; this.target = ends.target;
+      } else {
+        // la case la plus éloignée du départ : la destination la plus exigeante,
+        // et surtout pas toujours un coin du bord extérieur
+        this.target = farthestNode(g, 0);
+      }
       this.st.target = this.target;
     }
     // Les coordonnées vivent dans [0,1] : sans remise à l'échelle, l'heuristique
@@ -932,7 +986,7 @@ function carveMaze(g, rnd, addLoops){
     keep[pick.e] = 1; visited[pick.to] = 1; stack.push(pick.to);
   }
   if(addLoops){
-    const extra = Math.max(2, Math.round(g.n * 0.06));
+    const extra = Math.max(4, Math.round(g.n * 0.16));
     for(let k=0;k<extra;k++){
       const i = (rnd()*g.edges.length)|0;
       keep[i] = 1;
@@ -1769,15 +1823,509 @@ function allReachable(r){
 }
 
 /* ============================================================================
+   11. ÉCRANS EXPLICATIFS — une fiche par algorithme
+   ============================================================================ */
+const DOC = {
+
+dfs: {
+  demo:{ terrain:'grille', size:8 },
+  idee:"On s'enfonce aussi loin que possible et on ne recule que lorsqu'on y est forcé. " +
+       "Cette obstination est tout le caractère de l'algorithme.",
+  pseudo:
+"empiler(départ)\n" +
+"<b>tant que</b> la pile n'est pas vide :\n" +
+"    v ← sommet de la pile        <i>// sans retirer</i>\n" +
+"    <b>si</b> v a une voisine vierge :\n" +
+"        en choisir une au hasard\n" +
+"        retenir l'arête, marquer la voisine\n" +
+"        empiler(la voisine)      <i>// on avance</i>\n" +
+"    <b>sinon</b> :\n" +
+"        dépiler                  <i>// le retour en arrière</i>",
+  structure:"<b>La pile.</b> Dernier entré, premier sorti : on repart toujours du sommet le " +
+    "plus récemment atteint, donc on s'éloigne du départ au lieu de rayonner autour. " +
+    "Remplace la pile par une file et tu obtiens le parcours en largeur — un seul mot " +
+    "change, et le comportement devient l'exact opposé.",
+  garanties:[
+    "Visite <b>tous</b> les sommets accessibles depuis le départ.",
+    "Produit un arbre couvrant : exactement n−1 arêtes.",
+    "<b>Aucune</b> optimalité : ni le chemin le plus court, ni l'arbre le plus léger."],
+  cout:{ temps:"O(n + m)", memoire:"O(n)<br><span style='font-size:.62rem;opacity:.75'>la pile peut tout contenir</span>" },
+  usages:[
+    "Retour sur trace : sudoku, n reines, coloration de graphe.",
+    "Détection de cycles et tri topologique (ordonner des tâches liées).",
+    "Composantes connexes, remplissage par diffusion.",
+    "Exploration d'arbres de jeu."],
+  compare:['prim','bfs'],
+  verif:{
+    claim:"La profondeur produit des chemins bien plus longs que Prim, à nombre d'arêtes identique.",
+    run(){
+      let d=0,p=0,ed=0,ep=0;
+      const N=15;
+      for(let i=0;i<N;i++){
+        const s=(31+i*7919)>>>0;
+        const a=new Run('grille','dfs',12,s,{}); a.finish();
+        const b=new Run('grille','prim',12,s,{}); b.finish();
+        d+=measure(a).chemin; p+=measure(b).chemin;
+        ed+=a.st.counters.retenues; ep+=b.st.counters.retenues;
+      }
+      return 'Sur '+N+' grilles 12×12 : chemin le plus long <b>'+(d/N).toFixed(1)+
+        '</b> en profondeur contre <b>'+(p/N).toFixed(1)+'</b> chez Prim, soit '+
+        (d/p).toFixed(1)+'×.<br>Arêtes retenues : '+(ed/N)+' et '+(ep/N)+
+        ' — <b>identiques</b>, comme l’exige un arbre couvrant sur 144 sommets.';
+    }}
+},
+
+prim: {
+  demo:{ terrain:'nuage', size:45 },
+  idee:"Une seule zone grandit. À chaque tour on ajoute l'arête la moins chère qui sort " +
+       "de cette zone — jamais une autre.",
+  pseudo:
+"zone ← { départ }\n" +
+"tas ← les arêtes sortant du départ\n" +
+"<b>tant que</b> le tas n'est pas vide :\n" +
+"    (u,v,w) ← arête de poids minimal du tas\n" +
+"    <b>si</b> v est déjà dans la zone :\n" +
+"        la jeter                 <i>// ferait un cycle</i>\n" +
+"    <b>sinon</b> :\n" +
+"        retenir (u,v) ; ajouter v à la zone\n" +
+"        empiler les arêtes sortant de v",
+  structure:"<b>Le tas de priorité.</b> Sa racine est toujours le minimum ; insérer ou " +
+    "retirer coûte log(n) au lieu de parcourir toute la frontière. C'est lui qui rend " +
+    "l'algorithme praticable — sans lui, chaque tour coûterait un balayage complet.",
+  garanties:[
+    "Produit un arbre couvrant de <b>poids minimal</b>.",
+    "Repose sur la propriété de coupe : la plus légère arête traversant une coupe " +
+      "appartient à un arbre couvrant minimal.",
+    "Le résultat ne dépend pas du sommet de départ (en poids)."],
+  cout:{ temps:"O(m log n)", memoire:"O(m)<br><span style='font-size:.62rem;opacity:.75'>le tas contient des arêtes</span>" },
+  usages:[
+    "Réseaux au coût minimal : électricité, fibre, canalisations, routes.",
+    "Approximation du voyageur de commerce (borne à 2×).",
+    "Classification hiérarchique par lien simple.",
+    "Sur une grille aux poids aléatoires : un labyrinthe très ramifié."],
+  compare:['kruskal','dfs'],
+  verif:{
+    claim:"Prim et Kruskal, démarches opposées, aboutissent au même poids total.",
+    run(){
+      const N=12; let same=0, ex=[];
+      for(let i=0;i<N;i++){
+        const s=(31+i*7919)>>>0;
+        const a=new Run('nuage','prim',90,s,{}); a.finish();
+        const b=new Run('nuage','kruskal',90,s,{}); b.finish();
+        if(Math.abs(a.treeWeight()-b.treeWeight())<1e-9) same++;
+        if(i<3) ex.push(a.treeWeight().toFixed(5)+' / '+b.treeWeight().toFixed(5));
+      }
+      return '<b>'+same+' nuages sur '+N+'</b> donnent un poids strictement identique.<br>' +
+        'Trois exemples (Prim / Kruskal) : '+ex.join(' · ')+'.<br>' +
+        'Ils n’explorent pourtant pas du tout dans le même ordre — seul l’optimum est commun.';
+    }}
+},
+
+kruskal: {
+  demo:{ terrain:'nuage', size:45 },
+  idee:"Aucun point de départ. On trie toutes les arêtes du monde par coût, et on ne " +
+       "garde que celles qui relient deux îlots encore séparés.",
+  pseudo:
+"trier les arêtes par poids croissant\n" +
+"chaque sommet forme son propre îlot\n" +
+"<b>pour chaque</b> arête (u,v) dans cet ordre :\n" +
+"    <b>si</b> trouver(u) ≠ trouver(v) :\n" +
+"        retenir l'arête ; unir(u,v)\n" +
+"    <b>sinon</b> :\n" +
+"        la rejeter               <i>// ferait un cycle</i>",
+  structure:"<b>L'union-find.</b> Chaque sommet pointe vers un représentant. Avec la " +
+    "compression de chemin et l'union par taille, répondre à « ces deux sommets sont-ils " +
+    "déjà reliés ? » coûte un temps quasi constant, même après des millions de fusions. " +
+    "Sans cette structure, le test coûterait un parcours complet et l'algorithme serait " +
+    "inutilisable.",
+  garanties:[
+    "Même arbre couvrant minimal que Prim — le même poids, toujours.",
+    "Le nombre d'îlots décroît de n à 1 en <b>exactement n−1 fusions</b>.",
+    "Arrêté sur un seuil, il ne relie plus tout : il segmente."],
+  cout:{ temps:"O(m log m)<br><span style='font-size:.62rem;opacity:.75'>dominé par le tri</span>", memoire:"O(n)" },
+  usages:[
+    "Segmentation d'image : régions homogènes qui fusionnent (Felzenszwalb).",
+    "Classification par lien simple, en statistique.",
+    "Percolation et étude de connectivité en physique.",
+    "Détection de composantes connexes dynamiques."],
+  compare:['prim','dfs'],
+  verif:{
+    claim:"Les îlots passent de n à 1 en exactement n−1 fusions, et l'arrêt sur seuil produit une segmentation.",
+    run(){
+      const r=new Run('nuage','kruskal',90,4242,{}); r.finish();
+      const segs=[];
+      for(const thr of [10,20,30,50]){
+        const q=new Run('image','kruskal',48,7,{threshold:thr}); q.finish();
+        segs.push(thr+' → '+q.st.comp.count+' régions');
+      }
+      return 'Nuage de 90 points : <b>'+r.st.counters.retenues+' fusions</b> pour ' +
+        '90 sommets, et il reste <b>'+r.st.comp.count+' îlot</b>.<br>' +
+        'Sur une image synthétique bâtie sur 7 zones, selon le seuil : '+segs.join(' · ')+'.<br>' +
+        'Trop bas, il fragmente ; trop haut, il fond des zones voisines. Le bon seuil ' +
+        'retrouve à peu près le compte réel.';
+    }}
+},
+
+bfs: {
+  demo:{ terrain:'grille', size:9 },
+  idee:"Un front régulier avance. On visite les sommets par distance croissante, donc le " +
+       "premier chemin trouvé est le plus court en nombre d'arêtes.",
+  pseudo:
+"enfiler(départ) ; distance[départ] ← 0\n" +
+"<b>tant que</b> la file n'est pas vide :\n" +
+"    v ← défiler                  <i>// le plus ancien</i>\n" +
+"    <b>pour chaque</b> voisine w jamais vue :\n" +
+"        distance[w] ← distance[v] + 1\n" +
+"        parent[w] ← v\n" +
+"        enfiler(w)",
+  structure:"<b>La file.</b> Premier entré, premier sorti. C'est elle, et rien d'autre, qui " +
+    "garantit l'ordre par distance croissante : tous les sommets à distance k sortent " +
+    "avant ceux à distance k+1.",
+  garanties:[
+    "Plus court chemin en <b>nombre d'arêtes</b> — pas en poids.",
+    "Sur un graphe pondéré, il se trompe : il faut Dijkstra.",
+    "Le dernier sommet atteint est le plus éloigné du départ."],
+  cout:{ temps:"O(n + m)", memoire:"O(n)" },
+  usages:[
+    "Remplissage par diffusion : le pot de peinture des logiciels de dessin.",
+    "Degrés de séparation dans un réseau social.",
+    "Diamètre d'un arbre par double balayage : deux parcours suffisent.",
+    "Dans le jeu, c'est lui qui place la sortie sur la case la plus éloignée."],
+  compare:['dijkstra','dfs'],
+  verif:{
+    claim:"« Le plus court » n'a pas le même sens selon qu'on compte les arêtes ou le poids.",
+    run(){
+      const N=10; let bh=0,bw=0,dh=0,dw=0;
+      for(let i=0;i<N;i++){
+        const s=(31+i*7919)>>>0;
+        const a=new Run('nuage','bfs',90,s,{}); a.finish();
+        const b=new Run('nuage','dijkstra',90,s,{}); b.finish();
+        const w = r => { let t=0; for(let k=1;k<r.st.path.length;k++){
+          const u=r.st.path[k-1], v=r.st.path[k];
+          for(const e of r.g.adj[u]) if(e.to===v){ t+=r.g.edges[e.e].w; break; } } return t; };
+        bh+=a.st.path.length-1; bw+=w(a); dh+=b.st.path.length-1; dw+=w(b);
+      }
+      return 'Sur '+N+' nuages, entre les deux mêmes points :<br>' +
+        '<b>Largeur</b> : '+(bh/N).toFixed(1)+' arêtes, longueur totale '+(bw/N).toFixed(3)+'.<br>' +
+        '<b>Dijkstra</b> : '+(dh/N).toFixed(1)+' arêtes, longueur totale '+(dw/N).toFixed(3)+'.<br>' +
+        'Chacun gagne dans sa discipline : moins de sauts pour l’un, moins de distance pour l’autre.';
+    }}
+},
+
+dijkstra: {
+  demo:{ terrain:'grille', size:11, mode:'open' },
+  idee:"Le parcours en largeur, mais la file devient un tas : on fige toujours le sommet " +
+       "dont le coût cumulé est le plus faible.",
+  pseudo:
+"distance[départ] ← 0 ; empiler(départ, 0)\n" +
+"<b>tant que</b> le tas n'est pas vide :\n" +
+"    v ← sommet de coût cumulé minimal\n" +
+"    <b>si</b> v est déjà figé : passer\n" +
+"    figer v                      <i>// coût définitif</i>\n" +
+"    <b>pour chaque</b> voisine w :\n" +
+"        <b>si</b> distance[v] + poids(v,w) < distance[w] :\n" +
+"            distance[w] ← distance[v] + poids(v,w)\n" +
+"            parent[w] ← v ; empiler(w, distance[w])",
+  structure:"<b>Le tas de priorité</b>, comme chez Prim — mais la clé n'est pas la même. " +
+    "Prim classe sur le poids de l'arête seule ; Dijkstra classe sur le coût cumulé " +
+    "depuis le départ. Deux algorithmes presque identiques, séparés par cette seule " +
+    "différence de clé.",
+  garanties:[
+    "Plus court chemin pondéré, <b>à condition que tous les poids soient positifs</b>.",
+    "Un sommet figé ne sera plus jamais amélioré.",
+    "Avec des poids négatifs il se trompe : il faut Bellman-Ford."],
+  cout:{ temps:"O(m log n)", memoire:"O(n + m)" },
+  usages:[
+    "Calcul d'itinéraire, GPS.",
+    "Routage réseau (protocole OSPF).",
+    "Ordonnancement, analyse de chemin critique."],
+  compare:['astar','bfs'],
+  verif:{
+    claim:"Dijkstra explore dans toutes les directions, parce que sans indice il ignore où se trouve l'arrivée.",
+    run(){
+      const N=10; let ex=0, tot=0;
+      for(let i=0;i<N;i++){
+        const s=(31+i*7919)>>>0;
+        const r=new Run('grille','dijkstra',14,s,{gridMode:'open'}); r.finish();
+        ex+=r.st.counters.examines; tot+=r.g.n;
+      }
+      return 'Sur une grille 14×14 à obstacles, il fige en moyenne <b>'+(ex/N).toFixed(0)+
+        ' sommets</b> sur '+(tot/N).toFixed(0)+' — soit '+((ex/tot)*100).toFixed(0)+
+        ' % du terrain, alors qu’un seul chemin l’intéresse.<br>' +
+        'C’est exactement ce que l’heuristique d’A* vient corriger.';
+    }}
+},
+
+astar: {
+  demo:{ terrain:'grille', size:11, mode:'open' },
+  idee:"Dijkstra, plus une estimation de ce qu'il reste à parcourir. Cette seule addition " +
+       "oriente la recherche vers l'arrivée.",
+  pseudo:
+"<i>// identique à Dijkstra, sauf la clé du tas :</i>\n" +
+"priorité(v) = distance[v] + h(v)\n" +
+"\n" +
+"<i>// h(v) estime le coût restant de v jusqu'à l'arrivée</i>\n" +
+"<i>// sur une grille : distance de Manhattan × coût d'un pas</i>\n" +
+"<i>// sur un nuage  : distance à vol d'oiseau</i>\n" +
+"\n" +
+"<b>condition</b> : h ne doit <b>jamais surestimer</b> le coût réel\n" +
+"           sinon la garantie d'optimalité est perdue",
+  structure:"<b>Le même tas que Dijkstra.</b> Seule la clé change. C'est le plus bel exemple " +
+    "du laboratoire : deux algorithmes au comportement très différent, dont le code ne " +
+    "diffère que d'un terme ajouté.",
+  garanties:[
+    "Chemin optimal <b>si h est admissible</b> (ne surestime jamais).",
+    "N'examine jamais plus de sommets que Dijkstra.",
+    "Avec h = 0, il <b>est</b> Dijkstra."],
+  cout:{ temps:"O(m log n)<br><span style='font-size:.62rem;opacity:.75'>bien meilleur en pratique</span>", memoire:"O(n + m)" },
+  usages:[
+    "Déplacement des unités dans les jeux vidéo.",
+    "Planification de trajectoire en robotique.",
+    "Résolution de taquins et de casse-tête."],
+  compare:['dijkstra','bfs'],
+  verif:{
+    claim:"Le gain d'A* dépend entièrement du terrain — et il est presque nul dans un labyrinthe.",
+    run(){
+      const cases=[['grille','maze',14,'labyrinthe'],['grille','open',14,'grille à obstacles'],
+                   ['nuage','maze',90,'nuage de points']];
+      const out=[];
+      let sameAll=0, tot=0;
+      for(const [t,mode,size,label] of cases){
+        let d=0,a=0,same=0; const N=10;
+        for(let i=0;i<N;i++){
+          const s=(31+i*7919)>>>0;
+          const x=new Run(t,'dijkstra',size,s,{gridMode:mode}); x.finish();
+          const y=new Run(t,'astar',size,s,{gridMode:mode}); y.finish();
+          d+=x.st.counters.examines; a+=y.st.counters.examines;
+          if(Math.abs(x.st.dist[x.target]-y.st.dist[y.target])<1e-9) same++;
+        }
+        sameAll+=same; tot+=N;
+        out.push(label+' : <b>'+(d/a).toFixed(2)+'×</b> moins de sommets ('+
+                 (d/N).toFixed(0)+' → '+(a/N).toFixed(0)+')');
+      }
+      return out.join('<br>')+'<br><b>'+sameAll+'/'+tot+'</b> chemins de coût strictement ' +
+        'identique : l’heuristique accélère sans jamais dégrader.<br>' +
+        'Un labyrinthe est un arbre : il n’existe qu’un chemin, donc rien à guider.';
+    }}
+},
+
+mur: {
+  demo:{ terrain:'grille', size:8, loops:true },
+  idee:"Aucune carte, aucune mémoire, aucune structure : garder la main gauche au mur et " +
+       "avancer. La règle la plus bête du laboratoire — et elle marche souvent.",
+  pseudo:
+"<b>répéter</b> :\n" +
+"    <b>pour</b> d <b>dans</b> [gauche, tout droit, droite, demi-tour] :\n" +
+"        <b>si</b> le passage vers d est ouvert :\n" +
+"            s'y engager ; orientation ← d\n" +
+"            sortir de la boucle\n" +
+"\n" +
+"<i>// l'ordre des essais est tout l'algorithme :</i>\n" +
+"<i>// essayer la gauche en premier, c'est longer le mur de gauche</i>",
+  structure:"<b>Aucune.</b> C'est son intérêt : il tient dans un robot sans mémoire, avec " +
+    "un simple capteur de contact. Il ne sait ni où il est, ni d'où il vient.",
+  garanties:[
+    "Sort de tout labyrinthe <b>simplement connexe</b> — sans îlot de murs détaché — " +
+      "quelle que soit la position de l'arrivée.",
+    "<b>Peut tourner indéfiniment</b> dès qu'il existe une boucle : il longe un îlot " +
+      "intérieur sans jamais en sortir.",
+    "Ne trouve jamais le chemin le plus court, seulement un chemin."],
+  cout:{ temps:"O(pas effectués)", memoire:"<b>O(1)</b><br><span style='font-size:.62rem;opacity:.75'>rien du tout</span>" },
+  usages:[
+    "Robots suiveurs de mur, aspirateurs de première génération.",
+    "L'algorithme de Pledge le corrige en comptant les rotations cumulées.",
+    "Sortie de secours dans un bâtiment enfumé : la règle enseignée aux pompiers."],
+  compare:['bfs','dijkstra'],
+  verif:{
+    claim:"Sans boucle, il sort à tous les coups. Avec des boucles, il peut tourner " +
+          "indéfiniment — lance la mesure pour voir à quelle fréquence.",
+    run(){
+      const test = loops => {
+        let fail=0, steps=0; const N=24;
+        for(let i=0;i<N;i++){
+          const r=new Run('grille','mur',12,(31+i*7919)>>>0,{loops}); r.finish();
+          const last=r.st.logs[r.st.logs.length-1];
+          if(last && last.msg.indexOf('Abandon')===0) fail++; else steps+=r.st.counters.examines;
+        }
+        return { fail, N, steps: steps/Math.max(1,N-fail) };
+      };
+      const a=test(false), b=test(true);
+      const pc = (b.fail / b.N * 100).toFixed(0);
+      return 'Labyrinthe parfait, aucune boucle : <b>'+a.fail+' échec sur '+a.N+
+        '</b>, sortie trouvée en '+a.steps.toFixed(0)+' pas en moyenne.<br>' +
+        'Avec des boucles ajoutées : <b>'+b.fail+' échecs sur '+b.N+'</b>, soit '+pc+' %.<br>' +
+        'Un labyrinthe parfait n’a aucun îlot de murs détaché : en longeant, on finit ' +
+        'forcément par tout parcourir. Une boucle crée un tel îlot — et l’on peut en ' +
+        'faire le tour sans fin.';
+    }}
+},
+
+division: {
+  demo:{ terrain:'plan', size:14 },
+  idee:"Le seul algorithme qui travaille par le haut : il ne relie rien, il sépare. On part " +
+       "d'un espace vide et on le coupe en deux, encore et encore.",
+  pseudo:
+"<b>diviser</b>(zone) :\n" +
+"    <b>si</b> la zone est trop petite : arrêter\n" +
+"    choisir un sens              <i>// le plus long côté</i>\n" +
+"    poser un mur d'un bord à l'autre\n" +
+"    y laisser <b>une seule</b> porte\n" +
+"    diviser(première moitié)\n" +
+"    diviser(seconde moitié)",
+  structure:"<b>La pile des zones restantes</b> — celle de la récursion. Chaque appel " +
+    "n'a besoin que de son rectangle : la structure est l'arbre de découpage lui-même.",
+  garanties:[
+    "Une seule porte par mur ⇒ labyrinthe parfait, n−1 passages comme les autres.",
+    "Deux portes ou plus ⇒ des boucles apparaissent, volontairement.",
+    "Produit des couloirs droits et de grandes salles, jamais des méandres."],
+  cout:{ temps:"O(n)", memoire:"O(profondeur)<br><span style='font-size:.62rem;opacity:.75'>de la récursion</span>" },
+  usages:[
+    "Arbres BSP : le découpage d'espace des moteurs de jeu, depuis Doom.",
+    "Quadtrees et arbres k-d, pour indexer l'espace et accélérer les recherches.",
+    "Génération de donjons et de plans de bâtiments.",
+    "Découpage d'image en blocs pour la compression."],
+  compare:['kruskal','dfs'],
+  verif:{
+    claim:"Malgré une démarche inverse, elle aboutit au même compte que les autres : n−1 passages.",
+    run(){
+      const N=10; let ok=0, ex=[];
+      for(let i=0;i<N;i++){
+        const r=new Run('grille','division',12,(31+i*7919)>>>0,{}); r.finish();
+        if(r.st.counters.retenues===r.g.n-1) ok++;
+        if(i<4) ex.push(r.st.counters.retenues);
+      }
+      return '<b>'+ok+' plans sur '+N+'</b> conservent exactement 143 passages pour 144 cases.<br>' +
+        'Premiers relevés : '+ex.join(', ')+'.<br>' +
+        'Relier une à une ou séparer par moitiés : le compte final est le même, ' +
+        'parce que la propriété d’arbre, elle, ne dépend pas du chemin suivi.';
+    }}
+}
+};
+
+let docKey = 'dfs', exRun = null, exRaf = 0, exWait = 0, exSeed = 7;
+
+function buildDocOpts(){
+  const el = $('docOpts'); el.innerHTML = '';
+  for(const k of Object.keys(ALGOS)){
+    const d = document.createElement('div');
+    d.className = 'opt' + (docKey === k ? ' sel' : '');
+    d.innerHTML = ALGOS[k].icon + ' ' + ALGOS[k].name;
+    d.onclick = () => { docKey = k; buildDocOpts(); renderDoc(); };
+    el.appendChild(d);
+  }
+}
+
+function renderDoc(){
+  const k = docKey, a = ALGOS[k], d = DOC[k];
+  $('docPanel').innerHTML =
+    '<h1 style="font-size:1.25rem;margin-bottom:10px">' + a.icon + ' ' + a.name + '</h1>' +
+    '<div class="idee">' + d.idee + '</div>' +
+
+    '<h2>En action</h2>' +
+    '<div class="demoWrap">' +
+      '<div class="board"><canvas id="exBoard"></canvas></div>' +
+      '<div class="structBox">' +
+        '<div style="font-size:.66rem;text-transform:uppercase;letter-spacing:1.2px;' +
+          'color:#a89bff;margin-bottom:7px" id="exStructName">Structure</div>' +
+        '<canvas id="exStruct"></canvas>' +
+        '<div style="font-size:.68rem;color:#9d94c8;margin-top:7px;line-height:1.5">' +
+          d.structure + '</div>' +
+      '</div>' +
+    '</div>' +
+
+    '<h2>Le principe, en pseudo-code</h2>' +
+    '<pre>' + d.pseudo + '</pre>' +
+
+    '<h2>Ce qu’il garantit, et ce qu’il ne garantit pas</h2>' +
+    '<ul class="pts">' + d.garanties.map(x => '<li>' + x + '</li>').join('') + '</ul>' +
+
+    '<h2>Coût</h2>' +
+    '<div class="costGrid">' +
+      '<div class="ct" style="padding:9px 6px"><b style="font-size:.82rem;line-height:1.4">' +
+        d.cout.temps + '</b><span>temps</span></div>' +
+      '<div class="ct" style="padding:9px 6px"><b style="font-size:.82rem;line-height:1.4">' +
+        d.cout.memoire + '</b><span>mémoire</span></div>' +
+    '</div>' +
+
+    '<h2>Où on s’en sert vraiment</h2>' +
+    '<ul class="pts">' + d.usages.map(x => '<li>' + x + '</li>').join('') + '</ul>' +
+
+    '<h2>Vérifie toi-même</h2>' +
+    '<div class="verifBox">' +
+      '<div class="claim">' + d.verif.claim + '</div>' +
+      '<button class="btn ghost" id="verifBtn">▶ Lancer la vérification</button>' +
+      '<div class="verifOut" id="verifOut"></div>' +
+    '</div>' +
+
+    '<h2>À comparer avec</h2>' +
+    '<div class="opts" id="cmpOpts"></div>' +
+    '<div class="row" style="margin-top:12px">' +
+      '<button class="btn" id="docTryBtn">🔬 L’essayer dans l’observateur</button>' +
+    '</div>';
+
+  const cmp = $('cmpOpts');
+  for(const c of d.compare){
+    const el = document.createElement('div');
+    el.className = 'opt';
+    el.innerHTML = ALGOS[c].icon + ' ' + ALGOS[c].name;
+    el.onclick = () => { docKey = c; buildDocOpts(); renderDoc(); window.scrollTo({top:0,behavior:'smooth'}); };
+    cmp.appendChild(el);
+  }
+  $('verifBtn').onclick = () => {
+    $('verifOut').innerHTML = 'Calcul en cours…';
+    setTimeout(() => { try { $('verifOut').innerHTML = d.verif.run(); }
+                       catch(e){ $('verifOut').innerHTML = 'Erreur : ' + e.message; } }, 30);
+  };
+  $('docTryBtn').onclick = () => {
+    const dem = d.demo;
+    ui.algo = k;
+    if(terrainSupports(dem.terrain, k)) ui.terrain = dem.terrain;
+    ui.size = TERRAINS[ui.terrain].def;
+    if(dem.mode) ui.gridMode = dem.mode;
+    if(dem.loops) ui.loops = true;
+    document.querySelector('[data-tab="observer"]').click();
+    buildOptions(); syncFields(); resetRun();
+    window.scrollTo({ top:0, behavior:'smooth' });
+  };
+  startExplainDemo();
+}
+
+function startExplainDemo(){
+  const dem = DOC[docKey].demo;
+  exRun = new Run(dem.terrain, docKey, dem.size, exSeed,
+                  { gridMode: dem.mode || 'maze', loops: !!dem.loops });
+  exWait = 0;
+  const nm = $('exStructName');
+  if(nm) nm.textContent = STRUCT_NAME[exRun.st.struct.kind] || 'Structure';
+}
+
+function exLoop(){
+  exRaf = requestAnimationFrame(exLoop);
+  if(ui.tab !== 'comprendre' || !exRun) return;
+  const cv = $('exBoard'); if(!cv) return;
+  if(exRun.done){
+    // petite pause sur le résultat, puis on rejoue avec une autre graine
+    if(++exWait > 100){ exSeed = (exSeed * 1103515245 + 12345) >>> 0; startExplainDemo(); }
+  } else {
+    const steps = Math.max(1, Math.round(exRun.g.n / 70));
+    for(let i=0;i<steps && !exRun.done;i++) exRun.step();
+  }
+  drawRun(cv, exRun, true);
+  drawStruct($('exStruct'), exRun.st);
+}
+exLoop();
+
+/* ============================================================================
    10. CÂBLAGE GÉNÉRAL
    ============================================================================ */
 document.querySelectorAll('[data-tab]').forEach(el => {
   el.onclick = () => {
     ui.tab = el.dataset.tab;
     document.querySelectorAll('[data-tab]').forEach(x => x.classList.toggle('sel', x === el));
-    for(const t of ['observer','course','stats'])
+    for(const t of ['observer','course','stats','comprendre'])
       $('tab-'+t).className = (t === ui.tab) ? '' : 'hidden';
     if(ui.tab === 'course' && !racers.length) buildRace();
+    if(ui.tab === 'comprendre') startExplainDemo();
   };
 });
 
@@ -1822,11 +2370,21 @@ $('imgFile').onchange = e => {
 window.addEventListener('resize', () => { paint(); if(racers.length) paintRace(); });
 
 buildOptions();
+buildDocOpts();
+renderDoc();
 syncFields();
 resetRun();
 
+$('toDocBtn').onclick = () => {
+  docKey = ui.algo; buildDocOpts(); renderDoc();
+  document.querySelector('[data-tab="comprendre"]').click();
+  window.scrollTo({ top:0, behavior:'smooth' });
+};
+
 /* accès pour la console et les tests */
 window.LABO = { ui, get run(){ return run; }, get racers(){ return racers; },
+                DOC, get docKey(){ return docKey; }, set docKey(v){ docKey=v; buildDocOpts(); renderDoc(); },
+                get exRun(){ return exRun; },
                 Run, ALGOS, TERRAINS, measure, allReachable, applyCode, seedCode,
                 buildRace, resetRun };
 </script>
