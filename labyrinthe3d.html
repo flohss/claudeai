@@ -420,6 +420,7 @@ class MazeBuilder {
       this.carveWall(r,c,nr,nc);
       this.mark[this.ci(r,c)] = MARK.VISITED;
       this.mark[this.ci(nr,nc)] = MARK.CURRENT;
+      stack.push([nr,nc]);   // on avance : la nouvelle case devient le sommet de la pile
       this.cells++;
       this.progress = this.cells / this.total;
       if(this.cells % Math.max(3, (this.total/14)|0) === 0)
