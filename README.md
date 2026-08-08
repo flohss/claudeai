@@ -232,7 +232,11 @@ moment où tu cliques.
 - **Prim et Kruskal donnent toujours exactement le même poids total.** Deux démarches
   opposées — croissance locale contre tri global — qui convergent vers le même optimum.
 - **La profondeur produit des chemins bien plus longs que Prim**, à nombre d'arêtes
-  identique. Le biais de l'algorithme, et rien d'autre, décide de la difficulté.
+  identique : sur une grille 12×12, un diamètre d'arbre d'environ 91 contre 44. Le biais
+  de l'algorithme, et rien d'autre, décide de la difficulté. Le diamètre est mesuré par
+  double balayage — partir d'un sommet quelconque mène à une extrémité du diamètre, et
+  repartir de là donne le maximum réel. Mesurer depuis le coin de départ le
+  sous-estimerait d'environ 15 % chez Prim.
 - **Le gain d'A\* sur Dijkstra dépend entièrement du terrain** : environ 4× sur un nuage
   de points, 1,8× sur une grille à obstacles, mais à peine mieux que Dijkstra dans un
   labyrinthe. Un labyrinthe est un arbre : il n'existe qu'un chemin, donc l'heuristique

@@ -1629,19 +1629,28 @@ function measure(r){
   const out = { poids: r.treeWeight(), retenues: st.counters.retenues,
                 examines: st.counters.examines, aretes: st.counters.aretes };
   if(ALGOS[r.algoKey].kind === 'arbre' && g.n){
-    // longueur du plus long chemin depuis le sommet 0 dans l'arbre obtenu
     const edges = [];
     for(let i=0;i<g.edges.length;i++) if(st.chosen[i]) edges.push(g.edges[i]);
     const tg = makeGraph(g.nodes, edges);
-    const d = new Int32Array(tg.n).fill(-1); d[0] = 0;
-    const q = [0]; let head = 0, far = 0, leaves = 0;
-    while(head < q.length){
-      const v = q[head++];
-      if(d[v] > d[far]) far = v;
-      for(const a of tg.adj[v]) if(d[a.to] === -1){ d[a.to] = d[v]+1; q.push(a.to); }
-    }
+    const sweep = src => {
+      const d = new Int32Array(tg.n).fill(-1); d[src] = 0;
+      const q = [src]; let head = 0, far = src;
+      while(head < q.length){
+        const v = q[head++];
+        if(d[v] > d[far]) far = v;
+        for(const a of tg.adj[v]) if(d[a.to] === -1){ d[a.to] = d[v]+1; q.push(a.to); }
+      }
+      return { far, d };
+    };
+    // Double balayage : partir d'un sommet quelconque mène à UNE extrémité du
+    // diamètre ; repartir de là donne le diamètre lui-même. Mesurer depuis le
+    // coin sous-estimerait le plus long chemin (de 15 % environ chez Prim).
+    const a = sweep(0), bb = sweep(a.far);
+    out.depuisDepart = a.d[a.far];
+    out.chemin = bb.d[bb.far];
+    let leaves = 0;
     for(let i=0;i<tg.n;i++) if(tg.adj[i].length === 1) leaves++;
-    out.chemin = d[far]; out.impasses = leaves;
+    out.impasses = leaves;
   }
   if(st.path.length) out.chemin = st.path.length - 1;
   return out;
@@ -1676,7 +1685,7 @@ function stat(arr, f){
 }
 
 function renderStats(data, keys, runs){
-  const cols = [['chemin','Chemin'],['impasses','Impasses'],['poids','Poids'],
+  const cols = [['chemin','Plus long chemin'],['impasses','Impasses'],['poids','Poids'],
                 ['examines','Sommets vus'],['aretes','Arêtes testées']];
   let html = '<table><tr><th>Algorithme</th>' +
     cols.map(c => '<th>'+c[1]+'</th>').join('') + '</tr>';
@@ -1691,7 +1700,9 @@ function renderStats(data, keys, runs){
     html += '</tr>';
   }
   html += '</table><div class="note">Moyenne en gras, étendue min–max dessous, sur ' +
-          runs + ' tirages de graines différentes.';
+          runs + ' tirages de graines différentes. Pour les algorithmes d’arbre, ' +
+          '« plus long chemin » est le <b>diamètre</b> de l’arbre obtenu, calculé par ' +
+          'double balayage ; pour les algorithmes de chemin, c’est la longueur du chemin trouvé.';
   const p = keys.indexOf('prim') >= 0 ? stat(data.prim, d=>d.poids) : null;
   const kr = keys.indexOf('kruskal') >= 0 ? stat(data.kruskal, d=>d.poids) : null;
   if(p && kr){
@@ -1746,7 +1757,7 @@ function drawHist(data, keys){
   ctx.fillStyle='#9d94c8'; ctx.font='10px system-ui';
   ctx.textAlign='left'; ctx.fillText(lo.toFixed(0), pad, H-pad+13);
   ctx.textAlign='right'; ctx.fillText(hi.toFixed(0), W-pad, H-pad+13);
-  ctx.textAlign='center'; ctx.fillText('longueur du plus long chemin', W/2, H-pad+13);
+  ctx.textAlign='center'; ctx.fillText('plus long chemin dans le résultat', W/2, H-pad+13);
 }
 
 /* ---- vérification automatique des invariantes ---- */
@@ -1868,10 +1879,12 @@ dfs: {
         d+=measure(a).chemin; p+=measure(b).chemin;
         ed+=a.st.counters.retenues; ep+=b.st.counters.retenues;
       }
-      return 'Sur '+N+' grilles 12×12 : chemin le plus long <b>'+(d/N).toFixed(1)+
+      return 'Sur '+N+' grilles 12×12, diamètre de l’arbre obtenu : <b>'+(d/N).toFixed(1)+
         '</b> en profondeur contre <b>'+(p/N).toFixed(1)+'</b> chez Prim, soit '+
         (d/p).toFixed(1)+'×.<br>Arêtes retenues : '+(ed/N)+' et '+(ep/N)+
-        ' — <b>identiques</b>, comme l’exige un arbre couvrant sur 144 sommets.';
+        ' — <b>identiques</b>, comme l’exige un arbre couvrant sur 144 sommets.<br>' +
+        'Le diamètre est mesuré par double balayage : une première recherche depuis le ' +
+        'coin atteint une extrémité, une seconde depuis cette extrémité donne le vrai maximum.';
     }}
 },
 
