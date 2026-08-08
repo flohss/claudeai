@@ -46,6 +46,22 @@
   .row{display:flex;gap:8px;flex-wrap:wrap;}
   .row>*{flex:1 1 120px;}
 
+  /* Barre de commandes au-dessus du plateau, et collante : on doit pouvoir
+     mettre en pause sans remonter chercher le bouton pendant qu'on regarde. */
+  .cmdBar{position:sticky;top:0;z-index:5;
+    background:#151329;border:1px solid rgba(150,130,255,.25);
+    border-radius:12px;padding:10px;margin-bottom:14px;
+    box-shadow:0 6px 18px rgba(0,0,0,.55);}
+  .cmdBar .fld{margin:9px 0 5px;}
+  .cmdBar .row{gap:6px;flex-wrap:nowrap;}
+  .cmdBar .row>.btn{flex:1 1 0;min-width:0;padding:11px 3px;font-size:.8rem;
+    font-weight:600;letter-spacing:0;white-space:nowrap;}
+  .cmdBar .opts{grid-template-columns:repeat(4,1fr);gap:6px;}
+  .cmdBar .opt{padding:7px 2px;font-size:.72rem;}
+  @media(max-width:440px){
+    .cmdBar .row>.btn{font-size:.71rem;padding:11px 1px;}
+    .cmdBar .opt{font-size:.64rem;padding:7px 1px;}
+  }
   .stage{display:grid;gap:12px;grid-template-columns:1fr;}
   @media(min-width:760px){ .stage{grid-template-columns:1fr 300px;} }
   .board{position:relative;width:100%;aspect-ratio:1/1;border-radius:12px;overflow:hidden;
@@ -183,6 +199,17 @@
   <!-- ================= OBSERVER ================= -->
   <div id="tab-observer">
     <div class="panel">
+      <div class="cmdBar">
+        <div class="row">
+          <button class="btn" id="runBtn">▶ Lancer</button>
+          <button class="btn ghost" id="pauseBtn" disabled>⏸ Pause</button>
+          <button class="btn ghost" id="stepBtn" disabled>⏭ Étape</button>
+          <button class="btn ghost" id="endBtn" disabled>⏩ Fin</button>
+        </div>
+        <label class="fld" style="margin-top:10px">Vitesse</label>
+        <div class="opts" id="speedOpts"></div>
+      </div>
+
       <div class="stage">
         <div>
           <div class="board"><canvas id="board"></canvas></div>
@@ -202,15 +229,6 @@
         </div>
       </div>
 
-      <label class="fld">Vitesse</label>
-      <div class="opts" id="speedOpts"></div>
-
-      <div class="row" style="margin-top:12px">
-        <button class="btn" id="runBtn">▶ Lancer</button>
-        <button class="btn ghost" id="pauseBtn" disabled>⏸ Pause</button>
-        <button class="btn ghost" id="stepBtn" disabled>⏭ Une étape</button>
-        <button class="btn ghost" id="endBtn" disabled>⏩ Terminer</button>
-      </div>
       <div class="note" id="lesson"></div>
       <button class="btn ghost" id="toDocBtn" style="margin-top:10px">📖 Comprendre cet algorithme en détail</button>
     </div>
@@ -1493,7 +1511,7 @@ function loop(){
 }
 
 function onFinish(){
-  $('runBtn').textContent = '↻ Relancer';
+  $('runBtn').textContent = '↻ Rejouer';
   $('pauseBtn').disabled = $('stepBtn').disabled = $('endBtn').disabled = true;
   const st = run.st;
   if(ALGOS[ui.algo].kind === 'arbre' && run.terrain !== 'plan' && run.terrain !== 'image'){
@@ -1507,7 +1525,7 @@ function onFinish(){
 $('runBtn').onclick = () => {
   if(run.done || !running) resetRun();
   running = true; paused = false;
-  $('runBtn').textContent = '⏹ En cours…';
+  $('runBtn').textContent = 'En cours';   // état, pas une action : pas d'icône
   $('pauseBtn').disabled = $('endBtn').disabled = false;
   $('stepBtn').disabled = true;
   cancelAnimationFrame(raf); loop();

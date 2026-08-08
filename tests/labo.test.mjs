@@ -247,6 +247,42 @@ export default async function testLabo(browser, base){
     controles.echecs === 0 && controles.total >= 8,
     '→ ' + (controles.total - controles.echecs) + '/' + controles.total);
 
+  /* ------------------------------------------------ ergonomie des commandes */
+  R.section('Barre de commandes');
+  await page.click('[data-tab="observer"]');
+  const ergo = await page.evaluate(() => {
+    const bar = document.querySelector('.cmdBar');
+    const board = document.querySelector('.board');
+    return { avantPlateau: bar.getBoundingClientRect().top < board.getBoundingClientRect().top,
+             collante: getComputedStyle(bar).position === 'sticky' };
+  });
+  R.check('les commandes sont au-dessus du plateau', ergo.avantPlateau);
+  R.check('la barre reste accessible pendant le défilement', ergo.collante);
+
+  for(const largeur of [360, 412, 900]){
+    const p = await openPage(browser, url,
+      { viewport:{ width:largeur, height:900 }, isMobile: largeur < 700, hasTouch: largeur < 700 });
+    const etats = [];
+    for(const phase of ['repos','encours','fini']){
+      if(phase === 'encours'){
+        await p.evaluate(() => { LABO.ui.speed = 'lent'; LABO.resetRun(); });
+        await p.click('#runBtn'); await sleep(250);
+      }
+      if(phase === 'fini'){ await p.click('#endBtn'); await sleep(250); }
+      etats.push(await p.evaluate(() =>
+        [...document.querySelectorAll('.cmdBar .row .btn')].map(e => ({
+          txt: e.textContent.trim(), coupe: e.scrollWidth > e.clientWidth + 1 }))));
+    }
+    const coupes = etats.flat().filter(x => x.coupe);
+    const uneLigne = await p.evaluate(() => new Set(
+      [...document.querySelectorAll('.cmdBar .row .btn')]
+        .map(e => Math.round(e.getBoundingClientRect().top))).size === 1);
+    R.check('à ' + largeur + ' px : libellés entiers et boutons sur une ligne',
+      coupes.length === 0 && uneLigne,
+      coupes.length ? '→ tronqué : ' + coupes.map(c => c.txt).join(', ') : '');
+    await p.context().close();
+  }
+
   /* ------------------------------------------ lisibilité du journal de bord */
   R.section('Journal de bord : la conclusion doit rester visible');
   await page.click('[data-tab="observer"]');
