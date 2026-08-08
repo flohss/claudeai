@@ -53,6 +53,11 @@
     border-radius:12px;padding:10px;margin-bottom:14px;
     box-shadow:0 6px 18px rgba(0,0,0,.55);}
   .cmdBar .fld{margin:9px 0 5px;}
+  .cmdLabels{display:flex;align-items:center;justify-content:space-between;margin:10px 0 5px;}
+  .soundBtn{width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.08);
+    border:1px solid rgba(255,255,255,.2);color:#eae6ff;font-size:.8rem;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;padding:0;line-height:1;}
+  .soundBtn.off{opacity:.45;}
   .cmdBar .row{gap:6px;flex-wrap:nowrap;}
   .cmdBar .row>.btn{flex:1 1 0;min-width:0;padding:11px 3px;font-size:.8rem;
     font-weight:600;letter-spacing:0;white-space:nowrap;}
@@ -206,7 +211,10 @@
           <button class="btn ghost" id="stepBtn" disabled>⏭ Étape</button>
           <button class="btn ghost" id="endBtn" disabled>⏩ Fin</button>
         </div>
-        <label class="fld" style="margin-top:10px">Vitesse</label>
+        <div class="cmdLabels">
+          <label class="fld" style="margin:0">Vitesse</label>
+          <button class="soundBtn" id="soundBtn" title="Couper le son">🔊</button>
+        </div>
         <div class="opts" id="speedOpts"></div>
       </div>
 
@@ -350,6 +358,80 @@ function shuffle(arr, rnd){
   for(let i=arr.length-1;i>0;i--){ const j=(rnd()*(i+1))|0; [arr[i],arr[j]]=[arr[j],arr[i]]; }
   return arr;
 }
+
+/* ============================================================================
+   0bis. SON — sonorisation du parcours
+   Deux précautions, sans lesquelles c'est un crépitement : les hauteurs sont
+   calées sur une gamme pentatonique, donc toute suite reste consonante, et la
+   cadence est bridée — aux vitesses élevées des milliers d'étapes passent par
+   image, on n'en sonorise qu'une poignée.
+   ============================================================================ */
+const sfx = (() => {
+  let ctx = null;
+  let actif = true;
+  try { actif = localStorage.getItem('labo.son') !== '0'; } catch(_){}
+
+  const ensure = () => {
+    if(!actif) return null;
+    if(!ctx){
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if(!AC) return null;
+      ctx = new AC();
+    }
+    if(ctx.state === 'suspended') ctx.resume();
+    return ctx;
+  };
+  const bip = (freq, duree, forme, vol) => {
+    const c = ensure(); if(!c) return;
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = forme || 'sine'; o.frequency.value = freq;
+    g.gain.setValueAtTime(0.0001, c.currentTime);
+    g.gain.exponentialRampToValueAtTime(vol || 0.05, c.currentTime + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + duree);
+    o.connect(g); g.connect(c.destination);
+    o.start(); o.stop(c.currentTime + duree + 0.02);
+  };
+  const DEGRES = [0,2,4,7,9,12,14,16,19,21,24,26];
+  const gamme = (t, base) => {
+    const i = Math.max(0, Math.min(DEGRES.length-1, Math.floor(t * DEGRES.length)));
+    return (base || 196) * Math.pow(2, DEGRES[i] / 12);
+  };
+  let dernier = 0;
+
+  return {
+    unlock(){ ensure(); },
+    actif(){ return actif; },
+    basculer(){
+      actif = !actif;
+      try { localStorage.setItem('labo.son', actif ? '1' : '0'); } catch(_){}
+      if(!actif && ctx) ctx.suspend(); else ensure();
+      return actif;
+    },
+    fin(){ if(!actif) return; bip(660,0.12,'triangle',0.05);
+           setTimeout(() => bip(880,0.16,'triangle',0.05), 110); },
+    /** Un son par étape d'algorithme, au plus ~14 par seconde. */
+    etape(genre, t){
+      if(!actif) return;
+      const now = performance.now();
+      if(now - dernier < 70) return;
+      dernier = now;
+      const v = Math.max(0, Math.min(1, t || 0));
+      switch(genre){
+        case 'look':   bip(gamme(v, 523), 0.03, 'sine',     0.010); break;
+        case 'edge':   bip(gamme(v, 196), 0.07, 'triangle', 0.030); break;
+        case 'back':   bip(88 + v * 18,   0.10, 'sine',     0.026); break;
+        case 'skip':   bip(120 + v * 20,  0.05, 'square',   0.012); break;
+        case 'merge':  bip(gamme(v, 262), 0.06, 'square',   0.018);
+                       setTimeout(() => bip(gamme(v, 392), 0.05, 'square', 0.014), 55);
+                       dernier = now + 60; break;   // on réserve la place du second son
+        case 'wave':   bip(gamme(v, 262), 0.06, 'sine',     0.028); break;
+        case 'settle': bip(gamme(v, 220), 0.06, 'triangle', 0.026); break;
+        case 'walk':   bip(gamme(v, 220), 0.06, 'triangle', 0.026); break;
+        case 'wall':   bip(70 + v * 30,   0.09, 'square',   0.022); break;
+      }
+    }
+  };
+})();
 
 /* ============================================================================
    1. TERRAINS — chacun produit un graphe { nodes, edges, adj }
@@ -577,6 +659,7 @@ function newState(g){
     parent: new Int32Array(g.n).fill(-1),
     comp: null, rooms: [], region: null, path: [],
     struct: { kind:'aucune' },
+    tone: null,                          // son de l'étape en cours
     counters: { examines:0, aretes:0, retenues:0, retours:0 },
     logs: [], phase: '', progress: 0,
     note(msg, cls){
@@ -610,12 +693,14 @@ function* algoDFS(run){
       st.note('Plus aucune voisine vierge : je dépile.', 'k4');
       stack.pop(); st.counters.retours++;
       st.nodeState[v] = 2;
+      st.tone = { k:'back', v:st.progress };
       yield;
       continue;
     }
     st.candidates = opts.map(a => a.e);
     st.note(opts.length + (opts.length > 1 ? ' voisines vierges : je tire au sort.'
                                            : ' seule voisine vierge.'), 'k2');
+    st.tone = { k:'look', v:st.progress };
     yield;
 
     const pick = opts[(run.rnd() * opts.length) | 0];
@@ -627,6 +712,7 @@ function* algoDFS(run){
     stack.push(pick.to);
     st.candidates = [];
     st.note('Je retiens cette arête et j’avance.', 'k1');
+    st.tone = { k:'edge', v:st.progress };
     yield;
   }
   st.current = -1; st.progress = 1;
@@ -657,6 +743,7 @@ function* algoPrim(run){
     const top = heap.a[0];
     st.candidates = [top.e]; st.current = top.to;
     st.note('Sommet du tas : arête de coût ' + top.w.toFixed(3) + '. Je l’examine.', 'k2');
+    st.tone = { k:'look', v:st.progress };
     yield;
 
     const best = heap.pop();
@@ -669,6 +756,7 @@ function* algoPrim(run){
       st.note(dansLArbre === g.n
         ? 'Tous les sommets sont reliés : je vide le tas de ses arêtes périmées.'
         : 'Ce sommet a déjà rejoint la zone : arête inutile, je jette.', 'k4');
+      st.tone = { k:'skip', v:st.progress };
       yield;
       continue;
     }
@@ -677,6 +765,7 @@ function* algoPrim(run){
     add(best.to);
     st.candidates = [];
     st.note('Sommet rattaché pour ' + best.w.toFixed(3) + '.', 'k1');
+    st.tone = { k:'edge', v:st.progress };
     yield;
   }
   st.current = -1; st.progress = 1;
@@ -708,12 +797,14 @@ function* algoKruskal(run){
     st.candidates = [ei];
     st.counters.aretes++;
     st.note('Arête nº ' + tested + ' (coût ' + e.w.toFixed(3) + ') : deux côtés déjà reliés ?', 'k2');
+    st.tone = { k:'look', v:st.progress };
     yield;
 
     st.counters.examines++;
     if(uf.find(e.a) === uf.find(e.b)){
       st.note('Oui, même îlot : je la rejette, sinon je créerais un cycle.', 'k4');
       st.candidates = [];
+      st.tone = { k:'skip', v:st.progress };
       yield;
       continue;
     }
@@ -721,6 +812,7 @@ function* algoKruskal(run){
     st.chosen[ei] = 1; st.counters.retenues++;
     st.note('Non : deux îlots distincts, je fusionne. Reste ' + uf.count + ' îlots.', 'k1');
     st.candidates = [];
+    st.tone = { k:'merge', v:st.progress };
     yield;
     if(!seg && uf.count === 1) break;
   }
@@ -752,6 +844,7 @@ function* algoBFS(run){
     }
     st.candidates = news;
     if(news.length) st.note('Distance ' + st.dist[v] + ' : ' + news.length + ' nouveaux sommets en file.', 'k2');
+    st.tone = { k:'wave', v: (st.dist[v] % 12) / 12 };
     yield;
     st.candidates = [];
   }
@@ -803,6 +896,8 @@ function* dijkstraLike(run, useH){
     }
     st.candidates = news;
     st.note('Coût ' + st.dist[top.v].toFixed(3) + ' figé. ' + heap.size + ' sommets en attente.', 'k2');
+    st.tone = { k:'settle',
+                v: ((st.dist[top.v] / run.poidsMoyen) % 12) / 12 };
     yield;
     st.candidates = [];
   }
@@ -856,6 +951,7 @@ function* algoMur(run){
     st.dist[v] = trail[v];               // réutilisé pour colorer les repassages
     st.progress = Math.min(0.99, steps / (g.n * 2));
     if(steps % 7 === 0) st.note('Je longe… ' + steps + ' pas effectués.', 'k2');
+    st.tone = { k:'walk', v: facing / 4 };
     yield;
   }
   if(v !== run.target)
@@ -891,6 +987,7 @@ function* algoDivision(run){
     st.region = [r0,c0,r1,c1];
     st.note('Zone de ' + h + ' sur ' + w + ' : encore divisible.', 'k2');
     st.progress = Math.min(0.98, built / estimate);
+    st.tone = { k:'look', v:st.progress };
     yield;
 
     const horiz = (h === w) ? run.rnd() < 0.5 : h > w;
@@ -907,6 +1004,7 @@ function* algoDivision(run){
         st.counters.aretes++;
       }
       st.note('Mur posé, une porte laissée ouverte.', 'k3');
+      st.tone = { k:'wall', v:st.progress };
       yield;
       regions.push([r0,c0,wr,c1], [wr+1,c0,r1,c1]);
     } else {
@@ -920,6 +1018,7 @@ function* algoDivision(run){
         st.counters.aretes++;
       }
       st.note('Mur posé, une porte laissée ouverte.', 'k3');
+      st.tone = { k:'wall', v:st.progress };
       yield;
       regions.push([r0,c0,r1,wc], [r0,wc+1,r1,c1]);
     }
@@ -981,6 +1080,10 @@ class Run {
     // comporterait exactement comme Dijkstra.
     this.hScale = 1;
     this.hMin = 1;              // coût minimal d'un pas, pour rester admissible
+    // poids moyen d'une arête : convertit un coût cumulé en nombre de pas, ce qui
+    // donne une hauteur de note lisible quelle que soit l'échelle du terrain
+    this.poidsMoyen = g.edges.length
+      ? g.edges.reduce((a,e) => a + e.w, 0) / g.edges.length : 1;
     this.it = RUNNERS[algoKey](this);
     this.done = false;
   }
@@ -1503,14 +1606,20 @@ function loop(){
     const base = Math.max(1, Math.round(run.g.n / 45));
     let steps = Math.max(1, Math.round(base * SPEEDS[ui.speed].mult));
     if(ui.speed === 'eclair') steps = 200000;
-    let guard = steps;
-    while(guard-- > 0 && !run.done) run.step();
-    if(run.done){ running = false; onFinish(); }
+    let guard = steps, tone = null;
+    while(guard-- > 0 && !run.done){
+      run.st.tone = null;
+      run.step();
+      if(run.st.tone) tone = run.st.tone;      // on retient le dernier son du lot
+    }
+    if(run.done){ running = false; tone = null; onFinish(); }
+    if(tone) sfx.etape(tone.k, tone.v);
   }
   paint();
 }
 
 function onFinish(){
+  sfx.fin();
   $('runBtn').textContent = '↻ Rejouer';
   $('pauseBtn').disabled = $('stepBtn').disabled = $('endBtn').disabled = true;
   const st = run.st;
@@ -1523,6 +1632,7 @@ function onFinish(){
 }
 
 $('runBtn').onclick = () => {
+  sfx.unlock();
   if(run.done || !running) resetRun();
   running = true; paused = false;
   $('runBtn').textContent = 'En cours';   // état, pas une action : pas d'icône
@@ -1535,7 +1645,14 @@ $('pauseBtn').onclick = () => {
   $('pauseBtn').textContent = paused ? '▶ Reprendre' : '⏸ Pause';
   $('stepBtn').disabled = !paused;
 };
-$('stepBtn').onclick = () => { if(!run.done){ run.step(); if(run.done){ running=false; onFinish(); } paint(); } };
+$('stepBtn').onclick = () => {
+  if(run.done) return;
+  run.st.tone = null;
+  run.step();
+  if(run.st.tone) sfx.etape(run.st.tone.k, run.st.tone.v);
+  if(run.done){ running = false; onFinish(); }
+  paint();
+};
 $('endBtn').onclick = () => { run.finish(); running = false; onFinish(); paint(); };
 
 /* ============================================================================
@@ -1579,13 +1696,20 @@ function raceLoop(){
     const base = Math.max(1, Math.round(racers[0].g.n / 45));
     let steps = Math.max(1, Math.round(base * SPEEDS[ui.speed].mult));
     if(ui.speed === 'eclair') steps = 200000;
-    let alive = false;
+    let alive = false, tone = null;
     for(const r of racers){
       let guard = steps;
-      while(guard-- > 0 && !r.done) r.step();
+      while(guard-- > 0 && !r.done){
+        r.st.tone = null;
+        r.step();
+        // seul le premier concurrent est sonorisé : quatre pistes simultanées
+        // seraient inaudibles
+        if(r === racers[0] && r.st.tone) tone = r.st.tone;
+      }
       if(!r.done) alive = true;
     }
-    if(!alive){ raceRunning = false; raceVerdict(); }
+    if(tone && alive) sfx.etape(tone.k, tone.v);
+    if(!alive){ raceRunning = false; sfx.fin(); raceVerdict(); }
   }
   paintRace();
 }
@@ -1634,6 +1758,7 @@ function raceVerdict(){
 }
 
 $('raceRunBtn').onclick = () => {
+  sfx.unlock();
   buildRace();
   raceRunning = true; racePaused = false;
   $('racePauseBtn').disabled = $('raceEndBtn').disabled = false;
@@ -2374,6 +2499,13 @@ $('loopOpt').onclick = () => {
   if(ui.gridMode === 'open') return;
   ui.loops = !ui.loops; buildOptions(); resetRun();
 };
+function majBoutonSon(){
+  const on = sfx.actif();
+  $('soundBtn').textContent = on ? '🔊' : '🔇';
+  $('soundBtn').classList.toggle('off', !on);
+}
+$('soundBtn').onclick = () => { sfx.basculer(); majBoutonSon(); };
+
 $('modeMaze').onclick = () => { ui.gridMode = 'maze'; buildOptions(); resetRun(); };
 $('modeOpen').onclick = () => {
   if(ui.algo === 'mur') return;          // longer un mur n'a de sens que dans un labyrinthe
@@ -2410,6 +2542,7 @@ $('imgFile').onchange = e => {
 window.addEventListener('resize', () => { paint(); if(racers.length) paintRace(); });
 
 buildOptions();
+majBoutonSon();
 buildDocOpts();
 renderDoc();
 syncFields();
@@ -2422,7 +2555,7 @@ $('toDocBtn').onclick = () => {
 };
 
 /* accès pour la console et les tests */
-window.LABO = { ui, get run(){ return run; }, get racers(){ return racers; },
+window.LABO = { ui, sfx, get run(){ return run; }, get racers(){ return racers; },
                 DOC, get docKey(){ return docKey; }, set docKey(v){ docKey=v; buildDocOpts(); renderDoc(); },
                 get exRun(){ return exRun; },
                 Run, ALGOS, TERRAINS, measure, allReachable, applyCode, seedCode,

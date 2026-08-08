@@ -205,8 +205,8 @@ parfait : c'est le pont entre les deux mondes.
 ## Quatre modes
 
 **Observer** — un algorithme, pas à pas, avec la délibération visible (les arêtes
-envisagées avant le choix), le journal de raisonnement, les compteurs, et surtout **la
-structure de données dessinée en direct** : la pile qui monte et descend, la file qui
+envisagées avant le choix), le journal de raisonnement, les compteurs, une
+**sonorisation du parcours**, et surtout **la structure de données dessinée en direct** : la pile qui monte et descend, la file qui
 défile, le tas dont la racine est toujours le minimum, la forêt union-find dont les
 îlots fusionnent. C'est elle, et elle seule, qui distingue ces algorithmes — ils font
 sinon tous la même chose.
@@ -227,6 +227,20 @@ vers les algorithmes à lui comparer.
 Chaque fiche se termine par une affirmation et un bouton qui la **vérifie en la
 mesurant** sur-le-champ. Aucun chiffre n'est écrit en dur : ils sont tous calculés au
 moment où tu cliques.
+
+### Le son du parcours
+
+Chaque type d'étape a son timbre : l'examen d'un candidat, l'arête retenue, le
+dépilement, l'arête écartée, la fusion de deux îlots, le mur posé. Deux hauteurs
+portent une information plutôt qu'une simple couleur : dans le parcours en largeur la
+note monte avec la distance au départ, puis recommence — on **entend** le front
+s'éloigner ; chez la main sur le mur, la note dépend de la direction suivie, si bien
+qu'on entend le promeneur tourner aux angles.
+
+Comme dans le jeu, les hauteurs sont calées sur une gamme pentatonique et la cadence est
+bridée à une quinzaine de sons par seconde. Le bouton 🔊 de la barre de commandes coupe
+le son, et le réglage est retenu. En mode Course, seul le premier concurrent est
+sonorisé : quatre pistes simultanées seraient inaudibles.
 
 ## Quelques résultats à retrouver soi-même
 
@@ -281,6 +295,6 @@ npx playwright install chromium
 npm test
 ```
 
-95 contrôles, dont les propriétés mathématiques vérifiées contre des références
+110 contrôles, dont les propriétés mathématiques vérifiées contre des références
 recalculées dans le test lui-même. Le détail de ce qui est couvert — et surtout **ce qui
 ne l'est pas** — se trouve dans [`tests/README.md`](tests/README.md).

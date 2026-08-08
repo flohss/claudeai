@@ -247,6 +247,52 @@ export default async function testLabo(browser, base){
     controles.echecs === 0 && controles.total >= 8,
     '→ ' + (controles.total - controles.echecs) + '/' + controles.total);
 
+  /* ---------------------------------------------------------- sonorisation */
+  R.section('Sonorisation du parcours');
+  const son = await openPage(browser, url, { viewport:{ width:900, height:1200 } });
+  await son.evaluate(() => {
+    window.__notes = [];
+    const AC = window.AudioContext || window.webkitAudioContext;
+    const orig = AC.prototype.createOscillator;
+    AC.prototype.createOscillator = function(){
+      const o = orig.call(this);
+      const rec = { t: performance.now(), f:0 };
+      window.__notes.push(rec);
+      queueMicrotask(() => { rec.f = o.frequency.value; });
+      return o;
+    };
+  });
+  for(const [algo, terrain, taille] of [['dfs','grille',14], ['prim','nuage',80],
+                                        ['kruskal','nuage',80], ['bfs','grille',14],
+                                        ['dijkstra','grille',14], ['astar','grille',14],
+                                        ['mur','grille',12], ['division','plan',14]]){
+    await son.evaluate(([a,t,s]) => { LABO.ui.algo=a; LABO.ui.terrain=t; LABO.ui.size=s;
+      LABO.ui.speed='normal'; window.__notes=[]; LABO.resetRun(); }, [algo,terrain,taille]);
+    await son.click('#runBtn');
+    await son.waitForFunction(() => LABO.run.done, null, { timeout:60000 });
+    await sleep(250);
+    const a = await son.evaluate(() => {
+      const n = window.__notes;
+      const span = n.length > 1 ? (n[n.length-1].t - n[0].t)/1000 : 0;
+      return { nb:n.length, cadence: span > 0 ? n.length/span : 0,
+               hauteurs: new Set(n.map(x => Math.round(x.f))).size };
+    });
+    R.check('« ' + algo + ' » sonorisé, cadence bridée, hauteurs variées',
+      a.nb >= 5 && a.cadence <= 22 && a.hauteurs >= 4,
+      '→ ' + a.nb + ' notes, ' + a.cadence.toFixed(1) + '/s, ' + a.hauteurs + ' hauteurs');
+  }
+  await son.evaluate(() => { window.__notes = []; LABO.ui.algo='dfs';
+    LABO.ui.terrain='grille'; LABO.resetRun(); });
+  await son.click('#soundBtn');
+  await son.click('#runBtn');
+  await son.waitForFunction(() => LABO.run.done, null, { timeout:60000 });
+  R.check('le bouton coupe réellement le son',
+    (await son.evaluate(() => window.__notes.length)) === 0);
+  await son.reload({ waitUntil:'networkidle' });
+  R.check('le réglage du son survit au rechargement',
+    (await son.textContent('#soundBtn')).trim() === '🔇');
+  await son.context().close();
+
   /* ------------------------------------------------ ergonomie des commandes */
   R.section('Barre de commandes');
   await page.click('[data-tab="observer"]');
