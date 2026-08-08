@@ -93,8 +93,9 @@ rejoue le labyrinthe en 2D avec deux méthodes, l'une après l'autre :
    Le plus court chemin reste affiché en filigrane bleu pour la comparaison.
 
 Un verdict chiffré conclut. Sur le motif **Ouvert**, qui contient des boucles, la main
-gauche échoue environ une fois sur quatre et tourne indéfiniment : c'est la limite
-connue de la méthode, et le jeu le dit franchement plutôt que de la masquer.
+gauche tourne parfois indéfiniment : mesuré sur 120 tirages par cas, elle échoue 22 %
+du temps en 12×12 et 28 % en 17×17, contre **0 %** sur les motifs sans boucle. C'est la
+limite connue de la méthode, et le jeu l'annonce franchement plutôt que de la masquer.
 
 ## Phase 2 — le labyrinthe en 3D
 
