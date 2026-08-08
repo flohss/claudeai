@@ -36,6 +36,35 @@ Puis viennent deux phases bonus, tout aussi visibles :
 2. **Chemin de référence** — il trace le plus court chemin, qui te sert de score à
    battre.
 
+## Graine partageable
+
+Chaque labyrinthe porte un code court du genre `NEON-5D5PGS`, affiché pendant la
+conception et sur l'écran de victoire. Il encode le décor, le motif, la difficulté et
+la graine du tirage : **le même code redonne exactement le même labyrinthe**, sur
+n'importe quel appareil. De quoi lancer quelqu'un sur ton tracé et comparer les temps.
+
+Trois façons de le rejouer :
+
+- colle le code dans le champ « Graine » du menu, puis « Charger » ;
+- ouvre l'adresse `labyrinthe3d.html#NEON-5D5PGS`, la graine est chargée toute seule ;
+- laisse le champ vide pour un labyrinthe tiré au hasard, comme d'habitude.
+
+## Phase 3 — regarder l'ordinateur résoudre
+
+Depuis la pause ou l'écran de victoire, le bouton **🤖 Voir l'ordinateur résoudre**
+rejoue le labyrinthe en 2D avec deux méthodes, l'une après l'autre :
+
+1. **Le parcours en largeur** avance sur tous les fronts à la fois — les vagues
+   colorées montrent la progression. Il trouve forcément le plus court chemin, mais
+   doit examiner presque tout le labyrinthe pour en être sûr.
+2. **La main gauche sur le mur** applique une règle bête : longer le mur de gauche,
+   sans carte ni mémoire. Le tracé se colore de plus en plus chaud là où elle repasse.
+   Le plus court chemin reste affiché en filigrane bleu pour la comparaison.
+
+Un verdict chiffré conclut. Sur le motif **Ouvert**, qui contient des boucles, la main
+gauche échoue environ une fois sur quatre et tourne indéfiniment : c'est la limite
+connue de la méthode, et le jeu le dit franchement plutôt que de la masquer.
+
 ## Phase 2 — le labyrinthe en 3D
 
 Le bouton « Entrer dans le labyrinthe » bascule en vue subjective.
@@ -53,6 +82,9 @@ Le bouton « Entrer dans le labyrinthe » bascule en vue subjective.
 Le bouton 🗺 fait défiler trois états : carte masquée → **zone explorée uniquement** →
 carte complète. La boussole 🧭 pointe vers la sortie et affiche la distance ; le bouton
 🔊 coupe le son.
+
+Le bouton 💡, en bas à droite, allume au sol le chemin vers la sortie pendant sept
+secondes. Un temps obtenu avec au moins un indice n'est pas enregistré comme record.
 
 Le meilleur temps est retenu par navigateur pour chaque combinaison motif + difficulté.
 
@@ -88,5 +120,11 @@ de génération intéressante à regarder :
   structure servant à l'affichage 2D, aux collisions et à la construction 3D.
 - Les algorithmes sont écrits comme des **générateurs JavaScript** : une itération =
   une étape visible, ce qui permet de régler la vitesse ou de tout terminer d'un coup
-  sans dupliquer le code.
+  sans dupliquer le code. Les solveurs suivent le même principe.
+- Le tirage passe par un générateur pseudo-aléatoire à graine (mulberry32) plutôt que
+  par `Math.random`, ce qui rend chaque labyrinthe reproductible à partir de son code.
+  Seules les textures et les particules gardent un hasard libre.
+- Le chronomètre est lu sur l'horloge réelle, pas sur le delta d'image : ce dernier est
+  plafonné à 50 ms pour protéger les collisions, et s'en servir pour compter le temps
+  ferait retarder la montre sur tout appareil qui descend sous 20 images par seconde.
 - Sons synthétisés à la volée en WebAudio, aucun fichier audio.

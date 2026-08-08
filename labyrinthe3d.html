@@ -73,8 +73,45 @@
     border:1px solid rgba(150,130,255,.15);}
   .stat b{display:block;font-size:1rem;color:#fff;}
   .stat span{font-size:.6rem;text-transform:uppercase;letter-spacing:.8px;color:#9d94c8;}
-  #speedOpts{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px;}
-  #speedOpts .opt{font-size:.75rem;padding:8px 2px;}
+  #speedOpts,.speedGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px;}
+  #speedOpts .opt,.speedGrid .opt{font-size:.75rem;padding:8px 2px;}
+
+  /* graine partageable */
+  .seedRow{display:flex;gap:8px;}
+  .seedRow input{flex:1;min-width:0;padding:10px 12px;border-radius:10px;font-family:inherit;
+    background:rgba(0,0,0,.32);border:1px solid rgba(150,130,255,.25);color:#eae6ff;
+    font-size:.9rem;letter-spacing:1px;text-transform:uppercase;}
+  .seedRow input::placeholder{color:#6f679b;letter-spacing:.5px;text-transform:none;}
+  .seedRow input:focus{outline:none;border-color:#7b5bff;}
+  .seedRow .btn{margin-top:0;width:auto;padding:10px 14px;flex:0 0 auto;}
+  #seedMsg{font-size:.74rem;margin-top:6px;min-height:1em;color:#9d94c8;}
+  #seedMsg.ok{color:#6cff8f;} #seedMsg.err{color:#ff7ba6;}
+  .codeRow{display:flex;align-items:center;gap:10px;margin-bottom:12px;padding:8px 12px;
+    background:rgba(0,0,0,.3);border-radius:10px;border:1px solid rgba(150,130,255,.18);}
+  .codeRow span{font-size:.68rem;text-transform:uppercase;letter-spacing:1.4px;color:#a89bff;}
+  .codeRow b{flex:1;font-family:ui-monospace,Consolas,monospace;font-size:.95rem;letter-spacing:1.5px;}
+  .codeRow button{background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.2);
+    color:#eae6ff;border-radius:8px;padding:6px 10px;font-size:.72rem;cursor:pointer;font-family:inherit;}
+
+  /* écran de résolution */
+  #solveWrap{position:relative;width:100%;aspect-ratio:1/1;max-height:48vh;margin:0 auto 12px;
+    border-radius:14px;overflow:hidden;border:1px solid rgba(150,130,255,.25);background:#05050a;}
+  #solveCanvas{width:100%;height:100%;display:block;}
+  #solveBar{height:100%;width:0%;border-radius:4px;
+    background:linear-gradient(90deg,#7bd9ff,#6cff8f);transition:width .12s linear;}
+  #solveLog{height:64px;overflow:hidden;font-size:.74rem;line-height:1.5;color:#b9b1e6;
+    background:rgba(0,0,0,.3);border-radius:10px;padding:8px 10px;margin-bottom:10px;
+    font-family:ui-monospace,'SF Mono',Consolas,monospace;}
+  #solveLog div{opacity:.55;} #solveLog div:last-child{opacity:1;color:#fff;}
+  #solveLog .k1{color:#7bd9ff;}#solveLog .k2{color:#ffb04d;}
+  #solveLog .k3{color:#6cff8f;}#solveLog .k4{color:#ff7ba6;}
+  #verdict{font-size:.78rem;line-height:1.6;color:#c9c2ea;background:rgba(123,91,255,.12);
+    border:1px solid rgba(150,130,255,.25);border-radius:10px;padding:10px 12px;
+    margin-bottom:12px;display:none;}
+  #verdict.on{display:block;}
+  #verdict b{color:#fff;}
+  #hintBtn{top:auto;bottom:calc(76px + env(safe-area-inset-bottom));
+    right:calc(12px + env(safe-area-inset-right));}
 
   /* ---------- HUD ---------- */
   #hud{position:fixed;inset:0;z-index:10;pointer-events:none;display:none;}
@@ -113,7 +150,8 @@
   #joystickStick{position:absolute;width:46px;height:46px;border-radius:50%;
     background:rgba(255,255,255,.32);border:1px solid rgba(255,255,255,.5);left:27px;top:27px;}
   #lookZone{position:absolute;right:0;top:64px;bottom:0;width:55%;pointer-events:auto;z-index:1;}
-  #lockHint{position:fixed;inset:0;z-index:15;display:none;align-items:center;justify-content:center;
+  /* z-index 9 : sous le HUD (10), pour que pause/carte/indice restent cliquables */
+  #lockHint{position:fixed;inset:0;z-index:9;display:none;align-items:center;justify-content:center;
     font-size:1rem;background:rgba(0,0,0,.42);cursor:pointer;text-align:center;padding:24px;
     line-height:1.6;}
   #lockHint.on{display:flex;}
@@ -145,6 +183,16 @@
     <div class="group"><label>Motif du labyrinthe</label><div class="options" id="patternOpts"></div></div>
     <div class="group"><label>Difficulté</label><div class="options four" id="diffOpts"></div></div>
 
+    <div class="group">
+      <label>Graine — pour rejouer un labyrinthe précis</label>
+      <div class="seedRow">
+        <input id="seedInput" placeholder="ex. NEON-5D5PGS" autocomplete="off"
+               autocapitalize="characters" spellcheck="false">
+        <button class="btn ghost" id="seedBtn">Charger</button>
+      </div>
+      <div id="seedMsg"></div>
+    </div>
+
     <button class="btn" id="startBtn">▶ Concevoir le labyrinthe</button>
   </div>
 </div>
@@ -168,6 +216,11 @@
       <div class="stat"><b id="stBack">0</b><span>retours</span></div>
     </div>
 
+    <div class="codeRow">
+      <span>Graine</span><b id="genCode">—</b>
+      <button id="copyCodeBtn" title="Copier la graine">⧉ Copier</button>
+    </div>
+
     <div class="group" style="margin-bottom:10px">
       <label>Vitesse de réflexion</label>
       <div id="speedOpts"></div>
@@ -177,6 +230,39 @@
     <div class="row">
       <button class="btn ghost" id="skipBtn">⏭ Terminer tout de suite</button>
       <button class="btn ghost" id="genBackBtn">↩ Menu</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ RÉSOLUTION PAR L'ORDINATEUR ============ -->
+<div id="solveScreen" class="screen">
+  <div class="panel">
+    <h1 style="font-size:1.3rem">L'ORDINATEUR CHERCHE</h1>
+    <div class="subtitle" id="solveSub">Deux méthodes, le même labyrinthe.</div>
+
+    <div id="solveWrap"><canvas id="solveCanvas"></canvas></div>
+
+    <div id="phaseRow"><b id="solvePhase">Préparation</b><span id="solvePct">0 %</span></div>
+    <div id="bar"><div id="solveBar"></div></div>
+
+    <div id="solveLog"></div>
+
+    <div id="stats">
+      <div class="stat"><b id="svExplored">0</b><span>cases vues</span></div>
+      <div class="stat"><b id="svSteps">0</b><span>pas</span></div>
+      <div class="stat"><b id="svLen">—</b><span>chemin</span></div>
+    </div>
+
+    <div id="verdict"></div>
+
+    <div class="group" style="margin-bottom:10px">
+      <label>Vitesse</label>
+      <div id="solveSpeedOpts" class="speedGrid"></div>
+    </div>
+
+    <div class="row">
+      <button class="btn ghost" id="solveSkipBtn">⏭ Terminer</button>
+      <button class="btn ghost" id="solveBackBtn">↩ Retour</button>
     </div>
   </div>
 </div>
@@ -191,6 +277,7 @@
   <div id="minimapWrap"><canvas id="minimap" width="132" height="132"></canvas></div>
   <canvas id="compass" width="104" height="104"></canvas>
   <div id="crosshair"></div>
+  <div class="hudBtn" id="hintBtn" title="Montrer le chemin">💡</div>
   <div id="hint">Trouve la sortie lumineuse</div>
   <div id="joystickZone"><div id="joystickBase"><div id="joystickStick"></div></div></div>
   <div id="lookZone"></div>
@@ -205,6 +292,7 @@
     <h2 id="ovTitle">Pause</h2>
     <p id="ovText"></p>
     <button class="btn" id="ovPrimary">Reprendre</button>
+    <button class="btn ghost" id="ovSolve">🤖 Voir l'ordinateur résoudre</button>
     <button class="btn ghost" id="ovSecondary">Nouveau labyrinthe</button>
     <button class="btn ghost" id="ovThird">Menu</button>
   </div>
@@ -287,6 +375,49 @@ const SPEEDS = {
 
 const state = { theme:'antique', pattern:'classique', diff:'moyen', speed:'normal' };
 
+/* ----------------------------------------------------------------------------
+   Graine : un générateur pseudo-aléatoire reproductible (mulberry32) et un code
+   court qui encode décor + motif + difficulté + graine, du genre NEON-5D5PGS.
+   ---------------------------------------------------------------------------- */
+function mulberry32(a){
+  return function(){
+    a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const THEME_CODES = { antique:'ANTI', neon:'NEON', foret:'FORE',
+                      espace:'ORBI', glace:'GLAC', volcan:'VOLC' };
+const SEED_MAX = 0x1000000;   // 24 bits
+
+function makeCode(theme, pattern, diff, seed){
+  const p = Object.keys(PATTERNS).indexOf(pattern);
+  const d = Object.keys(DIFFS).indexOf(diff);
+  const packed = ((p * 4 + d) * SEED_MAX) + (seed % SEED_MAX);
+  return THEME_CODES[theme] + '-' + packed.toString(36).toUpperCase();
+}
+
+function parseCode(str){
+  const m = String(str || '').trim().toUpperCase().replace(/\s+/g,'')
+              .match(/^([A-Z]{4})-([0-9A-Z]+)$/);
+  if(!m) return null;
+  const theme = Object.keys(THEME_CODES).find(k => THEME_CODES[k] === m[1]);
+  if(!theme) return null;
+  const packed = parseInt(m[2], 36);
+  if(!isFinite(packed) || packed < 0) return null;
+  const seed = packed % SEED_MAX;
+  const rest = Math.floor(packed / SEED_MAX);
+  const pattern = Object.keys(PATTERNS)[Math.floor(rest / 4)];
+  const diff = Object.keys(DIFFS)[rest % 4];
+  if(!pattern || !diff) return null;
+  return { theme, pattern, diff, seed };
+}
+
+let pendingSeed = null;   // graine imposée pour la prochaine génération
+let currentCode = '—';
+
 /* ============================================================================
    2. MENU
    ============================================================================ */
@@ -312,6 +443,7 @@ function refreshMenu(){
   buildOpts('patternOpts', PATTERNS, 'pattern', d => d.desc);
   buildOpts('diffOpts',    DIFFS,    'diff',    d => d.size + '×' + d.size);
   buildOpts('speedOpts',   SPEEDS,   'speed');
+  buildOpts('solveSpeedOpts', SPEEDS, 'speed');
 }
 
 /* ============================================================================
@@ -322,9 +454,11 @@ function refreshMenu(){
 const MARK = { UNVISITED:0, VISITED:1, FRONTIER:2, CURRENT:3, PATH:4 };
 
 class MazeBuilder {
-  constructor(size, patternKey){
+  constructor(size, patternKey, seed){
     this.size = size;
     this.N = size * 2 + 1;
+    this.seed = seed >>> 0;
+    this.rnd = mulberry32(this.seed);   // même graine = même labyrinthe
     this.pattern = PATTERNS[patternKey];
     this.bitmap = new Uint8Array(this.N * this.N).fill(1);
     this.mark = new Uint8Array(size * size);       // état visuel des cellules
@@ -414,7 +548,7 @@ class MazeBuilder {
         continue;
       }
 
-      const [nr,nc] = opts[(Math.random() * opts.length) | 0];
+      const [nr,nc] = opts[(this.rnd() * opts.length) | 0];
       visited[this.ci(nr,nc)] = 1;
       this.carveCell(nr,nc);
       this.carveWall(r,c,nr,nc);
@@ -444,7 +578,7 @@ class MazeBuilder {
     }
 
     while(frontier.length){
-      const i = (Math.random() * frontier.length) | 0;
+      const i = (this.rnd() * frontier.length) | 0;
       const [r,c,nr,nc] = frontier.splice(i,1)[0];
       if(visited[this.ci(nr,nc)]) continue;
 
@@ -488,7 +622,7 @@ class MazeBuilder {
       if(r < this.size-1) edges.push([r,c,r+1,c]);
       if(c < this.size-1) edges.push([r,c,r,c+1]);
     }
-    for(let i=edges.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; const t=edges[i]; edges[i]=edges[j]; edges[j]=t; }
+    for(let i=edges.length-1;i>0;i--){ const j=(this.rnd()*(i+1))|0; const t=edges[i]; edges[i]=edges[j]; edges[j]=t; }
 
     let merged = 0, tested = 0;
     const needed = this.total - 1;
@@ -540,12 +674,12 @@ class MazeBuilder {
       const [r0,c0,r1,c1] = regions.pop();
       const h = r1 - r0 + 1, w = c1 - c0 + 1;
       if(h < 2 && w < 2) continue;
-      const horizontal = (h === w) ? Math.random() < 0.5 : h > w;
+      const horizontal = (h === w) ? this.rnd() < 0.5 : h > w;
 
       if(horizontal){
         if(h < 2) continue;
-        const wr = r0 + ((Math.random() * (h-1)) | 0);      // mur entre wr et wr+1
-        const gap = c0 + ((Math.random() * w) | 0);          // passage laissé ouvert
+        const wr = r0 + ((this.rnd() * (h-1)) | 0);      // mur entre wr et wr+1
+        const gap = c0 + ((this.rnd() * w) | 0);          // passage laissé ouvert
         this.note('Je pose un mur horizontal avec une porte.', 'k2');
         for(let c=c0;c<=c1;c++){
           if(c === gap) continue;
@@ -556,8 +690,8 @@ class MazeBuilder {
         regions.push([r0,c0,wr,c1], [wr+1,c0,r1,c1]);
       } else {
         if(w < 2) continue;
-        const wc = c0 + ((Math.random() * (w-1)) | 0);
-        const gap = r0 + ((Math.random() * h) | 0);
+        const wc = c0 + ((this.rnd() * (w-1)) | 0);
+        const gap = r0 + ((this.rnd() * h) | 0);
         this.note('Je pose un mur vertical avec une porte.', 'k2');
         for(let r=r0;r<=r1;r++){
           if(r === gap) continue;
@@ -589,10 +723,10 @@ class MazeBuilder {
     for(const [r,c] of deadEnds){
       i++;
       this.progress = i / Math.max(1, deadEnds.length);
-      if(Math.random() > rate){ continue; }
+      if(this.rnd() > rate){ continue; }
       const closed = this.neighbors(r,c).filter(([nr,nc]) => !this.isOpenBetween(r,c,nr,nc));
       if(!closed.length) continue;
-      const [nr,nc] = closed[(Math.random() * closed.length) | 0];
+      const [nr,nc] = closed[(this.rnd() * closed.length) | 0];
       this.carveWall(r,c,nr,nc);
       this.mark[this.ci(r,c)] = MARK.CURRENT;
       this.flash = [[r+nr+1, c+nc+1]];
@@ -658,6 +792,166 @@ class MazeBuilder {
     }
     this.path = path;
     this.showDist = false;
+  }
+}
+
+/* ============================================================================
+   3bis. RÉSOLUTION : deux méthodes comparées sur le même labyrinthe
+   ============================================================================ */
+const DIRS = [[-1,0],[0,1],[1,0],[0,-1]];             // nord, est, sud, ouest
+const DIR_NAMES = ['le nord','l’est','le sud','l’ouest'];
+
+class MazeSolver {
+  constructor(maze){
+    this.maze = maze;
+    this.size = maze.size;
+    this.N = maze.N;
+    this.total = maze.size * maze.size;
+    this.dist = new Int32Array(this.total).fill(-1);   // vagues du parcours en largeur
+    this.maxWave = 1;
+    this.trail = new Uint8Array(this.total);           // passages de la main gauche
+    this.path = [];
+    this.here = null;
+    this.facing = 1;
+    this.logs = [];
+    this.phase = 'Préparation';
+    this.progress = 0;
+    this.explored = 0; this.steps = 0; this.len = null;
+    this.bfs = null; this.hand = null;                 // résultats des deux méthodes
+    this.done = false;
+    this.mode = 'bfs';
+  }
+  ci(r,c){ return r * this.size + c; }
+  isOpenBetween(r1,c1,r2,c2){
+    return this.maze.bitmap[(r1+r2+1) * this.N + (c1+c2+1)] === 0;
+  }
+  inside(r,c){ return r >= 0 && r < this.size && c >= 0 && c < this.size; }
+  note(msg, cls){
+    if(!msg) return;
+    const last = this.logs[this.logs.length-1];
+    if(last && last.msg === msg) return;
+    this.logs.push({ msg, cls: cls || '' });
+    if(this.logs.length > 40) this.logs.shift();
+  }
+
+  *run(){
+    yield* this.runBFS();
+    yield* this.runWallFollower();
+    this.phase = 'Verdict';
+    this.progress = 1;
+    this.done = true;
+  }
+
+  /* ---- Méthode 1 : parcours en largeur (garantit le plus court chemin) ---- */
+  *runBFS(){
+    this.mode = 'bfs';
+    this.phase = 'Méthode 1 — parcours en largeur';
+    this.note('Je pars du départ et j’avance sur tous les fronts à la fois.', 'k1');
+    const parent = new Int32Array(this.total).fill(-1);
+    const q = [[0,0]];
+    this.dist[0] = 0;
+    let head = 0, found = false;
+    const exitIdx = this.ci(this.maze.exit.r, this.maze.exit.c);
+
+    while(head < q.length){
+      const [r,c] = q[head++];
+      const d = this.dist[this.ci(r,c)];
+      this.maxWave = Math.max(this.maxWave, d);
+      this.explored++;
+      this.here = [r,c];
+      this.progress = this.explored / this.total;
+
+      if(this.ci(r,c) === exitIdx){ found = true; this.note('Sortie atteinte !', 'k3'); break; }
+
+      for(const [dr,dc] of DIRS){
+        const nr = r+dr, nc = c+dc;
+        if(!this.inside(nr,nc)) continue;
+        if(this.dist[this.ci(nr,nc)] !== -1) continue;
+        if(!this.isOpenBetween(r,c,nr,nc)) continue;
+        this.dist[this.ci(nr,nc)] = d + 1;
+        parent[this.ci(nr,nc)] = this.ci(r,c);
+        q.push([nr,nc]);
+      }
+      if(this.explored % Math.max(4,(this.total/9)|0) === 0)
+        this.note('Vague ' + d + ' : ' + this.explored + ' cases déjà vues.', 'k2');
+      yield;
+    }
+
+    // remontée du chemin
+    const path = [];
+    let cur = found ? exitIdx : -1;
+    while(cur !== -1){ path.push([(cur / this.size) | 0, cur % this.size]); cur = parent[cur]; }
+    path.reverse();
+    this.path = path;
+    this.len = path.length - 1;
+    this.bfs = { explored: this.explored, len: this.len };
+    this.note('Chemin le plus court : ' + this.len + ' cases, après avoir examiné ' +
+              this.explored + ' cases.', 'k3');
+    for(let i=0;i<path.length;i++){ this.progress = i/path.length; yield; }
+  }
+
+  /* ---- Méthode 2 : la main gauche sur le mur ---- */
+  *runWallFollower(){
+    this.mode = 'hand';
+    this.phase = 'Méthode 2 — la main gauche sur le mur';
+    this.note('Maintenant, la méthode du promeneur : garder la main gauche au mur.', 'k1');
+    this.note('Aucune carte, aucune mémoire — juste une règle bête.', 'k1');
+    this.path = [];
+    this.steps = 0;
+    let r = 0, c = 0;
+    this.facing = 1;                                   // vers l'est
+    const limit = this.total * 12;
+    const exitIdx = this.ci(this.maze.exit.r, this.maze.exit.c);
+    const walk = [[0,0]];
+    this.trail[0] = 1;
+
+    while(this.steps < limit){
+      if(this.ci(r,c) === exitIdx) break;
+      // on essaie gauche, puis tout droit, puis droite, puis demi-tour
+      let moved = false;
+      for(const turn of [3, 0, 1, 2]){
+        const dir = (this.facing + turn) % 4;
+        const [dr,dc] = DIRS[dir];
+        const nr = r+dr, nc = c+dc;
+        if(!this.inside(nr,nc) || !this.isOpenBetween(r,c,nr,nc)) continue;
+        this.facing = dir; r = nr; c = nc; moved = true;
+        break;
+      }
+      if(!moved) break;
+      this.steps++;
+      const i = this.ci(r,c);
+      this.trail[i] = Math.min(3, this.trail[i] + 1);
+      walk.push([r,c]);
+      this.here = [r,c];
+      this.progress = Math.min(0.99, this.steps / Math.max(4, (this.bfs.len || 1) * 4));
+      if(this.steps % Math.max(5,(this.total/6)|0) === 0)
+        this.note('Je longe le mur vers ' + DIR_NAMES[this.facing] + '… ' + this.steps + ' pas.', 'k2');
+      yield;
+    }
+
+    const reached = this.ci(r,c) === exitIdx;
+    this.path = walk;
+    this.hand = { steps: this.steps, reached };
+    if(reached) this.note('Sortie atteinte en ' + this.steps + ' pas.', 'k3');
+    else this.note('Abandon : la règle tourne en rond dans ce labyrinthe à boucles.', 'k4');
+  }
+
+  verdict(){
+    if(!this.bfs || !this.hand) return '';
+    const b = this.bfs, h = this.hand;
+    if(!h.reached){
+      return '<b>Le parcours en largeur</b> trouve la sortie en <b>' + b.len +
+        ' cases</b> après en avoir examiné ' + b.explored + '.<br>' +
+        '<b>La main gauche</b> n’y arrive pas : ce labyrinthe contient des boucles, ' +
+        'et la règle peut y tourner indéfiniment. C’est sa limite connue.';
+    }
+    const ratio = (h.steps / Math.max(1, b.len)).toFixed(1);
+    return '<b>Le parcours en largeur</b> trouve la sortie en <b>' + b.len +
+      ' cases</b> — c’est le plus court chemin possible — mais il doit examiner ' +
+      b.explored + ' cases pour en être sûr.<br>' +
+      '<b>La main gauche</b> y arrive aussi, en <b>' + h.steps + ' pas</b>, soit ' +
+      ratio + '× plus long. Elle ne retient rien et ne voit rien : elle longe, ' +
+      'c’est tout. Souvent suffisant, jamais optimal.';
   }
 }
 
@@ -802,7 +1096,11 @@ function renderGenUI(){
 
 function startGeneration(){
   cancelAnimationFrame(genRaf);
-  builder = new MazeBuilder(DIFFS[state.diff].size, state.pattern);
+  const seed = (pendingSeed !== null) ? pendingSeed : ((Math.random() * SEED_MAX) | 0);
+  pendingSeed = null;
+  currentCode = makeCode(state.theme, state.pattern, state.diff, seed);
+  $('genCode').textContent = currentCode;
+  builder = new MazeBuilder(DIFFS[state.diff].size, state.pattern, seed);
   genIter = builder.run();
   genRunning = true;
   $('playBtn').disabled = true;
@@ -838,6 +1136,170 @@ function onGenerationDone(){
   $('playBtn').textContent = '▶ Entrer dans le labyrinthe';
   $('skipBtn').style.display = 'none';
   $('genSub').innerHTML = 'Labyrinthe prêt · chemin le plus court : <b>' + steps + ' cases</b>';
+  sfx.ready();
+}
+
+/* ============================================================================
+   4bis. VISUALISATION 2D DE LA RÉSOLUTION
+   ============================================================================ */
+const solveCanvas = $('solveCanvas');
+const sctx = solveCanvas.getContext('2d');
+let solver = null, solveIter = null, solveRunning = false, solveRaf = 0, solveReturn = 'overlay';
+
+function sizeSolveCanvas(){
+  const wrap = $('solveWrap');
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = wrap.clientWidth, h = wrap.clientHeight;
+  if(!w || !h) return;
+  solveCanvas.width = Math.round(w * dpr);
+  solveCanvas.height = Math.round(h * dpr);
+  sctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function drawSolve(){
+  if(!solver) return;
+  const th = THEMES[state.theme];
+  const wrap = $('solveWrap');
+  const W = wrap.clientWidth, H = wrap.clientHeight;
+  const N = solver.N;
+  const cell = Math.floor(Math.min(W, H) / N);
+  const gw = cell * N;
+  const ox = ((W - gw) / 2) | 0, oy = ((H - gw) / 2) | 0;
+  const bm = solver.maze.bitmap;
+
+  sctx.clearRect(0,0,W,H);
+  sctx.fillStyle = '#05050a'; sctx.fillRect(0,0,W,H);
+
+  for(let r=0;r<N;r++) for(let c=0;c<N;c++){
+    const x = ox + c*cell, y = oy + r*cell;
+    if(bm[r*N+c] === 1){
+      sctx.fillStyle = hexToCss(th.wall); sctx.globalAlpha = 0.5;
+      sctx.fillRect(x, y, cell, cell); sctx.globalAlpha = 1;
+    } else {
+      sctx.fillStyle = 'rgba(255,255,255,0.07)';
+      sctx.fillRect(x, y, cell, cell);
+    }
+  }
+
+  const cellRect = (r,c) => [ox + (2*c+1)*cell, oy + (2*r+1)*cell];
+  const cellMid  = (r,c) => [ox + (2*c+1)*cell + cell/2, oy + (2*r+1)*cell + cell/2];
+
+  if(solver.mode === 'bfs'){
+    // vagues d'exploration
+    for(let r=0;r<solver.size;r++) for(let c=0;c<solver.size;c++){
+      const d = solver.dist[solver.ci(r,c)];
+      if(d < 0) continue;
+      const [x,y] = cellRect(r,c);
+      sctx.fillStyle = lerpColor(0x1d2f6b, 0x7bd9ff, d / Math.max(1, solver.maxWave));
+      sctx.fillRect(x, y, cell, cell);
+    }
+  } else {
+    // trace de la main gauche : plus c'est repassé, plus c'est chaud
+    for(let r=0;r<solver.size;r++) for(let c=0;c<solver.size;c++){
+      const t = solver.trail[solver.ci(r,c)];
+      if(!t) continue;
+      const [x,y] = cellRect(r,c);
+      sctx.fillStyle = t === 1 ? 'rgba(255,176,77,0.45)'
+                    : t === 2 ? 'rgba(255,123,166,0.65)' : 'rgba(255,60,120,0.85)';
+      sctx.fillRect(x, y, cell, cell);
+    }
+    // rappel du chemin optimal, en filigrane
+    if(solver.bfs && solver.maze.path && solver.maze.path.length > 1){
+      sctx.strokeStyle = 'rgba(123,217,255,0.5)';
+      sctx.lineWidth = Math.max(1.2, cell * 0.22);
+      sctx.lineJoin = sctx.lineCap = 'round';
+      sctx.beginPath();
+      solver.maze.path.forEach(([r,c], k) => {
+        const [x,y] = cellMid(r,c); k ? sctx.lineTo(x,y) : sctx.moveTo(x,y);
+      });
+      sctx.stroke();
+    }
+  }
+
+  // chemin en cours de tracé
+  if(solver.mode === 'bfs' && solver.path.length > 1){
+    sctx.strokeStyle = hexToCss(th.accent);
+    sctx.lineWidth = Math.max(1.6, cell * 0.3);
+    sctx.lineJoin = sctx.lineCap = 'round';
+    sctx.beginPath();
+    solver.path.forEach(([r,c], k) => {
+      const [x,y] = cellMid(r,c); k ? sctx.lineTo(x,y) : sctx.moveTo(x,y);
+    });
+    sctx.stroke();
+  }
+
+  // position courante
+  if(solver.here){
+    const [x,y] = cellMid(solver.here[0], solver.here[1]);
+    sctx.fillStyle = '#fff';
+    sctx.beginPath(); sctx.arc(x, y, Math.max(2, cell*0.45), 0, 6.3); sctx.fill();
+    if(solver.mode === 'hand'){
+      const [dr,dc] = DIRS[solver.facing];
+      sctx.strokeStyle = '#fff'; sctx.lineWidth = Math.max(1.4, cell*0.2);
+      sctx.beginPath(); sctx.moveTo(x, y);
+      sctx.lineTo(x + dc*cell*1.1, y + dr*cell*1.1); sctx.stroke();
+    }
+  }
+
+  const mk = (r,c,col,label) => {
+    const [x,y] = cellMid(r,c);
+    sctx.fillStyle = col;
+    sctx.beginPath(); sctx.arc(x, y, Math.max(2.5, cell*0.5), 0, 6.3); sctx.fill();
+    if(cell > 9){
+      sctx.fillStyle = '#05050a';
+      sctx.font = 'bold ' + Math.floor(cell*0.8) + 'px system-ui';
+      sctx.textAlign = 'center'; sctx.textBaseline = 'middle';
+      sctx.fillText(label, x, y+0.5);
+    }
+  };
+  mk(0, 0, '#6cff8f', 'D');
+  mk(solver.maze.exit.r, solver.maze.exit.c, '#ffcf5c', 'S');
+}
+
+function renderSolveUI(){
+  $('solvePhase').textContent = solver.phase;
+  const pct = Math.round(Math.min(1, Math.max(0, solver.progress)) * 100);
+  $('solvePct').textContent = pct + ' %';
+  $('solveBar').style.width = pct + '%';
+  $('svExplored').textContent = solver.explored;
+  $('svSteps').textContent = solver.steps;
+  $('svLen').textContent = solver.len === null ? '—' : solver.len;
+  $('solveLog').innerHTML = solver.logs.slice(-3)
+    .map(l => '<div class="' + l.cls + '">› ' + l.msg + '</div>').join('');
+}
+
+function startSolve(){
+  cancelAnimationFrame(solveRaf);
+  solver = new MazeSolver(maze);
+  solveIter = solver.run();
+  solveRunning = true;
+  $('verdict').classList.remove('on');
+  $('solveSkipBtn').style.display = '';
+  $('solveSub').textContent = PATTERNS[state.pattern].name + ' · ' +
+    DIFFS[state.diff].name + ' · graine ' + currentCode;
+  sizeSolveCanvas();
+  solveLoop();
+}
+
+function solveLoop(){
+  solveRaf = requestAnimationFrame(solveLoop);
+  if(solveRunning){
+    const base = Math.max(1, Math.round(solver.total / 55));
+    let steps = Math.max(1, Math.round(base * SPEEDS[state.speed].mult));
+    if(state.speed === 'instant') steps = 100000;
+    let guard = steps;
+    while(guard-- > 0){
+      if(solveIter.next().done){ solveRunning = false; onSolveDone(); break; }
+    }
+  }
+  drawSolve();
+  renderSolveUI();
+}
+
+function onSolveDone(){
+  $('verdict').innerHTML = solver.verdict();
+  $('verdict').classList.add('on');
+  $('solveSkipBtn').style.display = 'none';
   sfx.ready();
 }
 
@@ -1137,9 +1599,18 @@ let explored = null;     // fog of war (par case bitmap)
 const player = { x:0, z:0, yaw:0, pitch:0, bob:0, speed:6.4, run:9.6 };
 const keys = {};
 let gameState = 'menu';  // menu | gen | playing | paused | won
-let elapsed = 0, lastStep = 0, visitedCells = 0;
+let lastStep = 0, visitedCells = 0;
+
+/* Chronomètre : mesuré sur l'horloge réelle, jamais sur le delta d'image.
+   Le delta est plafonné pour protéger les collisions ; s'en servir pour compter
+   le temps ferait retarder la montre sur toute machine qui descend sous 20 i/s. */
+let runStart = 0, banked = 0;
+const nowSec = () => performance.now() / 1000;
+function elapsedSec(){ return banked + (gameState === 'playing' ? nowSec() - runStart : 0); }
+function resetTimer(){ banked = 0; runStart = nowSec(); }
 
 function disposeWorld(){
+  clearHint();
   for(const d of disposables){
     if(d.dispose) d.dispose();
   }
@@ -1291,6 +1762,7 @@ function buildWorld(){
   explored = new Uint8Array(N*N);
   markExplored();
   visitedCells = 0;
+  hintsUsed = 0; hintTimer2 = 0;
 }
 
 /* ============================================================================
@@ -1562,17 +2034,22 @@ let hintTimer = 0;
 
 function animate(){
   requestAnimationFrame(animate);
-  const dt = Math.min(clock.getDelta(), 0.05);
+  const rawDt = clock.getDelta();            // temps réel écoulé depuis l'image précédente
+  const dt = Math.min(rawDt, 0.05);          // borné : sert au déplacement et aux collisions
 
   if(gameState === 'playing'){
     updatePlayer(dt);
     checkWin();
-    elapsed += dt;
-    bumpCool -= dt;
-    $('timer').textContent = fmt(elapsed);
+    bumpCool -= rawDt;
+    $('timer').textContent = fmt(elapsedSec());
     drawMinimap();
     drawCompass();
-    if(hintTimer > 0){ hintTimer -= dt; if(hintTimer <= 0) $('hint').style.opacity = '0'; }
+    if(hintTimer > 0){ hintTimer -= rawDt; if(hintTimer <= 0) $('hint').style.opacity = '0'; }
+    if(hintTimer2 > 0){
+      hintTimer2 -= rawDt;
+      if(hintGroup) hintGroup.userData.mat.opacity = Math.max(0, Math.min(0.85, hintTimer2 * 0.5));
+      if(hintTimer2 <= 0) clearHint();
+    }
   }
 
   if(scene){
@@ -1602,14 +2079,51 @@ function fmt(sec){
    12. ENCHAÎNEMENT DES ÉCRANS
    ============================================================================ */
 const menuEl = $('menu'), genEl = $('genScreen'), hudEl = $('hud'), ovEl = $('overlay');
+const solveEl = $('solveScreen');
 
 function show(which){
   menuEl.classList.toggle('on', which === 'menu');
   genEl.classList.toggle('on', which === 'gen');
+  solveEl.classList.toggle('on', which === 'solve');
   hudEl.classList.toggle('on', which === 'play');
   ovEl.classList.toggle('on', which === 'overlay');
   if(which !== 'play') lockHint.classList.remove('on');
 }
+
+/* --- graine : saisie, copie, lien partageable --- */
+function applyCode(str, quiet){
+  const cfg = parseCode(str);
+  const msg = $('seedMsg');
+  if(!cfg){
+    if(!quiet){ msg.textContent = 'Code non reconnu. Format attendu : NEON-5D5PGS'; msg.className = 'err'; }
+    return false;
+  }
+  state.theme = cfg.theme; state.pattern = cfg.pattern; state.diff = cfg.diff;
+  pendingSeed = cfg.seed;
+  refreshMenu();
+  msg.textContent = 'Graine chargée : ' + THEMES[cfg.theme].name + ' · ' +
+    PATTERNS[cfg.pattern].name + ' · ' + DIFFS[cfg.diff].name;
+  msg.className = 'ok';
+  return true;
+}
+
+$('seedBtn').onclick = () => { sfx.click(); applyCode($('seedInput').value); };
+$('seedInput').addEventListener('keydown', e => {
+  if(e.key === 'Enter'){ e.preventDefault(); applyCode($('seedInput').value); }
+});
+
+$('copyCodeBtn').onclick = async () => {
+  const btn = $('copyCodeBtn');
+  try {
+    if(navigator.clipboard) await navigator.clipboard.writeText(currentCode);
+    else { $('seedInput').value = currentCode; $('seedInput').select(); document.execCommand('copy'); }
+    btn.textContent = '✓ Copié';
+  } catch(_) {
+    btn.textContent = currentCode;   // au pire, l'utilisateur le lit et le recopie
+  }
+  setTimeout(() => { btn.textContent = '⧉ Copier'; }, 1800);
+  sfx.click();
+};
 
 $('startBtn').onclick = () => {
   sfx.unlock(); sfx.click();
@@ -1644,8 +2158,8 @@ $('playBtn').onclick = () => {
   };
   cancelAnimationFrame(genRaf);
   buildWorld();
-  elapsed = 0;
   gameState = 'playing';
+  resetTimer();
   show('play');
   $('hint').style.opacity = '1';
   $('hint').textContent = isTouch
@@ -1681,11 +2195,13 @@ $('soundBtn').onclick = () => {
 
 function pauseGame(){
   if(gameState !== 'playing') return;
+  banked += nowSec() - runStart;
   gameState = 'paused';
   if(document.pointerLockElement === canvas) document.exitPointerLock();
   $('ovTitle').textContent = 'Pause';
-  $('ovText').innerHTML = 'Temps écoulé : <b>' + fmt(elapsed) + '</b><br>' +
-    THEMES[state.theme].name + ' · ' + PATTERNS[state.pattern].name + ' · ' + DIFFS[state.diff].name;
+  $('ovText').innerHTML = 'Temps écoulé : <b>' + fmt(banked) + '</b><br>' +
+    THEMES[state.theme].name + ' · ' + PATTERNS[state.pattern].name + ' · ' + DIFFS[state.diff].name +
+    '<br><span style="opacity:.7">Graine ' + currentCode + '</span>';
   $('ovPrimary').textContent = '▶ Reprendre';
   $('ovSecondary').textContent = '🔄 Nouveau labyrinthe';
   $('ovThird').textContent = '☰ Menu principal';
@@ -1695,6 +2211,7 @@ function pauseGame(){
 
 function resumeGame(){
   gameState = 'playing';
+  runStart = nowSec();
   ovEl.classList.remove('on');
   hudEl.classList.add('on');
   if(!isTouch) lockHint.classList.add('on');
@@ -1704,6 +2221,8 @@ function bestKey(){ return 'laby3d.best.' + state.pattern + '.' + state.diff; }
 
 function winGame(){
   if(gameState !== 'playing') return;
+  const total = elapsedSec();
+  banked = total;
   gameState = 'won';
   if(document.pointerLockElement === canvas) document.exitPointerLock();
   sfx.win();
@@ -1711,18 +2230,23 @@ function winGame(){
   fx.style.opacity = '0.75';
   setTimeout(() => { fx.style.opacity = '0'; }, 120);
 
+  // un temps obtenu avec des indices ne compte pas comme record
   let best = parseFloat(localStorage.getItem(bestKey()) || '0');
   let record = false;
-  if(!best || elapsed < best){ best = elapsed; record = true;
-    try { localStorage.setItem(bestKey(), String(elapsed)); } catch(_){} }
+  if(hintsUsed === 0 && (!best || total < best)){
+    best = total; record = true;
+    try { localStorage.setItem(bestKey(), String(total)); } catch(_){}
+  }
 
   $('ovTitle').textContent = record ? '🏆 Nouveau record !' : '🎉 Sortie trouvée !';
   $('ovText').innerHTML =
-    'Temps : <b>' + fmt(elapsed) + '</b>' +
+    'Temps : <b>' + fmt(total) + '</b>' +
     (best ? ' · Meilleur : <b>' + fmt(best) + '</b>' : '') + '<br>' +
-    'Chemin le plus court : ' + maze.shortest + ' cases<br>' +
-    '<span style="opacity:.7">' + THEMES[state.theme].name + ' · ' +
-    PATTERNS[state.pattern].name + ' · ' + DIFFS[state.diff].name + '</span>';
+    'Chemin le plus court : ' + maze.shortest + ' cases' +
+    (hintsUsed ? ' · ' + hintsUsed + ' indice' + (hintsUsed>1?'s':'') + ' utilisé' + (hintsUsed>1?'s':'') : '') +
+    '<br><span style="opacity:.7">' + THEMES[state.theme].name + ' · ' +
+    PATTERNS[state.pattern].name + ' · ' + DIFFS[state.diff].name + '</span>' +
+    '<br><span style="opacity:.7">Graine <b>' + currentCode + '</b> — partage-la pour lancer quelqu’un sur le même tracé</span>';
   $('ovPrimary').textContent = '🔄 Nouveau labyrinthe';
   $('ovSecondary').textContent = '🧩 Refaire celui-ci';
   $('ovThird').textContent = '☰ Menu principal';
@@ -1733,8 +2257,8 @@ function winGame(){
 function replaySameMaze(){
   ovEl.classList.remove('on');
   buildWorld();
-  elapsed = 0;
   gameState = 'playing';
+  resetTimer();
   show('play');
   if(!isTouch) lockHint.classList.add('on');
 }
@@ -1763,6 +2287,102 @@ $('ovThird').onclick = () => {
   show('menu');
 };
 
+/* --- l'ordinateur résout --- */
+$('ovSolve').onclick = () => {
+  if(!maze) return;
+  sfx.click();
+  solveReturn = gameState;          // 'paused' ou 'won' : on y reviendra
+  show('solve');
+  requestAnimationFrame(() => { sizeSolveCanvas(); startSolve(); });
+};
+$('solveSkipBtn').onclick = () => {
+  if(!solveRunning) return;
+  let guard = 500000;
+  while(solveRunning && guard-- > 0){
+    if(solveIter.next().done){ solveRunning = false; onSolveDone(); }
+  }
+  drawSolve(); renderSolveUI();
+};
+$('solveBackBtn').onclick = () => {
+  solveRunning = false;
+  cancelAnimationFrame(solveRaf);
+  sfx.click();
+  gameState = solveReturn;
+  show('overlay');
+};
+
+/* --- indice : le chemin vers la sortie s'allume au sol --- */
+let hintGroup = null, hintTimer2 = 0, hintsUsed = 0;
+
+function currentCellRC(){
+  let br = Math.round(player.z / CELL), bc = Math.round(player.x / CELL);
+  if(br % 2 === 0) br = Math.max(1, br - 1);      // on est dans un couloir : on prend la case voisine
+  if(bc % 2 === 0) bc = Math.max(1, bc - 1);
+  return { r: (br - 1) / 2, c: (bc - 1) / 2 };
+}
+
+function pathToExit(from){
+  const size = maze.size, N = maze.N, bm = maze.bitmap;
+  const ci = (r,c) => r * size + c;
+  const parent = new Int32Array(size*size).fill(-2);
+  const q = [[from.r, from.c]];
+  parent[ci(from.r, from.c)] = -1;
+  let head = 0;
+  const target = ci(maze.exit.r, maze.exit.c);
+  while(head < q.length){
+    const [r,c] = q[head++];
+    if(ci(r,c) === target) break;
+    for(const [dr,dc] of DIRS){
+      const nr = r+dr, nc = c+dc;
+      if(nr<0||nr>=size||nc<0||nc>=size) continue;
+      if(parent[ci(nr,nc)] !== -2) continue;
+      if(bm[(r+nr+1)*N + (c+nc+1)] !== 0) continue;
+      parent[ci(nr,nc)] = ci(r,c);
+      q.push([nr,nc]);
+    }
+  }
+  if(parent[target] === -2) return [];
+  const out = [];
+  let cur = target;
+  while(cur !== -1){ out.push([(cur/size)|0, cur%size]); cur = parent[cur]; }
+  return out.reverse();
+}
+
+function clearHint(){
+  if(hintGroup){
+    hintGroup.traverse(o => { if(o.geometry) o.geometry.dispose(); });
+    if(hintGroup.parent) hintGroup.parent.remove(hintGroup);
+    hintGroup = null;
+  }
+}
+
+function showHintPath(){
+  if(gameState !== 'playing' || !maze || !scene) return;
+  clearHint();
+  const path = pathToExit(currentCellRC());
+  if(path.length < 2){ return; }
+  hintsUsed++;
+  const th = THEMES[state.theme];
+  hintGroup = new THREE.Group();
+  const geo = new THREE.CircleGeometry(0.45, 14);
+  const mat = new THREE.MeshBasicMaterial({
+    color: th.accent, transparent:true, opacity:0.85, depthWrite:false });
+  hintGroup.userData.mat = mat;
+  for(const [r,c] of path){
+    const dot = new THREE.Mesh(geo, mat);
+    dot.rotation.x = -Math.PI/2;
+    dot.position.set((2*c+1)*CELL, 0.06, (2*r+1)*CELL);
+    hintGroup.add(dot);
+  }
+  scene.add(hintGroup);
+  hintTimer2 = 7;
+  $('hint').textContent = 'Le chemin s’allume pendant 7 secondes · ' + (path.length-1) + ' cases jusqu’à la sortie';
+  $('hint').style.opacity = '1';
+  hintTimer = 4;
+  sfx.ready();
+}
+$('hintBtn').onclick = () => showHintPath();
+
 /* ============================================================================
    13. REDIMENSIONNEMENT
    ============================================================================ */
@@ -1772,17 +2392,27 @@ function onResize(){
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isTouch ? 1.6 : 2));
   renderer.setSize(window.innerWidth, window.innerHeight);
   if(genEl.classList.contains('on')){ sizeGenCanvas(); drawGen(); }
+  if(solveEl.classList.contains('on')){ sizeSolveCanvas(); drawSolve(); }
 }
 window.addEventListener('resize', onResize);
 window.addEventListener('orientationchange', () => setTimeout(onResize, 250));
 
 refreshMenu();
 
+/* Une adresse du type ...labyrinthe3d.html#NEON-5D5PGS charge la graine partagée */
+if(location.hash.length > 2){
+  const code = decodeURIComponent(location.hash.slice(1));
+  if(applyCode(code, true)) $('seedInput').value = code.toUpperCase();
+}
+
 /* Accès depuis la console / les tests automatisés */
 window.LAB = {
   state, get gameState(){ return gameState; }, get maze(){ return maze; },
   get player(){ return player; }, get builder(){ return builder; },
+  get solver(){ return solver; }, get code(){ return currentCode; },
+  get hintsUsed(){ return hintsUsed; }, get hintGroup(){ return hintGroup; },
   get exitWorld(){ return exitWorld; },
+  makeCode, parseCode,
   teleportToExit(){ player.x = exitWorld.x; player.z = exitWorld.z; }
 };
 } /* fin de boot() */
