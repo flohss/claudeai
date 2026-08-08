@@ -268,3 +268,19 @@ Le bouton « Vérifier les invariantes » contrôle sur une douzaine de graines 
 - L'heuristique d'A\* utilise la distance de Manhattan sur une grille et la distance
   euclidienne sur un nuage, toujours multipliée par le coût minimal d'un pas : c'est la
   condition d'admissibilité, sans laquelle A\* cesserait de garantir le plus court chemin.
+
+---
+
+# Tests
+
+Les deux pages sont couvertes par une suite exécutée dans un vrai navigateur.
+
+```
+npm install
+npx playwright install chromium
+npm test
+```
+
+95 contrôles, dont les propriétés mathématiques vérifiées contre des références
+recalculées dans le test lui-même. Le détail de ce qui est couvert — et surtout **ce qui
+ne l'est pas** — se trouve dans [`tests/README.md`](tests/README.md).

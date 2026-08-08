@@ -1,0 +1,15 @@
+{
+  "name": "labyrinthe-et-laboratoire",
+  "private": true,
+  "type": "module",
+  "description": "Jeu de labyrinthe 3D et laboratoire d'algorithmes de graphe",
+  "scripts": {
+    "test": "node tests/run.mjs",
+    "test:jeu": "node tests/run.mjs jeu",
+    "test:labo": "node tests/run.mjs labo",
+    "serve": "node -e \"import('./tests/lib.mjs').then(m=>m.serve('.',8080)).then(()=>console.log('http://localhost:8080/labyrinthe3d.html'))\""
+  },
+  "devDependencies": {
+    "playwright": "^1.56.1"
+  }
+}
