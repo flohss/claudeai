@@ -73,7 +73,7 @@
   #log div{opacity:.55;}
   #log div:last-child{opacity:1;color:#fff;}
   #log .k1{color:#7bd9ff;}#log .k2{color:#ffb04d;}#log .k3{color:#6cff8f;}#log .k4{color:#ff7ba6;}
-  #stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;}
+  #stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(70px,1fr));gap:8px;margin-bottom:12px;}
   .stat{background:rgba(255,255,255,.04);border-radius:10px;padding:7px 4px;text-align:center;
     border:1px solid rgba(150,130,255,.15);}
   .stat b{display:block;font-size:1rem;color:#fff;}
@@ -220,6 +220,7 @@
       <div class="stat"><b id="stCells">0</b><span>cases</span></div>
       <div class="stat"><b id="stWalls">0</b><span>murs ouverts</span></div>
       <div class="stat"><b id="stBack">0</b><span>retours</span></div>
+      <div class="stat"><b id="stStruct">0</b><span id="stStructLabel">pile</span></div>
     </div>
 
     <div class="codeRow">
@@ -230,6 +231,11 @@
     <div class="group" style="margin-bottom:10px">
       <label>Vitesse de réflexion</label>
       <div id="speedOpts"></div>
+    </div>
+
+    <div class="row" style="margin-bottom:10px">
+      <button class="btn ghost" id="genPauseBtn">⏸ Pause</button>
+      <button class="btn ghost" id="genStepBtn" disabled>⏭ Une étape</button>
     </div>
 
     <button class="btn" id="playBtn" disabled>⏳ Construction…</button>
@@ -474,6 +480,13 @@ class MazeBuilder {
     this.maxDist = 1;
     this.flash = [];        // cases bitmap à faire clignoter
     this.tone = null;       // son à jouer pour l'étape en cours
+    this.candidates = [];   // cases envisagées avant le choix
+    this.chosen = null;     // case retenue
+    this.thread = [];       // pile du parcours en profondeur, dessinée comme un fil
+    this.region = null;     // zone en cours de découpe (division récursive)
+    this.door = null;       // porte laissée dans un mur qu'on vient de poser
+    this.structLabel = 'retours';   // structure caractéristique de l'algorithme
+    this.structValue = 0;
     this.logs = [];
     this.progress = 0;
     this.phase = 'Initialisation';
@@ -533,23 +546,28 @@ class MazeBuilder {
   /* ---- 3a. Parcours en profondeur (backtracker) ---- */
   *carveDFS(){
     this.phase = 'Creusement (profondeur)';
-    this.note('Algorithme : parcours en profondeur. Je creuse tout droit tant que je peux.', 'k1');
+    this.structLabel = 'pile';
+    this.note('Parcours en profondeur : j’avance tant qu’une voisine est vierge,', 'k1');
+    this.note('et je reviens sur mes pas dès que je suis bloqué.', 'k1');
     const stack = [[0,0]];
     const visited = new Uint8Array(this.total);
     visited[0] = 1; this.carveCell(0,0); this.mark[0] = MARK.CURRENT; this.cells = 1;
+    this.thread = stack;              // le fil qui me relie au départ
 
     while(stack.length){
       const [r,c] = stack[stack.length-1];
+      this.structValue = stack.length;
       const opts = this.neighbors(r,c).filter(([nr,nc]) => !visited[this.ci(nr,nc)]);
 
       if(!opts.length){
+        this.candidates = []; this.chosen = null;
+        this.note('Aucune voisine vierge : impasse. Je remonte d’une case.', 'k4');
         stack.pop();
         this.backs++;
         this.mark[this.ci(r,c)] = MARK.VISITED;
         if(stack.length){
           const [pr,pc] = stack[stack.length-1];
           this.mark[this.ci(pr,pc)] = MARK.CURRENT;
-          if(this.backs % 7 === 1) this.note('Impasse. Je remonte chercher une autre issue…', 'k4');
         }
         this.flash = [[2*r+1, 2*c+1]];
         this.tone = { k:'back', v:this.progress };
@@ -557,7 +575,19 @@ class MazeBuilder {
         continue;
       }
 
+      // étape 1 — délibération : quelles voisines sont encore vierges ?
+      this.candidates = opts;
+      this.chosen = null;
+      this.flash = [];
+      this.note(opts.length + (opts.length > 1 ? ' voisines vierges : ' : ' voisine vierge : ') +
+                opts.map(([nr,nc]) => this.dirName(nr-r, nc-c)).join(', ') + '.', 'k2');
+      this.tone = { k:'look', v:this.progress };
+      yield;
+
+      // étape 2 — tirage au sort, puis percement du mur
       const [nr,nc] = opts[(this.rnd() * opts.length) | 0];
+      this.chosen = [nr,nc];
+      this.note('Je tire ' + this.dirName(nr-r, nc-c) + ' et je perce le mur.', 'k1');
       visited[this.ci(nr,nc)] = 1;
       this.carveCell(nr,nc);
       this.carveWall(r,c,nr,nc);
@@ -566,19 +596,21 @@ class MazeBuilder {
       stack.push([nr,nc]);   // on avance : la nouvelle case devient le sommet de la pile
       this.cells++;
       this.progress = this.cells / this.total;
-      if(this.cells % Math.max(3, (this.total/14)|0) === 0)
-        this.note('Je perce un mur vers ' + this.dirName(nr-r, nc-c) + '.', 'k1');
       this.flash = [[r+nr+1, c+nc+1], [2*nr+1, 2*nc+1]];
       this.tone = { k:'carve', v:this.progress };
       yield;
+      this.candidates = []; this.chosen = null;
     }
-    this.note('Toutes les cases sont reliées : ' + this.cells + ' cases visitées.', 'k3');
+    this.thread = [];
+    this.note('Pile vide : les ' + this.cells + ' cases sont toutes reliées.', 'k3');
   }
 
   /* ---- 3b. Prim aléatoire : croissance depuis une frontière ---- */
   *carvePrim(){
     this.phase = 'Croissance (Prim)';
-    this.note('Algorithme de Prim : je fais grandir le labyrinthe par sa frontière.', 'k1');
+    this.structLabel = 'frontière';
+    this.note('Prim : une seule zone grandit, et je tire au hasard', 'k1');
+    this.note('dans toute sa frontière — pas seulement là où je suis.', 'k1');
     const visited = new Uint8Array(this.total);
     const frontier = [];
     visited[0] = 1; this.carveCell(0,0); this.mark[0] = MARK.VISITED; this.cells = 1;
@@ -588,10 +620,30 @@ class MazeBuilder {
     }
 
     while(frontier.length){
+      this.structValue = frontier.length;
       const i = (this.rnd() * frontier.length) | 0;
-      const [r,c,nr,nc] = frontier.splice(i,1)[0];
-      if(visited[this.ci(nr,nc)]) continue;
+      const [r,c,nr,nc] = frontier[i];
 
+      // étape 1 — délibération : la frontière entière est en orange, j'y pioche
+      this.candidates = [[nr,nc]];
+      this.chosen = null;
+      this.flash = [];
+      this.note('Frontière : ' + frontier.length + ' passages possibles. J’en tire un.', 'k2');
+      this.tone = { k:'look', v:this.progress };
+      yield;
+
+      frontier.splice(i,1);
+      if(visited[this.ci(nr,nc)]){
+        this.candidates = [];
+        this.note('Cette case a été atteinte entre-temps : le passage ne sert plus.', 'k4');
+        this.tone = null;
+        yield;
+        continue;
+      }
+
+      // étape 2 — la case rejoint la zone
+      this.chosen = [nr,nc];
+      this.note('Je la rattache par ' + this.dirName(nr-r, nc-c) + '.', 'k1');
       visited[this.ci(nr,nc)] = 1;
       this.carveCell(nr,nc);
       this.carveWall(r,c,nr,nc);
@@ -606,20 +658,22 @@ class MazeBuilder {
           this.mark[this.ci(ar,ac)] = MARK.FRONTIER;
         }
       }
-      if(this.cells % Math.max(3,(this.total/14)|0) === 0)
-        this.note('Frontière : ' + frontier.length + ' passages possibles. J’en tire un au hasard.', 'k2');
       this.flash = [[r+nr+1, c+nc+1]];
       this.tone = { k:'carve', v:this.progress };
       yield;
       this.mark[this.ci(nr,nc)] = MARK.VISITED;
+      this.candidates = []; this.chosen = null;
     }
+    this.structValue = 0;
     this.note('Frontière épuisée : le labyrinthe est complet.', 'k3');
   }
 
   /* ---- 3c. Kruskal aléatoire : des îlots séparés qui fusionnent ---- */
   *carveKruskal(){
     this.phase = 'Fusion d’îlots (Kruskal)';
-    this.note('Algorithme de Kruskal : chaque case est un îlot, je les fusionne au hasard.', 'k1');
+    this.structLabel = 'îlots';
+    this.note('Kruskal : au départ chaque case est un îlot isolé.', 'k1');
+    this.note('J’examine les murs dans un ordre tiré au sort, sans point de départ.', 'k1');
     const parent = new Int32Array(this.total);
     for(let i=0;i<this.total;i++){ parent[i] = i; this.setId[i] = i; this.mark[i] = MARK.VISITED; }
     const find = x => { while(parent[x] !== x){ parent[x] = parent[parent[x]]; x = parent[x]; } return x; };
@@ -635,39 +689,52 @@ class MazeBuilder {
     }
     for(let i=edges.length-1;i>0;i--){ const j=(this.rnd()*(i+1))|0; const t=edges[i]; edges[i]=edges[j]; edges[j]=t; }
 
-    let merged = 0, tested = 0;
+    let merged = 0, tested = 0, islands = this.total;
     const needed = this.total - 1;
+    this.structValue = islands;
     for(const [r,c,nr,nc] of edges){
       tested++;
       const a = find(this.ci(r,c)), b = find(this.ci(nr,nc));
+
+      // étape 1 — le test qui fait tout l'algorithme : même îlot ou non ?
+      this.candidates = [[r,c],[nr,nc]];
+      this.chosen = null;
       this.flash = [[r+nr+1, c+nc+1]];
+      this.note('Mur nº ' + tested + ' sur ' + edges.length + ' : les deux côtés sont-ils déjà reliés ?', 'k2');
+      this.tone = { k:'look', v:this.progress };
+      yield;
+
       if(a === b){
-        if(tested % 11 === 0) this.note('Ces deux cases sont déjà reliées : je garde le mur.', 'k4');
+        this.note('Oui, même îlot : je garde le mur, sinon je créerais une boucle.', 'k4');
+        this.candidates = [];
         this.tone = null;          // rien à sonoriser : aucun mur n'est tombé
         yield;
         continue;
       }
+      this.note('Non, deux îlots distincts : je fusionne.', 'k1');
       parent[a] = b;
       this.carveWall(r,c,nr,nc);
-      merged++;
+      merged++; islands--;
+      this.structValue = islands;
       this.progress = merged / needed;
       // propage la couleur d'ensemble pour l'affichage
       const target = this.setId[this.ci(nr,nc)];
       const src = this.setId[this.ci(r,c)];
       for(let i=0;i<this.total;i++) if(this.setId[i] === src) this.setId[i] = target;
-      if(merged % Math.max(3,(needed/12)|0) === 0)
-        this.note('Fusion de deux îlots. Encore ' + (needed - merged) + ' à relier.', 'k2');
       this.tone = { k:'merge', v:this.progress };
       yield;
+      this.candidates = [];
       if(merged >= needed) break;
     }
-    this.note('Tous les îlots ne font plus qu’un.', 'k3');
+    this.note('Il ne reste qu’un seul îlot : ' + merged + ' murs abattus.', 'k3');
   }
 
   /* ---- 3d. Division récursive : des salles que l'on cloisonne ---- */
   *carveDivision(){
     this.phase = 'Division récursive';
-    this.note('Je pars d’une immense salle vide, puis je la cloisonne.', 'k1');
+    this.structLabel = 'zones';
+    this.note('Division récursive : je pars d’une salle entièrement vide,', 'k1');
+    this.note('et je la coupe en deux, encore et encore.', 'k1');
     // tout ouvrir
     for(let r=0;r<this.size;r++) for(let c=0;c<this.size;c++){
       this.carveCell(r,c);
@@ -685,16 +752,28 @@ class MazeBuilder {
     const estimate = Math.max(1, this.size * 2);
 
     while(regions.length){
+      this.structValue = regions.length;
       const [r0,c0,r1,c1] = regions.pop();
       const h = r1 - r0 + 1, w = c1 - c0 + 1;
       if(h < 2 && w < 2) continue;
+
+      // étape 1 — on encadre la zone à traiter
+      this.region = [r0,c0,r1,c1];
+      this.door = null;
+      this.flash = [];
+      this.note('Zone de ' + h + ' sur ' + w + ' : encore divisible.', 'k2');
+      this.tone = { k:'look', v:this.progress };
+      yield;
+
       const horizontal = (h === w) ? this.rnd() < 0.5 : h > w;
+      this.note(h === w ? 'Elle est carrée : je tire le sens du mur au sort.'
+                        : (horizontal ? 'Plus haute que large : je coupe à l’horizontale.'
+                                      : 'Plus large que haute : je coupe à la verticale.'), 'k1');
 
       if(horizontal){
         if(h < 2) continue;
         const wr = r0 + ((this.rnd() * (h-1)) | 0);      // mur entre wr et wr+1
         const gap = c0 + ((this.rnd() * w) | 0);          // passage laissé ouvert
-        this.note('Je pose un mur horizontal avec une porte.', 'k2');
         for(let c=c0;c<=c1;c++){
           if(c === gap) continue;
           this.bitmap[this.bi(2*wr+2, 2*c+1)] = 1;
@@ -703,12 +782,16 @@ class MazeBuilder {
           this.tone = { k:'wall', v:this.progress };
           yield;
         }
+        this.door = [2*wr+2, 2*gap+1];
+        this.flash = [];
+        this.note('Une porte reste ouverte : les deux moitiés communiquent encore.', 'k3');
+        this.tone = { k:'merge', v:this.progress };
+        yield;
         regions.push([r0,c0,wr,c1], [wr+1,c0,r1,c1]);
       } else {
         if(w < 2) continue;
         const wc = c0 + ((this.rnd() * (w-1)) | 0);
         const gap = r0 + ((this.rnd() * h) | 0);
-        this.note('Je pose un mur vertical avec une porte.', 'k2');
         for(let r=r0;r<=r1;r++){
           if(r === gap) continue;
           this.bitmap[this.bi(2*r+1, 2*wc+2)] = 1;
@@ -717,11 +800,18 @@ class MazeBuilder {
           this.tone = { k:'wall', v:this.progress };
           yield;
         }
+        this.door = [2*gap+1, 2*wc+2];
+        this.flash = [];
+        this.note('Une porte reste ouverte : les deux moitiés communiquent encore.', 'k3');
+        this.tone = { k:'merge', v:this.progress };
+        yield;
         regions.push([r0,c0,r1,wc], [r0,wc+1,r1,c1]);
       }
       built++;
       this.progress = Math.min(0.98, built / estimate);
+      this.door = null;
     }
+    this.region = null; this.door = null; this.structValue = 0;
     this.flash = [];
     this.note('Toutes les salles sont cloisonnées.', 'k3');
   }
@@ -758,6 +848,8 @@ class MazeBuilder {
   /* ---- 3f. Inondation : mesure des distances, choix de la sortie ---- */
   *flood(){
     this.phase = 'Recherche de la sortie';
+    this.candidates = []; this.chosen = null; this.thread = [];
+    this.structLabel = 'file d’attente';
     this.showDist = true;
     this.note('Je mesure la distance de chaque case au départ…', 'k1');
     this.dist.fill(-1);
@@ -779,6 +871,7 @@ class MazeBuilder {
       }
       this.progress = seen / this.total;
       this.flash = [[2*r+1, 2*c+1]];
+      this.structValue = q.length - head;
       if(seen % Math.max(4,(this.total/8)|0) === 0)
         this.note('Distance maximale actuelle : ' + best + ' cases.', 'k2');
       this.tone = { k:'flood', v:this.progress };
@@ -1068,6 +1161,47 @@ function drawGen(){
     }
   }
 
+  // --- le fil : pile du parcours en profondeur, du départ à la case courante ---
+  if(builder.thread && builder.thread.length > 1){
+    gctx.strokeStyle = 'rgba(255,255,255,0.32)';
+    gctx.lineWidth = Math.max(1, cell * 0.24);
+    gctx.lineJoin = gctx.lineCap = 'round';
+    gctx.beginPath();
+    builder.thread.forEach(([r,c], k) => {
+      const x = ox + (2*c+1)*cell + cell/2, y = oy + (2*r+1)*cell + cell/2;
+      k ? gctx.lineTo(x,y) : gctx.moveTo(x,y);
+    });
+    gctx.stroke();
+  }
+
+  // --- zone en cours de découpe (division récursive) ---
+  if(builder.region){
+    const [r0,c0,r1,c1] = builder.region;
+    gctx.strokeStyle = 'rgba(123,217,255,0.95)';
+    gctx.lineWidth = 2;
+    gctx.strokeRect(ox + (2*c0)*cell + 1, oy + (2*r0)*cell + 1,
+                    (2*(c1-c0)+3)*cell - 2, (2*(r1-r0)+3)*cell - 2);
+  }
+
+  // --- cases envisagées, puis case retenue ---
+  if(builder.candidates.length){
+    gctx.strokeStyle = '#ffffff';
+    gctx.lineWidth = Math.max(1.2, cell * 0.2);
+    for(const [r,c] of builder.candidates){
+      gctx.strokeRect(ox + (2*c+1)*cell + 1, oy + (2*r+1)*cell + 1, cell - 2, cell - 2);
+    }
+  }
+  if(builder.chosen){
+    const [r,c] = builder.chosen;
+    gctx.fillStyle = '#ffffff';
+    gctx.fillRect(ox + (2*c+1)*cell, oy + (2*r+1)*cell, cell, cell);
+  }
+  if(builder.door){
+    const [r,c] = builder.door;
+    gctx.fillStyle = '#6cff8f';
+    gctx.fillRect(ox + c*cell, oy + r*cell, cell, cell);
+  }
+
   // --- chemin de référence en pointillés ---
   if(builder.path.length > 1){
     gctx.strokeStyle = hexToCss(th.accent);
@@ -1118,6 +1252,8 @@ function renderGenUI(){
   $('stCells').textContent = builder.cells;
   $('stWalls').textContent = builder.walls;
   $('stBack').textContent = builder.backs;
+  $('stStruct').textContent = builder.structValue;
+  $('stStructLabel').textContent = builder.structLabel;
   const logEl = $('log');
   const last = builder.logs.slice(-4);
   logEl.innerHTML = last.map(l => '<div class="' + l.cls + '">› ' + l.msg + '</div>').join('');
@@ -1132,6 +1268,7 @@ function startGeneration(){
   builder = new MazeBuilder(DIFFS[state.diff].size, state.pattern, seed);
   genIter = builder.run();
   genRunning = true;
+  setGenPaused(false);
   $('playBtn').disabled = true;
   $('playBtn').textContent = '⏳ Construction…';
   $('skipBtn').style.display = '';
@@ -1141,9 +1278,25 @@ function startGeneration(){
   genLoop();
 }
 
+let genPaused = false;
+function setGenPaused(v){
+  genPaused = v;
+  $('genPauseBtn').textContent = v ? '▶ Reprendre' : '⏸ Pause';
+  $('genStepBtn').disabled = !v;
+}
+$('genPauseBtn').onclick = () => { setGenPaused(!genPaused); sfx.click(); };
+$('genStepBtn').onclick = () => {
+  if(!genRunning) return;
+  builder.tone = null;
+  const r = genIter.next();
+  if(builder.tone) sfx.work(builder.tone.k, builder.tone.v);
+  if(r.done){ genRunning = false; onGenerationDone(); }
+  drawGen(); renderGenUI();
+};
+
 function genLoop(){
   genRaf = requestAnimationFrame(genLoop);
-  if(genRunning){
+  if(genRunning && !genPaused){
     // nombre de pas par image : proportionnel à la taille pour un temps constant
     const base = Math.max(1, Math.round(builder.total / 60));
     let steps = Math.max(1, Math.round(base * SPEEDS[state.speed].mult));
@@ -1406,6 +1559,7 @@ const sfx = (() => {
         case 'flood': beep(scale(v, 262), 0.06, 'sine',     0.028); break;
         case 'path':  beep(scale(v, 330), 0.09, 'triangle', 0.038); break;
         case 'walk':  beep(scale(v, 220), 0.06, 'triangle', 0.026); break;
+        case 'look':  beep(scale(v, 523), 0.03, 'sine',     0.011); break;
       }
     },
     click(){ beep(520, 0.05, 'square', 0.03); },

@@ -20,14 +20,28 @@ Ouvre `labyrinthe3d.html` dans un navigateur. C'est tout.
 
 ## Phase 1 — l'ordinateur conçoit le labyrinthe
 
-L'écran de génération affiche en temps réel :
+L'écran de génération ne montre pas seulement le résultat de chaque décision, mais la
+**décision elle-même**. Chaque case se joue en deux temps : d'abord la délibération —
+les possibilités envisagées apparaissent en blanc et le journal les énumère —, puis le
+choix et son exécution.
+
+Ce qui est affiché en temps réel :
 
 - la grille 2D qui se creuse, case par case ;
-- la case en cours (blanche), les cases déjà visitées, la frontière (orange) ;
-- un **journal de réflexion** en français (« Impasse, je remonte sur mes pas… ») ;
-- les compteurs : cases visitées, murs ouverts, retours en arrière ;
+- les **cases envisagées** (contour blanc) puis la **case retenue** (pleine) ;
+- **le fil de la pile** en profondeur : le trait blanc qui relie la case courante au
+  départ, et qui se rétracte à chaque retour en arrière ;
+- **la zone en cours de découpe** (cadre cyan) pour la division récursive ;
+- un **journal de réflexion** en français, qui explique le raisonnement : « 3 voisines
+  vierges : le nord, le sud, l'est », « je tire le sud et je perce le mur », « oui, même
+  îlot : je garde le mur, sinon je créerais une boucle » ;
+- quatre compteurs, dont un qui suit **la structure propre à l'algorithme** : la pile en
+  profondeur, la frontière chez Prim, les îlots restants chez Kruskal, les zones à
+  traiter en division récursive ;
 - une **vitesse réglable** : 🐢 Lent, ▶ Normal, ⏩ Rapide, ⚡ Éclair — ou le bouton
   « Terminer tout de suite » ;
+- une **pause avec avance pas à pas**, pour examiner une décision précise aussi
+  longtemps qu'on veut ;
 - une **sonorisation du travail en cours** : chaque type d'étape a son timbre —
   creusement, impasse, fusion d'îlots, pose de mur, inondation, tracé du chemin.
 
@@ -109,13 +123,26 @@ de génération intéressante à regarder :
 
 | Motif | Algorithme | Ce que ça donne |
 |---|---|---|
-| 🧵 Classique | parcours en profondeur | longs couloirs sinueux, beaucoup d'impasses |
+| 🧵 Classique | parcours en profondeur | longs couloirs sinueux, chemin de sortie très long |
 | 🌿 Ramifié | Prim aléatoire | croissance depuis une frontière, arbre très ramifié |
 | ✨ Éparpillé | Kruskal aléatoire | des îlots colorés apparaissent partout puis fusionnent |
 | 🔀 Ouvert | profondeur + tressage | les impasses sont rouvertes : des boucles, plusieurs routes |
 | 🏰 Salles | division récursive | on part d'une grande salle vide qu'on cloisonne |
 
 **4 difficultés** : Facile 8×8 · Moyen 12×12 · Difficile 17×17 · Expert 23×23.
+
+### Une invariante à observer
+
+Quel que soit l'algorithme, le compteur « murs ouverts » finit toujours à **cases − 1**
+— 143 sur un 12×12. Ce n'est pas un hasard du tirage : un labyrinthe où toute case est
+atteignable par un chemin unique est un *arbre couvrant*, et un arbre sur N sommets a
+exactement N−1 arêtes. Seul le motif **Ouvert** dépasse ce compte, parce que le tressage
+ajoute des passages en trop — et ce sont précisément ces passages qui créent les boucles.
+
+En revanche la longueur du chemin de sortie varie du simple au quadruple : environ 90
+cases en Classique contre 23 en Ramifié, à taille et à nombre de murs identiques. Toute
+la différence tient à *quel* arbre est tiré parmi les milliards possibles, c'est-à-dire
+au biais de l'algorithme.
 
 ## Détails techniques
 
