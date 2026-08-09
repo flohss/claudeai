@@ -11,8 +11,8 @@ export default async function testLabo(browser, base){
   const page = await openPage(browser, url);
   R.check('les quatre onglets sont présents',
     (await page.evaluate(() => document.querySelectorAll('[data-tab]').length)) === 4);
-  R.check('les huit algorithmes sont déclarés',
-    (await page.evaluate(() => Object.keys(LABO.ALGOS).length)) === 8);
+  R.check('les neuf algorithmes sont déclarés',
+    (await page.evaluate(() => Object.keys(LABO.ALGOS).length)) === 9);
 
   /* ------------------------------------------------- couverture des croisements */
   R.section('Couverture terrain × algorithme');
@@ -37,7 +37,7 @@ export default async function testLabo(browser, base){
   const arbres = await page.evaluate(() => {
     const out = {};
     for(const t of ['grille','nuage'])
-      for(const k of ['dfs','prim','kruskal']){
+      for(const k of ['dfs','prim','kruskal','wilson']){
         let ok = 0; const N = 20;
         for(let i=0;i<N;i++){
           const r = new LABO.Run(t, k, LABO.TERRAINS[t].def, (1000+i*7919)>>>0, {});
@@ -86,6 +86,37 @@ export default async function testLabo(browser, base){
   });
   R.check('Prim et Kruskal retiennent exactement les mêmes arêtes',
     memeArbre === '20/20', '→ ' + memeArbre);
+
+  R.section('Wilson tire les arbres uniformément');
+  const uniforme = await page.evaluate(() => {
+    // grille 2×2 : un carré de 4 arêtes, donc exactement 4 arbres couvrants
+    const cle = r => Array.from(r.st.chosen).join('');
+    const compte = (algo, M) => {
+      const m = new Map();
+      for(let i=0;i<M;i++){
+        const r = new LABO.Run('grille', algo, 2, (i*2654435761)>>>0, {});
+        r.finish();
+        m.set(cle(r), (m.get(cle(r))||0) + 1);
+      }
+      return { arbres: m.size,
+               ecart: Math.max(...[...m.values()].map(v => Math.abs(v/M - 0.25))) };
+    };
+    const dia = algo => { let s = 0; const M = 50;
+      for(let i=0;i<M;i++){ const r = new LABO.Run('grille',algo,12,(7+i*7919)>>>0,{});
+        r.finish(); s += LABO.measure(r).chemin; }
+      return s/M; };
+    return { w: compte('wilson', 3000), d: compte('dfs', 3000),
+             diaDfs: dia('dfs'), diaW: dia('wilson'), diaPrim: dia('prim') };
+  });
+  R.check('Wilson produit les 4 arbres à parts égales',
+    uniforme.w.arbres === 4 && uniforme.w.ecart < 0.03,
+    '→ ' + uniforme.w.arbres + ' arbres, écart max ' + (uniforme.w.ecart*100).toFixed(1) + ' pt');
+  R.check('la profondeur, elle, n’en produit que 2 — son biais est net',
+    uniforme.d.arbres === 2, '→ ' + uniforme.d.arbres + ' arbres');
+  R.check('le diamètre de Wilson tombe entre profondeur et Prim',
+    uniforme.diaW < uniforme.diaDfs && uniforme.diaW > uniforme.diaPrim,
+    '→ profondeur ' + uniforme.diaDfs.toFixed(1) + ' · Wilson ' + uniforme.diaW.toFixed(1) +
+    ' · Prim ' + uniforme.diaPrim.toFixed(1));
 
   /* ------------------------------------------------------------- A* et Dijkstra */
   R.section('A* : jamais plus coûteux, et toujours optimal');
@@ -184,7 +215,8 @@ export default async function testLabo(browser, base){
   const chemins = await page.evaluate(() => {
     const out = {};
     for(const [algo, terrain, size] of [['dfs','grille',14], ['prim','grille',14],
-                                        ['kruskal','nuage',90], ['division','grille',14]]){
+                                        ['kruskal','nuage',90], ['wilson','grille',14],
+                                        ['division','grille',14]]){
       let ok = 0, diametreIntact = 0; const N = 15;
       for(let i=0;i<N;i++){
         const r = new LABO.Run(terrain, algo, size, (31+i*7919)>>>0, {});
@@ -253,7 +285,7 @@ export default async function testLabo(browser, base){
   R.section('Écrans explicatifs');
   await page.click('[data-tab="comprendre"]');
   const algos = await page.evaluate(() => Object.keys(LABO.DOC));
-  R.check('une fiche par algorithme', algos.length === 8, '→ ' + algos.length);
+  R.check('une fiche par algorithme', algos.length === 9, '→ ' + algos.length);
   for(const k of algos){
     await page.evaluate(x => { LABO.docKey = x; }, k);
     await sleep(120);
@@ -345,7 +377,8 @@ export default async function testLabo(browser, base){
   for(const [algo, terrain, taille] of [['dfs','grille',14], ['prim','nuage',80],
                                         ['kruskal','nuage',80], ['bfs','grille',14],
                                         ['dijkstra','grille',14], ['astar','grille',14],
-                                        ['mur','grille',12], ['division','plan',14]]){
+                                        ['mur','grille',12], ['wilson','grille',12],
+                                        ['division','plan',14]]){
     await son.evaluate(([a,t,s]) => { LABO.ui.algo=a; LABO.ui.terrain=t; LABO.ui.size=s;
       LABO.ui.speed='normal'; window.__notes=[]; LABO.resetRun(); }, [algo,terrain,taille]);
     await son.click('#runBtn');

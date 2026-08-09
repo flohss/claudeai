@@ -194,6 +194,7 @@ révéler un autre usage du même raisonnement.
 | **Profondeur** | labyrinthe à longs couloirs | arbre d'exploration | | |
 | **Prim** | labyrinthe ramifié | réseau de câblage minimal | | |
 | **Kruskal** | labyrinthe par îlots | réseau de câblage minimal | segmentation | |
+| **Wilson** | labyrinthe sans biais | arbre couvrant uniforme | | |
 | **Largeur** | plus court chemin | plus court chemin | remplissage par diffusion | |
 | **Dijkstra / A\*** | chemin pondéré | chemin pondéré | | |
 | **Main au mur** | navigation sans mémoire | | | |
@@ -218,7 +219,7 @@ synchronisés, avec les compteurs en vis-à-vis et un verdict chiffré.
 d'étendues, et trace les distributions. C'est ce qui fait passer de « je sens la
 différence » à « je la mesure ».
 
-**Comprendre** — une fiche par algorithme : l'idée en une phrase, une démonstration
+**Comprendre** — une fiche par algorithme (neuf en tout) : l'idée en une phrase, une démonstration
 animée en boucle sur le terrain qui lui va le mieux, le pseudo-code, la structure de
 données et pourquoi c'est elle qui décide du comportement, ce qu'il garantit **et ce
 qu'il ne garantit pas**, le coût en temps et en mémoire, ses usages réels, et des liens
@@ -264,6 +265,16 @@ sonorisé : quatre pistes simultanées seraient inaudibles.
 
 ## Quelques résultats à retrouver soi-même
 
+- **Wilson est le seul tirage sans biais**, et il sert de mètre étalon. Sur une grille
+  2×2 — un carré de 4 arêtes, donc exactement 4 arbres couvrants — il les produit à
+  25 % chacun sur 3000 tirages, alors que le parcours en profondeur n'en produit que
+  **deux**, à 50 % chacun : parti d'un coin, il fait toujours le tour complet. Sur une
+  grille 12×12, le diamètre moyen vaut 94 en profondeur, 48 chez Wilson, 42 chez Prim.
+  Wilson tombe entre les deux, et c'est cette valeur — celle d'un arbre *typique* — qui
+  donne la mesure du biais des autres.
+- **Le prix de l'absence de biais se voit à l'écran** : Wilson efface des centaines de
+  boucles avant d'aboutir. Ce travail perdu n'est pas un défaut d'implémentation, c'est
+  exactement ce qui rend le tirage uniforme.
 - **Prim et Kruskal ne donnent pas seulement le même poids : ils donnent le même
   arbre**, arête pour arête, vérifié sur 300 tirages d'un nuage de 220 points. Quand tous
   les poids d'arêtes diffèrent — ce qui est le cas de distances entre points tirés au

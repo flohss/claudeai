@@ -643,6 +643,14 @@ const ALGOS = {
     lesson:"Aucune structure, aucune mémoire : longer le mur de gauche suffit à sortir " +
            "d'un labyrinthe sans boucle. Ajoute des boucles au terrain et la méthode " +
            "peut tourner indéfiniment — c'est sa limite, pas un bug." },
+  wilson: { name:'Wilson', icon:'🎲', kind:'arbre', struct:'marche',
+    terrains:['grille','nuage'],
+    lesson:"Le seul du laboratoire à tirer son arbre <b>uniformément</b> parmi tous les " +
+           "arbres couvrants possibles — sans aucun biais. Il marche au hasard, sans but, " +
+           "et efface toute boucle qu'il se crée. Les autres algorithmes ont chacun leur " +
+           "déformation : la profondeur allonge, Prim ramifie. Wilson, lui, sert de " +
+           "référence neutre : c'est à quoi ressemble un arbre « typique »." },
+
   division: { name:'Division', icon:'🏰', kind:'arbre', struct:'zones',
     terrains:['grille','plan'],
     lesson:"Seul algorithme à travailler par le haut : il ne relie pas, il sépare. " +
@@ -960,6 +968,93 @@ function* algoMur(run){
   st.progress = 1;
 }
 
+/* ---------- Wilson : marche aléatoire à boucles effacées ----------
+   Le seul tirage uniforme du laboratoire. On part d'un sommet déjà relié, puis
+   depuis chaque sommet isolé on marche au hasard jusqu'à retomber sur l'arbre.
+   Toute boucle refermée en chemin est effacée : il n'en reste rien. */
+function* algoWilson(run){
+  const { g, st } = run;
+  const dansArbre = new Uint8Array(g.n);
+  dansArbre[run.start] = 1;
+  st.nodeState[run.start] = 2;
+  let relies = 1, effacees = 0, pas = 0;
+
+  st.phase = 'Wilson — marche à boucles effacées';
+  st.note('Je marche au hasard, sans chercher nulle part où aller.', 'k1');
+  st.note('Chaque boucle que je referme est effacée : l’arbre reste sans biais.', 'k1');
+
+  for(let depart = 0; depart < g.n; depart++){
+    if(dansArbre[depart]) continue;
+
+    const marche = [depart], aretes = [];
+    const rang = new Map([[depart, 0]]);
+    st.struct = { kind:'marche', marche, effacees, nodes:g.nodes };
+    st.nodeState[depart] = 1;
+    let v = depart, touche = false, garde = g.n * g.n * 60;
+
+    while(garde-- > 0){
+      const voisins = g.adj[v];
+      if(!voisins.length) break;
+      const a = voisins[(run.rnd() * voisins.length) | 0];
+      pas++; st.counters.examines++; st.counters.aretes++;
+      st.progress = relies / g.n;
+
+      if(dansArbre[a.to]){                       // la marche rejoint l'arbre
+        aretes.push(a.e); marche.push(a.to);
+        st.candidates = aretes.slice();
+        st.note('La marche touche l’arbre : je la raccroche entière.', 'k3');
+        st.tone = { k:'edge', v: relies / g.n };
+        touche = true;
+        yield;
+        break;
+      }
+
+      if(rang.has(a.to)){                        // boucle : on l'efface
+        const i = rang.get(a.to);
+        for(let k = i + 1; k < marche.length; k++){
+          rang.delete(marche[k]);
+          st.nodeState[marche[k]] = 0;
+        }
+        marche.length = i + 1;
+        aretes.length = i;
+        v = a.to; effacees++; st.counters.retours++;
+        st.struct.effacees = effacees;
+        st.candidates = aretes.slice();
+        st.current = v;
+        st.note('Je me recoupe : la boucle disparaît, il n’en reste rien.', 'k4');
+        st.tone = { k:'back', v: marche.length / g.n };
+        yield;
+        continue;
+      }
+
+      rang.set(a.to, marche.length);
+      aretes.push(a.e); marche.push(a.to);
+      v = a.to;
+      st.nodeState[a.to] = 1;
+      st.candidates = aretes.slice();
+      st.current = v;
+      if(marche.length % 6 === 0)
+        st.note('Marche en cours : ' + marche.length + ' sommets, ' + effacees + ' boucles effacées.', 'k2');
+      st.tone = { k:'walk', v: (marche.length % 12) / 12 };
+      yield;
+    }
+
+    if(!touche) break;                           // sécurité : marche interrompue
+    for(let k = 0; k < aretes.length; k++){
+      st.chosen[aretes[k]] = 1; st.counters.retenues++;
+      dansArbre[marche[k]] = 1;
+      st.nodeState[marche[k]] = 2;
+      relies++;
+    }
+    st.candidates = []; st.current = -1;
+    st.progress = relies / g.n;
+    yield;
+  }
+  st.progress = 1;
+  st.note('Terminé en ' + pas + ' pas, dont ' + effacees + ' boucles effacées. ' +
+          'Cet arbre est tiré uniformément parmi tous les possibles.', 'k3');
+}
+
 /* ---------- Division récursive ---------- */
 function* algoDivision(run){
   const { g, st } = run;
@@ -1031,7 +1126,8 @@ function* algoDivision(run){
 }
 
 const RUNNERS = { dfs:algoDFS, prim:algoPrim, kruskal:algoKruskal, bfs:algoBFS,
-                  dijkstra:algoDijkstra, astar:algoAstar, mur:algoMur, division:algoDivision };
+                  dijkstra:algoDijkstra, astar:algoAstar, mur:algoMur,
+                  wilson:algoWilson, division:algoDivision };
 
 /* ============================================================================
    3. UNE EXÉCUTION
@@ -1401,7 +1497,8 @@ function drawPlan(ctx, W, H, run){
    5. AFFICHAGE DE LA STRUCTURE VIVANTE
    ============================================================================ */
 const STRUCT_NAME = { pile:'La pile', file:'La file', tas:'Le tas de priorité',
-                      uf:'Union-find', zones:'Zones en attente', aucune:'Structure' };
+                      uf:'Union-find', zones:'Zones en attente', marche:'La marche en cours',
+                      aucune:'Structure' };
 const STRUCT_HINT = {
   pile:"Dernier entré, premier sorti. C'est elle qui force l'algorithme à s'enfoncer " +
        "avant d'explorer ailleurs.",
@@ -1411,6 +1508,9 @@ const STRUCT_HINT = {
   uf:"Chaque case pointe vers un représentant. Répondre à « déjà reliés ? » coûte " +
      "presque rien, même après des milliers de fusions.",
   zones:"Une pile de rectangles restant à découper.",
+  marche:"Le chemin parcouru depuis le dernier sommet isolé. Il s'allonge à chaque pas " +
+     "et se raccourcit d'un coup dès qu'il se referme sur lui-même : c'est cet effacement " +
+     "qui rend le tirage uniforme.",
   aucune:"Aucune structure, aucune mémoire : c'est tout l'intérêt de la méthode."
 };
 
@@ -1494,6 +1594,24 @@ function drawStruct(cv, st){
       ctx.fillStyle='#9d94c8'; ctx.textAlign='right';
       ctx.fillText(uf.count + ' îlots', W-10, H-9);
     }
+  }
+  else if(s.kind === 'marche'){
+    const m = s.marche || [];
+    const vus = m.slice(-12);
+    const bw = Math.min(28, (W - 20) / Math.max(1, vus.length));
+    vus.forEach((v,k) => {
+      ctx.fillStyle = k === vus.length-1 ? '#ffb04d' : 'rgba(255,176,77,0.4)';
+      ctx.fillRect(10 + k*bw, H/2 - 12, bw - 2, 24);
+      if(bw > 20){
+        ctx.fillStyle = k === vus.length-1 ? '#05050a' : '#eae6ff';
+        ctx.textAlign = 'center'; ctx.fillText(v, 10 + k*bw + bw/2 - 1, H/2);
+      }
+    });
+    ctx.fillStyle = '#9d94c8'; ctx.textAlign = 'left';
+    ctx.fillText(m.length + ' sommets dans la marche', 10, H/2 - 26);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#ff7ba6';
+    ctx.fillText((s.effacees || 0) + ' boucles effacées', W - 10, H/2 + 30);
   }
   else if(s.kind === 'zones'){
     const items = s.items || [];
@@ -2425,6 +2543,87 @@ mur: {
         'Un labyrinthe parfait n’a aucun îlot de murs détaché : en longeant, on finit ' +
         'forcément par tout parcourir. Une boucle crée un tel îlot — et l’on peut en ' +
         'faire le tour sans fin.';
+    }}
+},
+
+wilson: {
+  demo:{ terrain:'grille', size:10 },
+  idee:"Marcher au hasard, sans but, et effacer toute boucle que l'on referme. " +
+       "C'est la seule méthode du laboratoire dont le résultat n'est déformé par rien.",
+  pseudo:
+"le premier sommet forme l'arbre\n" +
+"<b>pour chaque</b> sommet s encore isolé :\n" +
+"    marche ← [s]\n" +
+"    <b>répéter</b> :\n" +
+"        w ← une voisine tirée au hasard\n" +
+"        <b>si</b> w est dans l'arbre : raccrocher, arrêter\n" +
+"        <b>si</b> w est déjà dans la marche :\n" +
+"            effacer tout ce qui suit w   <i>// la boucle</i>\n" +
+"        <b>sinon</b> :\n" +
+"            ajouter w à la marche\n" +
+"    ajouter toute la marche à l'arbre",
+  structure:"<b>La marche en cours.</b> Elle s'allonge d'un sommet à chaque pas, et se " +
+    "tronque d'un coup dès qu'elle se referme sur elle-même. Cet effacement n'est pas " +
+    "une optimisation : c'est <b>lui</b> qui rend le tirage uniforme. Sans lui, les " +
+    "chemins qui tournent en rond seraient sur-représentés.",
+  garanties:[
+    "Tire un arbre couvrant <b>uniformément</b> parmi tous les arbres possibles.",
+    "Aucune déformation : ni couloirs allongés, ni buissons — la forme « typique ».",
+    "Le résultat ne dépend pas du sommet de départ.",
+    "Chaque sommet n'est ajouté qu'une fois, mais la marche peut piétiner longtemps."],
+  cout:{ temps:"temps moyen d'atteinte<br><span style='font-size:.62rem;opacity:.75'>du graphe (Wilson, 1996)</span>",
+         memoire:"O(n)" },
+  usages:[
+    "Tirage uniforme d'arbres couvrants, en probabilités et en physique statistique.",
+    "Génération de labyrinthes sans biais, quand la difficulté doit être neutre.",
+    "Échantillonnage de réseaux pour tester un protocole sur un cas moyen.",
+    "Point de référence : mesurer le biais des autres méthodes revient à les comparer à lui."],
+  compare:['dfs','prim'],
+  verif:{
+    claim:"Wilson tire chaque arbre à parts égales. Les autres ont chacun leur déformation — mais il faut un graphe assez grand pour la voir.",
+    run(){
+      // Une grille 2×2 est un carré : 4 arêtes, donc exactement 4 arbres couvrants
+      // (il suffit d'en retirer une). Un tirage uniforme les donne à 25 % chacun.
+      const cle = r => Array.from(r.st.chosen).join('');
+      const compte = (algo, N) => {
+        const m = new Map();
+        for(let i=0;i<N;i++){
+          const r = new Run('grille', algo, 2, (i*2654435761)>>>0, {});
+          r.finish();
+          m.set(cle(r), (m.get(cle(r))||0) + 1);
+        }
+        return m;
+      };
+      const N = 2000;
+      const ligne = (nom, algo) => {
+        const m = compte(algo, N);
+        const parts = [...m.values()].sort((a,b)=>b-a).map(v => (v/N*100).toFixed(1) + ' %');
+        const ecart = Math.max(...[...m.values()].map(v => Math.abs(v/N - 0.25)));
+        return '<b>' + nom + '</b> : ' + m.size + ' arbres sur 4 · ' + parts.join(' · ') +
+               ' · écart max à 25 % : <b>' + (ecart*100).toFixed(1) + ' pt</b>';
+      };
+      // comparaison de forme sur une vraie grille
+      const dia = algo => {
+        let s = 0; const M = 40;
+        for(let i=0;i<M;i++){
+          const r = new Run('grille', algo, 12, (7+i*7919)>>>0, {}); r.finish();
+          s += measure(r).chemin;
+        }
+        return (s/M).toFixed(1);
+      };
+      return 'Sur une grille 2×2 — un carré de 4 arêtes, donc <b>exactement 4 arbres ' +
+        'couvrants</b> — en ' + N + ' tirages :<br>' +
+        ligne('Wilson', 'wilson') + '<br>' + ligne('Profondeur', 'dfs') + '<br>' +
+        ligne('Prim', 'prim') + '<br><br>' +
+        'La profondeur ne produit que <b>deux</b> des quatre arbres : partie d’un coin, ' +
+        'elle fait toujours le tour complet. Son biais crève les yeux même ici.<br>' +
+        'Prim, lui, paraît uniforme sur ce carré — et il l’est réellement : sur un cycle, ' +
+        'l’arbre minimal se contente d’écarter l’arête la plus lourde, tirée au hasard. ' +
+        'Ce graphe est trop petit pour révéler sa déformation.<br><br>' +
+        'Il faut passer à une grille 12×12 pour la voir. Diamètre moyen — Profondeur ' +
+        '<b>' + dia('dfs') + '</b>, Wilson <b>' + dia('wilson') + '</b>, Prim <b>' +
+        dia('prim') + '</b>. Wilson tombe entre les deux : c’est la valeur d’un arbre ' +
+        '« typique », et c’est elle qui donne la mesure du biais des deux autres.';
     }}
 },
 
