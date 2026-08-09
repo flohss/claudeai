@@ -228,6 +228,26 @@ Chaque fiche se termine par une affirmation et un bouton qui la **vérifie en la
 mesurant** sur-le-champ. Aucun chiffre n'est écrit en dur : ils sont tous calculés au
 moment où tu cliques.
 
+### Deux familles à ne pas confondre
+
+Les algorithmes du laboratoire se répartissent en deux familles, indiquées sous chaque
+nom :
+
+- les **algorithmes d'arbre** — profondeur, Prim, Kruskal, division récursive — ne
+  cherchent aucun itinéraire. Ils relient *tout* le graphe, et la question « comment
+  aller de D à A » ne se pose pas pendant leur exécution ;
+- les **algorithmes de chemin** — largeur, Dijkstra, A\*, main sur le mur — partent d'un
+  départ et visent une arrivée. Eux seuls affichent un tracé pendant leur travail.
+
+Une fois un algorithme d'arbre terminé, le laboratoire éclaire malgré tout le chemin de
+D à A. Ce n'est pas un résultat de l'algorithme, c'est une propriété de l'objet qu'il a
+construit : **dans un arbre couvrant, il existe exactement un chemin entre deux
+sommets**. Le chemin était donc déjà là, sans que personne l'ait cherché — c'est
+exactement ce qui fait qu'un labyrinthe parfait a une solution et une seule.
+
+À noter : la colonne « plus long chemin » des statistiques reste le **diamètre** de
+l'arbre, pas ce tracé D→A, qui n'en est qu'une illustration.
+
 ### Le son du parcours
 
 Chaque type d'étape a son timbre : l'examen d'un candidat, l'arête retenue, le

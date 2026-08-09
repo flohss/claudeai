@@ -1065,6 +1065,20 @@ class Run {
     this.st.struct = { kind: algo.struct };   // connue avant même le premier pas
     this.start = 0;
     this.target = -1;
+    // Un algorithme d'arbre ne CHERCHE pas de chemin : il relie tout le graphe.
+    // On se donne quand même une arrivée de référence, purement géométrique, pour
+    // pouvoir montrer à la fin que le chemin existe — et qu'il est unique.
+    if(algo.kind === 'arbre' && terrain !== 'plan' && g.n > 1){
+      let best = 0, score = -1;
+      for(let i=0;i<g.n;i++){
+        const nd = g.nodes[i];
+        const sc = terrain === 'grille' ? nd.r + nd.c
+                 : Math.hypot(nd.x - g.nodes[0].x, nd.y - g.nodes[0].y);
+        if(sc > score){ score = sc; best = i; }
+      }
+      this.target = best;
+      this.st.target = best;
+    }
     if(algo.kind === 'chemin'){
       if(openGrid){
         const ends = openGridEnds(g);
@@ -1090,8 +1104,32 @@ class Run {
   }
   step(){
     if(this.done) return true;
-    if(this.it.next().done){ this.done = true; }
+    if(this.it.next().done){ this.done = true; this.apresCoup(); }
     return this.done;
+  }
+  /* Dans un arbre couvrant, il existe exactement UN chemin entre deux sommets.
+     L'algorithme ne l'a pas cherché, mais on peut le mettre en évidence. */
+  apresCoup(){
+    if(ALGOS[this.algoKey].kind !== 'arbre') return;
+    if(this.target < 0 || !this.g.n) return;
+    const g = this.g, st = this.st;
+    const parent = new Int32Array(g.n).fill(-2);
+    parent[this.start] = -1;
+    const q = [this.start]; let head = 0;
+    while(head < q.length){
+      const v = q[head++];
+      if(v === this.target) break;
+      for(const a of g.adj[v]){
+        if(!st.chosen[a.e] || parent[a.to] !== -2) continue;
+        parent[a.to] = v; q.push(a.to);
+      }
+    }
+    if(parent[this.target] === -2) return;
+    const p = []; let v = this.target, garde = g.n + 5;
+    while(v !== -1 && garde-- > 0){ p.push(v); v = parent[v]; }
+    st.path = p.reverse();
+    st.note('Le chemin de D à A existe, et il est unique — mais je ne l’ai jamais ' +
+            'cherché : je relie tout, je ne route rien.', 'k3');
   }
   finish(cap){
     let guard = cap || 4e6;
@@ -1235,7 +1273,10 @@ function drawGrille(ctx, W, H, run, compact){
     ctx.fillRect(px(n.c)+pad, py(n.r)+pad, cell-2*pad, cell-2*pad);
   }
   if(!compact) markNode(ctx, g.nodes[run.start], px, py, cell, '#6cff8f', 'D');
-  if(!compact && run.target >= 0) markNode(ctx, g.nodes[run.target], px, py, cell, '#ffcf5c', 'A');
+  const montrerArrivee = run.target >= 0 &&
+    (ALGOS[run.algoKey].kind === 'chemin' || run.done);
+  if(!compact && montrerArrivee)
+    markNode(ctx, g.nodes[run.target], px, py, cell, '#ffcf5c', 'A');
 }
 function markNode(ctx, n, px, py, cell, col, label){
   const x = px(n.c)+cell/2, y = py(n.r)+cell/2;
@@ -1295,7 +1336,9 @@ function drawNuage(ctx, W, H, run, compact){
   }
   if(!compact){
     ctx.fillStyle='#6cff8f'; ctx.beginPath(); ctx.arc(X(g.nodes[run.start]),Y(g.nodes[run.start]),R*2.2,0,6.3); ctx.fill();
-    if(run.target>=0){ ctx.fillStyle='#ffcf5c';
+    const montrerArrivee = run.target >= 0 &&
+      (ALGOS[run.algoKey].kind === 'chemin' || run.done);
+    if(montrerArrivee){ ctx.fillStyle='#ffcf5c';
       ctx.beginPath(); ctx.arc(X(g.nodes[run.target]),Y(g.nodes[run.target]),R*2.2,0,6.3); ctx.fill(); }
   }
 }
@@ -1601,7 +1644,9 @@ function paint(){
                 : ALGOS[ui.algo].kind === 'chemin' ? 'sommets figés' : 'étapes';
   const boxes = [[libelle, c.examines], ['arêtes testées', c.aretes],
                  ['arêtes retenues', c.retenues], ['retours', c.retours]];
-  if(run.target >= 0 && st.path.length) boxes.push(['chemin', st.path.length-1]);
+  if(run.target >= 0 && st.path.length)
+    boxes.push([ALGOS[ui.algo].kind === 'arbre' ? 'D→A dans l’arbre' : 'chemin',
+                st.path.length-1]);
   if(ALGOS[ui.algo].kind === 'arbre') boxes.push(['poids total', run.treeWeight().toFixed(2)]);
   $('counters').innerHTML = boxes.map(([l,v]) => '<div class="ct"><b>'+v+'</b><span>'+l+'</span></div>').join('');
 }
@@ -1811,7 +1856,9 @@ function measure(r){
     for(let i=0;i<tg.n;i++) if(tg.adj[i].length === 1) leaves++;
     out.impasses = leaves;
   }
-  if(st.path.length) out.chemin = st.path.length - 1;
+  // Pour un algorithme d'arbre, « chemin » reste le diamètre : le tracé D→A n'est
+  // qu'une illustration de fin, pas une mesure de la forme de l'arbre.
+  if(ALGOS[r.algoKey].kind === 'chemin' && st.path.length) out.chemin = st.path.length - 1;
   return out;
 }
 

@@ -179,6 +179,41 @@ export default async function testLabo(browser, base){
   for(const [k,v] of Object.entries(diam))
     R.check('diamètre exact pour ' + k, v === '30/30', '→ ' + v);
 
+  /* ----------------------------- le chemin unique révélé par les arbres */
+  R.section('Arbres : le chemin D→A existe et il est unique');
+  const chemins = await page.evaluate(() => {
+    const out = {};
+    for(const [algo, terrain, size] of [['dfs','grille',14], ['prim','grille',14],
+                                        ['kruskal','nuage',90], ['division','grille',14]]){
+      let ok = 0, diametreIntact = 0; const N = 15;
+      for(let i=0;i<N;i++){
+        const r = new LABO.Run(terrain, algo, size, (31+i*7919)>>>0, {});
+        r.finish();
+        // référence : distance dans l'arbre retenu, recalculée ici
+        const adj = r.g.nodes.map(() => []);
+        for(let k=0;k<r.g.edges.length;k++) if(r.st.chosen[k]){
+          const e = r.g.edges[k]; adj[e.a].push(e.b); adj[e.b].push(e.a);
+        }
+        const d = new Int32Array(adj.length).fill(-1); d[r.start] = 0;
+        const q = [r.start]; let h = 0;
+        while(h < q.length){ const v = q[h++];
+          for(const w of adj[v]) if(d[w] === -1){ d[w] = d[v]+1; q.push(w); } }
+        if(r.st.path.length && d[r.target] === r.st.path.length - 1) ok++;
+        // la colonne des statistiques doit rester le diamètre, pas ce chemin
+        const m = LABO.measure(r);
+        if(m.chemin >= d[r.target]) diametreIntact++;
+      }
+      out[algo] = { ok, diametreIntact, N };
+    }
+    return out;
+  });
+  for(const [k,v] of Object.entries(chemins)){
+    R.check('« ' + k + ' » trace le chemin unique de son arbre',
+      v.ok === v.N, '→ ' + v.ok + '/' + v.N);
+    R.check('« ' + k + ' » : la statistique reste le diamètre, pas ce chemin',
+      v.diametreIntact === v.N, '→ ' + v.diametreIntact + '/' + v.N);
+  }
+
   /* ------------------------------------------------------------- main au mur */
   R.section('Main au mur : sa limite est structurelle');
   const mur = await page.evaluate(() => {
