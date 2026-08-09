@@ -1593,7 +1593,12 @@ function paint(){
   $('barFill').style.width = pct + '%';
   $('log').innerHTML = st.logs.slice(-4).map(l => '<div class="'+l.cls+'">› '+l.msg+'</div>').join('');
   const c = st.counters;
-  const boxes = [['sommets vus', c.examines], ['arêtes testées', c.aretes],
+  // Ce compteur ne compte pas la même chose selon la famille : des sommets figés
+  // pour une recherche de chemin, des itérations principales pour un arbre — chez
+  // Prim et Kruskal, une itération est un retrait du tas ou une arête testée.
+  const libelle = ui.algo === 'mur' ? 'pas effectués'
+                : ALGOS[ui.algo].kind === 'chemin' ? 'sommets figés' : 'étapes';
+  const boxes = [[libelle, c.examines], ['arêtes testées', c.aretes],
                  ['arêtes retenues', c.retenues], ['retours', c.retours]];
   if(run.target >= 0 && st.path.length) boxes.push(['chemin', st.path.length-1]);
   if(ALGOS[ui.algo].kind === 'arbre') boxes.push(['poids total', run.treeWeight().toFixed(2)]);
@@ -1778,7 +1783,8 @@ $('raceEndBtn').onclick = () => {
    ============================================================================ */
 function measure(r){
   const g = r.g, st = r.st;
-  const out = { poids: r.treeWeight(), retenues: st.counters.retenues,
+  const out = { poids: ALGOS[r.algoKey].kind === 'arbre' ? r.treeWeight() : null,
+                retenues: st.counters.retenues,
                 examines: st.counters.examines, aretes: st.counters.aretes };
   if(ALGOS[r.algoKey].kind === 'arbre' && g.n){
     const edges = [];
@@ -1816,15 +1822,26 @@ $('statsRunBtn').onclick = () => {
   setTimeout(() => {
     const data = {};
     for(const k of keys) data[k] = [];
+    let memeArbre = 0, comparables = 0;
     for(let i=0;i<runs;i++){
       const seed = (ui.seed + i*2654435761) >>> 0;
+      const faits = {};
       for(const k of keys){
         const r = new Run(ui.terrain, k, ui.size, seed, { loops:ui.loops, threshold:ui.threshold, gridMode:ui.gridMode });
         r.finish();
         data[k].push(measure(r));
+        faits[k] = r;
+      }
+      // Prim et Kruskal donnent-ils le même arbre, ou seulement le même poids ?
+      if(faits.prim && faits.kruskal){
+        comparables++;
+        const a = faits.prim.st.chosen, b = faits.kruskal.st.chosen;
+        let ecart = false;
+        for(let j=0;j<a.length;j++) if(a[j] !== b[j]){ ecart = true; break; }
+        if(!ecart) memeArbre++;
       }
     }
-    renderStats(data, keys, runs);
+    renderStats(data, keys, runs, { memeArbre, comparables });
   }, 30);
 };
 
@@ -1836,9 +1853,9 @@ function stat(arr, f){
   return { moy:m, min:Math.min(...v), max:Math.max(...v), sd, vals:v };
 }
 
-function renderStats(data, keys, runs){
+function renderStats(data, keys, runs, extra){
   const cols = [['chemin','Plus long chemin'],['impasses','Impasses'],['poids','Poids'],
-                ['examines','Sommets vus'],['aretes','Arêtes testées']];
+                ['examines','Étapes'],['aretes','Arêtes testées']];
   let html = '<table><tr><th>Algorithme</th>' +
     cols.map(c => '<th>'+c[1]+'</th>').join('') + '</tr>';
   for(const k of keys){
@@ -1860,8 +1877,21 @@ function renderStats(data, keys, runs){
   if(p && kr){
     const same = Math.abs(p.moy - kr.moy) < 1e-9;
     html += '<br><br>' + (same
-      ? 'Prim et Kruskal affichent <b>le même poids moyen à la décimale près</b> : sur un graphe donné, l’arbre couvrant minimal est unique en poids, quel que soit le chemin pris pour l’atteindre.'
+      ? 'Prim et Kruskal affichent <b>le même poids moyen à la décimale près</b>.'
       : '<span class="ko">Prim et Kruskal divergent en poids — c’est un défaut à corriger.</span>');
+    if(extra && extra.comparables){
+      const tous = extra.memeArbre === extra.comparables;
+      html += ' Mieux : sur <b>' + extra.memeArbre + '</b> des ' + extra.comparables +
+        ' tirages comparés, les deux retiennent <b>exactement les mêmes arêtes</b>' +
+        (tous ? '' : '') + '. ' +
+        (tous
+          ? 'Ce n’est pas une coïncidence : quand tous les poids d’arêtes sont distincts, ' +
+            'l’arbre couvrant minimal est <b>unique</b>. Deux démarches opposées — croissance ' +
+            'locale contre tri global — ne peuvent alors aboutir qu’au même objet. Seul le ' +
+            'travail fourni diffère, comme le montre la colonne « Étapes ».'
+          : 'Les tirages qui diffèrent sont ceux où deux arêtes ont exactement le même poids : ' +
+            'l’arbre minimal n’y est plus unique.');
+    }
   }
   const dd = keys.indexOf('dfs') >= 0 ? stat(data.dfs, d=>d.chemin) : null;
   const pp = keys.indexOf('prim') >= 0 ? stat(data.prim, d=>d.chemin) : null;
@@ -1893,13 +1923,20 @@ function drawHist(data, keys){
   const peak = Math.max(1, ...bins.flat());
   const pal = ['#7bd9ff','#ff7ba6','#6cff8f','#ffb04d','#a89bff','#ffffff'];
   const pad = 26;
+  // Prim et Kruskal donnent souvent la MÊME distribution : sans pointillés, la
+  // seconde courbe disparaîtrait exactement sous la première.
+  const traits = [[], [7,5], [2,4], [11,4], [4,3], []];
   series.forEach((s,si) => {
-    ctx.strokeStyle = pal[si % pal.length]; ctx.lineWidth = 2; ctx.beginPath();
+    ctx.strokeStyle = pal[si % pal.length];
+    ctx.lineWidth = si % 2 ? 3 : 2;
+    ctx.setLineDash(traits[si % traits.length]);
+    ctx.beginPath();
     bins[si].forEach((v,i) => {
       const x = pad + (W-2*pad)*i/(B-1), y = H-pad - (H-2*pad)*v/peak;
       i ? ctx.lineTo(x,y) : ctx.moveTo(x,y);
     });
     ctx.stroke();
+    ctx.setLineDash([]);
     ctx.fillStyle = pal[si % pal.length];
     ctx.font='11px system-ui'; ctx.textAlign='left';
     ctx.fillText(ALGOS[s.k].name, pad + si*82, 14);
@@ -2070,19 +2107,26 @@ prim: {
     "Sur une grille aux poids aléatoires : un labyrinthe très ramifié."],
   compare:['kruskal','dfs'],
   verif:{
-    claim:"Prim et Kruskal, démarches opposées, aboutissent au même poids total.",
+    claim:"Prim et Kruskal ne donnent pas seulement le même poids : ils donnent le même arbre.",
     run(){
-      const N=12; let same=0, ex=[];
+      const N=12; let poids=0, arbre=0, travail=[];
       for(let i=0;i<N;i++){
         const s=(31+i*7919)>>>0;
         const a=new Run('nuage','prim',90,s,{}); a.finish();
         const b=new Run('nuage','kruskal',90,s,{}); b.finish();
-        if(Math.abs(a.treeWeight()-b.treeWeight())<1e-9) same++;
-        if(i<3) ex.push(a.treeWeight().toFixed(5)+' / '+b.treeWeight().toFixed(5));
+        if(Math.abs(a.treeWeight()-b.treeWeight())<1e-9) poids++;
+        let ecart=false;
+        for(let j=0;j<a.st.chosen.length;j++)
+          if(a.st.chosen[j]!==b.st.chosen[j]){ ecart=true; break; }
+        if(!ecart) arbre++;
+        if(i<3) travail.push(a.st.counters.examines+' contre '+b.st.counters.examines);
       }
-      return '<b>'+same+' nuages sur '+N+'</b> donnent un poids strictement identique.<br>' +
-        'Trois exemples (Prim / Kruskal) : '+ex.join(' · ')+'.<br>' +
-        'Ils n’explorent pourtant pas du tout dans le même ordre — seul l’optimum est commun.';
+      return '<b>'+poids+'/'+N+'</b> tirages au poids strictement identique, et ' +
+        '<b>'+arbre+'/'+N+'</b> au jeu d’arêtes <b>exactement</b> identique.<br>' +
+        'Quand tous les poids d’arêtes diffèrent, l’arbre couvrant minimal est ' +
+        '<b>unique</b> : deux démarches opposées ne peuvent aboutir qu’au même objet.<br>' +
+        'Seul le travail fourni change — étapes de Prim contre Kruskal : ' +
+        travail.join(' · ') + '.';
     }}
 },
 

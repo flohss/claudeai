@@ -69,6 +69,24 @@ export default async function testLabo(browser, base){
   for(const [k,v] of Object.entries(poids))
     R.check('poids identique sur ' + k, v === '20/20', '→ ' + v);
 
+  const memeArbre = await page.evaluate(() => {
+    // sur un nuage, les poids sont des distances : tous distincts, donc l'arbre
+    // couvrant minimal est unique et les deux algorithmes doivent le retrouver
+    let ok = 0; const N = 20;
+    for(let i=0;i<N;i++){
+      const s = (1000+i*7919)>>>0;
+      const a = new LABO.Run('nuage','prim',150,s,{}); a.finish();
+      const b = new LABO.Run('nuage','kruskal',150,s,{}); b.finish();
+      let ecart = false;
+      for(let j=0;j<a.st.chosen.length;j++)
+        if(a.st.chosen[j] !== b.st.chosen[j]){ ecart = true; break; }
+      if(!ecart) ok++;
+    }
+    return ok + '/' + N;
+  });
+  R.check('Prim et Kruskal retiennent exactement les mêmes arêtes',
+    memeArbre === '20/20', '→ ' + memeArbre);
+
   /* ------------------------------------------------------------- A* et Dijkstra */
   R.section('A* : jamais plus coûteux, et toujours optimal');
   const astar = await page.evaluate(() => {
@@ -226,6 +244,10 @@ export default async function testLabo(browser, base){
     [...document.querySelectorAll('#statsOut table td')].map(t => t.textContent));
   R.check('le tableau ne contient aucune valeur invalide',
     !cellules.some(c => /NaN|undefined|Infinity/.test(c)), '→ ' + cellules.length + ' cellules');
+  const entetes = await page.evaluate(() =>
+    [...document.querySelectorAll('#statsOut table th')].map(t => t.textContent.trim()));
+  R.check('le compteur d’étapes n’est plus étiqueté « sommets »',
+    !entetes.some(h => /sommet/i.test(h)), '→ ' + entetes.join(' · '));
   const hist = await page.evaluate(() => {
     const cv = document.getElementById('histCv');
     const d = cv.getContext('2d').getImageData(0,0,cv.width,cv.height).data;

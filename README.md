@@ -244,8 +244,12 @@ sonorisé : quatre pistes simultanées seraient inaudibles.
 
 ## Quelques résultats à retrouver soi-même
 
-- **Prim et Kruskal donnent toujours exactement le même poids total.** Deux démarches
-  opposées — croissance locale contre tri global — qui convergent vers le même optimum.
+- **Prim et Kruskal ne donnent pas seulement le même poids : ils donnent le même
+  arbre**, arête pour arête, vérifié sur 300 tirages d'un nuage de 220 points. Quand tous
+  les poids d'arêtes diffèrent — ce qui est le cas de distances entre points tirés au
+  hasard — l'arbre couvrant minimal est *unique*. Deux démarches opposées, croissance
+  locale contre tri global, ne peuvent alors aboutir qu'au même objet. Seul le travail
+  fourni change : environ 787 étapes pour Prim contre 681 pour Kruskal.
 - **La profondeur produit des chemins bien plus longs que Prim**, à nombre d'arêtes
   identique : sur une grille 12×12, un diamètre d'arbre d'environ 91 contre 44. Le biais
   de l'algorithme, et rien d'autre, décide de la difficulté. Le diamètre est mesuré par
