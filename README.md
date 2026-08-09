@@ -256,10 +256,16 @@ sonorisé : quatre pistes simultanées seraient inaudibles.
   double balayage — partir d'un sommet quelconque mène à une extrémité du diamètre, et
   repartir de là donne le maximum réel. Mesurer depuis le coin de départ le
   sous-estimerait d'environ 15 % chez Prim.
-- **Le gain d'A\* sur Dijkstra dépend entièrement du terrain** : environ 4× sur un nuage
-  de points, 1,8× sur une grille à obstacles, mais à peine mieux que Dijkstra dans un
-  labyrinthe. Un labyrinthe est un arbre : il n'existe qu'un chemin, donc l'heuristique
-  n'a presque rien à guider. Une bonne heuristique ne sert que là où il y a un choix.
+- **Le gain d'A\* sur Dijkstra dépend du terrain, et il grandit avec la taille.** Sur une
+  grille à obstacles il passe d'environ 1,6× en 10×10 à 2,5× en 26×26 : plus l'espace de
+  recherche est vaste, plus l'heuristique évite de terrain inutile. Dans un labyrinthe il
+  reste à 1,03× quelle que soit la taille, parce qu'un labyrinthe est un arbre — il
+  n'existe qu'un chemin, donc rien à guider. Une heuristique ne paie que là où il y a un
+  choix.
+- **La colonne « Étapes » ne raconte pas tout pour Kruskal** : elle ne compte que la phase
+  de fusion. Le tri initial de toutes les arêtes a déjà eu lieu, et c'est lui qui domine
+  son coût. Kruskal paraît s'arrêter plus tôt que Prim, mais il a touché chaque arête
+  avant de commencer — le tableau le signale.
 - **Sur l'image synthétique, qui contient 7 régions, Kruskal en retrouve exactement 7**
   au seuil par défaut.
 

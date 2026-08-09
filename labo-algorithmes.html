@@ -632,11 +632,12 @@ const ALGOS = {
   astar: { name:'A*', icon:'🎯', kind:'chemin', struct:'tas',
     terrains:['grille','nuage'],
     lesson:"A* est Dijkstra plus une estimation de la distance restante, qui oriente la " +
-           "recherche vers l'arrivée. Le gain dépend entièrement du terrain : environ 4× " +
-           "sur un nuage de points, 1,8× sur une grille à obstacles, mais à peine mieux " +
-           "que Dijkstra dans un labyrinthe — un labyrinthe est un arbre, il n'existe " +
-           "qu'un chemin, donc presque rien à guider. Une bonne heuristique ne sert que " +
-           "là où il y a un choix." },
+           "recherche vers l'arrivée. Le gain dépend entièrement du terrain, et il " +
+           "grandit avec la taille : sur une grille à obstacles il passe d'environ 1,6× " +
+           "en 10×10 à 2,5× en 26×26. Dans un labyrinthe il reste à 1,03× quelle que " +
+           "soit la taille — un labyrinthe est un arbre, il n'existe qu'un chemin, donc " +
+           "presque rien à guider. Une heuristique ne paie que là où il y a un choix, et " +
+           "elle paie d'autant plus que l'espace de recherche est vaste." },
   mur: { name:'Main au mur', icon:'🤚', kind:'chemin', struct:'aucune',
     terrains:['grille'],
     lesson:"Aucune structure, aucune mémoire : longer le mur de gauche suffit à sortir " +
@@ -1872,6 +1873,11 @@ function renderStats(data, keys, runs, extra){
           runs + ' tirages de graines différentes. Pour les algorithmes d’arbre, ' +
           '« plus long chemin » est le <b>diamètre</b> de l’arbre obtenu, calculé par ' +
           'double balayage ; pour les algorithmes de chemin, c’est la longueur du chemin trouvé.';
+  if(keys.indexOf('kruskal') >= 0)
+    html += '<br><br>Attention en lisant « Étapes » pour Kruskal : elle ne compte que la ' +
+            'phase de fusion. Le <b>tri initial de toutes les arêtes</b> a déjà eu lieu, et ' +
+            'c’est lui qui domine son coût. Kruskal paraît s’arrêter plus tôt que Prim, mais ' +
+            'il a touché chaque arête avant même de commencer.';
   const p = keys.indexOf('prim') >= 0 ? stat(data.prim, d=>d.poids) : null;
   const kr = keys.indexOf('kruskal') >= 0 ? stat(data.kruskal, d=>d.poids) : null;
   if(p && kr){
@@ -2293,14 +2299,10 @@ astar: {
     "Résolution de taquins et de casse-tête."],
   compare:['dijkstra','bfs'],
   verif:{
-    claim:"Le gain d'A* dépend entièrement du terrain — et il est presque nul dans un labyrinthe.",
+    claim:"Le gain d'A* dépend du terrain, et sur une grille il grandit avec la taille.",
     run(){
-      const cases=[['grille','maze',14,'labyrinthe'],['grille','open',14,'grille à obstacles'],
-                   ['nuage','maze',90,'nuage de points']];
-      const out=[];
-      let sameAll=0, tot=0;
-      for(const [t,mode,size,label] of cases){
-        let d=0,a=0,same=0; const N=10;
+      const mesure = (t, mode, size) => {
+        let d=0, a=0, same=0; const N=14;
         for(let i=0;i<N;i++){
           const s=(31+i*7919)>>>0;
           const x=new Run(t,'dijkstra',size,s,{gridMode:mode}); x.finish();
@@ -2308,13 +2310,23 @@ astar: {
           d+=x.st.counters.examines; a+=y.st.counters.examines;
           if(Math.abs(x.st.dist[x.target]-y.st.dist[y.target])<1e-9) same++;
         }
-        sameAll+=same; tot+=N;
-        out.push(label+' : <b>'+(d/a).toFixed(2)+'×</b> moins de sommets ('+
-                 (d/N).toFixed(0)+' → '+(a/N).toFixed(0)+')');
-      }
-      return out.join('<br>')+'<br><b>'+sameAll+'/'+tot+'</b> chemins de coût strictement ' +
-        'identique : l’heuristique accélère sans jamais dégrader.<br>' +
-        'Un labyrinthe est un arbre : il n’existe qu’un chemin, donc rien à guider.';
+        return { gain:d/a, same, N };
+      };
+      const tailles = [10, 18, 26];
+      const lab = tailles.map(z => mesure('grille','maze',z));
+      const ouv = tailles.map(z => mesure('grille','open',z));
+      const nu  = mesure('nuage','maze',150);
+      const ligne = (nom, arr) => nom + ' : ' +
+        arr.map((x,i) => tailles[i]+'×'+tailles[i]+' <b>'+x.gain.toFixed(2)+'×</b>').join(' · ');
+      const totSame = [...lab, ...ouv, nu].reduce((s,x)=>s+x.same,0);
+      const totN    = [...lab, ...ouv, nu].reduce((s,x)=>s+x.N,0);
+      return ligne('Labyrinthe', lab) + '<br>' + ligne('Grille à obstacles', ouv) + '<br>' +
+        'Nuage de 150 points : <b>' + nu.gain.toFixed(2) + '×</b><br><br>' +
+        'Sur la grille à obstacles le gain <b>grandit avec la taille</b> : plus l’espace ' +
+        'de recherche est vaste, plus l’heuristique évite de terrain inutile. Dans le ' +
+        'labyrinthe il reste plat — il n’y a qu’un chemin, donc rien à guider.<br>' +
+        '<b>' + totSame + '/' + totN + '</b> chemins de coût strictement identique : ' +
+        'l’heuristique accélère sans jamais dégrader.';
     }}
 },
 

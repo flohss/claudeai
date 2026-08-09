@@ -113,6 +113,29 @@ export default async function testLabo(browser, base){
     R.check('même coût optimal — ' + k, v.memeCout === v.N, '→ ' + v.memeCout + '/' + v.N);
   }
 
+  R.section('Le gain d’A* grandit avec la taille sur grille à obstacles');
+  const tendance = await page.evaluate(() => {
+    const mesure = (mode, size) => {
+      let d = 0, a = 0; const N = 25;
+      for(let i=0;i<N;i++){
+        const s = (1000+i*7919)>>>0;
+        const x = new LABO.Run('grille','dijkstra',size,s,{gridMode:mode}); x.finish();
+        const y = new LABO.Run('grille','astar',size,s,{gridMode:mode}); y.finish();
+        d += x.st.counters.examines; a += y.st.counters.examines;
+      }
+      return d/a;
+    };
+    return { ouvertPetit: mesure('open',10), ouvertGrand: mesure('open',26),
+             labPetit: mesure('maze',10), labGrand: mesure('maze',26) };
+  });
+  R.check('sur grille ouverte, le gain croît nettement avec la taille',
+    tendance.ouvertGrand > tendance.ouvertPetit * 1.25,
+    '→ ' + tendance.ouvertPetit.toFixed(2) + '× en 10×10 puis ' +
+    tendance.ouvertGrand.toFixed(2) + '× en 26×26');
+  R.check('dans un labyrinthe, le gain reste proche de 1 quelle que soit la taille',
+    tendance.labPetit < 1.2 && tendance.labGrand < 1.2,
+    '→ ' + tendance.labPetit.toFixed(2) + '× puis ' + tendance.labGrand.toFixed(2) + '×');
+
   /* ------------------------------------ régression : le départ ne doit pas être muré */
   R.section('Grille à obstacles : départ et arrivée toujours reliés');
   const ends = await page.evaluate(() => {
