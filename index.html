@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Arcade Rétro</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1 class="logo">🕹️ ARCADE <span>RÉTRO</span></h1>
+    <button id="backBtn" class="back-btn hidden">← Menu</button>
+  </header>
+
+  <main>
+    <section id="menu" class="menu">
+      <p class="subtitle">Choisis un jeu d'arcade de l'époque et joue directement dans ton navigateur.</p>
+      <div class="game-grid" id="gameGrid"></div>
+    </section>
+
+    <section id="gameScreen" class="game-screen hidden">
+      <div class="game-header">
+        <h2 id="gameTitle"></h2>
+        <div id="gameScore" class="score"></div>
+      </div>
+      <canvas id="canvas" width="640" height="420"></canvas>
+      <p id="gameHint" class="hint"></p>
+    </section>
+  </main>
+
+  <footer>
+    <p>Utilise le clavier — flèches / W-S / Espace. Fait avec Claude.</p>
+  </footer>
+
+  <script src="games/pong.js"></script>
+  <script src="games/snake.js"></script>
+  <script src="games/breakout.js"></script>
+  <script src="games/invaders.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>
