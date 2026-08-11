@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Générateur de schémas d'architecture</title>
+<style>
+  :root{
+    --panel-bg:#f7f7fb;
+    --panel-border:#e1e1ea;
+    --text:#1c1c28;
+    --muted:#6b6b7b;
+    --accent:#3b5bdb;
+    --accent-hover:#2f4bc4;
+    --danger:#c0392b;
+    --input-border:#d4d4de;
+    --canvas-bg:#ffffff;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--text);background:var(--canvas-bg);}
+  body{display:flex;height:100vh;overflow:hidden;}
+
+  #controls{
+    width:380px;min-width:380px;height:100%;overflow-y:auto;
+    background:var(--panel-bg);border-right:1px solid var(--panel-border);
+    padding:18px 18px 60px;
+  }
+  #controls h1{font-size:17px;margin:0 0 2px;}
+  #controls .subtitle{font-size:12.5px;color:var(--muted);margin:0 0 18px;}
+  .section{background:#fff;border:1px solid var(--panel-border);border-radius:10px;padding:14px;margin-bottom:14px;}
+  .section h2{font-size:12.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:0 0 10px;font-weight:700;}
+  .row{display:flex;gap:8px;margin-bottom:8px;align-items:center;}
+  .row label{flex:0 0 auto;font-size:12.5px;color:var(--muted);}
+  label.field{display:block;font-size:12.5px;color:var(--muted);margin-bottom:4px;margin-top:8px;}
+  label.field:first-child{margin-top:0;}
+  input[type=text], input[type=search], select, textarea{
+    width:100%;padding:7px 8px;border:1px solid var(--input-border);border-radius:6px;
+    font-size:13px;font-family:inherit;background:#fff;color:var(--text);
+  }
+  input[type=color]{width:38px;height:30px;padding:0;border:1px solid var(--input-border);border-radius:6px;background:#fff;cursor:pointer;}
+  .colorfield{display:flex;align-items:center;gap:8px;}
+  .colorfield input[type=text]{flex:1;font-family:monospace;font-size:12px;}
+  .swatches{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;}
+  .swatch{width:20px;height:20px;border-radius:5px;border:1px solid rgba(0,0,0,.15);cursor:pointer;padding:0;}
+  .swatch:hover{outline:2px solid var(--accent);outline-offset:1px;}
+  button{cursor:pointer;font-family:inherit;}
+  .btn{
+    background:var(--accent);color:#fff;border:none;border-radius:6px;padding:8px 12px;
+    font-size:13px;font-weight:600;
+  }
+  .btn:hover{background:var(--accent-hover);}
+  .btn.secondary{background:#eceef4;color:var(--text);}
+  .btn.secondary:hover{background:#dfe1ea;}
+  .btn.danger{background:#fdecea;color:var(--danger);}
+  .btn.danger:hover{background:#fadbd8;}
+  .btn.block{width:100%;}
+  .btn.small{padding:4px 8px;font-size:11.5px;}
+  .btn-row{display:flex;gap:8px;margin-top:10px;}
+  .btn-row .btn{flex:1;}
+
+  .parent-list{max-height:130px;overflow-y:auto;border:1px solid var(--input-border);border-radius:6px;padding:6px;background:#fbfbfd;}
+  .parent-list label{display:flex;align-items:center;gap:6px;font-size:12.5px;padding:3px 2px;color:var(--text);}
+  .parent-list .empty{color:var(--muted);font-size:12px;padding:2px;}
+
+  .node-list{max-height:260px;overflow-y:auto;}
+  .node-item{
+    display:flex;align-items:center;gap:8px;padding:6px 6px;border-radius:6px;
+    border:1px solid transparent;font-size:12.5px;
+  }
+  .node-item:hover{background:#f1f2f8;}
+  .node-item.editing{border-color:var(--accent);background:#eef1fd;}
+  .node-item .chip{width:14px;height:14px;border-radius:4px;flex:0 0 auto;border:1px solid rgba(0,0,0,.15);}
+  .node-item .lbl{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .node-item .depth-indent{flex:0 0 auto;color:var(--muted);font-size:11px;}
+  .node-item .actions{display:flex;gap:4px;flex:0 0 auto;}
+  .node-item .actions button{background:none;border:none;font-size:13px;padding:2px 4px;border-radius:4px;}
+  .node-item .actions button:hover{background:#e2e4ee;}
+  .empty-hint{color:var(--muted);font-size:12px;padding:8px 2px;}
+
+  .legend-row, .info-row{display:flex;gap:6px;align-items:center;margin-bottom:6px;}
+  .legend-row input[type=text], .info-row input[type=text]{flex:1;}
+  .legend-row input[type=color]{flex:0 0 auto;}
+  .icon-input{width:52px;flex:0 0 auto;text-align:center;}
+  .remove-x{background:none;border:none;color:var(--danger);font-size:15px;padding:2px 6px;border-radius:4px;}
+  .remove-x:hover{background:#fadbd8;}
+
+  #stage{
+    flex:1;height:100%;overflow:auto;background:
+      linear-gradient(90deg,#f4f4f8 1px,transparent 1px) 0 0/24px 24px,
+      linear-gradient(#f4f4f8 1px,transparent 1px) 0 0/24px 24px,
+      #fff;
+    display:flex;align-items:flex-start;justify-content:center;padding:40px;
+  }
+  #diagram{background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.08);border-radius:4px;}
+
+  .hint{font-size:11.5px;color:var(--muted);line-height:1.5;margin-top:6px;}
+  .checkbox-line{display:flex;align-items:center;gap:6px;font-size:12.5px;}
+  .checkbox-line input{margin:0;}
+  select#iconSelect{margin-bottom:4px;}
+</style>
+</head>
+<body>
+
+<aside id="controls">
+  <h1>🧩 Générateur de schémas</h1>
+  <p class="subtitle">Composez un schéma d'architecture en blocs reliés par des branches — comme l'exemple AIDEN.</p>
+
+  <div class="section">
+    <h2>Modèle</h2>
+    <div class="btn-row">
+      <button class="btn secondary block" id="loadExampleBtn">Charger l'exemple AIDEN</button>
+    </div>
+    <div class="btn-row">
+      <button class="btn secondary block" id="newDiagramBtn">Nouveau schéma vierge</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Titre &amp; style général</h2>
+    <label class="field">Titre du schéma</label>
+    <input type="text" id="titleInput">
+    <div class="row" style="margin-top:8px;">
+      <label style="flex:1;">Couleur du titre</label>
+      <input type="color" id="titleColor">
+      <label style="flex:1;">Couleur des flèches</label>
+      <input type="color" id="edgeColor">
+    </div>
+  </div>
+
+  <div class="section">
+    <h2 id="formTitle">Ajouter un bloc</h2>
+    <label class="field">Libellé *</label>
+    <input type="text" id="nodeLabel" placeholder="Ex : PORTAIL AIDEN">
+    <label class="field">Sous-texte (optionnel)</label>
+    <input type="text" id="nodeSubtitle" placeholder="Ex : Export principal">
+
+    <label class="field">Icône</label>
+    <select id="iconSelect"></select>
+    <input type="text" id="iconCustom" class="icon-input" maxlength="4" placeholder="🙂" style="display:none;">
+
+    <label class="field">Couleur de la bulle</label>
+    <div class="colorfield">
+      <input type="color" id="nodeBg" value="#3b5bdb">
+      <input type="text" id="nodeBgText" value="#3b5bdb">
+    </div>
+    <div class="swatches" id="bgSwatches"></div>
+
+    <label class="field">Couleur du texte</label>
+    <div class="colorfield">
+      <input type="color" id="nodeColor" value="#ffffff">
+      <input type="text" id="nodeColorText" value="#ffffff">
+    </div>
+    <div class="swatches" id="textSwatches"></div>
+
+    <label class="field">Branché depuis (parents) — laissez vide pour un bloc racine, cochez plusieurs blocs pour une jointure</label>
+    <div class="parent-list" id="parentList"></div>
+
+    <div class="btn-row">
+      <button class="btn block" id="saveNodeBtn">Ajouter le bloc</button>
+      <button class="btn secondary" id="cancelEditBtn" style="display:none;">Annuler</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Blocs du schéma (<span id="nodeCount">0</span>)</h2>
+    <div class="node-list" id="nodeList"></div>
+  </div>
+
+  <div class="section">
+    <h2>Légende</h2>
+    <div id="legendList"></div>
+    <div class="btn-row">
+      <button class="btn secondary" id="addLegendBtn">+ Ajouter une entrée</button>
+      <button class="btn secondary" id="syncLegendBtn">Générer depuis les couleurs</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Panneau d'informations (encart latéral)</h2>
+    <label class="checkbox-line"><input type="checkbox" id="showInfoPanel" checked> Afficher l'encart</label>
+    <div id="infoList" style="margin-top:8px;"></div>
+    <div class="btn-row">
+      <button class="btn secondary block" id="addInfoBtn">+ Ajouter une ligne</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Export</h2>
+    <div class="btn-row">
+      <button class="btn block" id="exportPngBtn">Télécharger en PNG</button>
+    </div>
+    <div class="btn-row">
+      <button class="btn secondary block" id="exportSvgBtn">Télécharger en SVG</button>
+    </div>
+    <p class="hint">Le schéma se met à jour automatiquement. Utilisez la molette pour zoomer votre navigateur si besoin avant l'export.</p>
+  </div>
+</aside>
+
+<main id="stage">
+  <svg id="diagram" xmlns="http://www.w3.org/2000/svg"></svg>
+</main>
+
+<script>
+(function(){
+  "use strict";
+  const SVG_NS = "http://www.w3.org/2000/svg";
+
+  const ICONS = [
+    ["", "Aucune icône"],
+    ["🖥️","Portail / écran"],
+    ["🗄️","Base de données"],
+    ["🧩","Modèle / module"],
+    ["📄","Document"],
+    ["📊","Analyse / graphique"],
+    ["📁","Dossier"],
+    ["🔗","Lien / jointure"],
+    ["⚙️","Traitement"],
+    ["🗂️","Classeur"],
+    ["📈","Restitution"],
+    ["📥","Import"],
+    ["📤","Export"],
+    ["👤","Personne"],
+    ["💡","Idée / conception"],
+    ["📅","Fréquence / calendrier"],
+    ["⭐","Repère"],
+    ["custom","Personnalisée…"]
+  ];
+
+  const BG_PRESETS = ["#14206b","#3b5bdb","#7b2fa3","#1f7a4d","#2f9e64","#e8a100","#c0392b","#a8d5ba","#374151","#ffffff"];
+  const TEXT_PRESETS = ["#ffffff","#14206b","#1c1c28","#7b2fa3","#1f7a4d","#e8a100"];
+
+  function uid(s){ return "n" + (s.seq++); }
+
+  function defaultState(){
+    return {
+      seq: 1,
+      title: "Nouveau schéma d'architecture",
+      titleColor: "#14206b",
+      edgeColor: "#2f5fdd",
+      showInfoPanel: false,
+      infoItems: [],
+      legend: [],
+      order: [],
+      nodes: {}
+    };
+  }
+
+  function aidenExample(){
+    const s = defaultState();
+    s.title = "Architecture du système décisionnel AIDEN";
+    s.titleColor = "#14206b";
+    s.edgeColor = "#2f5fdd";
+    s.showInfoPanel = true;
+    s.infoItems = [
+      {icon:"👤", title:"Administration :", subtitle:"Florian HESS"},
+      {icon:"💡", title:"Conception modèle principal :", subtitle:"Bertrand ZUGMEYER"},
+      {icon:"📅", title:"Fréquence d'actualisation :", subtitle:"Tous les matins"}
+    ];
+    s.legend = [
+      {color:"#14206b", label:"AIDEN"},
+      {color:"#7b2fa3", label:"Modèles sémantiques"},
+      {color:"#1f7a4d", label:"Exports SharePoint"},
+      {color:"#e8a100", label:"Restitutions Power BI"},
+      {color:"#a8d5ba", label:"Analyses Excel"}
+    ];
+    const add = (label, sub, icon, bg, color, parents) => {
+      const id = uid(s);
+      s.nodes[id] = {id, label, subtitle: sub||"", icon: icon||"", bg, color, parents: parents||[]};
+      s.order.push(id);
+      return id;
+    };
+    const portail = add("PORTAIL AIDEN","","🖥️","#14206b","#ffffff",[]);
+    const gis = add("GISEMENTS V2","","🗄️","#7b2fa3","#ffffff",[portail]);
+    const info = add("INFOCOMP V1","","🧩","#7b2fa3","#ffffff",[portail]);
+    const exp1 = add("EXPORT_TABLE_SUBVENTIONS.xlsx","(Export principal)","📄","#eaf6ee","#1f7a4d",[gis]);
+    const exp2 = add("Informations complémentaires des téléservices","","📄","#eaf6ee","#1f7a4d",[info]);
+    const enrich = add("Exports enrichis","","🗄️","#eaf6ee","#1f7a4d",[exp1, exp2]);
+    const a1 = add("AIDESANAH01","","📄","#eaf6ee","#1f7a4d",[enrich]);
+    const a2 = add("MANISPORT02","","📄","#eaf6ee","#1f7a4d",[enrich]);
+    const a3 = add("SECSPORTSC02","","📄","#eaf6ee","#1f7a4d",[enrich]);
+    const a4 = add("…","","📄","#eaf6ee","#1f7a4d",[enrich]);
+    const restit = add("Restitutions","","📊","#fff3da","#c07a00",[a1,a2,a3,a4]);
+    add("INFOCOMP_F_I_AIDESANAH01","(LECTURE)","📈","#fff3da","#c07a00",[restit]);
+    add("Analyses Excel","","📄","#eaf6ee","#1f7a4d",[restit]);
+    return s;
+  }
+
+  let state = aidenExample();
+  let editingId = null;
+
+  // ---------- persistence helpers not needed (in-memory only) ----------
+
+  function normalizeHex(v){
+    if(!v) return null;
+    v = v.trim();
+    if(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(v)) return v;
+    return null;
+  }
+
+  // ---------- Text measuring / wrapping ----------
+  const measureCanvas = document.createElement("canvas");
+  const mctx = measureCanvas.getContext("2d");
+  function textWidth(text, font){
+    mctx.font = font;
+    return mctx.measureText(text).width;
+  }
+  function wrapText(text, font, maxWidth){
+    if(!text) return [];
+    const words = text.split(/\s+/).filter(Boolean);
+    const lines = [];
+    let cur = "";
+    for(const w of words){
+      const test = cur ? cur + " " + w : w;
+      if(textWidth(test, font) > maxWidth && cur){
+        lines.push(cur);
+        cur = w;
+      } else {
+        cur = test;
+      }
+    }
+    if(cur) lines.push(cur);
+    return lines.length ? lines : [""];
+  }
+
+  // ---------- Layout ----------
+  const NODE_MAX_WIDTH = 260;
+  const NODE_MIN_WIDTH = 150;
+  const PAD_X = 14, PAD_Y = 11;
+  const ICON_W = 26;
+  const LABEL_FONT = "700 14px -apple-system,Segoe UI,Roboto,sans-serif";
+  const SUB_FONT = "400 12px -apple-system,Segoe UI,Roboto,sans-serif";
+  const LABEL_LH = 18, SUB_LH = 15;
+  const SIB_GAP = 26;
+  const LAYER_GAP = 78;
+  const MARGIN_X = 50;
+  const TOP_Y = 100;
+
+  function computeNodeBox(node){
+    const iconAllow = node.icon ? ICON_W : 0;
+    const textMax = NODE_MAX_WIDTH - PAD_X*2 - iconAllow;
+    const labelLines = wrapText(node.label, LABEL_FONT, textMax);
+    const subLines = node.subtitle ? wrapText(node.subtitle, SUB_FONT, textMax) : [];
+    let maxLineW = 0;
+    labelLines.forEach(l => maxLineW = Math.max(maxLineW, textWidth(l, LABEL_FONT)));
+    subLines.forEach(l => maxLineW = Math.max(maxLineW, textWidth(l, SUB_FONT)));
+    const w = Math.max(NODE_MIN_WIDTH, PAD_X*2 + iconAllow + maxLineW);
+    let h = PAD_Y*2 + labelLines.length*LABEL_LH;
+    if(subLines.length) h += 4 + subLines.length*SUB_LH;
+    return {w, h, labelLines, subLines};
+  }
+
+  function computeLayout(){
+    const nodes = state.nodes;
+    const order = state.order;
+    const depth = {};
+    order.forEach(id => {
+      const n = nodes[id];
+      if(!n.parents || n.parents.length === 0){
+        depth[id] = 0;
+      } else {
+        depth[id] = Math.max(...n.parents.map(p => (depth[p] !== undefined ? depth[p] : 0))) + 1;
+      }
+    });
+    const layers = [];
+    order.forEach(id => {
+      const d = depth[id];
+      layers[d] = layers[d] || [];
+      layers[d].push(id);
+    });
+
+    const boxes = {};
+    order.forEach(id => { boxes[id] = computeNodeBox(nodes[id]); });
+
+    const layerWidths = layers.map(layer => {
+      if(!layer) return 0;
+      const sum = layer.reduce((acc,id) => acc + boxes[id].w, 0);
+      return sum + SIB_GAP*Math.max(0, layer.length-1);
+    });
+    const overallWidth = Math.max(0, ...layerWidths);
+
+    const pos = {};
+    let y = TOP_Y;
+    layers.forEach((layer, i) => {
+      if(!layer){ return; }
+      let startX = (overallWidth - layerWidths[i]) / 2;
+      let x = startX;
+      let rowH = 0;
+      layer.forEach(id => {
+        const box = boxes[id];
+        pos[id] = {x: x + MARGIN_X, y, w: box.w, h: box.h, labelLines: box.labelLines, subLines: box.subLines};
+        x += box.w + SIB_GAP;
+        rowH = Math.max(rowH, box.h);
+      });
+      y += rowH + LAYER_GAP;
+    });
+
+    const treeBottom = y - LAYER_GAP;
+    const treeRight = overallWidth + MARGIN_X;
+    return {pos, treeRight, treeBottom, treeLeft: MARGIN_X};
+  }
+
+  // ---------- SVG helpers ----------
+  function el(tag, attrs, parent){
+    const e = document.createElementNS(SVG_NS, tag);
+    if(attrs) for(const k in attrs) e.setAttribute(k, attrs[k]);
+    if(parent) parent.appendChild(e);
+    return e;
+  }
+
+  function render(){
+    const svg = document.getElementById("diagram");
+    while(svg.firstChild) svg.removeChild(svg.firstChild);
+
+    const layout = computeLayout();
+    const defs = el("defs", {}, svg);
+    const marker = el("marker", {
+      id:"arrowhead", markerWidth:"8", markerHeight:"8", refX:"6", refY:"4",
+      orient:"auto", markerUnits:"userSpaceOnUse"
+    }, defs);
+    el("path", {d:"M0,0 L8,4 L0,8 z", fill: state.edgeColor}, marker);
+
+    // Edges (drawn first, under nodes)
+    const edgeLayer = el("g", {}, svg);
+    state.order.forEach(id => {
+      const n = state.nodes[id];
+      const cp = layout.pos[id];
+      (n.parents||[]).forEach(pid => {
+        const pp = layout.pos[pid];
+        if(!pp || !cp) return;
+        const startX = pp.x + pp.w/2, startY = pp.y + pp.h;
+        const endX = cp.x + cp.w/2, endY = cp.y;
+        const midY = (startY + endY) / 2;
+        const d = `M ${startX} ${startY} L ${startX} ${midY} L ${endX} ${midY} L ${endX} ${endY - 6}`;
+        el("path", {d, fill:"none", stroke: state.edgeColor, "stroke-width":"2", "marker-end":"url(#arrowhead)"}, edgeLayer);
+      });
+    });
+
+    // Nodes
+    const nodeLayer = el("g", {}, svg);
+    state.order.forEach(id => {
+      const n = state.nodes[id];
+      const p = layout.pos[id];
+      if(!p) return;
+      const g = el("g", {transform:`translate(${p.x},${p.y})`}, nodeLayer);
+      el("rect", {width:p.w, height:p.h, rx:10, ry:10, fill:n.bg, stroke:"rgba(0,0,0,0.08)"}, g);
+
+      const iconAllow = n.icon ? ICON_W : 0;
+      const textX = PAD_X + iconAllow;
+      const totalTextH = p.labelLines.length*LABEL_LH + (p.subLines.length ? 4 + p.subLines.length*SUB_LH : 0);
+      let curY = (p.h - totalTextH)/2 + LABEL_LH*0.72;
+
+      if(n.icon){
+        el("text", {
+          x: PAD_X, y: p.h/2, "font-size":"17", "dominant-baseline":"central"
+        }, g).textContent = n.icon;
+      }
+
+      p.labelLines.forEach(line => {
+        const t = el("text", {
+          x:textX, y:curY, "font-size":"14", "font-weight":"700", fill:n.color, "font-family":"-apple-system,Segoe UI,Roboto,sans-serif"
+        }, g);
+        t.textContent = line;
+        curY += LABEL_LH;
+      });
+      if(p.subLines.length){
+        curY += 2;
+        p.subLines.forEach(line => {
+          const t = el("text", {
+            x:textX, y:curY, "font-size":"12", "font-weight":"400", fill:n.color, "font-family":"-apple-system,Segoe UI,Roboto,sans-serif", "opacity":"0.92"
+          }, g);
+          t.textContent = line;
+          curY += SUB_LH;
+        });
+      }
+    });
+
+    // Title
+    const title = el("text", {
+      x: layout.treeRight/2, y: 42, "text-anchor":"middle",
+      "font-size":"28", "font-weight":"800", fill: state.titleColor,
+      "font-family":"-apple-system,Segoe UI,Roboto,sans-serif"
+    }, svg);
+    title.textContent = state.title;
+
+    // Info panel
+    let infoRight = layout.treeRight;
+    if(state.showInfoPanel && state.infoItems.length){
+      const panelW = 280;
+      const panelX = layout.treeRight + 40;
+      const panelY = TOP_Y;
+      const rowH = 52;
+      const panelH = 20 + state.infoItems.length * rowH;
+      const g = el("g", {transform:`translate(${panelX},${panelY})`}, svg);
+      el("rect", {width:panelW, height:panelH, rx:12, ry:12, fill:"#f3f5fd", stroke:"#c9d3f7"}, g);
+      state.infoItems.forEach((item, i) => {
+        const rowY = 16 + i*rowH;
+        el("circle", {cx:26, cy:rowY+10, r:14, fill: state.titleColor}, g);
+        el("text", {x:26, y:rowY+10, "text-anchor":"middle", "dominant-baseline":"central", "font-size":"13", fill:"#fff"}, g).textContent = item.icon || "•";
+        const tt = el("text", {x:50, y:rowY+4, "font-size":"12.5", "font-weight":"700", fill:"#1c1c28"}, g);
+        tt.textContent = item.title;
+        const ts = el("text", {x:50, y:rowY+20, "font-size":"12.5", fill:"#3b3b4a"}, g);
+        ts.textContent = item.subtitle;
+      });
+      infoRight = panelX + panelW;
+    }
+
+    // Legend
+    let legendBottom = layout.treeBottom;
+    if(state.legend.length){
+      const legendY = layout.treeBottom + 30;
+      const g = el("g", {transform:`translate(${MARGIN_X},${legendY})`}, svg);
+      let lx = 14, lh = 0;
+      const itemsG = el("g", {transform:"translate(14,14)"}, null);
+      let cx = 0;
+      const rowEls = [];
+      state.legend.forEach(item => {
+        const label = item.label || "";
+        const w = textWidth(label, "600 12.5px sans-serif");
+        rowEls.push({item, x: cx, w});
+        cx += 16 + 6 + w + 26;
+      });
+      const totalW = Math.max(0, cx - 26);
+      const bg = el("rect", {width: totalW + 28, height: 44, rx:10, ry:10, fill:"#f7f7fb", stroke:"#e1e1ea"}, g);
+      rowEls.forEach(({item, x}) => {
+        el("rect", {x: x+14, y:14, width:16, height:16, rx:4, fill:item.color}, g);
+        const t = el("text", {x: x+14+22, y:22, "dominant-baseline":"central", "font-size":"12.5", "font-weight":"600", fill:"#1c1c28"}, g);
+        t.textContent = item.label;
+      });
+      legendBottom = legendY + 44;
+    }
+
+    const totalWidth = Math.max(infoRight, layout.treeRight) + MARGIN_X;
+    const totalHeight = legendBottom + 40;
+    svg.setAttribute("width", totalWidth);
+    svg.setAttribute("height", totalHeight);
+    svg.setAttribute("viewBox", `0 0 ${totalWidth} ${totalHeight}`);
+    svg.style.background = "#ffffff";
+  }
+
+  // ---------- UI wiring ----------
+  const $ = sel => document.querySelector(sel);
+
+  function populateIconSelect(){
+    const sel = $("#iconSelect");
+    sel.innerHTML = "";
+    ICONS.forEach(([val,label]) => {
+      const o = document.createElement("option");
+      o.value = val;
+      o.textContent = val && val !== "custom" ? `${val}  ${label}` : label;
+      sel.appendChild(o);
+    });
+    sel.addEventListener("change", () => {
+      $("#iconCustom").style.display = sel.value === "custom" ? "block" : "none";
+    });
+  }
+
+  function buildSwatches(container, colors, targetColorInput, targetTextInput){
+    container.innerHTML = "";
+    colors.forEach(c => {
+      const b = document.createElement("button");
+      b.className = "swatch";
+      b.type = "button";
+      b.style.background = c;
+      b.title = c;
+      b.addEventListener("click", () => {
+        targetColorInput.value = c;
+        targetTextInput.value = c;
+      });
+      container.appendChild(b);
+    });
+  }
+
+  function syncColorPair(colorInput, textInput){
+    colorInput.addEventListener("input", () => textInput.value = colorInput.value);
+    textInput.addEventListener("change", () => {
+      const v = normalizeHex(textInput.value);
+      if(v) colorInput.value = v;
+    });
+  }
+
+  function refreshParentList(){
+    const container = $("#parentList");
+    container.innerHTML = "";
+    const ids = state.order.filter(id => id !== editingId);
+    if(!ids.length){
+      container.innerHTML = '<div class="empty">Aucun bloc existant — celui-ci sera un bloc racine.</div>';
+      return;
+    }
+    // avoid selecting descendants of the node being edited (prevent cycles)
+    const forbidden = new Set();
+    if(editingId){
+      const stack = [editingId];
+      while(stack.length){
+        const cur = stack.pop();
+        state.order.forEach(id => {
+          const nd = state.nodes[id];
+          if(nd.parents && nd.parents.includes(cur) && !forbidden.has(id)){
+            forbidden.add(id);
+            stack.push(id);
+          }
+        });
+      }
+    }
+    ids.forEach(id => {
+      if(forbidden.has(id)) return;
+      const n = state.nodes[id];
+      const label = document.createElement("label");
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.value = id;
+      if(editingId && state.nodes[editingId].parents.includes(id)) cb.checked = true;
+      label.appendChild(cb);
+      const span = document.createElement("span");
+      span.textContent = `${n.icon ? n.icon+" " : ""}${n.label}`;
+      label.appendChild(span);
+      container.appendChild(label);
+    });
+  }
+
+  function resetForm(){
+    editingId = null;
+    $("#formTitle").textContent = "Ajouter un bloc";
+    $("#nodeLabel").value = "";
+    $("#nodeSubtitle").value = "";
+    $("#iconSelect").value = "";
+    $("#iconCustom").style.display = "none";
+    $("#iconCustom").value = "";
+    $("#nodeBg").value = "#3b5bdb";
+    $("#nodeBgText").value = "#3b5bdb";
+    $("#nodeColor").value = "#ffffff";
+    $("#nodeColorText").value = "#ffffff";
+    $("#saveNodeBtn").textContent = "Ajouter le bloc";
+    $("#cancelEditBtn").style.display = "none";
+    refreshParentList();
+  }
+
+  function loadNodeIntoForm(id){
+    editingId = id;
+    const n = state.nodes[id];
+    $("#formTitle").textContent = "Modifier le bloc";
+    $("#nodeLabel").value = n.label;
+    $("#nodeSubtitle").value = n.subtitle || "";
+    const known = ICONS.some(([v]) => v === n.icon);
+    $("#iconSelect").value = known ? n.icon : (n.icon ? "custom" : "");
+    if(!known && n.icon){
+      $("#iconCustom").style.display = "block";
+      $("#iconCustom").value = n.icon;
+    } else {
+      $("#iconCustom").style.display = "none";
+      $("#iconCustom").value = "";
+    }
+    $("#nodeBg").value = n.bg;
+    $("#nodeBgText").value = n.bg;
+    $("#nodeColor").value = n.color;
+    $("#nodeColorText").value = n.color;
+    $("#saveNodeBtn").textContent = "Enregistrer les modifications";
+    $("#cancelEditBtn").style.display = "inline-block";
+    refreshParentList();
+  }
+
+  function currentIconValue(){
+    const sel = $("#iconSelect").value;
+    if(sel === "custom") return $("#iconCustom").value.trim();
+    return sel;
+  }
+
+  function saveNode(){
+    const label = $("#nodeLabel").value.trim();
+    if(!label){
+      alert("Le libellé est obligatoire.");
+      return;
+    }
+    const parents = Array.from($("#parentList").querySelectorAll("input[type=checkbox]:checked")).map(cb => cb.value);
+    const data = {
+      label,
+      subtitle: $("#nodeSubtitle").value.trim(),
+      icon: currentIconValue(),
+      bg: normalizeHex($("#nodeBgText").value) || $("#nodeBg").value,
+      color: normalizeHex($("#nodeColorText").value) || $("#nodeColor").value,
+      parents
+    };
+    if(editingId){
+      Object.assign(state.nodes[editingId], data);
+    } else {
+      const id = uid(state);
+      state.nodes[id] = Object.assign({id}, data);
+      state.order.push(id);
+    }
+    resetForm();
+    renderAll();
+  }
+
+  function deleteNode(id){
+    if(!confirm("Supprimer ce bloc ? Les branches qui en dépendent perdront ce lien.")) return;
+    delete state.nodes[id];
+    state.order = state.order.filter(x => x !== id);
+    state.order.forEach(oid => {
+      const n = state.nodes[oid];
+      n.parents = n.parents.filter(p => p !== id);
+    });
+    if(editingId === id) resetForm();
+    renderAll();
+  }
+
+  function refreshNodeList(){
+    const container = $("#nodeList");
+    container.innerHTML = "";
+    $("#nodeCount").textContent = state.order.length;
+    if(!state.order.length){
+      container.innerHTML = '<div class="empty-hint">Aucun bloc pour l\'instant. Ajoutez-en un ci-dessus.</div>';
+      return;
+    }
+    const depth = {};
+    state.order.forEach(id => {
+      const n = state.nodes[id];
+      depth[id] = (n.parents && n.parents.length) ? Math.max(...n.parents.map(p => depth[p]!==undefined?depth[p]:0))+1 : 0;
+    });
+    state.order.forEach(id => {
+      const n = state.nodes[id];
+      const row = document.createElement("div");
+      row.className = "node-item" + (editingId === id ? " editing" : "");
+      row.innerHTML = `
+        <span class="depth-indent">${"·".repeat(depth[id])}</span>
+        <span class="chip" style="background:${n.bg}"></span>
+        <span class="lbl">${n.icon ? n.icon+" " : ""}${escapeHtml(n.label)}</span>
+        <span class="actions">
+          <button data-act="edit" title="Modifier">✎</button>
+          <button data-act="del" title="Supprimer">🗑</button>
+        </span>`;
+      row.querySelector('[data-act="edit"]').addEventListener("click", () => loadNodeIntoForm(id));
+      row.querySelector('[data-act="del"]').addEventListener("click", () => deleteNode(id));
+      container.appendChild(row);
+    });
+  }
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  }
+
+  function refreshLegendList(){
+    const container = $("#legendList");
+    container.innerHTML = "";
+    state.legend.forEach((item, i) => {
+      const row = document.createElement("div");
+      row.className = "legend-row";
+      row.innerHTML = `<input type="color" value="${item.color}"><input type="text" value="${escapeHtml(item.label)}" placeholder="Libellé"><button class="remove-x" title="Supprimer">✕</button>`;
+      const colorInput = row.querySelector("input[type=color]");
+      const textInput = row.querySelector("input[type=text]");
+      colorInput.addEventListener("input", () => { item.color = colorInput.value; render(); });
+      textInput.addEventListener("input", () => { item.label = textInput.value; render(); });
+      row.querySelector(".remove-x").addEventListener("click", () => {
+        state.legend.splice(i,1);
+        refreshLegendList();
+        render();
+      });
+      container.appendChild(row);
+    });
+  }
+
+  function refreshInfoList(){
+    const container = $("#infoList");
+    container.innerHTML = "";
+    state.infoItems.forEach((item, i) => {
+      const row = document.createElement("div");
+      row.className = "info-row";
+      row.innerHTML = `<input type="text" class="icon-input" maxlength="4" value="${escapeHtml(item.icon)}" placeholder="🙂">
+        <div style="flex:1;display:flex;flex-direction:column;gap:4px;">
+          <input type="text" value="${escapeHtml(item.title)}" placeholder="Titre">
+          <input type="text" value="${escapeHtml(item.subtitle)}" placeholder="Sous-texte">
+        </div>
+        <button class="remove-x" title="Supprimer">✕</button>`;
+      const [iconInput, titleInput, subInput] = row.querySelectorAll("input");
+      iconInput.addEventListener("input", () => { item.icon = iconInput.value; render(); });
+      titleInput.addEventListener("input", () => { item.title = titleInput.value; render(); });
+      subInput.addEventListener("input", () => { item.subtitle = subInput.value; render(); });
+      row.querySelector(".remove-x").addEventListener("click", () => {
+        state.infoItems.splice(i,1);
+        refreshInfoList();
+        render();
+      });
+      container.appendChild(row);
+    });
+  }
+
+  function renderAll(){
+    refreshNodeList();
+    refreshLegendList();
+    refreshInfoList();
+    refreshParentList();
+    render();
+  }
+
+  // ---- Export ----
+  function serializeSvg(){
+    const svg = document.getElementById("diagram");
+    const clone = svg.cloneNode(true);
+    clone.setAttribute("xmlns", SVG_NS);
+    return new XMLSerializer().serializeToString(clone);
+  }
+
+  function downloadBlob(blob, filename){
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function exportSvg(){
+    const svgStr = '<?xml version="1.0" standalone="no"?>\r\n' + serializeSvg();
+    downloadBlob(new Blob([svgStr], {type:"image/svg+xml"}), "schema.svg");
+  }
+
+  function exportPng(){
+    const svg = document.getElementById("diagram");
+    const w = parseInt(svg.getAttribute("width"), 10);
+    const h = parseInt(svg.getAttribute("height"), 10);
+    const scale = 2;
+    const svgStr = serializeSvg();
+    const img = new Image();
+    const svgBlob = new Blob([svgStr], {type:"image/svg+xml;charset=utf-8"});
+    const url = URL.createObjectURL(svgBlob);
+    img.onload = function(){
+      const canvas = document.createElement("canvas");
+      canvas.width = w*scale; canvas.height = h*scale;
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+      ctx.scale(scale,scale);
+      ctx.drawImage(img,0,0,w,h);
+      URL.revokeObjectURL(url);
+      canvas.toBlob(blob => downloadBlob(blob, "schema.png"), "image/png");
+    };
+    img.src = url;
+  }
+
+  // ---- init ----
+  function init(){
+    populateIconSelect();
+    buildSwatches($("#bgSwatches"), BG_PRESETS, $("#nodeBg"), $("#nodeBgText"));
+    buildSwatches($("#textSwatches"), TEXT_PRESETS, $("#nodeColor"), $("#nodeColorText"));
+    syncColorPair($("#nodeBg"), $("#nodeBgText"));
+    syncColorPair($("#nodeColor"), $("#nodeColorText"));
+
+    $("#titleInput").value = state.title;
+    $("#titleColor").value = state.titleColor;
+    $("#edgeColor").value = state.edgeColor;
+    $("#showInfoPanel").checked = state.showInfoPanel;
+
+    $("#titleInput").addEventListener("input", e => { state.title = e.target.value; render(); });
+    $("#titleColor").addEventListener("input", e => { state.titleColor = e.target.value; render(); });
+    $("#edgeColor").addEventListener("input", e => { state.edgeColor = e.target.value; render(); });
+    $("#showInfoPanel").addEventListener("change", e => { state.showInfoPanel = e.target.checked; render(); });
+
+    $("#saveNodeBtn").addEventListener("click", saveNode);
+    $("#cancelEditBtn").addEventListener("click", resetForm);
+
+    $("#addLegendBtn").addEventListener("click", () => {
+      state.legend.push({color:"#3b5bdb", label:"Nouvelle entrée"});
+      refreshLegendList(); render();
+    });
+    $("#syncLegendBtn").addEventListener("click", () => {
+      const seen = new Map();
+      state.order.forEach(id => {
+        const n = state.nodes[id];
+        if(!seen.has(n.bg)) seen.set(n.bg, n.label);
+      });
+      state.legend = Array.from(seen.entries()).map(([color,label]) => ({color, label}));
+      refreshLegendList(); render();
+    });
+    $("#addInfoBtn").addEventListener("click", () => {
+      state.infoItems.push({icon:"ℹ️", title:"Titre", subtitle:"Détail"});
+      refreshInfoList(); render();
+    });
+
+    $("#loadExampleBtn").addEventListener("click", () => {
+      if(state.order.length && !confirm("Remplacer le schéma actuel par l'exemple AIDEN ?")) return;
+      state = aidenExample();
+      editingId = null;
+      $("#titleInput").value = state.title;
+      $("#titleColor").value = state.titleColor;
+      $("#edgeColor").value = state.edgeColor;
+      $("#showInfoPanel").checked = state.showInfoPanel;
+      resetForm();
+      renderAll();
+    });
+    $("#newDiagramBtn").addEventListener("click", () => {
+      if(!confirm("Repartir d'un schéma vierge ? Le travail non exporté sera perdu.")) return;
+      state = defaultState();
+      editingId = null;
+      $("#titleInput").value = state.title;
+      $("#titleColor").value = state.titleColor;
+      $("#edgeColor").value = state.edgeColor;
+      $("#showInfoPanel").checked = state.showInfoPanel;
+      resetForm();
+      renderAll();
+    });
+
+    $("#exportPngBtn").addEventListener("click", exportPng);
+    $("#exportSvgBtn").addEventListener("click", exportSvg);
+
+    resetForm();
+    renderAll();
+  }
+
+  document.addEventListener("DOMContentLoaded", init);
+})();
+</script>
+</body>
+</html>
