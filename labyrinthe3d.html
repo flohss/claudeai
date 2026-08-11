@@ -140,9 +140,22 @@
   #minimapWrap{position:absolute;top:calc(64px + env(safe-area-inset-top));
     right:calc(12px + env(safe-area-inset-right));width:132px;height:132px;border-radius:12px;
     overflow:hidden;border:1px solid rgba(255,255,255,.22);background:rgba(5,5,10,.6);
-    display:none;z-index:2;}
+    display:none;z-index:2;cursor:pointer;pointer-events:auto;}
   #minimapWrap.on{display:block;}
   #minimap{width:132px;height:132px;display:block;}
+
+  /* carte agrandie : un aperçu temporaire, au centre, zoomé */
+  #mapPopup{position:fixed;inset:0;z-index:14;display:none;align-items:center;justify-content:center;
+    background:rgba(5,5,12,.76);backdrop-filter:blur(4px);padding:22px;cursor:pointer;}
+  #mapPopup.on{display:flex;}
+  #mapPopupCard{width:min(88vw,88vh,520px);padding:16px;cursor:default;}
+  #mapPopupHead{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;
+    color:#eae6ff;font-weight:700;letter-spacing:1px;font-size:.8rem;text-transform:uppercase;}
+  #mapPopupClose{width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.09);
+    border:1px solid rgba(255,255,255,.22);color:#fff;font-size:.85rem;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;padding:0;line-height:1;}
+  #mapPopupCanvas{width:100%;aspect-ratio:1/1;display:block;border-radius:12px;background:#05050a;}
+  #mapPopupHint{text-align:center;font-size:.72rem;color:#9d94c8;margin-top:10px;}
   #compass{position:absolute;top:calc(66px + env(safe-area-inset-top));left:50%;
     transform:translateX(-50%);width:52px;height:52px;display:none;z-index:2;}
   #compass.on{display:block;}
@@ -297,6 +310,18 @@
   <div id="hint">Trouve la sortie lumineuse</div>
   <div id="joystickZone"><div id="joystickBase"><div id="joystickStick"></div></div></div>
   <div id="lookZone"></div>
+</div>
+
+<!-- ============ CARTE EN GRAND ============ -->
+<div id="mapPopup">
+  <div class="panel" id="mapPopupCard">
+    <div id="mapPopupHead">
+      <span>🗺 Carte</span>
+      <button id="mapPopupClose" title="Fermer">✕</button>
+    </div>
+    <canvas id="mapPopupCanvas"></canvas>
+    <div id="mapPopupHint">Touche n'importe où pour fermer</div>
+  </div>
 </div>
 
 <div id="lockHint">Clique pour capturer la souris et regarder autour de toi<br>
@@ -1996,6 +2021,7 @@ function buildWorld(){
   markExplored();
   visitedCells = 0;
   hintsUsed = 0; hintTimer2 = 0;
+  mapPopupOpen = false; mapPopupEl.classList.remove('on');
 }
 
 /* ============================================================================
@@ -2083,6 +2109,10 @@ function checkWin(){
    ============================================================================ */
 document.addEventListener('keydown', e => {
   keys[e.code] = true;
+  if(mapPopupOpen){
+    if(e.code === 'Escape' || e.code === 'KeyM'){ e.preventDefault(); closeMapPopup(); }
+    return;
+  }
   if(e.code === 'Escape'){
     if(gameState === 'playing'){ e.preventDefault(); pauseGame(); }
   }
@@ -2110,7 +2140,7 @@ document.addEventListener('pointerlockchange', () => {
 lockHint.addEventListener('click', () => { if(canvas.requestPointerLock) canvas.requestPointerLock(); });
 
 document.addEventListener('mousemove', e => {
-  if(gameState !== 'playing') return;
+  if(gameState !== 'playing' || mapPopupOpen) return;
   let dx = 0, dy = 0;
   if(document.pointerLockElement === canvas){ dx = e.movementX; dy = e.movementY; }
   else if(dragLook.active){ dx = e.clientX - dragLook.x; dy = e.clientY - dragLook.y;
@@ -2202,37 +2232,77 @@ function cycleMap(){
   sfx.click();
 }
 
-function drawMinimap(){
-  if(mapMode === 0) return;
-  const N = maze.N, w = mmCanvas.width, h = mmCanvas.height;
-  const s = w / N;
-  mmctx.fillStyle = '#05050a'; mmctx.fillRect(0,0,w,h);
+/* Dessine la carte dans n'importe quel contexte 2D, à n'importe quelle taille :
+   partagée entre la vignette du coin et le popup agrandi, pour que les deux
+   restent toujours rigoureusement identiques. */
+function renderMapInto(ctx, w, h){
+  const N = maze.N, s = w / N;
+  ctx.fillStyle = '#05050a'; ctx.fillRect(0,0,w,h);
   const th = THEMES[state.theme];
   for(let r=0;r<N;r++) for(let c=0;c<N;c++){
     const known = mapMode === 2 || explored[r*N+c];
     if(!known) continue;
-    if(maze.bitmap[r*N+c] === 1){
-      mmctx.fillStyle = 'rgba(190,180,255,0.75)';
-    } else {
-      mmctx.fillStyle = 'rgba(255,255,255,0.10)';
-    }
-    mmctx.fillRect(c*s, r*s, s+0.7, s+0.7);
+    ctx.fillStyle = maze.bitmap[r*N+c] === 1 ? 'rgba(190,180,255,0.75)' : 'rgba(255,255,255,0.10)';
+    ctx.fillRect(c*s, r*s, s+0.7, s+0.7);
   }
   // sortie (visible seulement si explorée, ou en mode carte complète)
   const er = 2*maze.exit.r + 1, ec = 2*maze.exit.c + 1;
   if(mapMode === 2 || explored[er*N+ec]){
-    mmctx.fillStyle = hexToCss(th.accent);
-    mmctx.beginPath(); mmctx.arc(ec*s + s/2, er*s + s/2, Math.max(2.5, s*0.9), 0, 6.3); mmctx.fill();
+    ctx.fillStyle = hexToCss(th.accent);
+    ctx.beginPath(); ctx.arc(ec*s + s/2, er*s + s/2, Math.max(2.5, s*0.9), 0, 6.3); ctx.fill();
   }
-  // joueur
+  // joueur : taille du repère proportionnelle à la case, pour rester lisible
+  // aussi bien sur la petite vignette que sur la carte zoomée
   const px = (player.x/CELL)*s + s/2, pz = (player.z/CELL)*s + s/2;
-  mmctx.save();
-  mmctx.translate(px, pz); mmctx.rotate(-player.yaw);
-  mmctx.fillStyle = '#5cffb0';
-  mmctx.beginPath(); mmctx.moveTo(0,-5.5); mmctx.lineTo(4,4.5); mmctx.lineTo(-4,4.5);
-  mmctx.closePath(); mmctx.fill();
-  mmctx.restore();
+  const mk = Math.max(4.2, s*0.42);
+  ctx.save();
+  ctx.translate(px, pz); ctx.rotate(-player.yaw);
+  ctx.fillStyle = '#5cffb0';
+  ctx.beginPath(); ctx.moveTo(0,-mk*1.35); ctx.lineTo(mk*0.9,mk*1.05); ctx.lineTo(-mk*0.9,mk*1.05);
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
 }
+
+function drawMinimap(){
+  if(mapMode === 0) return;
+  renderMapInto(mmctx, mmCanvas.width, mmCanvas.height);
+}
+
+/* ---- carte agrandie : un aperçu temporaire au centre de l'écran ---- */
+let mapPopupOpen = false;
+const mapPopupEl = $('mapPopup');
+const mapPopupCv = $('mapPopupCanvas'), mapPopupCtx = mapPopupCv.getContext('2d');
+
+function sizeMapPopup(){
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = mapPopupCv.clientWidth, h = mapPopupCv.clientHeight;
+  if(!w || !h) return;
+  mapPopupCv.width = Math.round(w * dpr);
+  mapPopupCv.height = Math.round(h * dpr);
+  mapPopupCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  mapPopupCv.__cssW = w; mapPopupCv.__cssH = h;
+}
+function drawMapPopup(){
+  if(!mapPopupOpen || !mapPopupCv.__cssW) return;
+  renderMapInto(mapPopupCtx, mapPopupCv.__cssW, mapPopupCv.__cssH);
+}
+function openMapPopup(){
+  if(gameState !== 'playing' || mapMode === 0 || mapPopupOpen) return;
+  mapPopupOpen = true;
+  mapPopupEl.classList.add('on');
+  if(document.pointerLockElement === canvas) document.exitPointerLock();
+  sizeMapPopup();
+  drawMapPopup();
+  sfx.click();
+}
+function closeMapPopup(){
+  if(!mapPopupOpen) return;
+  mapPopupOpen = false;
+  mapPopupEl.classList.remove('on');
+  sfx.click();
+}
+$('minimapWrap').addEventListener('click', openMapPopup);
+mapPopupEl.addEventListener('click', closeMapPopup);
 
 function drawCompass(){
   if(!compassOn || !exitWorld) return;
@@ -2270,7 +2340,7 @@ function animate(){
   const rawDt = clock.getDelta();            // temps réel écoulé depuis l'image précédente
   const dt = Math.min(rawDt, 0.05);          // borné : sert au déplacement et aux collisions
 
-  if(gameState === 'playing'){
+  if(gameState === 'playing' && !mapPopupOpen){
     updatePlayer(dt);
     checkWin();
     bumpCool -= rawDt;
@@ -2284,6 +2354,7 @@ function animate(){
       if(hintTimer2 <= 0) clearHint();
     }
   }
+  if(mapPopupOpen) drawMapPopup();
 
   if(scene){
     if(exitGroup){
@@ -2633,6 +2704,7 @@ function onResize(){
   renderer.setSize(window.innerWidth, window.innerHeight);
   if(genEl.classList.contains('on')){ sizeGenCanvas(); drawGen(); }
   if(solveEl.classList.contains('on')){ sizeSolveCanvas(); drawSolve(); }
+  if(mapPopupOpen){ sizeMapPopup(); drawMapPopup(); }
 }
 window.addEventListener('resize', onResize);
 window.addEventListener('orientationchange', () => setTimeout(onResize, 250));
@@ -2652,7 +2724,7 @@ window.LAB = {
   get player(){ return player; }, get builder(){ return builder; },
   get solver(){ return solver; }, get code(){ return currentCode; },
   get hintsUsed(){ return hintsUsed; }, get hintGroup(){ return hintGroup; },
-  get exitWorld(){ return exitWorld; },
+  get exitWorld(){ return exitWorld; }, get mapPopupOpen(){ return mapPopupOpen; },
   makeCode, parseCode,
   teleportToExit(){ player.x = exitWorld.x; player.z = exitWorld.z; }
 };

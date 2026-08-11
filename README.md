@@ -115,6 +115,12 @@ Le bouton 🗺 fait défiler trois états : carte masquée → **zone explorée 
 carte complète. La boussole 🧭 pointe vers la sortie et affiche la distance ; le bouton
 🔊 coupe le son.
 
+**Toucher la vignette de carte l'agrandit** dans un popup temporaire, centré et net,
+pratique pour repérer un embranchement sans plisser les yeux. Le jeu se met en pause de
+fait : les déplacements sont bloqués tant que le popup est ouvert (le chronomètre, lui,
+continue — regarder la carte prend du temps). Il se referme d'une touche n'importe où
+dessus, avec le bouton ✕, ou avec `Échap`/`M`.
+
 Le bouton 💡, en bas à droite, allume au sol le chemin vers la sortie pendant sept
 secondes. Un temps obtenu avec au moins un indice n'est pas enregistré comme record.
 

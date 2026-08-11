@@ -132,6 +132,14 @@ export default async function testJeu(browser, base){
   const apres = await m.evaluate(() => ({ x:LAB.player.x, z:LAB.player.z }));
   R.check('le joystick déplace le joueur',
     Math.hypot(apres.x - avant.x, apres.z - avant.z) > 0.5);
+  // Relâcher le doigt : sans ce touchend, le joystick reste actif indéfiniment
+  // et fait dériver le joueur en continu pendant tout le reste de la suite.
+  await m.evaluate(() => {
+    const z = document.getElementById('joystickZone');
+    const t = new Touch({ identifier:1, target:z, clientX:90, clientY:640 });
+    z.dispatchEvent(new TouchEvent('touchend', { bubbles:true, cancelable:true,
+      touches:[], changedTouches:[t], targetTouches:[] }));
+  });
   R.check('le joueur n’a pas traversé de mur', await m.evaluate(() => {
     const c = Math.round(LAB.player.x/4), r = Math.round(LAB.player.z/4);
     return LAB.maze.bitmap[r*LAB.maze.N + c] === 0;
@@ -164,6 +172,53 @@ export default async function testJeu(browser, base){
   const compte = toSec(apresSec) - toSec(avantSec);
   R.range('le chronomètre suit l’horloge réelle', Math.round(compte), Math.round(ecoule) - 2,
     Math.round(ecoule) + 1, ' s');
+
+  /* ------------------------------------------------------------ carte agrandie */
+  R.section('Carte agrandie (popup)');
+  const avantClic = await m.evaluate(() => ({ x: LAB.player.x, z: LAB.player.z }));
+  await m.click('#minimapWrap'); await sleep(200);
+  R.check('un clic sur la vignette ouvre le popup',
+    (await m.evaluate(() => LAB.mapPopupOpen)) === true && (await m.isVisible('#mapPopup')));
+  const taillePopup = await m.evaluate(() => document.getElementById('mapPopupCanvas').clientWidth);
+  R.check('le popup est bien plus grand que la vignette du HUD (132 px)',
+    taillePopup > 200, '→ ' + taillePopup + ' px');
+
+  await m.keyboard.down('KeyW'); await sleep(400); await m.keyboard.up('KeyW');
+  const pendant = await m.evaluate(() => ({ x: LAB.player.x, z: LAB.player.z }));
+  R.check('le joueur ne bouge pas tant que le popup est ouvert',
+    pendant.x === avantClic.x && pendant.z === avantClic.z);
+
+  await m.keyboard.press('Escape'); await sleep(200);
+  R.check('Échap referme le popup sans mettre le jeu en pause',
+    (await m.evaluate(() => LAB.mapPopupOpen)) === false &&
+    (await m.evaluate(() => LAB.gameState)) === 'playing');
+
+  await m.click('#minimapWrap'); await sleep(150);
+  await m.click('#mapPopup', { position: { x: 5, y: 5 } }); await sleep(150);
+  R.check('un clic sur le fond referme le popup',
+    (await m.evaluate(() => LAB.mapPopupOpen)) === false);
+
+  await m.click('#minimapWrap'); await sleep(150);
+  await m.click('#mapPopupClose'); await sleep(150);
+  R.check('le bouton ✕ referme le popup',
+    (await m.evaluate(() => LAB.mapPopupOpen)) === false);
+
+  // Une seule direction dépendrait de l'angle de caméra hérité des essais précédents
+  // et pourrait pointer droit sur un mur sans que ce soit un défaut du popup : on
+  // essaie les quatre avant de conclure à un blocage.
+  let reprise = false;
+  for(const touche of ['KeyW','KeyS','KeyA','KeyD']){
+    const p0 = await m.evaluate(() => ({ x: LAB.player.x, z: LAB.player.z }));
+    await m.keyboard.down(touche); await sleep(300); await m.keyboard.up(touche);
+    const p1 = await m.evaluate(() => ({ x: LAB.player.x, z: LAB.player.z }));
+    if(Math.hypot(p1.x - p0.x, p1.z - p0.z) > 0.01){ reprise = true; break; }
+  }
+  R.check('le joueur peut de nouveau bouger une fois le popup fermé', reprise);
+
+  await m.click('#minimapWrap'); await sleep(150);
+  await m.keyboard.press('KeyM'); await sleep(150);
+  R.check('la touche M referme aussi le popup',
+    (await m.evaluate(() => LAB.mapPopupOpen)) === false);
 
   /* ------------------------------------------------------------------- indice */
   R.section('Indice au sol');

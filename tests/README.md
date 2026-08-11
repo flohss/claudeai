@@ -30,9 +30,12 @@ distincts, toutes les cases atteignables et le compte d'arêtes attendu (n−1, 
 motif *Ouvert* qui doit dépasser ce compte) ; les 480 aller-retours possibles du code de
 graine ; reproductibilité à graine égale ; construction des six décors en 3D ; joystick,
 rotation du regard et absence de traversée de mur ; pause, reprise et exactitude du
-chronomètre par rapport à l'horloge réelle ; indice au sol et son effacement ;
-résolution comparée, avec le taux d'échec de la main gauche mesuré sur 120 tirages ;
-sonorisation, sa cadence bridée, sa coupure et la persistance du réglage.
+chronomètre par rapport à l'horloge réelle ; carte agrandie en popup — ouverture au
+clic, déplacements bloqués tant qu'elle est affichée, fermeture par clic sur le fond,
+par le bouton ✕, par `Échap` ou par `M`, et mouvement qui reprend une fois refermée ;
+indice au sol et son effacement ; résolution comparée, avec le taux d'échec de la main
+gauche mesuré sur 120 tirages ; sonorisation, sa cadence bridée, sa coupure et la
+persistance du réglage.
 
 **Le laboratoire** — les dix-huit croisements terrain × algorithme aboutissent ;
 n−1 arêtes et connexité pour les trois algorithmes d'arbre sur deux terrains ; Prim et
