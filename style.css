@@ -21,6 +21,7 @@ html, body {
 }
 
 body {
+  overflow-x: hidden;
   background-image:
     radial-gradient(circle at 20% 20%, rgba(52, 245, 255, 0.08), transparent 40%),
     radial-gradient(circle at 80% 0%, rgba(255, 46, 136, 0.08), transparent 40%);
@@ -78,6 +79,13 @@ main {
 }
 
 .hidden { display: none !important; }
+
+.menu {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
 
 .subtitle {
   color: var(--muted);
@@ -178,4 +186,88 @@ footer {
   color: var(--muted);
   font-size: 0.75rem;
   border-top: 1px solid #222240;
+}
+
+body.pad-active main {
+  padding-bottom: 190px;
+}
+
+body.pad-active footer {
+  display: none;
+}
+
+.touch-controls {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 14px 20px calc(14px + env(safe-area-inset-bottom));
+  pointer-events: none;
+  z-index: 50;
+}
+
+.touch-controls.hidden {
+  display: none;
+}
+
+.dpad {
+  display: grid;
+  grid-template-columns: repeat(3, 54px);
+  grid-template-rows: repeat(2, 54px);
+  gap: 6px;
+  pointer-events: auto;
+}
+
+.dpad-up { grid-column: 2; grid-row: 1; }
+.dpad-left { grid-column: 1; grid-row: 2; }
+.dpad-right { grid-column: 3; grid-row: 2; }
+.dpad-down { grid-column: 2; grid-row: 2; }
+
+.pad-btn {
+  background: rgba(20, 20, 42, 0.9);
+  border: 2px solid var(--neon-cyan);
+  color: var(--neon-cyan);
+  border-radius: 10px;
+  font-size: 1.3rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: none;
+  box-shadow: 0 0 12px rgba(52, 245, 255, 0.3);
+}
+
+.pad-btn.active {
+  background: var(--neon-cyan);
+  color: #000;
+}
+
+.action-btn {
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  border-color: var(--neon-pink);
+  color: var(--neon-pink);
+  font-size: 1.5rem;
+  align-self: flex-end;
+  pointer-events: auto;
+  box-shadow: 0 0 14px rgba(255, 46, 136, 0.4);
+}
+
+.action-btn.active {
+  background: var(--neon-pink);
+  color: #000;
+}
+
+@media (max-width: 480px) {
+  .logo { font-size: 1.1rem; }
+  .game-header h2 { font-size: 1.1rem; }
+  .score { font-size: 1rem; }
 }

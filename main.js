@@ -37,6 +37,8 @@
     stopCurrentGame = game.start(canvas, (text) => {
       gameScore.textContent = text;
     });
+
+    if (window.__setTouchControlsVisible) window.__setTouchControlsVisible(true);
   }
 
   function closeGame() {
@@ -47,6 +49,7 @@
     gameScreen.classList.add("hidden");
     backBtn.classList.add("hidden");
     menu.classList.remove("hidden");
+    if (window.__setTouchControlsVisible) window.__setTouchControlsVisible(false);
   }
 
   backBtn.addEventListener("click", closeGame);
