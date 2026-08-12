@@ -48,7 +48,11 @@
             </label>
             <label>
               Durée minimale d'une note (ms)
-              <input type="range" id="minDuration" min="20" max="300" step="10" value="70">
+              <input type="range" id="minDuration" min="20" max="300" step="10" value="90">
+            </label>
+            <label title="Plus élevé = moins de notes parasites dues au vibrato, mais réaction un peu plus lente aux vrais changements de note.">
+              Stabilité de note (ms)
+              <input type="range" id="noteStability" min="40" max="400" step="10" value="150">
             </label>
             <label>
               Note la plus grave (Hz)

@@ -19,6 +19,7 @@ const silenceThresholdInput = document.getElementById("silenceThreshold");
 const minDurationInput = document.getElementById("minDuration");
 const minFreqInput = document.getElementById("minFreq");
 const maxFreqInput = document.getElementById("maxFreq");
+const noteStabilityInput = document.getElementById("noteStability");
 
 // ---------- Constants ----------
 const ANALYSIS_BUFFER_SIZE = 2048;
@@ -27,8 +28,9 @@ const TICKS_PER_QUARTER = 480;
 const MICROSECONDS_PER_QUARTER = 500000; // 120 BPM
 const TICKS_PER_SECOND = TICKS_PER_QUARTER / (MICROSECONDS_PER_QUARTER / 1e6);
 const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-const NOTE_STABILITY_FRAMES = 2; // consecutive frames needed before switching notes
-const SILENCE_HOLD_MS = 90; // brief gaps that don't end a note
+const SILENCE_HOLD_MS = 130; // brief gaps that don't end a note
+const PITCH_MEDIAN_WINDOW = 5; // frames of median smoothing applied to the raw pitch estimate
+const NOTE_DEAD_ZONE_SEMITONES = 0.55; // pitch can wander this far from the held note without triggering a change
 
 // ---------- State ----------
 let audioContext = null;
@@ -45,11 +47,18 @@ let timerHandle = null;
 let noteEvents = []; // finalized notes: {note, start, end, velocity}
 let currentNote = null; // in-progress note: {note, start, lastVoiced, velocitySamples}
 let candidateNote = null;
-let candidateCount = 0;
+let candidateStart = null;
+let pitchHistory = []; // recent raw MIDI pitch estimates, for median smoothing
 
 // ---------- Helpers ----------
 function freqToMidi(freq) {
   return 69 + 12 * Math.log2(freq / 440);
+}
+
+function median(values) {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
 function midiToNoteName(midi) {
@@ -131,52 +140,67 @@ function detectPitch(buf, sampleRate, minFreq, maxFreq, silenceThreshold) {
 }
 
 // ---------- Note segmentation ----------
+// Raw pitch estimates are noisy from frame to frame (vibrato, breath, octave slips).
+// To avoid chopping a sung note into many spurious fragments we: (1) median-smooth the
+// pitch over a short rolling window, (2) keep a dead zone around the currently held note
+// so small wobbles don't count as a change, and (3) require a pitch drift outside that
+// dead zone to persist for a configurable duration before actually switching notes.
 function processFrame(freq, rms, nowSeconds) {
   const silenceThreshold = parseFloat(silenceThresholdInput.value);
-  const detectedMidi = freq > 0 && rms >= silenceThreshold ? Math.round(freqToMidi(freq)) : null;
+  const voiced = freq > 0 && rms >= silenceThreshold;
 
-  if (detectedMidi === null) {
+  if (!voiced) {
     liveNoteEl.textContent = "—";
     liveFreqEl.textContent = "— Hz";
+    pitchHistory.length = 0;
+    candidateNote = null;
+    candidateStart = null;
     if (currentNote && (nowSeconds - currentNote.lastVoiced) * 1000 > SILENCE_HOLD_MS) {
       finalizeCurrentNote(currentNote.lastVoiced);
     }
-    candidateNote = null;
-    candidateCount = 0;
     return;
   }
 
-  liveNoteEl.textContent = midiToNoteName(detectedMidi);
+  pitchHistory.push(freqToMidi(freq));
+  if (pitchHistory.length > PITCH_MEDIAN_WINDOW) pitchHistory.shift();
+  const smoothedMidi = median(pitchHistory);
+  const roundedNote = Math.round(smoothedMidi);
+
+  liveNoteEl.textContent = midiToNoteName(roundedNote);
   liveFreqEl.textContent = `${freq.toFixed(1)} Hz`;
 
   if (!currentNote) {
-    currentNote = { note: detectedMidi, start: nowSeconds, lastVoiced: nowSeconds, velocitySamples: [rms] };
+    currentNote = { note: roundedNote, start: nowSeconds, lastVoiced: nowSeconds, velocitySamples: [rms] };
     candidateNote = null;
-    candidateCount = 0;
+    candidateStart = null;
     return;
   }
 
-  if (detectedMidi === currentNote.note) {
-    currentNote.lastVoiced = nowSeconds;
+  currentNote.lastVoiced = nowSeconds;
+
+  const deviation = Math.abs(smoothedMidi - currentNote.note);
+  if (deviation < NOTE_DEAD_ZONE_SEMITONES) {
     currentNote.velocitySamples.push(rms);
     candidateNote = null;
-    candidateCount = 0;
+    candidateStart = null;
     return;
   }
 
-  // note appears to have changed pitch - require stability before switching
-  if (detectedMidi === candidateNote) {
-    candidateCount++;
-  } else {
-    candidateNote = detectedMidi;
-    candidateCount = 1;
+  // pitch has drifted outside the held note's dead zone - require it to hold steady
+  // for noteStability ms before treating it as a genuine note change
+  if (candidateNote !== roundedNote) {
+    candidateNote = roundedNote;
+    candidateStart = nowSeconds;
   }
 
-  if (candidateCount >= NOTE_STABILITY_FRAMES) {
-    finalizeCurrentNote(nowSeconds);
-    currentNote = { note: detectedMidi, start: nowSeconds, lastVoiced: nowSeconds, velocitySamples: [rms] };
+  const stabilityMs = parseFloat(noteStabilityInput.value);
+  if ((nowSeconds - candidateStart) * 1000 >= stabilityMs) {
+    // backdate the transition to when the pitch actually started drifting, rather than
+    // the later moment it was confirmed, so note timing isn't skewed by the debounce delay
+    finalizeCurrentNote(candidateStart);
+    currentNote = { note: roundedNote, start: candidateStart, lastVoiced: nowSeconds, velocitySamples: [rms] };
     candidateNote = null;
-    candidateCount = 0;
+    candidateStart = null;
   }
 }
 
@@ -322,7 +346,8 @@ function resetState() {
   noteEvents = [];
   currentNote = null;
   candidateNote = null;
-  candidateCount = 0;
+  candidateStart = null;
+  pitchHistory = [];
   updateNoteCount();
   drawPianoRoll();
   playbackPanel.hidden = true;
