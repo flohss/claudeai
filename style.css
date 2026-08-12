@@ -1,0 +1,251 @@
+:root {
+  --bg: #0f1115;
+  --panel: #171a21;
+  --panel-border: #262b36;
+  --text: #e7e9ee;
+  --text-dim: #9aa2b1;
+  --accent: #ff6b5e;
+  --accent-dim: #ff6b5e33;
+  --ok: #5ed6a4;
+  --note-color: #7aa2ff;
+  --note-color-2: #ff9f6b;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+.app {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 32px 20px 60px;
+}
+
+header h1 {
+  margin: 0 0 4px;
+  font-size: 28px;
+  letter-spacing: -0.02em;
+}
+
+.subtitle {
+  margin: 0 0 24px;
+  color: var(--text-dim);
+  font-size: 14px;
+  max-width: 60ch;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.record-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.btn {
+  border: none;
+  border-radius: 999px;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.btn:not(:disabled):active {
+  transform: scale(0.97);
+}
+
+.btn-record {
+  background: var(--accent);
+  color: #1a0d0b;
+}
+
+.btn-record .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #1a0d0b;
+}
+
+.btn-record.recording {
+  background: #ff2d2d;
+  color: white;
+  animation: pulse 1.4s infinite;
+}
+
+.btn-record.recording .dot {
+  background: white;
+}
+
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255,45,45,0.5); }
+  50% { box-shadow: 0 0 0 8px rgba(255,45,45,0); }
+}
+
+.btn-stop {
+  background: #2a2f3a;
+  color: var(--text);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid var(--panel-border);
+}
+
+.btn-primary {
+  background: var(--ok);
+  color: #06251a;
+}
+
+.timer {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  font-size: 18px;
+  color: var(--text-dim);
+}
+
+.live-readout {
+  display: flex;
+  gap: 24px;
+  margin-top: 18px;
+  flex-wrap: wrap;
+}
+
+.readout-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.readout-item .label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+
+.readout-item .value {
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.meter-item {
+  flex: 1;
+  min-width: 160px;
+  justify-content: center;
+}
+
+.meter {
+  height: 10px;
+  border-radius: 999px;
+  background: #262b36;
+  overflow: hidden;
+}
+
+.meter-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--ok), var(--accent));
+  transition: width 0.05s linear;
+}
+
+.advanced {
+  margin-top: 18px;
+  border-top: 1px solid var(--panel-border);
+  padding-top: 12px;
+}
+
+.advanced summary {
+  cursor: pointer;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.advanced-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-top: 14px;
+}
+
+.advanced-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.status {
+  margin: 18px 0 0;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.roll-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 12px;
+}
+
+.roll-header h2 {
+  margin: 0;
+  font-size: 15px;
+}
+
+#noteCount {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.roll-scroll {
+  overflow-x: auto;
+  border-radius: 10px;
+  border: 1px solid var(--panel-border);
+}
+
+#pianoRoll {
+  display: block;
+  background: #10131a;
+}
+
+.playback-panel h2 {
+  margin: 0 0 12px;
+  font-size: 15px;
+}
+
+.playback-panel audio {
+  width: 100%;
+  margin-bottom: 14px;
+}
+
+footer p {
+  font-size: 12px;
+  color: var(--text-dim);
+  max-width: 65ch;
+}

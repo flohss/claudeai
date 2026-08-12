@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Voix → MIDI</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>Voix → MIDI</h1>
+      <p class="subtitle">Enregistrez votre voix (chant, sifflement, fredonnement…) et obtenez un fichier MIDI de la mélodie détectée.</p>
+    </header>
+
+    <main>
+      <section class="panel controls-panel">
+        <div class="record-row">
+          <button id="recordBtn" class="btn btn-record">
+            <span class="dot"></span> Enregistrer
+          </button>
+          <button id="stopBtn" class="btn btn-stop" disabled>Arrêter</button>
+          <button id="resetBtn" class="btn btn-ghost" disabled>Réinitialiser</button>
+          <div class="timer" id="timer">00:00.0</div>
+        </div>
+
+        <div class="live-readout">
+          <div class="readout-item">
+            <span class="label">Note détectée</span>
+            <span class="value" id="liveNote">—</span>
+          </div>
+          <div class="readout-item">
+            <span class="label">Fréquence</span>
+            <span class="value" id="liveFreq">— Hz</span>
+          </div>
+          <div class="readout-item meter-item">
+            <span class="label">Niveau</span>
+            <div class="meter"><div class="meter-fill" id="meterFill"></div></div>
+          </div>
+        </div>
+
+        <details class="advanced">
+          <summary>Réglages avancés</summary>
+          <div class="advanced-grid">
+            <label>
+              Sensibilité au silence
+              <input type="range" id="silenceThreshold" min="0.002" max="0.05" step="0.001" value="0.012">
+            </label>
+            <label>
+              Durée minimale d'une note (ms)
+              <input type="range" id="minDuration" min="20" max="300" step="10" value="70">
+            </label>
+            <label>
+              Note la plus grave (Hz)
+              <input type="range" id="minFreq" min="50" max="200" step="5" value="70">
+            </label>
+            <label>
+              Note la plus aiguë (Hz)
+              <input type="range" id="maxFreq" min="500" max="1500" step="10" value="1000">
+            </label>
+          </div>
+        </details>
+
+        <p class="status" id="status">Cliquez sur « Enregistrer » puis autorisez l'accès au microphone.</p>
+      </section>
+
+      <section class="panel roll-panel">
+        <div class="roll-header">
+          <h2>Piano roll</h2>
+          <span id="noteCount">0 note</span>
+        </div>
+        <div class="roll-scroll">
+          <canvas id="pianoRoll" width="2000" height="360"></canvas>
+        </div>
+      </section>
+
+      <section class="panel playback-panel" id="playbackPanel" hidden>
+        <h2>Écouter l'enregistrement</h2>
+        <audio id="playbackAudio" controls></audio>
+        <button id="downloadBtn" class="btn btn-primary" disabled>Télécharger le fichier MIDI</button>
+      </section>
+    </main>
+
+    <footer>
+      <p>La détection de hauteur fonctionne dans le navigateur (autocorrélation), sans envoi de données vers un serveur. Le microphone nécessite une page servie en HTTPS ou en local (localhost).</p>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
