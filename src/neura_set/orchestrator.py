@@ -82,6 +82,13 @@ class Orchestrator:
         while self._running:
             buffer = self.capture.read_window()
             context = await loop.run_in_executor(None, self.analyzer.analyze, buffer)
+            logger.debug(
+                "niveau audio (rms)=%.4f seuil=%.4f tempo=%.0f section=%s",
+                context.rms_energy,
+                self.decision.config.min_rms_energy,
+                context.tempo_bpm,
+                context.section.value,
+            )
             if self.decision.should_propose(context):
                 await self._maybe_propose(context)
             await asyncio.sleep(self.analysis_interval_seconds)

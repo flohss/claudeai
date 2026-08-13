@@ -34,6 +34,22 @@ def main() -> None:
         action="store_true",
         help="Print available audio devices (to find your loopback/virtual cable) and exit.",
     )
+    parser.add_argument(
+        "--min-rms-energy",
+        type=float,
+        default=None,
+        help="Override the silence threshold below which NEURA-SET never proposes "
+        "(DecisionConfig.min_rms_energy, default 0.02). Lower it if audio is reaching "
+        "the app (see --verbose) but proposals never trigger.",
+    )
+    parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Log the measured audio level on every analysis tick — use this to check "
+        "whether NEURA-SET is actually receiving sound and how it compares to the "
+        "silence threshold.",
+    )
     args = parser.parse_args()
 
     if args.list_audio_devices:
@@ -42,11 +58,13 @@ def main() -> None:
         print(sd.query_devices())
         return
 
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO)
 
     if args.input_device is not None:
         device = int(args.input_device) if args.input_device.isdigit() else args.input_device
         DEFAULT_CONFIG.audio.input_device = device
+    if args.min_rms_energy is not None:
+        DEFAULT_CONFIG.decision.min_rms_energy = args.min_rms_energy
 
     orchestrator = Orchestrator(ableton_track_id=args.track_id, style=args.style)
     app = create_app(orchestrator)
