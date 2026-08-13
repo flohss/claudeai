@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Awaitable, Callable
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from neura_set.interface.websocket_manager import ConnectionManager
 from neura_set.types import Proposal
@@ -15,6 +15,29 @@ from neura_set.types import Proposal
 FeedbackCallback = Callable[[str, bool], Awaitable[None]]
 
 STATIC_DIR = Path(__file__).parent / "static"
+
+# Serving a manifest + icon lets Android Chrome offer "Add to Home screen":
+# the page then launches full-screen, with its own icon and theme color,
+# indistinguishable from an installed app. No build step needed — the icon
+# is a plain inline SVG, so there's no binary asset to ship alongside the code.
+_MANIFEST = {
+    "name": "NEURA-SET",
+    "short_name": "NEURA-SET",
+    "description": "Votre co-producteur musical, à l'écoute",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#f7f7fb",
+    "theme_color": "#6c5ce7",
+    "orientation": "portrait",
+    "icons": [
+        {"src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable"}
+    ],
+}
+
+_ICON_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
+  <rect width="192" height="192" rx="40" fill="#6c5ce7"/>
+  <text x="96" y="132" font-size="104" text-anchor="middle" font-family="sans-serif">🎹</text>
+</svg>"""
 
 
 def _proposal_to_json(proposal: Proposal) -> dict:
@@ -58,6 +81,14 @@ class InterfaceServer:
         @app.get("/", response_class=HTMLResponse)
         async def index() -> str:
             return (STATIC_DIR / "index.html").read_text()
+
+        @app.get("/manifest.webmanifest")
+        async def manifest() -> JSONResponse:
+            return JSONResponse(_MANIFEST, media_type="application/manifest+json")
+
+        @app.get("/icon.svg")
+        async def icon() -> Response:
+            return Response(content=_ICON_SVG, media_type="image/svg+xml")
 
         @app.websocket("/ws")
         async def ws_endpoint(websocket: WebSocket) -> None:

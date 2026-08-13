@@ -89,6 +89,29 @@ python -m neura_set --track-id 2 --style techno
 5. Ouvrez `http://localhost:8000` pour accepter/rejeter les propositions en
    direct.
 
+## Utilisation depuis un téléphone Android
+
+L'interface tourne côté serveur : le téléphone n'est qu'un écran de
+validation, aucune install requise dessus. Le serveur écoute déjà sur
+`0.0.0.0` par défaut, donc :
+
+1. Assurez-vous que l'ordinateur et le téléphone sont sur le même réseau WiFi.
+2. Trouvez l'adresse IP locale de l'ordinateur (`ip a` sur Linux, `ipconfig`
+   sur Windows, `ifconfig` sur macOS — cherchez quelque chose comme
+   `192.168.1.x`).
+3. Sur le téléphone, ouvrez Chrome et allez sur `http://<cette-ip>:8000`.
+4. Menu Chrome (⋮) → **Ajouter à l'écran d'accueil** : la page s'installe
+   avec sa propre icône et se lance en plein écran, sans barre d'adresse.
+
+L'interface est pensée pour Android dès le départ : cibles tactiles ≥ 48px,
+retour visuel au toucher (pas de survol nécessaire), reconnexion automatique
+du WebSocket si Android met l'onglet en veille (écran éteint, changement
+d'appli), et couleur de la barre de statut Chrome assortie au thème
+clair/sombre du téléphone. Limite connue : si vous exposez le serveur sur
+internet (au lieu du LAN) derrière HTTPS, utilisez un reverse-proxy qui gère
+le TLS — le navigateur bascule automatiquement en `wss://` dans ce cas, mais
+un simple tunnel HTTP ne suffira pas.
+
 ## Roadmap
 
 - [ ] Fine-tuner un Music Transformer sur un corpus MIDI par genre

@@ -4,6 +4,12 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>NEURA-SET</title>
+<link rel="manifest" href="/manifest.webmanifest" />
+<link rel="icon" href="/icon.svg" type="image/svg+xml" />
+<!-- Tints Android Chrome's status/toolbar to match the app instead of default grey. -->
+<meta name="theme-color" content="#f7f7fb" media="(prefers-color-scheme: light)" />
+<meta name="theme-color" content="#121218" media="(prefers-color-scheme: dark)" />
+<meta name="mobile-web-app-capable" content="yes" />
 <style>
   :root {
     --bg: #f7f7fb;
@@ -56,10 +62,18 @@
   button {
     font: inherit;
     cursor: pointer;
+    touch-action: manipulation; /* removes Android's ~300ms tap delay */
+    -webkit-tap-highlight-color: transparent;
   }
   button:focus-visible, a:focus-visible {
     outline: 3px solid var(--focus);
     outline-offset: 2px;
+  }
+  button:active {
+    transform: scale(0.96); /* visible press feedback where :hover doesn't apply */
+  }
+  @media (prefers-reduced-motion: reduce) {
+    button:active { transform: none; }
   }
 
   .help-banner {
@@ -174,6 +188,14 @@
   }
   .keep { background: var(--accept-bg); color: var(--accept); }
   .pass { background: var(--reject-bg); color: var(--reject); }
+
+  /* Smallest Android phones (Galaxy A/S-series budget models, ~320-360px):
+     keep Garder/Passer full-width and legible instead of cramming them
+     next to the play button. */
+  @media (max-width: 360px) {
+    .row { flex-wrap: wrap; }
+    .actions { flex-basis: 100%; }
+  }
 
   .sr-only {
     position: absolute; width: 1px; height: 1px;
@@ -384,6 +406,17 @@ function connect() {
   };
 }
 connect();
+
+// Android (and mobile browsers generally) suspend timers and can drop the
+// WebSocket while the tab is backgrounded/screen is off. Force a reconnect
+// check the moment the page becomes visible again instead of waiting for a
+// possibly-already-dead close event.
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible") return;
+  if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+    connect();
+  }
+});
 </script>
 </body>
 </html>
