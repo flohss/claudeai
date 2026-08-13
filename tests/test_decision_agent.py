@@ -4,7 +4,7 @@ from neura_set.types import MusicalContext, NoteEvent, Proposal, SectionLabel
 
 
 def make_proposal(pid: str, section: SectionLabel = SectionLabel.VERSE, pitch: int = 60) -> Proposal:
-    context = MusicalContext(section=section)
+    context = MusicalContext(section=section, rms_energy=0.5)
     notes = [NoteEvent(pitch=pitch, start_beat=i * 0.5, duration_beats=0.5) for i in range(4)]
     return Proposal(id=pid, notes=notes, context=context, generator_name="test")
 
@@ -12,7 +12,7 @@ def make_proposal(pid: str, section: SectionLabel = SectionLabel.VERSE, pitch: i
 def test_should_propose_respects_cooldown():
     config = DecisionConfig(min_seconds_between_proposals=10.0)
     agent = DecisionAgent(config)
-    context = MusicalContext(section=SectionLabel.VERSE)
+    context = MusicalContext(section=SectionLabel.VERSE, rms_energy=0.5)
     now = 1000.0
 
     assert agent.should_propose(context, now=now) is True
@@ -23,8 +23,17 @@ def test_should_propose_respects_cooldown():
 
 def test_should_propose_avoids_busy_sections():
     agent = DecisionAgent()
-    context = MusicalContext(section=SectionLabel.DROP)
+    context = MusicalContext(section=SectionLabel.DROP, rms_energy=0.5)
     assert agent.should_propose(context, now=100.0) is False
+
+
+def test_should_propose_blocks_on_silence():
+    agent = DecisionAgent()
+    silent_context = MusicalContext(section=SectionLabel.VERSE, rms_energy=0.0)
+    assert agent.should_propose(silent_context, now=100.0) is False
+
+    playing_context = MusicalContext(section=SectionLabel.VERSE, rms_energy=0.5)
+    assert agent.should_propose(playing_context, now=100.0) is True
 
 
 def test_filter_candidate_rejects_near_duplicate():
@@ -45,7 +54,7 @@ def test_filter_candidate_rejects_near_duplicate():
 def test_agent_backs_off_after_repeated_rejections():
     config = DecisionConfig(min_seconds_between_proposals=0.0)
     agent = DecisionAgent(config)
-    context = MusicalContext(section=SectionLabel.VERSE)
+    context = MusicalContext(section=SectionLabel.VERSE, rms_energy=0.5)
 
     for i in range(4):
         p = make_proposal(f"p{i}", context.section)

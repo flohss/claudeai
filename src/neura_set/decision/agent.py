@@ -54,6 +54,8 @@ class DecisionAgent:
 
     def should_propose(self, context: MusicalContext, now: float | None = None) -> bool:
         now = now if now is not None else time.time()
+        if context.rms_energy < self.config.min_rms_energy:
+            return False  # silence / no input signal — nothing to react to yet
         if now - self._last_proposal_time < self.config.min_seconds_between_proposals:
             return False
         if len(self._pending) >= self.config.max_pending_proposals:

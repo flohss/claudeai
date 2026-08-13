@@ -33,6 +33,7 @@ class DecisionConfig:
     min_seconds_between_proposals: float = 8.0
     novelty_similarity_threshold: float = 0.92
     max_pending_proposals: int = 3
+    min_rms_energy: float = 0.02  # below this, treat the buffer as silence/no signal
 
 
 @dataclass

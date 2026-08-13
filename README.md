@@ -59,11 +59,27 @@ le détail des compromis.
 
 ## Installation
 
+macOS / Linux :
+
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 pytest
 ```
+
+Windows (PowerShell ou l'invite de commandes) :
+
+```bat
+python -m venv .venv
+.venv\Scripts\activate
+pip install -e ".[dev]"
+pytest
+```
+
+Sur Windows, la commande s'appelle `python` (pas `python3`), et l'activation du
+venv passe par `.venv\Scripts\activate` plutôt que `source .venv/bin/activate`.
+Si vous préférez ne pas utiliser de venv, `pip install -e ".[dev]"` seul
+fonctionne aussi directement avec votre Python global.
 
 ## Utilisation
 

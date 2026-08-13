@@ -59,7 +59,7 @@ Ableton via OSC. Les retours accept/reject repartent de l'UI vers la décision
 
 | Fichier | Rôle | État |
 |---|---|---|
-| `agent.py` | `DecisionAgent` à règles : cooldown, limite de propositions en attente, évitement des sections denses (drop/chorus), recul si le taux d'acceptation chute sur une section, filtrage de nouveauté (similarité de hauteurs vs. propositions récemment acceptées) | **Fonctionnel**, c'est l'agent par défaut |
+| `agent.py` | `DecisionAgent` à règles : silence gate (pas de proposition sous `min_rms_energy`, donc rien au démarrage tant que personne ne joue), cooldown, limite de propositions en attente, évitement des sections denses (drop/chorus), recul si le taux d'acceptation chute sur une section, filtrage de nouveauté (similarité de hauteurs vs. propositions récemment acceptées) | **Fonctionnel**, c'est l'agent par défaut |
 | `rl_agent.py` | Environnement Gymnasium + entraînement PPO (stable-baselines3) rejouant des transitions (contexte, proposer/pas, accepté/rejeté) loggées | Fonctionnel *si des logs existent* — non branché sur le pipeline par défaut, car il n'y a pas encore de données de session réelles pour entraîner sur autre chose que du bruit |
 
 ## 4. Action — `neura_set/action/`
