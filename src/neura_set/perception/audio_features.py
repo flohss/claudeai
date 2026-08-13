@@ -22,11 +22,18 @@ _MINOR_PROFILE = np.array(
 
 
 def estimate_tempo(y: np.ndarray, config: AudioConfig = DEFAULT_CONFIG.audio) -> float:
-    """Estimate tempo in BPM using librosa's onset-strength-based tracker."""
+    """Estimate tempo in BPM using librosa's onset-strength-based tracker.
+
+    Uses the top-level `librosa.feature.tempo`, not `librosa.feature.rhythm.tempo`:
+    the `rhythm` submodule is lazy-loaded and its availability there has proven
+    inconsistent across librosa versions (present in 0.10.x/0.11.x, raises
+    AttributeError on 1.0.0), while `feature.tempo` is the stable public entry
+    point across all of them.
+    """
     onset_env = librosa.onset.onset_strength(
         y=y, sr=config.sample_rate, hop_length=config.hop_length
     )
-    tempo = librosa.feature.rhythm.tempo(
+    tempo = librosa.feature.tempo(
         onset_envelope=onset_env, sr=config.sample_rate, hop_length=config.hop_length
     )
     return float(tempo[0]) if len(tempo) else 0.0

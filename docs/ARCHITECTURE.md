@@ -41,7 +41,7 @@ Ableton via OSC. Les retours accept/reject repartent de l'UI vers la décision
 | Fichier | Rôle | État |
 |---|---|---|
 | `audio_capture.py` | Capture temps réel via `sounddevice` (PortAudio) dans un ring buffer, thread-safe | Fonctionnel, nécessite un device de loopback configuré dans l'OS/Ableton |
-| `audio_features.py` | Tempo (`librosa.feature.rhythm.tempo`), chroma, tonalité (corrélation avec les profils de Krumhansl-Kessler), RMS, centroïde spectral, densité d'onsets | Fonctionnel |
+| `audio_features.py` | Tempo (`librosa.feature.tempo`), chroma, tonalité (corrélation avec les profils de Krumhansl-Kessler), RMS, centroïde spectral, densité d'onsets | Fonctionnel |
 | `chord_detection.py` | Détection d'accord par *template matching* sur le chromagramme (triades maj/min) | Fonctionnel, mais volontairement simple — voir "Écarts avec le brief" |
 | `structure_segmentation.py` | Segmentation par matrice d'auto-similarité + noyau damier (Foote 2000), étiquetage grossier par énergie relative | Fonctionnel, heuristique |
 | `analyzer.py` | Combine tout ça en un `MusicalContext`, verrouille la tonalité globale une fois détectée avec confiance | Fonctionnel |
