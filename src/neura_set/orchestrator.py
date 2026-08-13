@@ -78,19 +78,29 @@ class Orchestrator:
             self.osc_client.stop()
 
     async def _perception_loop(self) -> None:
+        # This runs as a detached background task (see start()): nothing
+        # awaits it, so an uncaught exception here would silently end the
+        # whole loop forever with no visible error — confirmed live, a
+        # single bad tick (e.g. a librosa edge case on real, non-silent
+        # audio) killed analysis permanently while the rest of the app kept
+        # responding normally. Catch per-tick instead of per-run so one bad
+        # analysis doesn't take down the whole session.
         loop = asyncio.get_event_loop()
         while self._running:
-            buffer = self.capture.read_window()
-            context = await loop.run_in_executor(None, self.analyzer.analyze, buffer)
-            logger.debug(
-                "niveau audio (rms)=%.4f seuil=%.4f tempo=%.0f section=%s",
-                context.rms_energy,
-                self.decision.config.min_rms_energy,
-                context.tempo_bpm,
-                context.section.value,
-            )
-            if self.decision.should_propose(context):
-                await self._maybe_propose(context)
+            try:
+                buffer = self.capture.read_window()
+                context = await loop.run_in_executor(None, self.analyzer.analyze, buffer)
+                logger.debug(
+                    "niveau audio (rms)=%.4f seuil=%.4f tempo=%.0f section=%s",
+                    context.rms_energy,
+                    self.decision.config.min_rms_energy,
+                    context.tempo_bpm,
+                    context.section.value,
+                )
+                if self.decision.should_propose(context):
+                    await self._maybe_propose(context)
+            except Exception:
+                logger.exception("échec de l'analyse audio sur ce cycle, on continue")
             await asyncio.sleep(self.analysis_interval_seconds)
 
     async def _maybe_propose(self, context: MusicalContext) -> None:
