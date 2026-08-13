@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>NEURA-SET</title>
+<style>
+  body { font-family: -apple-system, sans-serif; background: #12121a; color: #e8e8f0; margin: 0; padding: 2rem; }
+  h1 { font-weight: 600; letter-spacing: 0.02em; }
+  .status { color: #8a8aa0; margin-bottom: 1.5rem; }
+  .proposal { background: #1c1c28; border: 1px solid #2e2e3e; border-radius: 10px; padding: 1rem 1.25rem; margin-bottom: 0.75rem; display: flex; justify-content: space-between; align-items: center; }
+  .meta { color: #a0a0b8; font-size: 0.85rem; }
+  .meta b { color: #e8e8f0; }
+  .actions button { border: none; border-radius: 6px; padding: 0.5rem 1rem; margin-left: 0.5rem; cursor: pointer; font-weight: 600; }
+  .accept { background: #3ddc84; color: #04140a; }
+  .reject { background: #ff5470; color: #1a0508; }
+  .empty { color: #55556a; font-style: italic; }
+</style>
+</head>
+<body>
+  <h1>NEURA-SET</h1>
+  <div class="status" id="status">connecting…</div>
+  <div id="proposals"><div class="empty">No proposals yet — play something.</div></div>
+
+<script>
+const proposalsEl = document.getElementById("proposals");
+const statusEl = document.getElementById("status");
+const seen = new Map();
+
+function render() {
+  if (seen.size === 0) {
+    proposalsEl.innerHTML = '<div class="empty">No proposals yet — play something.</div>';
+    return;
+  }
+  proposalsEl.innerHTML = "";
+  for (const [id, p] of seen) {
+    const el = document.createElement("div");
+    el.className = "proposal";
+    const key = `${["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"][p.context.key_root_pc]}${p.context.key_is_minor ? "m" : ""}`;
+    el.innerHTML = `
+      <div class="meta">
+        <b>${p.generator_name}</b> · ${p.style} · ${p.notes.length} notes<br/>
+        ${Math.round(p.context.tempo_bpm)} BPM · ${key} · ${p.context.section}
+      </div>
+      <div class="actions">
+        <button class="accept">Accept</button>
+        <button class="reject">Reject</button>
+      </div>`;
+    el.querySelector(".accept").onclick = () => respond(id, "accept");
+    el.querySelector(".reject").onclick = () => respond(id, "reject");
+    proposalsEl.appendChild(el);
+  }
+}
+
+function respond(proposalId, type) {
+  ws.send(JSON.stringify({ type, proposal_id: proposalId }));
+  seen.delete(proposalId);
+  render();
+}
+
+const proto = location.protocol === "https:" ? "wss" : "ws";
+const ws = new WebSocket(`${proto}://${location.host}/ws`);
+ws.onopen = () => (statusEl.textContent = "listening");
+ws.onclose = () => (statusEl.textContent = "disconnected");
+ws.onmessage = (event) => {
+  const msg = JSON.parse(event.data);
+  if (msg.type === "proposal") {
+    seen.set(msg.proposal.id, msg.proposal);
+    render();
+  }
+};
+</script>
+</body>
+</html>
