@@ -58,7 +58,14 @@ def main() -> None:
         print(sd.query_devices())
         return
 
-    logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO)
+    # Keep third-party libraries (numba's JIT compiler in particular, via
+    # librosa) at INFO — only NEURA-SET's own logger goes to DEBUG. numba
+    # alone dumps thousands of lines of bytecode/compilation trace per
+    # analysis tick under a global DEBUG level, drowning out the one line
+    # --verbose is meant to surface.
+    logging.basicConfig(level=logging.INFO)
+    if args.verbose:
+        logging.getLogger("neura_set").setLevel(logging.DEBUG)
 
     if args.input_device is not None:
         device = int(args.input_device) if args.input_device.isdigit() else args.input_device
