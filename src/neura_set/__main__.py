@@ -23,9 +23,30 @@ def main() -> None:
     parser.add_argument("--style", default="default", choices=sorted(STYLES))
     parser.add_argument("--host", default=DEFAULT_CONFIG.interface.host)
     parser.add_argument("--port", type=int, default=DEFAULT_CONFIG.interface.port)
+    parser.add_argument(
+        "--input-device",
+        default=None,
+        help="Name or index of the audio input device to listen on (see --list-audio-devices). "
+        "Defaults to the system's default input.",
+    )
+    parser.add_argument(
+        "--list-audio-devices",
+        action="store_true",
+        help="Print available audio devices (to find your loopback/virtual cable) and exit.",
+    )
     args = parser.parse_args()
 
+    if args.list_audio_devices:
+        import sounddevice as sd
+
+        print(sd.query_devices())
+        return
+
     logging.basicConfig(level=logging.INFO)
+
+    if args.input_device is not None:
+        device = int(args.input_device) if args.input_device.isdigit() else args.input_device
+        DEFAULT_CONFIG.audio.input_device = device
 
     orchestrator = Orchestrator(ableton_track_id=args.track_id, style=args.style)
     app = create_app(orchestrator)

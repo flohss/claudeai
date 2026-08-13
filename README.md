@@ -83,27 +83,59 @@ fonctionne aussi directement avec votre Python global.
 
 ## Utilisation
 
-Sans Ableton, pour tester la boucle perception → génération → UI :
+Lancer la commande seule (`python -m neura_set`) ne suffit pas à obtenir des
+propositions : NEURA-SET écoute un périphérique d'entrée audio, pas
+directement Ableton. Tant que ce périphérique ne reçoit aucun son (micro
+silencieux, rien routé dessus), l'interface affichera "En attente…" — c'est
+le comportement normal, pas un bug.
+
+### Étape 1 — router le son d'Ableton vers NEURA-SET
+
+Il faut un câble audio virtuel qui fait sortir le son d'Ableton d'un côté et
+rentrer comme "micro" de l'autre :
+
+- **Windows** : installez [VB-CABLE](https://vb-audio.com/Cable/) (gratuit).
+  Dans Ableton, Préférences → Audio → réglez la sortie sur "CABLE Input". Ça
+  coupe le monitoring normal ; pour garder le son sur vos enceintes *et*
+  l'envoyer à NEURA-SET, utilisez [VoiceMeeter](https://vb-audio.com/Voicemeeter/)
+  à la place, qui permet de dupliquer la sortie.
+- **macOS** : [BlackHole](https://github.com/ExistentialAudio/BlackHole)
+  (gratuit), même principe, combinable avec un périphérique agrégé pour
+  garder le monitoring.
+- **Linux** : créez un sink PipeWire/PulseAudio virtuel (`pactl load-module
+  module-null-sink`) et routez la sortie d'Ableton dessus.
+
+### Étape 2 — dire à NEURA-SET quel périphérique écouter
 
 ```bash
-python -m neura_set
+python -m neura_set --list-audio-devices
 ```
 
-Avec Ableton :
+Repérez le nom ou l'index du câble virtuel (ex. `CABLE Output` sur Windows
+avec VB-CABLE) dans la liste, puis :
+
+```bash
+python -m neura_set --input-device "CABLE Output"
+```
+
+Sans cet argument, NEURA-SET écoute le périphérique d'entrée par défaut du
+système (généralement votre micro) — ce qui explique une interface qui reste
+vide même en jouant, si Ableton ne sort pas sur ce device.
+
+### Étape 3 — avec Ableton, pour écrire les propositions dans un clip
 
 1. Installez [AbletonOSC](https://github.com/ideoforms/AbletonOSC) comme
    Control Surface.
 2. Créez une piste MIDI dédiée (ex. "NEURA-SET Proposals") et notez son index.
-3. Routez la sortie d'Ableton (ou une cue) vers un device de loopback virtuel
-   (BlackHole/VB-Cable/PipeWire sink) — voir `docs/ARCHITECTURE.md`.
-4. Lancez :
+3. Lancez :
 
 ```bash
-python -m neura_set --track-id 2 --style techno
+python -m neura_set --input-device "CABLE Output" --track-id 2 --style techno
 ```
 
-5. Ouvrez `http://localhost:8000` pour accepter/rejeter les propositions en
-   direct.
+4. Ouvrez `http://localhost:8000` pour accepter/rejeter les propositions en
+   direct. Sans `--track-id`, NEURA-SET tourne en mode UI seule (pas d'écriture
+   dans Ableton) — pratique pour tester juste la boucle écoute → proposition.
 
 ## Utilisation depuis un téléphone Android
 
