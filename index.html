@@ -258,6 +258,12 @@ body {
   font-size: 13px;
 }
 
+.symmetry-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .checkbox-row {
   display: flex;
   align-items: center;
@@ -410,6 +416,20 @@ body {
         </section>
 
         <section class="panel">
+          <h2>Symétrie</h2>
+          <div class="symmetry-options">
+            <label class="checkbox-row">
+              <input type="checkbox" id="symmetry-h">
+              Horizontale (↔)
+            </label>
+            <label class="checkbox-row">
+              <input type="checkbox" id="symmetry-v">
+              Verticale (↕)
+            </label>
+          </div>
+        </section>
+
+        <section class="panel">
           <h2>Actions</h2>
           <div class="action-buttons">
             <button id="undo-btn" title="Annuler (Ctrl+Z)">↶ Annuler</button>
@@ -458,6 +478,8 @@ body {
   const hueRange = document.getElementById("hue-range");
   const gridSizeSelect = document.getElementById("grid-size");
   const gridLinesCheckbox = document.getElementById("grid-lines");
+  const symmetryHCheckbox = document.getElementById("symmetry-h");
+  const symmetryVCheckbox = document.getElementById("symmetry-v");
   const undoBtn = document.getElementById("undo-btn");
   const redoBtn = document.getElementById("redo-btn");
   const clearBtn = document.getElementById("clear-btn");
@@ -473,6 +495,7 @@ body {
     hsv: { h: 230, s: 74, v: 33 },
     isPointerDown: false,
     isSvDragging: false,
+    symmetry: { h: false, v: false },
     history: [],
     historyIndex: -1,
   };
@@ -599,6 +622,45 @@ body {
         ctx.stroke();
       }
     }
+
+    if (state.symmetry.h || state.symmetry.v) {
+      ctx.save();
+      ctx.strokeStyle = "rgba(108, 141, 255, 0.7)";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 5]);
+      if (state.symmetry.h) {
+        const pos = Math.round((size / 2) * cs) + 0.5;
+        ctx.beginPath();
+        ctx.moveTo(pos, 0);
+        ctx.lineTo(pos, canvas.height);
+        ctx.stroke();
+      }
+      if (state.symmetry.v) {
+        const pos = Math.round((size / 2) * cs) + 0.5;
+        ctx.beginPath();
+        ctx.moveTo(0, pos);
+        ctx.lineTo(canvas.width, pos);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
+
+  function getSymmetricCells(x, y) {
+    const size = state.gridSize;
+    const points = [[x, y]];
+    if (state.symmetry.h) points.push([size - 1 - x, y]);
+    if (state.symmetry.v) points.push([x, size - 1 - y]);
+    if (state.symmetry.h && state.symmetry.v) points.push([size - 1 - x, size - 1 - y]);
+    const seen = new Set();
+    const result = [];
+    for (const [px, py] of points) {
+      const key = px + "," + py;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push({ x: px, y: py });
+    }
+    return result;
   }
 
   function buildPalette() {
@@ -722,13 +784,18 @@ body {
 
   function handlePointerAction(x, y, isStart) {
     if (state.tool === "pencil" || state.tool === "eraser") {
-      const changed = paintAt(x, y);
+      let changed = false;
+      for (const cell of getSymmetricCells(x, y)) {
+        changed = paintAt(cell.x, cell.y) || changed;
+      }
       if (changed) render();
     } else if (state.tool === "bucket") {
       if (!isStart) return;
-      const target = state.grid[idx(x, y)];
       const replacement = state.activeColor;
-      floodFill(x, y, target, replacement);
+      for (const cell of getSymmetricCells(x, y)) {
+        const target = state.grid[idx(cell.x, cell.y)];
+        floodFill(cell.x, cell.y, target, replacement);
+      }
       render();
       pushHistory();
     } else if (state.tool === "picker") {
@@ -853,6 +920,16 @@ body {
   });
 
   gridLinesCheckbox.addEventListener("change", render);
+
+  symmetryHCheckbox.addEventListener("change", (e) => {
+    state.symmetry.h = e.target.checked;
+    render();
+  });
+
+  symmetryVCheckbox.addEventListener("change", (e) => {
+    state.symmetry.v = e.target.checked;
+    render();
+  });
 
   clearBtn.addEventListener("click", () => {
     if (state.grid.some((c) => c !== null) && !confirm("Effacer tout le dessin ?")) return;
