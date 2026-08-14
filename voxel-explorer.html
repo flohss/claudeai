@@ -551,7 +551,10 @@ function updatePlayer(dt) {
   if (!locked) return;
   const running = (keys['ShiftLeft'] || keys['ShiftRight'] || touchState.running);
   const speed = running ? 7.5 : 4.3;
-  const forward = new THREE.Vector3(Math.sin(player.yaw), 0, Math.cos(player.yaw));
+  // THREE.PerspectiveCamera regarde par défaut vers -Z ; à yaw=0 la caméra
+  // fixe donc (0,0,-1), pas (0,0,1). Les signes ci-dessous doivent matcher
+  // camera.rotation.y = player.yaw pour que "avancer" avance réellement.
+  const forward = new THREE.Vector3(-Math.sin(player.yaw), 0, -Math.cos(player.yaw));
   const right = new THREE.Vector3(Math.sin(player.yaw + Math.PI/2), 0, Math.cos(player.yaw + Math.PI/2));
 
   let move = new THREE.Vector3();
@@ -739,7 +742,11 @@ function drawMinimapFrame() {
   const cx = mmSize / 2, cy = mmSize / 2;
   minimapCtx.save();
   minimapCtx.translate(cx, cy);
-  minimapCtx.rotate(player.yaw); // yaw=0 -> +Z (bas de l'écran en three.js) ; on aligne visuellement
+  // ctx.rotate() tourne dans le sens horaire pour un angle positif, alors que
+  // la caméra (regard vers -Z à yaw=0) tourne dans l'autre sens quand yaw
+  // augmente : il faut donc inverser le signe pour que la flèche pointe
+  // réellement dans la direction regardée par le joueur.
+  minimapCtx.rotate(-player.yaw);
   minimapCtx.beginPath();
   minimapCtx.moveTo(0, -9);
   minimapCtx.lineTo(6, 7);
