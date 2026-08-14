@@ -250,6 +250,53 @@ const BLOCK_NAME_FR = {
   [SNOW]: 'Neige', [WOOD]: 'Bois', [LEAVES]: 'Feuilles', [LAVA]: 'Lave',
 };
 
+// ---------- Atlas de textures procédural (un peu de grain sur les blocs) ----------
+// Un canvas généré au démarrage : une tuile bruitée par type de bloc, plutôt
+// que la couleur plate unie d'origine. Pas d'images externes.
+const BLOCK_TILES = [GRASS, DIRT, STONE, SAND, SNOW, WOOD, LEAVES, LAVA];
+const BLOCK_TILE_INDEX = {};
+BLOCK_TILES.forEach((b, i) => BLOCK_TILE_INDEX[b] = i);
+const ATLAS_TILE = 16;
+
+function buildBlockAtlas() {
+  const canvas = document.createElement('canvas');
+  canvas.width = ATLAS_TILE * BLOCK_TILES.length;
+  canvas.height = ATLAS_TILE;
+  const ctx = canvas.getContext('2d');
+  let s = 987654321;
+  const rand = () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; };
+
+  BLOCK_TILES.forEach((b, i) => {
+    const [r, g, bl] = BLOCK_COLOR[b].map(v => v * 255);
+    const ox = i * ATLAS_TILE;
+    for (let py = 0; py < ATLAS_TILE; py++) {
+      for (let px = 0; px < ATLAS_TILE; px++) {
+        let jitter = (rand() - 0.5) * 42; // grain de base, commun à tous
+        if (b === WOOD) jitter += Math.sin(px * 1.7) * 22; // grain vertical du tronc
+        if (b === LEAVES) jitter += (Math.sin(px * 0.9 + py * 0.4) + Math.cos(py * 1.1)) * 16; // feuillage moucheté
+        if (b === STONE && rand() > 0.9) jitter -= 32; // fissures/taches sombres
+        if (b === LAVA) jitter += rand() > 0.87 ? 90 : 0; // veines incandescentes
+        if (b === SNOW) jitter *= 0.5; // neige plus uniforme
+        const rr = Math.max(0, Math.min(255, r + jitter));
+        const gg = Math.max(0, Math.min(255, g + jitter));
+        const bb = Math.max(0, Math.min(255, bl + jitter));
+        ctx.fillStyle = `rgb(${rr | 0},${gg | 0},${bb | 0})`;
+        ctx.fillRect(ox + px, py, 1, 1);
+      }
+    }
+  });
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearFilter;
+  tex.generateMipmaps = false; // évite le "bleed" entre tuiles voisines de l'atlas
+  return tex;
+}
+const blockAtlas = buildBlockAtlas();
+// Rentre l'UV d'un demi-texel à l'intérieur de la tuile pour la même raison.
+const ATLAS_TEXEL_U = 1 / (ATLAS_TILE * BLOCK_TILES.length);
+const ATLAS_TEXEL_V = 1 / ATLAS_TILE;
+
 // Biomes en fonction de température/humidité
 function getBiome(temp, humid) {
   if (temp < -0.35) return 'snow';
@@ -399,7 +446,7 @@ function isSolid(b) { return b !== AIR && b !== WATER && b !== LAVA; }
 
 // Construit une géométrie fusionnée pour un chunk (culling des faces cachées)
 function buildChunkMesh(cx, cz, data) {
-  const positions = [], normals = [], colors = [], indices = [];
+  const positions = [], normals = [], colors = [], uvs = [], indices = [];
   const idx = (x, y, z) => x + CHUNK_SIZE * (z + CHUNK_SIZE * y);
   const FACES = [
     { dir:[ 1,0,0], corners:[[1,0,0],[1,1,0],[1,1,1],[1,0,1]] },
@@ -409,13 +456,22 @@ function buildChunkMesh(cx, cz, data) {
     { dir:[0,0, 1], corners:[[1,0,1],[1,1,1],[0,1,1],[0,0,1]] },
     { dir:[0,0,-1], corners:[[0,0,0],[0,1,0],[1,1,0],[1,0,0]] },
   ];
+  // UV des 4 coins d'une face, dans le même ordre que corners[] ci-dessus ;
+  // rentrés d'un demi-texel pour rester à l'intérieur de la tuile de l'atlas.
+  const FACE_UV = [
+    [ATLAS_TEXEL_U * 0.5, ATLAS_TEXEL_V * 0.5],
+    [ATLAS_TEXEL_U * 0.5, 1 - ATLAS_TEXEL_V * 0.5],
+    [1 - ATLAS_TEXEL_U * 0.5, 1 - ATLAS_TEXEL_V * 0.5],
+    [1 - ATLAS_TEXEL_U * 0.5, ATLAS_TEXEL_V * 0.5],
+  ];
 
   for (let x = 0; x < CHUNK_SIZE; x++) {
     for (let y = 0; y < WORLD_HEIGHT; y++) {
       for (let z = 0; z < CHUNK_SIZE; z++) {
         const b = data[idx(x, y, z)];
         if (b === AIR || b === WATER) continue;
-        const col = BLOCK_COLOR[b] || [1,0,1];
+        const tile = BLOCK_TILE_INDEX[b] ?? 0;
+        const uOffset = tile / BLOCK_TILES.length;
         for (const f of FACES) {
           const nx = x + f.dir[0], ny = y + f.dir[1], nz = z + f.dir[2];
           let neighbor;
@@ -427,29 +483,32 @@ function buildChunkMesh(cx, cz, data) {
           if (isSolid(neighbor)) continue;
           const shade = f.dir[1] === 1 ? 1.0 : f.dir[1] === -1 ? 0.55 : 0.78;
           const base = positions.length / 3;
-          for (const c of f.corners) {
+          for (let ci = 0; ci < 4; ci++) {
+            const c = f.corners[ci];
             positions.push(x + c[0], y + c[1], z + c[2]);
             normals.push(...f.dir);
-            colors.push(col[0]*shade, col[1]*shade, col[2]*shade);
+            colors.push(shade, shade, shade);
+            uvs.push(uOffset + FACE_UV[ci][0] / BLOCK_TILES.length, FACE_UV[ci][1]);
           }
           indices.push(base, base+1, base+2, base, base+2, base+3);
         }
       }
     }
   }
-  return { positions, normals, colors, indices };
+  return { positions, normals, colors, uvs, indices };
 }
 
-const material = new THREE.MeshLambertMaterial({ vertexColors: true });
+const material = new THREE.MeshLambertMaterial({ map: blockAtlas, vertexColors: true });
 const waterMaterial = new THREE.MeshLambertMaterial({ color: 0x2f6fb0, transparent: true, opacity: 0.55 });
 
 function chunkToMesh(cx, cz, data) {
-  const { positions, normals, colors, indices } = buildChunkMesh(cx, cz, data);
+  const { positions, normals, colors, uvs, indices } = buildChunkMesh(cx, cz, data);
   if (positions.length === 0) return null;
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
   geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
   geo.setIndex(indices);
   const mesh = new THREE.Mesh(geo, material);
   mesh.position.set(cx * CHUNK_SIZE, 0, cz * CHUNK_SIZE);
