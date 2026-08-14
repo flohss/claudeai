@@ -927,6 +927,69 @@ function updateDayNight(dt) {
   ambient.intensity = 0.12 + dayFactor * 0.43;
 }
 
+// ---------- Soleil, lune et étoiles visibles dans le ciel ----------
+// Sprites/points repositionnés chaque frame autour de la caméra (pas de la
+// scène) : ça donne l'illusion d'objets "à l'infini" qui suivent le joueur
+// sans parallaxe, tout en se déplaçant dans le ciel au fil de la journée.
+function makeGlowSprite(colorInner, colorOuter, size) {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const ctx = c.getContext('2d');
+  const grad = ctx.createRadialGradient(size/2, size/2, 0, size/2, size/2, size/2);
+  grad.addColorStop(0, colorInner);
+  grad.addColorStop(0.5, colorOuter);
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, size, size);
+  const tex = new THREE.CanvasTexture(c);
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, fog: false });
+  return new THREE.Sprite(mat);
+}
+const sunSprite = makeGlowSprite('rgba(255,250,220,1)', 'rgba(255,210,110,0.55)', 128);
+sunSprite.scale.set(55, 55, 1);
+scene.add(sunSprite);
+const moonSprite = makeGlowSprite('rgba(235,240,255,1)', 'rgba(195,205,230,0.4)', 128);
+moonSprite.scale.set(38, 38, 1);
+scene.add(moonSprite);
+
+function makeStars(count) {
+  const positions = new Float32Array(count * 3);
+  const R = 380;
+  for (let i = 0; i < count; i++) {
+    const theta = Math.random() * Math.PI * 2;
+    const phi = Math.acos(Math.random() * 2 - 1);
+    positions[i*3]   = R * Math.sin(phi) * Math.cos(theta);
+    positions[i*3+1] = Math.abs(R * Math.cos(phi)); // repliées sur l'hémisphère supérieur : jamais sous les pieds
+    positions[i*3+2] = R * Math.sin(phi) * Math.sin(theta);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  const mat = new THREE.PointsMaterial({
+    color: 0xffffff, size: 1.6, sizeAttenuation: false,
+    transparent: true, opacity: 0, depthWrite: false, fog: false,
+  });
+  return new THREE.Points(geo, mat);
+}
+const stars = makeStars(600);
+scene.add(stars);
+
+const SKY_RADIUS = 380;
+function updateSky() {
+  const angle = dayTime * Math.PI * 2;
+  const sunHeight = Math.sin(angle);
+  const dx = Math.cos(angle), dy = sunHeight, dz = 0.35;
+  const len = Math.hypot(dx, dy, dz);
+  const ux = dx / len, uy = dy / len, uz = dz / len;
+
+  sunSprite.position.set(camera.position.x + ux*SKY_RADIUS, camera.position.y + uy*SKY_RADIUS, camera.position.z + uz*SKY_RADIUS);
+  moonSprite.position.set(camera.position.x - ux*SKY_RADIUS, camera.position.y - uy*SKY_RADIUS, camera.position.z - uz*SKY_RADIUS);
+  stars.position.copy(camera.position);
+
+  sunSprite.material.opacity = Math.max(0, Math.min(1, sunHeight + 0.35));
+  moonSprite.material.opacity = Math.max(0, Math.min(1, -sunHeight + 0.35));
+  stars.material.opacity = Math.max(0, Math.min(0.9, -sunHeight * 1.5));
+}
+
 // ---------- Joueur ----------
 const player = {
   pos: new THREE.Vector3(0, 40, 0),
@@ -1575,6 +1638,7 @@ function animate() {
   camera.rotation.order = 'YXZ';
   camera.rotation.y = player.yaw;
   camera.rotation.x = player.pitch;
+  updateSky();
 
   renderer.render(scene, camera);
 
