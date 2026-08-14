@@ -289,7 +289,8 @@ const IS_MOBILE = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 const RENDER_DIST = IS_MOBILE ? 3 : 5; // rayon en chunks (réduit sur mobile pour la fluidité)
 
 // Types de blocs
-const AIR = 0, GRASS = 1, DIRT = 2, STONE = 3, SAND = 4, SNOW = 5, WATER = 6, WOOD = 7, LEAVES = 8, LAVA = 9;
+const AIR = 0, GRASS = 1, DIRT = 2, STONE = 3, SAND = 4, SNOW = 5, WATER = 6, WOOD = 7, LEAVES = 8, LAVA = 9,
+      BRICK = 10, ROOFTILE = 11;
 
 const BLOCK_COLOR = {
   [GRASS]: [0.36, 0.62, 0.28],
@@ -300,17 +301,20 @@ const BLOCK_COLOR = {
   [WOOD]:  [0.40, 0.26, 0.14],
   [LEAVES]:[0.22, 0.45, 0.18],
   [LAVA]:  [0.95, 0.35, 0.05],
+  [BRICK]: [0.62, 0.54, 0.42], // maçonnerie des structures (ruines, tours, temples)
+  [ROOFTILE]: [0.55, 0.28, 0.18], // toits des huttes de village
 };
 
 const BLOCK_NAME_FR = {
   [GRASS]: 'Herbe', [DIRT]: 'Terre', [STONE]: 'Pierre', [SAND]: 'Sable',
   [SNOW]: 'Neige', [WOOD]: 'Bois', [LEAVES]: 'Feuilles', [LAVA]: 'Lave',
+  [BRICK]: 'Pierre taillée', [ROOFTILE]: 'Tuile',
 };
 
 // ---------- Atlas de textures procédural (un peu de grain sur les blocs) ----------
 // Un canvas généré au démarrage : une tuile bruitée par type de bloc, plutôt
 // que la couleur plate unie d'origine. Pas d'images externes.
-const BLOCK_TILES = [GRASS, DIRT, STONE, SAND, SNOW, WOOD, LEAVES, LAVA];
+const BLOCK_TILES = [GRASS, DIRT, STONE, SAND, SNOW, WOOD, LEAVES, LAVA, BRICK, ROOFTILE];
 const BLOCK_TILE_INDEX = {};
 BLOCK_TILES.forEach((b, i) => BLOCK_TILE_INDEX[b] = i);
 const ATLAS_TILE = 16;
@@ -334,6 +338,8 @@ function buildBlockAtlas() {
         if (b === STONE && rand() > 0.9) jitter -= 32; // fissures/taches sombres
         if (b === LAVA) jitter += rand() > 0.87 ? 90 : 0; // veines incandescentes
         if (b === SNOW) jitter *= 0.5; // neige plus uniforme
+        if (b === BRICK && (px % 4 === 0 || py % 4 === 0)) jitter -= 26; // joints de maçonnerie
+        if (b === ROOFTILE && py % 3 === 0) jitter -= 20; // rangées de tuiles
         const rr = Math.max(0, Math.min(255, r + jitter));
         const gg = Math.max(0, Math.min(255, g + jitter));
         const bb = Math.max(0, Math.min(255, bl + jitter));
@@ -392,6 +398,232 @@ function isCascadeCandidate(wx, wz) {
   const px = Math.floor(((treeNoise.noise2D(cellX * 13.7 + 500, cellZ * 13.7 + 500) + 1) / 2) * CASCADE_CELL);
   const pz = Math.floor(((treeNoise.noise2D(cellX * 13.7 + 900, cellZ * 13.7 + 900) + 1) / 2) * CASCADE_CELL);
   return wx === cellX * CASCADE_CELL + px && wz === cellZ * CASCADE_CELL + pz;
+}
+
+// ---------- Structures (ruines, tours, temples, villages) ----------
+// Petit LCG dédié : donne une suite déterministe de nombres 0..1 à partir
+// d'une seule graine entière, indépendamment de l'état des bruits de Perlin.
+function seededRng(seed) {
+  let s = seed % 2147483647;
+  if (s <= 0) s += 2147483646;
+  return () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; };
+}
+
+function addBox(blocks, x0, y0, z0, x1, y1, z1, block, hollow) {
+  for (let x = x0; x <= x1; x++) {
+    for (let y = y0; y <= y1; y++) {
+      for (let z = z0; z <= z1; z++) {
+        if (hollow && x > x0 && x < x1 && y > y0 && y < y1 && z > z0 && z < z1) continue;
+        blocks.push([x, y, z, block]);
+      }
+    }
+  }
+}
+
+// Petites ruines effondrées : périmètre de murs troués, hauteur irrégulière.
+function buildRuin(rng) {
+  const size = 6 + Math.floor(rng() * 2); // 6 ou 7
+  const blocks = [];
+  for (let x = 0; x < size; x++) {
+    for (let z = 0; z < size; z++) {
+      if (x !== 0 && x !== size - 1 && z !== 0 && z !== size - 1) continue; // périmètre seulement
+      if (rng() < 0.3) continue; // pan de mur effondré
+      const h = 1 + Math.floor(rng() * 3);
+      for (let y = 0; y < h; y++) blocks.push([x, y, z, BRICK]);
+    }
+  }
+  for (let i = 0; i < 3; i++) {
+    const bx = 1 + Math.floor(rng() * (size - 2)), bz = 1 + Math.floor(rng() * (size - 2));
+    blocks.push([bx, 0, bz, BRICK]); // débris au sol
+  }
+  return blocks;
+}
+
+// Tour de guet en pierre, creuse, porte + fenêtres + créneaux.
+function buildTower(rng) {
+  const size = 3;
+  const h = 8 + Math.floor(rng() * 5); // 8..12
+  const blocks = [];
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < size; x++) {
+      for (let z = 0; z < size; z++) {
+        const edge = x === 0 || x === size - 1 || z === 0 || z === size - 1;
+        if (!edge) continue;
+        if (y === 0 && x === 1 && z === 0) continue; // porte
+        if (y === 1 && x === 1 && z === 0) continue;
+        if (y === Math.floor(h / 2) && ((x === 1 && z === 0) || (x === 1 && z === size - 1))) continue; // fenêtres
+        blocks.push([x, y, z, BRICK]);
+      }
+    }
+  }
+  for (let x = 0; x < size; x++) {
+    for (let z = 0; z < size; z++) {
+      const edge = x === 0 || x === size - 1 || z === 0 || z === size - 1;
+      if (edge && (x + z) % 2 === 0) blocks.push([x, h, z, BRICK]); // créneaux
+    }
+  }
+  return blocks;
+}
+
+// Temple à degrés (ziggourat) : socle avec chambre creuse + bassin de lave,
+// pyramide pleine par-dessus.
+function buildTemple() {
+  const baseSize = 11;
+  const baseHeight = 2; // assez haut pour marcher dans la chambre
+  const blocks = [];
+  addBox(blocks, 0, 0, 0, baseSize - 1, baseHeight - 1, baseSize - 1, BRICK);
+  const c = Math.floor(baseSize / 2);
+  addBox(blocks, c - 1, 0, c - 1, c + 1, baseHeight - 1, c + 1, AIR); // chambre centrale
+  for (let x = 0; x <= c - 2; x++) { // corridor d'entrée
+    blocks.push([x, 0, c, AIR]);
+    blocks.push([x, 1, c, AIR]);
+  }
+  blocks.push([c, 0, c, LAVA]); // bassin sacré
+
+  let size = baseSize - 2, yOff = baseHeight;
+  for (let l = 0; l < 3; l++) {
+    const inset = (baseSize - size) / 2;
+    addBox(blocks, inset, yOff, inset, inset + size - 1, yOff, inset + size - 1, BRICK);
+    size -= 2; yOff += 1;
+  }
+  blocks.push([c, yOff, c, BRICK]); // flèche sommitale
+  return blocks;
+}
+
+function addHut(blocks, x0, z0, w, d, h) {
+  for (let x = 0; x < w; x++) {
+    for (let z = 0; z < d; z++) {
+      const edge = x === 0 || x === w - 1 || z === 0 || z === d - 1;
+      if (!edge) continue;
+      for (let y = 0; y < h; y++) {
+        if (y < 2 && x === Math.floor(w / 2) && z === 0) continue; // porte
+        blocks.push([x0 + x, y, z0 + z, WOOD]);
+      }
+    }
+  }
+  let rw = w, rd = d, rx = x0, rz = z0, ry = h;
+  while (rw > 0 && rd > 0) {
+    addBox(blocks, rx, ry, rz, rx + rw - 1, ry, rz + rd - 1, ROOFTILE);
+    rx += 1; rz += 1; rw -= 2; rd -= 2; ry += 1;
+  }
+}
+
+// Village : puits central, chemins de terre battue rayonnant vers 3-5
+// huttes en bois disposées en cercle irrégulier.
+function buildVillage(rng) {
+  const size = 26;
+  const blocks = [];
+  const c = Math.floor(size / 2);
+  for (let x = -1; x <= 1; x++) {
+    for (let z = -1; z <= 1; z++) {
+      if (Math.abs(x) === 1 || Math.abs(z) === 1) blocks.push([c + x, 0, c + z, BRICK]);
+    }
+  }
+  blocks.push([c, -1, c, AIR]); // puits
+
+  const hutCount = 3 + Math.floor(rng() * 3); // 3..5
+  for (let i = 0; i < hutCount; i++) {
+    const angle = (i / hutCount) * Math.PI * 2 + rng() * 0.5;
+    const dist = 7 + rng() * 4;
+    const hx = Math.round(c + Math.cos(angle) * dist);
+    const hz = Math.round(c + Math.sin(angle) * dist);
+    const w = 4 + Math.floor(rng() * 2), d = 4 + Math.floor(rng() * 2);
+    addHut(blocks, hx - Math.floor(w / 2), hz - Math.floor(d / 2), w, d, 3);
+    const steps = Math.ceil(dist);
+    for (let s = 0; s <= steps; s++) {
+      const px = Math.round(c + Math.cos(angle) * (dist * s / steps));
+      const pz = Math.round(c + Math.sin(angle) * (dist * s / steps));
+      blocks.push([px, -1, pz, DIRT]); // chemin en terre battue
+    }
+  }
+  return blocks;
+}
+
+const STRUCTURE_TYPES = [
+  { id: 'ruin',    build: buildRuin,    size: 7,  height: 4,  biomes: ['plains', 'forest', 'desert', 'snow'], weight: 5 },
+  { id: 'tower',   build: buildTower,   size: 3,  height: 13, biomes: ['plains', 'forest', 'snow'],           weight: 2 },
+  { id: 'temple',  build: buildTemple,  size: 11, height: 6,  biomes: ['desert'],                             weight: 2 },
+  { id: 'village', build: buildVillage, size: 26, height: 8,  biomes: ['plains'],                             weight: 1 },
+];
+const STRUCTURE_LABEL_FR = { ruin: '🏚️ Ruines', tower: '🗼 Tour en ruine', temple: '🏛️ Temple', village: '🏘️ Village' };
+const STRUCT_CELL = 48;
+
+// Choisit au plus UNE structure candidate par cellule de STRUCT_CELL blocs
+// (même principe que isCascadeCandidate), sans construire sa géométrie —
+// juste sa position/son type/sa taille, pour rester bon marché : cette
+// fonction est appelée à la fois pour chaque chunk généré ET à chaque
+// vérification de découverte du joueur.
+function structureCandidateForCell(cellX, cellZ) {
+  const baseSeed = cellX * 928371 + cellZ * 68917 + worldSeed * 7 + 1;
+  const rng = seededRng(baseSeed);
+  if (rng() > 0.15) return null; // ~15% des cellules ont une structure
+  const offX = Math.floor(rng() * STRUCT_CELL);
+  const offZ = Math.floor(rng() * STRUCT_CELL);
+  const wx = cellX * STRUCT_CELL + offX, wz = cellZ * STRUCT_CELL + offZ;
+  const { height, biome } = surfaceHeight(wx, wz);
+  if (height < SEA_LEVEL + 1) return null;
+
+  const eligible = STRUCTURE_TYPES.filter(s => s.biomes.includes(biome));
+  if (!eligible.length) return null;
+  const totalWeight = eligible.reduce((sum, e) => sum + e.weight, 0);
+  let pick = rng() * totalWeight;
+  let type = eligible[eligible.length - 1];
+  for (const e of eligible) { if (pick < e.weight) { type = e; break; } pick -= e.weight; }
+
+  // Terrain assez plat sur toute l'empreinte, et toujours au-dessus de l'eau.
+  const corners = [
+    height,
+    surfaceHeight(wx + type.size, wz).height,
+    surfaceHeight(wx, wz + type.size).height,
+    surfaceHeight(wx + type.size, wz + type.size).height,
+  ];
+  if (Math.max(...corners) - Math.min(...corners) > 3) return null;
+  if (corners.some(h => h < SEA_LEVEL + 1)) return null;
+
+  return { wx, wz, groundHeight: height, type };
+}
+
+// Tamponne dans `data` la portion de chaque structure voisine qui tombe
+// dans ce chunk. Une structure peut chevaucher plusieurs chunks ; chacun
+// d'eux la reconstruit indépendamment (fonction pure de sa position) et ne
+// pose que les blocs qui lui appartiennent — sans concertation entre chunks,
+// juste la garantie que le résultat est identique des deux côtés.
+function stampStructures(data, idx, cx, cz) {
+  const chunkMinX = cx * CHUNK_SIZE, chunkMinZ = cz * CHUNK_SIZE;
+  const margin = 32; // > la plus grande empreinte (village, 26)
+  const cellMinX = Math.floor((chunkMinX - margin) / STRUCT_CELL);
+  const cellMaxX = Math.floor((chunkMinX + CHUNK_SIZE + margin) / STRUCT_CELL);
+  const cellMinZ = Math.floor((chunkMinZ - margin) / STRUCT_CELL);
+  const cellMaxZ = Math.floor((chunkMinZ + CHUNK_SIZE + margin) / STRUCT_CELL);
+
+  for (let ccx = cellMinX; ccx <= cellMaxX; ccx++) {
+    for (let ccz = cellMinZ; ccz <= cellMaxZ; ccz++) {
+      const cand = structureCandidateForCell(ccx, ccz);
+      if (!cand) continue;
+      const { wx, wz, groundHeight, type } = cand;
+
+      // Dégage l'espace au-dessus du sol sur toute l'empreinte (dans ce
+      // chunk), pour effacer arbres/bosses qui dépasseraient dans la zone.
+      for (let fx = 0; fx < type.size; fx++) {
+        for (let fz = 0; fz < type.size; fz++) {
+          const lx = wx + fx - chunkMinX, lz = wz + fz - chunkMinZ;
+          if (lx < 0 || lx >= CHUNK_SIZE || lz < 0 || lz >= CHUNK_SIZE) continue;
+          for (let y = groundHeight; y <= groundHeight + type.height && y < WORLD_HEIGHT; y++) {
+            data[idx(lx, y, lz)] = AIR;
+          }
+        }
+      }
+
+      const buildRng = seededRng((ccx * 928371 + ccz * 68917 + worldSeed * 7 + 1) + 777);
+      const blocks = type.build(buildRng);
+      for (const [dx, dy, dz, block] of blocks) {
+        const lx = wx + dx - chunkMinX, lz = wz + dz - chunkMinZ, ly = groundHeight + dy;
+        if (lx < 0 || lx >= CHUNK_SIZE || lz < 0 || lz >= CHUNK_SIZE) continue;
+        if (ly < 0 || ly >= WORLD_HEIGHT) continue;
+        data[idx(lx, ly, lz)] = block;
+      }
+    }
+  }
 }
 
 // ---------- Génération d'un chunk (voxel grid) ----------
@@ -481,6 +713,7 @@ function generateChunk(cx, cz) {
       }
     }
   }
+  stampStructures(data, idx, cx, cz);
   return { data, biome: dominantBiome, waterfalls };
 }
 
@@ -731,6 +964,25 @@ function respawnAfterLava() {
   player.pos.set(player.pos.x, Math.max(height, SEA_LEVEL) + 3, player.pos.z);
   player.vel.set(0, 0, 0);
   showMessage('🔥 Tu es tombé dans la lave ! Retour à la surface.');
+}
+
+// ---------- Découverte de structures ----------
+const seenStructures = new Set();
+function checkStructureDiscovery() {
+  const cellX = Math.floor(player.pos.x / STRUCT_CELL), cellZ = Math.floor(player.pos.z / STRUCT_CELL);
+  for (let dx = -1; dx <= 1; dx++) {
+    for (let dz = -1; dz <= 1; dz++) {
+      const cand = structureCandidateForCell(cellX + dx, cellZ + dz);
+      if (!cand) continue;
+      const key = cand.wx + ',' + cand.wz;
+      if (seenStructures.has(key)) continue;
+      const midX = cand.wx + cand.type.size / 2, midZ = cand.wz + cand.type.size / 2;
+      if (Math.hypot(player.pos.x - midX, player.pos.z - midZ) < cand.type.size) {
+        seenStructures.add(key);
+        showMessage(`${STRUCTURE_LABEL_FR[cand.type.id]} découvert(e) !`);
+      }
+    }
+  }
 }
 
 const IS_TOUCH = IS_MOBILE;
@@ -1096,6 +1348,7 @@ function resetWorld(seed) {
   chunkQueue.length = 0;
   queuedSet.clear();
   lastPlayerChunk = { cx: null, cz: null };
+  seenStructures.clear();
 
   initNoise(seed);
   spawnPlayer();
@@ -1329,7 +1582,10 @@ function animate() {
   drawMinimapFrame();
 
   fpsAcc += dt; fpsCount++;
-  if (fpsAcc >= 0.5) { fpsShown = Math.round(fpsCount / fpsAcc); fpsAcc = 0; fpsCount = 0; }
+  if (fpsAcc >= 0.5) {
+    fpsShown = Math.round(fpsCount / fpsAcc); fpsAcc = 0; fpsCount = 0;
+    if (locked) checkStructureDiscovery(); // 2x/s suffit, inutile de le faire à 60fps
+  }
   const { biome, height: groundHeight } = surfaceHeight(player.pos.x, player.pos.z);
   // Le biome (température/humidité) est indépendant du relief : un lac peut
   // tomber n'importe où, y compris en zone "forêt". Sans ceci, le HUD annonce
