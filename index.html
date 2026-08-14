@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pixel Art Studio</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <header class="app-header">
+      <h1>🎨 Pixel Art Studio</h1>
+    </header>
+
+    <div class="app-body">
+      <aside class="sidebar">
+        <section class="panel">
+          <h2>Outils</h2>
+          <div class="tool-buttons">
+            <button class="tool-btn active" data-tool="pencil" title="Crayon">✏️ Crayon</button>
+            <button class="tool-btn" data-tool="eraser" title="Gomme">🧹 Gomme</button>
+            <button class="tool-btn" data-tool="bucket" title="Pot de peinture">🪣 Remplir</button>
+            <button class="tool-btn" data-tool="picker" title="Pipette">💧 Pipette</button>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Couleur active</h2>
+          <div class="active-color-row">
+            <div id="active-color-swatch" class="active-color-swatch"></div>
+            <input type="color" id="color-input" value="#1d2b53">
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Palette</h2>
+          <div id="palette" class="palette"></div>
+        </section>
+
+        <section class="panel">
+          <h2>Grille</h2>
+          <div class="grid-size-row">
+            <label for="grid-size">Taille</label>
+            <select id="grid-size">
+              <option value="8">8 × 8</option>
+              <option value="16" selected>16 × 16</option>
+              <option value="24">24 × 24</option>
+              <option value="32">32 × 32</option>
+              <option value="48">48 × 48</option>
+            </select>
+          </div>
+          <label class="checkbox-row">
+            <input type="checkbox" id="grid-lines" checked>
+            Afficher les lignes de grille
+          </label>
+        </section>
+
+        <section class="panel">
+          <h2>Actions</h2>
+          <div class="action-buttons">
+            <button id="undo-btn" title="Annuler (Ctrl+Z)">↶ Annuler</button>
+            <button id="redo-btn" title="Rétablir (Ctrl+Y)">↷ Rétablir</button>
+            <button id="clear-btn" class="danger">🗑️ Effacer tout</button>
+            <button id="export-btn">⬇️ Exporter PNG</button>
+          </div>
+        </section>
+      </aside>
+
+      <main class="canvas-area">
+        <div id="canvas-wrapper" class="canvas-wrapper">
+          <canvas id="pixel-canvas"></canvas>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
