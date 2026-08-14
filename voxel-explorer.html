@@ -326,9 +326,12 @@ function generateChunk(cx, cz) {
       if (height < SEA_LEVEL) {
         const wf = treeNoise.noise2D(wx * 0.37 + 1000, wz * 0.37 + 1000);
         if (wf > 0.5) {
+          // Uniquement du vide : viser une poche de lave ferait tomber l'eau
+          // directement dedans, sans aucune réaction — visuellement absurde.
           let capY = -1;
           for (let y = height - 5; y >= 3; y--) {
-            if (data[idx(x, y, z)] === AIR || data[idx(x, y, z)] === LAVA) { capY = y; break; }
+            if (data[idx(x, y, z)] === LAVA) break;
+            if (data[idx(x, y, z)] === AIR) { capY = y; break; }
           }
           if (capY >= 3 && height - capY <= 24) {
             for (let y = capY + 1; y < height; y++) data[idx(x, y, z)] = AIR;
