@@ -292,12 +292,15 @@ function generateChunk(cx, cz) {
       const { height, biome } = surfaceHeight(wx, wz);
       if (x === 8 && z === 8) dominantBiome = biome;
 
+      const underwater = height < SEA_LEVEL;
       for (let y = 0; y < WORLD_HEIGHT; y++) {
         let block = AIR;
         if (y < height - 4) block = STONE;
-        else if (y < height - 1) block = (biome === 'desert') ? SAND : DIRT;
+        else if (y < height - 1) block = (biome === 'desert' || underwater) ? SAND : DIRT;
         else if (y < height) {
-          block = biome === 'desert' ? SAND : biome === 'snow' ? SNOW : GRASS;
+          // Un fond de lac/mer garde du sable quel que soit le biome au-dessus :
+          // sinon l'herbe du biome transparaît sous l'eau translucide façon algues.
+          block = underwater ? SAND : biome === 'desert' ? SAND : biome === 'snow' ? SNOW : GRASS;
         } else if (y < SEA_LEVEL) {
           block = WATER;
         }
@@ -438,14 +441,28 @@ function chunkToMesh(cx, cz, data) {
   return mesh;
 }
 
-// Plan d'eau simple par chunk (à SEA_LEVEL) pour l'aspect visuel
-// Géométrie partagée par tous les chunks : évite une fuite mémoire GPU
-// (un PlaneGeometry par chunk n'était jamais libéré lors du déchargement).
-const waterGeometry = new THREE.PlaneGeometry(CHUNK_SIZE, CHUNK_SIZE);
-waterGeometry.rotateX(-Math.PI / 2);
-function chunkWaterMesh(cx, cz) {
-  const mesh = new THREE.Mesh(waterGeometry, waterMaterial);
-  mesh.position.set(cx * CHUNK_SIZE + CHUNK_SIZE/2, SEA_LEVEL, cz * CHUNK_SIZE + CHUNK_SIZE/2);
+// Plan d'eau à SEA_LEVEL, mais uniquement au-dessus des colonnes réellement
+// immergées : un plan plein-chunk (l'ancienne version) débordait visuellement
+// sur les collines sèches voisines et se mélangeait à leur herbe.
+function chunkWaterMesh(cx, cz, data) {
+  const idx = (x, y, z) => x + CHUNK_SIZE * (z + CHUNK_SIZE * y);
+  const positions = [], normals = [], indices = [];
+  for (let x = 0; x < CHUNK_SIZE; x++) {
+    for (let z = 0; z < CHUNK_SIZE; z++) {
+      if (data[idx(x, SEA_LEVEL - 1, z)] !== WATER) continue;
+      const base = positions.length / 3;
+      positions.push(x, SEA_LEVEL, z,  x + 1, SEA_LEVEL, z,  x + 1, SEA_LEVEL, z + 1,  x, SEA_LEVEL, z + 1);
+      normals.push(0, 1, 0,  0, 1, 0,  0, 1, 0,  0, 1, 0);
+      indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+    }
+  }
+  if (positions.length === 0) return null;
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+  geo.setIndex(indices);
+  const mesh = new THREE.Mesh(geo, waterMaterial);
+  mesh.position.set(cx * CHUNK_SIZE, 0, cz * CHUNK_SIZE);
   return mesh;
 }
 
@@ -843,8 +860,8 @@ function unloadFarChunks(cx, cz) {
     const [ccx, ccz] = k.split(',').map(Number);
     if (Math.abs(ccx - cx) > limit || Math.abs(ccz - cz) > limit) {
       if (c.mesh) scene.remove(c.mesh);
-      if (c.water) scene.remove(c.water);
       if (c.mesh) c.mesh.geometry.dispose();
+      if (c.water) { scene.remove(c.water); c.water.geometry.dispose(); }
       if (c.waterfallMeshes) for (const wf of c.waterfallMeshes) disposeWaterfallMesh(wf);
       chunks.delete(k);
     }
@@ -876,7 +893,11 @@ function meshPendingChunks(maxCount) {
     const [cx, cz] = k.split(',').map(Number);
     const mesh = chunkToMesh(cx, cz, c.data);
     if (mesh) { scene.add(mesh); c.mesh = mesh; }
-    if (!c.water) { const w = chunkWaterMesh(cx, cz); scene.add(w); c.water = w; }
+    if (c.water === null) {
+      const w = chunkWaterMesh(cx, cz, c.data);
+      c.water = w || false; // false = "vérifié, aucune eau dans ce chunk" (évite de recalculer)
+      if (w) scene.add(w);
+    }
     if (!c.waterfallMeshes) {
       c.waterfallMeshes = [];
       for (const wf of c.waterfalls) {
@@ -1109,8 +1130,11 @@ function animate() {
 
   fpsAcc += dt; fpsCount++;
   if (fpsAcc >= 0.5) { fpsShown = Math.round(fpsCount / fpsAcc); fpsAcc = 0; fpsCount = 0; }
-  const { biome } = surfaceHeight(player.pos.x, player.pos.z);
-  biomeLabel.textContent = BIOME_LABEL[biome] || biome;
+  const { biome, height: groundHeight } = surfaceHeight(player.pos.x, player.pos.z);
+  // Le biome (température/humidité) est indépendant du relief : un lac peut
+  // tomber n'importe où, y compris en zone "forêt". Sans ceci, le HUD annonce
+  // un biome terrestre alors qu'on est au-dessus/dans l'eau — trompeur.
+  biomeLabel.textContent = groundHeight < SEA_LEVEL ? '🌊 Lac / Mer' : (BIOME_LABEL[biome] || biome);
   posLabel.textContent = `x:${player.pos.x.toFixed(0)} y:${player.pos.y.toFixed(0)} z:${player.pos.z.toFixed(0)}`;
   fpsLabel.textContent = `${fpsShown} fps`;
 }
