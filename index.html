@@ -110,6 +110,38 @@ body {
   color: var(--accent-hover);
 }
 
+.presets {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.preset-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 10px 4px;
+  background: #1e222d;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  color: var(--text-dim);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.preset-btn:hover {
+  background: #262b39;
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.preset-btn .preset-emoji {
+  font-size: 20px;
+}
+
 .active-color-row {
   display: flex;
   align-items: center;
@@ -381,6 +413,11 @@ body {
         </section>
 
         <section class="panel">
+          <h2>Presets</h2>
+          <div id="presets" class="presets"></div>
+        </section>
+
+        <section class="panel">
           <h2>Couleur active</h2>
           <div class="active-color-row">
             <div id="active-color-swatch" class="active-color-swatch"></div>
@@ -473,6 +510,147 @@ body {
     "#00468c", "#6a1b9a", "#795548", "#607d8b"
   ];
 
+  const PRESETS = {
+    smiley: {
+      label: "Smiley",
+      emoji: "😀",
+      legend: { Y: "#ffec27", B: "#000000" },
+      rows: [
+        "................",
+        "....YYYYYYYY....",
+        "..YYYYYYYYYYYY..",
+        ".YYYYYYYYYYYYYY.",
+        "YYYYYYYYYYYYYYYY",
+        "YYYYBBYYYYBBYYYY",
+        "YYYYBBYYYYBBYYYY",
+        "YYYYYYYYYYYYYYYY",
+        "YYYYYYYYYYYYYYYY",
+        "YYYBYYYYYYYYBYYY",
+        "YYYBBBBBBBBBBYYY",
+        ".YYYYYYYYYYYYYY.",
+        "..YYYYYYYYYYYY..",
+        "....YYYYYYYY....",
+        "................",
+        "................",
+      ],
+    },
+    poisson: {
+      label: "Poisson",
+      emoji: "🐟",
+      legend: { O: "#ffa300", T: "#e07a00", W: "#ffffff", B: "#000000" },
+      rows: [
+        "................",
+        "................",
+        "................",
+        ".....OOOO.......",
+        "...OOOOOOOO.....",
+        "..OOOOOOOOOO.T..",
+        ".OOWBOOOOOOOOTT.",
+        ".OOOOOOOOOOOOTTT",
+        ".OOOOOOOOOOOOTTT",
+        ".OOOOOOOOOOOOTT.",
+        "..OOOOOOOOOO.T..",
+        "...OOOOOOOO.....",
+        ".....OOOO.......",
+        "................",
+        "................",
+        "................",
+      ],
+    },
+    plage: {
+      label: "Plage",
+      emoji: "🏖️",
+      legend: { S: "#29adff", U: "#ffec27", G: "#00e436", K: "#ab5236", N: "#ffccaa" },
+      rows: [
+        "SSUSSSSSSSSSSSSS",
+        "SUUUSSSSSSSSSSSS",
+        "SSUSSSSSSSSSSSSS",
+        "SSSSSSSSSSSGGSSS",
+        "SSSSSSSSSGGGGGGS",
+        "SSSSSSSSSSGGGGGS",
+        "SSSSSSSSSSSGGGSS",
+        "SSSSSSSSSSSSKSSS",
+        "SSSSSSSSSSSSKSSS",
+        "SSSSSSSSSSSSKSSS",
+        "NNNNNNNNNNNNKNNN",
+        "NNNNNNNNNNNNNNNN",
+        "NNNNNNNNNNNNNNNN",
+        "NNNNNNNNNNNNNNNN",
+        "NNNNNNNNNNNNNNNN",
+        "NNNNNNNNNNNNNNNN",
+      ],
+    },
+    coeur: {
+      label: "Cœur",
+      emoji: "❤️",
+      legend: { R: "#ff004d" },
+      rows: [
+        "................",
+        "..RRRR...RRRR...",
+        ".RRRRRR.RRRRRR..",
+        ".RRRRRRRRRRRRRR.",
+        ".RRRRRRRRRRRRRR.",
+        ".RRRRRRRRRRRRRR.",
+        "..RRRRRRRRRRRR..",
+        "...RRRRRRRRRR...",
+        "....RRRRRRRR....",
+        ".....RRRRRR.....",
+        "......RRRR......",
+        ".......RR.......",
+        "................",
+        "................",
+        "................",
+        "................",
+      ],
+    },
+    champignon: {
+      label: "Champignon",
+      emoji: "🍄",
+      legend: { C: "#ff004d", W: "#ffffff", M: "#fff1e8" },
+      rows: [
+        "......CCCC......",
+        "....CCCCCCCC....",
+        "..CCWCCCCCCWCC..",
+        ".CCCCCCCCCCCCCC.",
+        "CCCCWCCCCCCWCCCC",
+        "CCCCCCCCCCCCCCCC",
+        ".CCCCCCCCCCCCCC.",
+        "......MMMM......",
+        "......MMMM......",
+        "......MMMM......",
+        "......MMMM......",
+        "......MMMM......",
+        "......MMMM......",
+        "......MMMM......",
+        "......MMMM......",
+        ".....MMMMMM.....",
+      ],
+    },
+    fantome: {
+      label: "Fantôme",
+      emoji: "👻",
+      legend: { P: "#ffffff", B: "#000000" },
+      rows: [
+        "......PPPP......",
+        "....PPPPPPPP....",
+        "..PPPPPPPPPPPP..",
+        ".PPPPPPPPPPPPPP.",
+        ".PPPPPPPPPPPPPP.",
+        ".PPPPPPPPPPPPPP.",
+        ".PPPBBPPPPBBPPP.",
+        ".PPPBBPPPPBBPPP.",
+        ".PPPPPPPPPPPPPP.",
+        ".PPPPPPPPPPPPPP.",
+        ".PPPPPPPPPPPPPP.",
+        ".PPPPPPPPPPPPPP.",
+        ".PPPP.PPPP.PPPP.",
+        "..PP...PP...PP..",
+        "..P....P....P...",
+        "................",
+      ],
+    },
+  };
+
   const MAX_DISPLAY_PX = 576;
   const MIN_CELL_PX = 6;
   const MAX_HISTORY = 60;
@@ -481,6 +659,7 @@ body {
   const ctx = canvas.getContext("2d");
   const canvasAreaEl = document.querySelector(".canvas-area");
   const paletteEl = document.getElementById("palette");
+  const presetsEl = document.getElementById("presets");
   const hexInput = document.getElementById("hex-input");
   const activeSwatch = document.getElementById("active-color-swatch");
   const svCanvas = document.getElementById("sv-canvas");
@@ -694,6 +873,44 @@ body {
     Array.from(paletteEl.children).forEach((btn) => {
       btn.classList.toggle("selected", btn.style.background === hexToRgbCss(state.activeColor));
     });
+  }
+
+  function buildPresets() {
+    presetsEl.innerHTML = "";
+    Object.entries(PRESETS).forEach(([key, preset]) => {
+      const btn = document.createElement("button");
+      btn.className = "preset-btn";
+      btn.title = preset.label;
+      btn.innerHTML = `<span class="preset-emoji">${preset.emoji}</span><span>${preset.label}</span>`;
+      btn.addEventListener("click", () => loadPreset(key));
+      presetsEl.appendChild(btn);
+    });
+  }
+
+  function loadPreset(key) {
+    const preset = PRESETS[key];
+    if (!preset) return;
+    const hasContent = state.grid.some((c) => c !== null);
+    if (hasContent && !confirm(`Charger le preset "${preset.label}" ? Cela remplacera le dessin actuel.`)) {
+      return;
+    }
+    const size = preset.rows.length;
+    const grid = new Array(size * size).fill(null);
+    preset.rows.forEach((row, y) => {
+      for (let x = 0; x < size; x++) {
+        const ch = row[x];
+        grid[y * size + x] = ch && ch !== "." ? preset.legend[ch] || null : null;
+      }
+    });
+
+    state.gridSize = size;
+    state.grid = grid;
+    gridSizeSelect.value = String(size);
+    setupCanvasSize();
+    render();
+    state.history = [];
+    state.historyIndex = -1;
+    pushHistory();
   }
 
   function hexToRgbCss(hex) {
@@ -1196,6 +1413,7 @@ body {
 
   // Init
   buildPalette();
+  buildPresets();
   setActiveColor(state.activeColor);
   setTool("pencil");
   resetGrid(state.gridSize);
