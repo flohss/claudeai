@@ -39,6 +39,19 @@
   #rerollBtn:active { background:rgba(255,255,255,0.4); }
   #rerollHint { font-size:11px !important; opacity:0.55 !important; margin-top:6px !important; }
 
+  #seedRow { display:flex; gap:6px; margin-top:10px; cursor:default; }
+  #seedInput {
+    width:170px; padding:8px 10px; border-radius:8px; border:1px solid rgba(255,255,255,0.35);
+    background:rgba(255,255,255,0.1); color:#fff; font-size:13px; font-family:inherit;
+  }
+  #seedInput::placeholder { color:rgba(255,255,255,0.5); }
+  #seedGoBtn {
+    padding:8px 16px; border-radius:8px; border:1px solid rgba(255,255,255,0.4);
+    background:rgba(255,255,255,0.14); color:#fff; font-size:13px; font-family:inherit; cursor:pointer;
+  }
+  #seedGoBtn:hover { background:rgba(255,255,255,0.26); }
+  #seedGoBtn:active { background:rgba(255,255,255,0.4); }
+
   #loading {
     position:fixed; bottom:12px; left:12px; color:#fff; font-size:12px; opacity:0.6;
     pointer-events:none; z-index:10;
@@ -151,7 +164,11 @@
   <p id="desktopHelp3"><span class="key">Clic gauche</span> casser &nbsp; <span class="key">Clic droit</span> poser</p>
   <p id="mobileHelp" style="display:none;">Joystick à gauche pour marcher &nbsp;·&nbsp; glisse à droite pour regarder &nbsp;·&nbsp; ⛏ casser &nbsp;·&nbsp; ➕ poser</p>
   <button id="rerollBtn" type="button">🎲 Nouveau paysage</button>
-  <p id="rerollHint">Aperçu sur la mini-carte en haut à droite</p>
+  <div id="seedRow">
+    <input id="seedInput" type="text" placeholder="graine : nombre ou mot" maxlength="40" autocomplete="off">
+    <button id="seedGoBtn" type="button">Aller</button>
+  </div>
+  <p id="rerollHint">Aperçu sur la mini-carte en haut à droite &nbsp;·&nbsp; copie l'adresse de la page pour partager ce monde</p>
 </div>
 
 <div id="touchControls">
@@ -243,7 +260,25 @@ function initNoise(seed) {
   cavernNoise = new Perlin(seed + 9051); // grandes cavernes, plus rares et plus larges
   lakeNoise = new Perlin(seed + 3312);   // grandes dépressions : lacs/mers à large échelle
 }
-initNoise(worldSeed);
+
+// Une graine texte (nombre ou mot) tape sur 32 bits pour rester compatible
+// avec la graine numérique attendue par Perlin. Permet des graines
+// mémorables ("lune", "archipel"...) en plus des nombres.
+function hashSeedString(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0;
+  return Math.abs(h) || 1;
+}
+function parseSeedInput(raw) {
+  const trimmed = (raw || '').trim();
+  if (!trimmed) return null;
+  return /^-?\d+$/.test(trimmed) ? (Math.abs(parseInt(trimmed, 10)) || 1) : hashSeedString(trimmed);
+}
+
+// Graine partagée par l'URL (?seed=...) : le monde est reproductible en
+// envoyant simplement l'adresse de la page.
+const urlSeedParam = new URLSearchParams(location.search).get('seed');
+initNoise(urlSeedParam ? parseSeedInput(urlSeedParam) : worldSeed);
 
 // ---------- Constantes du monde ----------
 const CHUNK_SIZE = 16;
@@ -710,17 +745,50 @@ const placeBtn = document.getElementById('placeBtn');
 const joystickBase = document.getElementById('joystickBase');
 const joystickThumb = document.getElementById('joystickThumb');
 const rerollBtn = document.getElementById('rerollBtn');
+const seedInput = document.getElementById('seedInput');
+const seedGoBtn = document.getElementById('seedGoBtn');
 
 const touchState = { moveX: 0, moveY: 0, jumping: false, running: false };
 
-// Nouveau paysage aléatoire, avant d'entrer dans la partie. stopPropagation
-// est indispensable : le clic/tap remonterait sinon jusqu'à #overlay et
-// lancerait la partie immédiatement (verrouillage du pointeur / mode tactile).
+// Applique une graine (aléatoire ou saisie), met à jour le champ et
+// l'adresse de la page : copier l'URL suffit alors à partager ce monde.
+function applySeed(seed, displayText) {
+  resetWorld(seed);
+  seedInput.value = displayText;
+  const url = new URL(location.href);
+  url.searchParams.set('seed', displayText);
+  history.replaceState(null, '', url);
+}
+if (urlSeedParam) seedInput.value = urlSeedParam;
+
+// Nouveau paysage, avant d'entrer dans la partie. stopPropagation est
+// indispensable partout ici : un clic/tap remonterait sinon jusqu'à
+// #overlay et lancerait la partie immédiatement (verrouillage du
+// pointeur / mode tactile), y compris juste pour donner le focus au champ.
 rerollBtn.addEventListener('click', (e) => {
   e.stopPropagation();
-  resetWorld(Math.floor(Math.random() * 2000000000) + 1);
+  const n = Math.floor(Math.random() * 2000000000) + 1;
+  applySeed(n, String(n));
 });
 rerollBtn.addEventListener('touchstart', (e) => { e.stopPropagation(); }, { passive: true });
+
+function applySeedFromInput() {
+  const raw = seedInput.value.trim();
+  const seed = parseSeedInput(raw);
+  if (seed === null) return;
+  applySeed(seed, raw);
+}
+seedGoBtn.addEventListener('click', (e) => { e.stopPropagation(); applySeedFromInput(); });
+seedInput.addEventListener('click', (e) => e.stopPropagation());
+[seedInput, seedGoBtn].forEach((el) => {
+  el.addEventListener('mousedown', (e) => e.stopPropagation());
+  el.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
+});
+seedInput.addEventListener('keydown', (e) => {
+  e.stopPropagation(); // sinon Espace/flèches pendant la saisie fuitent vers les contrôles du jeu
+  if (e.key === 'Enter') applySeedFromInput();
+});
+seedInput.addEventListener('keyup', (e) => e.stopPropagation());
 
 if (IS_TOUCH) {
   document.getElementById('desktopHelp').style.display = 'none';
