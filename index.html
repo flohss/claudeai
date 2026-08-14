@@ -268,6 +268,7 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-bottom: 10px;
   font-size: 13px;
   color: var(--text-dim);
   cursor: pointer;
@@ -438,6 +439,17 @@ body {
             <button id="export-btn">⬇️ Exporter PNG</button>
           </div>
         </section>
+
+        <section class="panel">
+          <h2>Export 3D</h2>
+          <label class="checkbox-row">
+            <input type="checkbox" id="base3d-checkbox" checked>
+            Socle plein (impression 3D)
+          </label>
+          <div class="action-buttons">
+            <button id="export3d-btn" title="Chaque pixel devient un cube ; téléchargement d'un .zip contenant un modèle OBJ + MTL">🧱 Exporter en 3D</button>
+          </div>
+        </section>
       </aside>
 
       <main class="canvas-area">
@@ -484,6 +496,8 @@ body {
   const redoBtn = document.getElementById("redo-btn");
   const clearBtn = document.getElementById("clear-btn");
   const exportBtn = document.getElementById("export-btn");
+  const base3dCheckbox = document.getElementById("base3d-checkbox");
+  const export3dBtn = document.getElementById("export3d-btn");
   const toolButtons = Array.from(document.querySelectorAll(".tool-btn"));
 
   const state = {
@@ -875,6 +889,197 @@ body {
     }, "image/png");
   }
 
+  // ---- 3D export (extruded voxel mesh, OBJ + MTL bundled as a ZIP) ----
+  function buildVoxelMeshOBJ(addBase) {
+    const size = state.gridSize;
+    const depth = 1;
+    const baseThickness = 0.15;
+    const baseColor = "#202020";
+
+    const positions = [];
+    const normals = [];
+    const groups = new Map(); // color -> array of { v:[4 indices], n: index }
+
+    function addQuad(color, p0, p1, p2, p3, normal) {
+      const baseIdx = positions.length;
+      positions.push(p0, p1, p2, p3);
+      const nIdx = normals.length;
+      normals.push(normal);
+      if (!groups.has(color)) groups.set(color, []);
+      groups.get(color).push({ v: [baseIdx, baseIdx + 1, baseIdx + 2, baseIdx + 3], n: nIdx });
+    }
+
+    const filled = (cx, cy) => cx >= 0 && cy >= 0 && cx < size && cy < size && !!state.grid[idx(cx, cy)];
+
+    let hasGeometry = false;
+
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const color = state.grid[idx(x, y)];
+        const x0 = x, x1 = x + 1;
+        const yTop = size - y, yBottom = size - y - 1;
+
+        if (color) {
+          hasGeometry = true;
+          const z0 = 0, z1 = depth;
+          addQuad(color, [x0, yBottom, z1], [x1, yBottom, z1], [x1, yTop, z1], [x0, yTop, z1], [0, 0, 1]);
+          if (!addBase) addQuad(color, [x1, yBottom, z0], [x0, yBottom, z0], [x0, yTop, z0], [x1, yTop, z0], [0, 0, -1]);
+          if (!filled(x - 1, y)) addQuad(color, [x0, yBottom, z1], [x0, yTop, z1], [x0, yTop, z0], [x0, yBottom, z0], [-1, 0, 0]);
+          if (!filled(x + 1, y)) addQuad(color, [x1, yBottom, z0], [x1, yTop, z0], [x1, yTop, z1], [x1, yBottom, z1], [1, 0, 0]);
+          if (!filled(x, y - 1)) addQuad(color, [x0, yTop, z0], [x0, yTop, z1], [x1, yTop, z1], [x1, yTop, z0], [0, 1, 0]);
+          if (!filled(x, y + 1)) addQuad(color, [x0, yBottom, z1], [x0, yBottom, z0], [x1, yBottom, z0], [x1, yBottom, z1], [0, -1, 0]);
+        } else if (addBase) {
+          addQuad(baseColor, [x0, yBottom, 0], [x1, yBottom, 0], [x1, yTop, 0], [x0, yTop, 0], [0, 0, 1]);
+        }
+
+        if (addBase) {
+          hasGeometry = true;
+          const zBack = -baseThickness;
+          // bottom (per cell, so it tiles edge-for-edge with the side walls below)
+          addQuad(baseColor, [x1, yBottom, zBack], [x0, yBottom, zBack], [x0, yTop, zBack], [x1, yTop, zBack], [0, 0, -1]);
+          // outer perimeter walls of the base slab, one segment per boundary cell
+          if (x === 0) addQuad(baseColor, [x0, yBottom, 0], [x0, yTop, 0], [x0, yTop, zBack], [x0, yBottom, zBack], [-1, 0, 0]);
+          if (x === size - 1) addQuad(baseColor, [x1, yBottom, zBack], [x1, yTop, zBack], [x1, yTop, 0], [x1, yBottom, 0], [1, 0, 0]);
+          if (y === 0) addQuad(baseColor, [x0, yTop, zBack], [x0, yTop, 0], [x1, yTop, 0], [x1, yTop, zBack], [0, 1, 0]);
+          if (y === size - 1) addQuad(baseColor, [x0, yBottom, 0], [x0, yBottom, zBack], [x1, yBottom, zBack], [x1, yBottom, 0], [0, -1, 0]);
+        }
+      }
+    }
+
+    if (!hasGeometry) return null;
+
+    const objLines = ["# Pixel Art Studio - export 3D (1 unite = 1 pixel)", "mtllib model.mtl", "o PixelArt"];
+    positions.forEach((p) => objLines.push(`v ${p[0]} ${p[1]} ${p[2]}`));
+    normals.forEach((n) => objLines.push(`vn ${n[0]} ${n[1]} ${n[2]}`));
+
+    const mtlLines = [];
+    const sortedColors = Array.from(groups.keys()).sort();
+    sortedColors.forEach((color) => {
+      const matName = "mat_" + color.replace("#", "");
+      const { r, g, b } = hexToRgb(color);
+      mtlLines.push(`newmtl ${matName}`, `Kd ${(r / 255).toFixed(4)} ${(g / 255).toFixed(4)} ${(b / 255).toFixed(4)}`, "Ka 0 0 0", "Ks 0 0 0", "d 1.0", "illum 1", "");
+
+      objLines.push(`usemtl ${matName}`);
+      groups.get(color).forEach((face) => {
+        const [a, bIdx, c, d] = face.v;
+        const n = face.n + 1;
+        objLines.push(`f ${a + 1}//${n} ${bIdx + 1}//${n} ${c + 1}//${n} ${d + 1}//${n}`);
+      });
+    });
+
+    return { obj: objLines.join("\n") + "\n", mtl: mtlLines.join("\n") + "\n" };
+  }
+
+  function crc32(bytes) {
+    if (!crc32.table) {
+      const table = new Uint32Array(256);
+      for (let n = 0; n < 256; n++) {
+        let c = n;
+        for (let k = 0; k < 8; k++) {
+          c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+        }
+        table[n] = c >>> 0;
+      }
+      crc32.table = table;
+    }
+    let crc = 0xFFFFFFFF;
+    for (let i = 0; i < bytes.length; i++) {
+      crc = (crc >>> 8) ^ crc32.table[(crc ^ bytes[i]) & 0xFF];
+    }
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+
+  function createZip(files) {
+    const encoder = new TextEncoder();
+    const entries = files.map((f) => {
+      const data = typeof f.data === "string" ? encoder.encode(f.data) : f.data;
+      return { nameBytes: encoder.encode(f.name), data, crc: crc32(data) };
+    });
+
+    let localSize = 0;
+    entries.forEach((e) => { localSize += 30 + e.nameBytes.length + e.data.length; });
+    let centralSize = 0;
+    entries.forEach((e) => { centralSize += 46 + e.nameBytes.length; });
+    const total = localSize + centralSize + 22;
+
+    const buf = new Uint8Array(total);
+    const view = new DataView(buf.buffer);
+    let offset = 0;
+    const localOffsets = [];
+
+    entries.forEach((e) => {
+      localOffsets.push(offset);
+      view.setUint32(offset, 0x04034b50, true); offset += 4;
+      view.setUint16(offset, 20, true); offset += 2;
+      view.setUint16(offset, 0, true); offset += 2;
+      view.setUint16(offset, 0, true); offset += 2;
+      view.setUint16(offset, 0, true); offset += 2;
+      view.setUint16(offset, 0x21, true); offset += 2;
+      view.setUint32(offset, e.crc, true); offset += 4;
+      view.setUint32(offset, e.data.length, true); offset += 4;
+      view.setUint32(offset, e.data.length, true); offset += 4;
+      view.setUint16(offset, e.nameBytes.length, true); offset += 2;
+      view.setUint16(offset, 0, true); offset += 2;
+      buf.set(e.nameBytes, offset); offset += e.nameBytes.length;
+      buf.set(e.data, offset); offset += e.data.length;
+    });
+
+    const centralStart = offset;
+    entries.forEach((e, i) => {
+      view.setUint32(offset, 0x02014b50, true); offset += 4;
+      view.setUint16(offset, 20, true); offset += 2;
+      view.setUint16(offset, 20, true); offset += 2;
+      view.setUint16(offset, 0, true); offset += 2;
+      view.setUint16(offset, 0, true); offset += 2;
+      view.setUint16(offset, 0, true); offset += 2;
+      view.setUint16(offset, 0x21, true); offset += 2;
+      view.setUint32(offset, e.crc, true); offset += 4;
+      view.setUint32(offset, e.data.length, true); offset += 4;
+      view.setUint32(offset, e.data.length, true); offset += 4;
+      view.setUint16(offset, e.nameBytes.length, true); offset += 2;
+      view.setUint16(offset, 0, true); offset += 2;
+      view.setUint16(offset, 0, true); offset += 2;
+      view.setUint16(offset, 0, true); offset += 2;
+      view.setUint16(offset, 0, true); offset += 2;
+      view.setUint32(offset, 0, true); offset += 4;
+      view.setUint32(offset, localOffsets[i], true); offset += 4;
+      buf.set(e.nameBytes, offset); offset += e.nameBytes.length;
+    });
+    const centralSizeActual = offset - centralStart;
+
+    view.setUint32(offset, 0x06054b50, true); offset += 4;
+    view.setUint16(offset, 0, true); offset += 2;
+    view.setUint16(offset, 0, true); offset += 2;
+    view.setUint16(offset, entries.length, true); offset += 2;
+    view.setUint16(offset, entries.length, true); offset += 2;
+    view.setUint32(offset, centralSizeActual, true); offset += 4;
+    view.setUint32(offset, centralStart, true); offset += 4;
+    view.setUint16(offset, 0, true); offset += 2;
+
+    return buf;
+  }
+
+  function export3D() {
+    const mesh = buildVoxelMeshOBJ(base3dCheckbox.checked);
+    if (!mesh) {
+      alert("Le dessin est vide, rien à exporter en 3D.");
+      return;
+    }
+    const zipBytes = createZip([
+      { name: "model.obj", data: mesh.obj },
+      { name: "model.mtl", data: mesh.mtl },
+    ]);
+    const blob = new Blob([zipBytes], { type: "application/zip" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "pixel-art-3d.zip";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
   // Event wiring
   toolButtons.forEach((btn) => {
     btn.addEventListener("click", () => setTool(btn.dataset.tool));
@@ -941,6 +1146,7 @@ body {
   undoBtn.addEventListener("click", undo);
   redoBtn.addEventListener("click", redo);
   exportBtn.addEventListener("click", exportPNG);
+  export3dBtn.addEventListener("click", export3D);
 
   document.addEventListener("keydown", (e) => {
     const mod = e.ctrlKey || e.metaKey;
