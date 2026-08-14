@@ -98,11 +98,27 @@
   #breakBtn.pressed, #placeBtn.pressed { background:rgba(255,255,255,0.4); }
   #breakBtn { right:24px; }
   #placeBtn { right:96px; }
+
+  #fluidOverlay {
+    position:fixed; inset:0; pointer-events:none; z-index:12; opacity:0; transition:opacity 0.4s;
+  }
+  #fluidOverlay.water { background:rgba(30,90,150,0.38); opacity:1; }
+  #fluidOverlay.lava { background:rgba(180,40,10,0.45); opacity:1; }
+
+  #message {
+    position:fixed; top:18%; left:50%; transform:translate(-50%,-50%);
+    color:#fff; background:rgba(0,0,0,0.55); padding:8px 16px; border-radius:8px;
+    font-size:15px; text-shadow:0 1px 3px rgba(0,0,0,0.9); pointer-events:none;
+    z-index:15; opacity:0; transition:opacity 0.3s; text-align:center; white-space:nowrap;
+  }
+  #message.visible { opacity:1; }
 </style>
 </head>
 <body>
 
 <div id="crosshair"></div>
+<div id="fluidOverlay"></div>
+<div id="message"></div>
 <div id="hud">
   <div class="biome" id="biomeLabel">—</div>
   <div id="posLabel">x:0 y:0 z:0</div>
@@ -205,16 +221,18 @@ const biomeNoise = new Perlin(4242);
 const humidNoise = new Perlin(9911);
 const caveNoise = new Perlin(555);
 const treeNoise = new Perlin(777);
+const cavernNoise = new Perlin(2024); // grandes cavernes, plus rares et plus larges
 
 // ---------- Constantes du monde ----------
 const CHUNK_SIZE = 16;
 const WORLD_HEIGHT = 48;
 const SEA_LEVEL = 14;
+const LAVA_LEVEL = 4; // en dessous de cette hauteur, les cavités creusées se remplissent de lave
 const IS_MOBILE = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 const RENDER_DIST = IS_MOBILE ? 3 : 5; // rayon en chunks (réduit sur mobile pour la fluidité)
 
 // Types de blocs
-const AIR = 0, GRASS = 1, DIRT = 2, STONE = 3, SAND = 4, SNOW = 5, WATER = 6, WOOD = 7, LEAVES = 8;
+const AIR = 0, GRASS = 1, DIRT = 2, STONE = 3, SAND = 4, SNOW = 5, WATER = 6, WOOD = 7, LEAVES = 8, LAVA = 9;
 
 const BLOCK_COLOR = {
   [GRASS]: [0.36, 0.62, 0.28],
@@ -224,11 +242,12 @@ const BLOCK_COLOR = {
   [SNOW]:  [0.95, 0.97, 1.0],
   [WOOD]:  [0.40, 0.26, 0.14],
   [LEAVES]:[0.22, 0.45, 0.18],
+  [LAVA]:  [0.95, 0.35, 0.05],
 };
 
 const BLOCK_NAME_FR = {
   [GRASS]: 'Herbe', [DIRT]: 'Terre', [STONE]: 'Pierre', [SAND]: 'Sable',
-  [SNOW]: 'Neige', [WOOD]: 'Bois', [LEAVES]: 'Feuilles',
+  [SNOW]: 'Neige', [WOOD]: 'Bois', [LEAVES]: 'Feuilles', [LAVA]: 'Lave',
 };
 
 // Biomes en fonction de température/humidité
@@ -240,6 +259,7 @@ function getBiome(temp, humid) {
 }
 const BIOME_LABEL = { snow: '❄️ Toundra enneigée', desert: '🏜️ Désert', forest: '🌲 Forêt', plains: '🌾 Plaines' };
 
+const lakeNoise = new Perlin(6060); // grandes dépressions : lacs/mers à large échelle
 function surfaceHeight(wx, wz) {
   const temp = biomeNoise.fbm2D(wx * 0.004, wz * 0.004, 3);
   const humid = humidNoise.fbm2D(wx * 0.005 + 500, wz * 0.005 + 500, 3);
@@ -250,7 +270,12 @@ function surfaceHeight(wx, wz) {
   if (biome === 'snow') { amp = 14; base = SEA_LEVEL + 8; }
   if (biome === 'forest') { amp = 9; base = SEA_LEVEL + 5; }
   const n = heightNoise.fbm2D(wx * 0.012, wz * 0.012, 5, 2.0, 0.5);
-  const h = Math.floor(base + n * amp);
+  let h = Math.floor(base + n * amp);
+  // Sans ceci, le terrain ne descend quasiment jamais sous le niveau de la
+  // mer (le fbm de heightNoise reste dans une plage trop étroite) : aucune
+  // étendue d'eau n'apparaît. On creuse donc de larges bassins à part.
+  const lake = lakeNoise.fbm2D(wx * 0.0025, wz * 0.0025, 3);
+  if (lake < -0.2) h -= Math.round(Math.min(1, (-0.2 - lake) / 0.25) * 11);
   return { height: Math.max(2, Math.min(WORLD_HEIGHT - 6, h)), biome, temp, humid };
 }
 
@@ -259,6 +284,7 @@ function generateChunk(cx, cz) {
   const data = new Uint8Array(CHUNK_SIZE * WORLD_HEIGHT * CHUNK_SIZE);
   const idx = (x, y, z) => x + CHUNK_SIZE * (z + CHUNK_SIZE * y);
   let dominantBiome = 'plains';
+  const waterfalls = [];
 
   for (let x = 0; x < CHUNK_SIZE; x++) {
     for (let z = 0; z < CHUNK_SIZE; z++) {
@@ -276,12 +302,36 @@ function generateChunk(cx, cz) {
           block = WATER;
         }
 
-        // Grottes (creusées sous la surface, au-dessus du bedrock)
+        // Grottes (creusées sous la surface, au-dessus du bedrock) : petites
+        // poches partout, et grandes cavernes plus rares près du bedrock.
         if (block === STONE && y > 2) {
           const cn = caveNoise.noise3D(wx * 0.06, y * 0.09, wz * 0.06);
-          if (cn > 0.42) block = AIR;
+          let carved = cn > 0.42;
+          if (!carved && y < 12) {
+            const gc = cavernNoise.noise3D(wx * 0.025, y * 0.05, wz * 0.025);
+            carved = gc > 0.62;
+          }
+          if (carved) block = (y <= LAVA_LEVEL) ? LAVA : AIR;
         }
         if (block !== AIR) data[idx(x, y, z)] = block;
+      }
+
+      // Cascade : sur un fond de lac/mer (height < SEA_LEVEL), si une cavité
+      // creusée existe plus bas dans la colonne, on perce un puits jusqu'à
+      // elle pour que l'eau s'y déverse. Rare (bruit dédié) pour que ça reste
+      // un évènement notable plutôt qu'un trou sous chaque lac.
+      if (height < SEA_LEVEL) {
+        const wf = treeNoise.noise2D(wx * 0.37 + 1000, wz * 0.37 + 1000);
+        if (wf > 0.5) {
+          let capY = -1;
+          for (let y = height - 5; y >= 3; y--) {
+            if (data[idx(x, y, z)] === AIR || data[idx(x, y, z)] === LAVA) { capY = y; break; }
+          }
+          if (capY >= 3 && height - capY <= 24) {
+            for (let y = capY + 1; y < height; y++) data[idx(x, y, z)] = AIR;
+            waterfalls.push({ lx: x, lz: z, topY: height, bottomY: capY + 1 });
+          }
+        }
       }
 
       // Arbres simples (tronc + boule de feuilles) en forêt/plaines
@@ -310,7 +360,7 @@ function generateChunk(cx, cz) {
       }
     }
   }
-  return { data, biome: dominantBiome };
+  return { data, biome: dominantBiome, waterfalls };
 }
 
 // ---------- Gestion des chunks ----------
@@ -327,7 +377,7 @@ function getVoxel(wx, wy, wz) {
   return c.data[lx + CHUNK_SIZE * (lz + CHUNK_SIZE * wy)];
 }
 
-function isSolid(b) { return b !== AIR && b !== WATER; }
+function isSolid(b) { return b !== AIR && b !== WATER && b !== LAVA; }
 
 // Construit une géométrie fusionnée pour un chunk (culling des faces cachées)
 function buildChunkMesh(cx, cz, data) {
@@ -399,14 +449,73 @@ function chunkWaterMesh(cx, cz) {
   return mesh;
 }
 
+// Cascade : deux plans croisés (comme un feuillage) avec une texture à
+// rayures qui défile verticalement pour donner une impression d'écoulement.
+function makeWaterfallTexture() {
+  const c = document.createElement('canvas');
+  c.width = 8; c.height = 32;
+  const ctx = c.getContext('2d');
+  const grad = ctx.createLinearGradient(0, 0, 0, 32);
+  grad.addColorStop(0, 'rgba(215,238,255,0.92)');
+  grad.addColorStop(0.5, 'rgba(140,195,235,0.55)');
+  grad.addColorStop(1, 'rgba(215,238,255,0.92)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 8, 32);
+  ctx.fillStyle = 'rgba(255,255,255,0.35)';
+  ctx.fillRect(1, 0, 1, 32);
+  ctx.fillRect(5, 0, 1, 32);
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
+const waterfallBaseTexture = makeWaterfallTexture();
+// Texture/matériau clonés par cascade : chacune a sa propre hauteur de
+// répétition, donc elles ne peuvent pas partager un seul objet Texture.
+const activeWaterfallTextures = new Set();
+
+function chunkWaterfallMesh(wx, wz, topY, bottomY) {
+  const h = topY - bottomY;
+  if (h <= 0) return null;
+  const geo = new THREE.PlaneGeometry(0.9, h);
+  const tex = waterfallBaseTexture.clone();
+  tex.repeat.set(1, h); // une rayure par bloc de hauteur
+  tex.needsUpdate = true;
+  const mat = new THREE.MeshBasicMaterial({
+    map: tex, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide,
+  });
+  const p1 = new THREE.Mesh(geo, mat);
+  const p2 = new THREE.Mesh(geo, mat);
+  p2.rotation.y = Math.PI / 2;
+  const group = new THREE.Group();
+  group.add(p1, p2);
+  group.position.set(wx + 0.5, bottomY + h / 2, wz + 0.5);
+  group.userData.geometry = geo; // référence partagée par p1/p2, à libérer une seule fois
+  group.userData.texture = tex;
+  group.userData.material = mat;
+  activeWaterfallTextures.add(tex);
+  return group;
+}
+
+function disposeWaterfallMesh(group) {
+  scene.remove(group);
+  activeWaterfallTextures.delete(group.userData.texture);
+  group.userData.geometry.dispose();
+  group.userData.texture.dispose();
+  group.userData.material.dispose();
+}
+
 // ---------- Scène Three.js ----------
 const SKY_DAY = new THREE.Color(0x9fd3f0);
 const SKY_NIGHT = new THREE.Color(0x060a1c);
 const skyColor = SKY_DAY.clone();
 
+const FOG_NEAR = CHUNK_SIZE * (RENDER_DIST - 1.5);
+const FOG_FAR = CHUNK_SIZE * (RENDER_DIST + 1);
+
 const scene = new THREE.Scene();
 scene.background = skyColor;
-scene.fog = new THREE.Fog(skyColor.getHex(), CHUNK_SIZE * (RENDER_DIST - 1.5), CHUNK_SIZE * (RENDER_DIST + 1));
+scene.fog = new THREE.Fog(skyColor.getHex(), FOG_NEAR, FOG_FAR);
 
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -451,6 +560,30 @@ const player = {
 function spawnPlayer() {
   const { height } = surfaceHeight(0, 0);
   player.pos.set(0.5, height + 3, 0.5);
+}
+
+// ---------- Fluides (eau/lave) ----------
+let headFluid = null; // WATER, LAVA ou null — utilisé pour le voile écran et le brouillard
+
+function fluidAt(x, y, z) {
+  const b = getVoxel(Math.floor(x), Math.floor(y), Math.floor(z));
+  return (b === WATER || b === LAVA) ? b : null;
+}
+
+const messageEl = document.getElementById('message');
+let messageTimeout = null;
+function showMessage(text, duration = 2200) {
+  messageEl.textContent = text;
+  messageEl.classList.add('visible');
+  clearTimeout(messageTimeout);
+  messageTimeout = setTimeout(() => messageEl.classList.remove('visible'), duration);
+}
+
+function respawnAfterLava() {
+  const { height } = surfaceHeight(player.pos.x, player.pos.z);
+  player.pos.set(player.pos.x, Math.max(height, SEA_LEVEL) + 3, player.pos.z);
+  player.vel.set(0, 0, 0);
+  showMessage('🔥 Tu es tombé dans la lave ! Retour à la surface.');
 }
 
 const IS_TOUCH = IS_MOBILE;
@@ -606,8 +739,16 @@ placeBtn.addEventListener('touchend', (e) => { e.preventDefault(); placeBtn.clas
 
 function updatePlayer(dt) {
   if (!locked) return;
+
+  // Détecte si les pieds ou la tête baignent dans un fluide (eau ou lave).
+  const feetFluid = fluidAt(player.pos.x, player.pos.y + 0.1, player.pos.z);
+  const eyeFluid = fluidAt(player.pos.x, player.pos.y + player.height - 0.15, player.pos.z);
+  headFluid = eyeFluid;
+  if (feetFluid === LAVA || eyeFluid === LAVA) { respawnAfterLava(); return; }
+  const swimming = !!(feetFluid || eyeFluid);
+
   const running = (keys['ShiftLeft'] || keys['ShiftRight'] || touchState.running);
-  const speed = running ? 7.5 : 4.3;
+  const speed = (running ? 7.5 : 4.3) * (swimming ? 0.55 : 1); // l'eau ralentit la nage
   // THREE.PerspectiveCamera regarde par défaut vers -Z ; à yaw=0 la caméra
   // fixe donc (0,0,-1), pas (0,0,1). Les signes ci-dessous doivent matcher
   // camera.rotation.y = player.yaw pour que "avancer" avance réellement.
@@ -629,10 +770,16 @@ function updatePlayer(dt) {
     move.multiplyScalar(speed * dt);
   }
 
-  // Gravité
-  player.vel.y -= 22 * dt;
-  if (player.vel.y < -30) player.vel.y = -30;
-  if ((keys['Space'] || touchState.jumping) && player.onGround) { player.vel.y = 8.2; player.onGround = false; }
+  if (swimming) {
+    // Sous l'eau : gravité très réduite, on remonte en maintenant Espace/sauter.
+    player.vel.y -= 4 * dt;
+    player.vel.y = Math.max(player.vel.y, -3.2);
+    if (keys['Space'] || touchState.jumping) player.vel.y = Math.min(player.vel.y + 14 * dt, 4.4);
+  } else {
+    player.vel.y -= 22 * dt;
+    if (player.vel.y < -30) player.vel.y = -30;
+    if ((keys['Space'] || touchState.jumping) && player.onGround) { player.vel.y = 8.2; player.onGround = false; }
+  }
 
   // Résolution de collisions simple axe par axe
   tryMove(move.x, 0, 0);
@@ -698,6 +845,7 @@ function unloadFarChunks(cx, cz) {
       if (c.mesh) scene.remove(c.mesh);
       if (c.water) scene.remove(c.water);
       if (c.mesh) c.mesh.geometry.dispose();
+      if (c.waterfallMeshes) for (const wf of c.waterfallMeshes) disposeWaterfallMesh(wf);
       chunks.delete(k);
     }
   }
@@ -712,8 +860,8 @@ function processChunkQueue(budgetMs) {
     const k = key(cx, cz);
     queuedSet.delete(k);
     if (chunks.has(k)) continue;
-    const { data, biome } = generateChunk(cx, cz);
-    const entry = { data, biome, mesh: null, water: null };
+    const { data, biome, waterfalls } = generateChunk(cx, cz);
+    const entry = { data, biome, mesh: null, water: null, waterfalls, waterfallMeshes: null };
     chunks.set(k, entry);
   }
   // (Re)mesh chunks whose neighbors are now available, for correct border culling
@@ -729,6 +877,13 @@ function meshPendingChunks(maxCount) {
     const mesh = chunkToMesh(cx, cz, c.data);
     if (mesh) { scene.add(mesh); c.mesh = mesh; }
     if (!c.water) { const w = chunkWaterMesh(cx, cz); scene.add(w); c.water = w; }
+    if (!c.waterfallMeshes) {
+      c.waterfallMeshes = [];
+      for (const wf of c.waterfalls) {
+        const fall = chunkWaterfallMesh(cx * CHUNK_SIZE + wf.lx, cz * CHUNK_SIZE + wf.lz, wf.topY, wf.bottomY);
+        if (fall) { scene.add(fall); c.waterfallMeshes.push(fall); }
+      }
+    }
     done++;
   }
 }
@@ -906,6 +1061,7 @@ const fpsLabel = document.getElementById('fpsLabel');
 
 let lastTime = performance.now();
 let fpsAcc = 0, fpsCount = 0, fpsShown = 0;
+const fluidOverlay = document.getElementById('fluidOverlay');
 
 function animate() {
   requestAnimationFrame(animate);
@@ -925,6 +1081,21 @@ function animate() {
 
   updatePlayer(dt);
   updateDayNight(dt);
+
+  // Sous l'eau/la lave : voile à l'écran et brouillard resserré pour l'immersion.
+  if (headFluid === WATER) {
+    fluidOverlay.className = 'water';
+    scene.fog.color.set(0x1a4a72);
+    scene.fog.near = 1; scene.fog.far = 15;
+  } else if (headFluid === LAVA) {
+    fluidOverlay.className = 'lava';
+    scene.fog.color.set(0x431406);
+    scene.fog.near = 0.5; scene.fog.far = 9;
+  } else {
+    fluidOverlay.className = '';
+    scene.fog.near = FOG_NEAR; scene.fog.far = FOG_FAR;
+  }
+  for (const tex of activeWaterfallTextures) tex.offset.y -= dt * 1.4;
 
   camera.position.copy(player.pos).add(new THREE.Vector3(0, player.height, 0));
   camera.rotation.order = 'YXZ';
