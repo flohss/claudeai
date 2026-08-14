@@ -10,7 +10,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from neura_set.interface.websocket_manager import ConnectionManager
-from neura_set.types import Proposal
+from neura_set.types import MusicalContext, Proposal
 
 FeedbackCallback = Callable[[str, bool], Awaitable[None]]
 
@@ -64,6 +64,17 @@ def _proposal_to_json(proposal: Proposal) -> dict:
     }
 
 
+def _context_to_json(context: MusicalContext) -> dict:
+    return {
+        "tempo_bpm": context.tempo_bpm,
+        "key_root_pc": context.key_root_pc,
+        "key_is_minor": context.key_is_minor,
+        "chord_root_pc": context.chord_root_pc,
+        "chord_is_minor": context.chord_is_minor,
+        "section": context.section.value,
+    }
+
+
 class InterfaceServer:
     """Owns the FastAPI app. `on_feedback(proposal_id, accepted)` is set
     by the orchestrator to route accept/reject clicks into the decision
@@ -106,4 +117,14 @@ class InterfaceServer:
     async def push_proposal(self, proposal: Proposal) -> None:
         await self.manager.broadcast(
             {"type": "proposal", "proposal": _proposal_to_json(proposal)}
+        )
+
+    async def push_context(self, context: MusicalContext) -> None:
+        """Broadcast the current listening state on every analysis tick —
+        distinct from push_proposal, which only fires when there's
+        actually something to accept/reject. Lets the UI show a live
+        tempo/key/section readout instead of only updating when a
+        proposal happens to land."""
+        await self.manager.broadcast(
+            {"type": "context", "context": _context_to_json(context)}
         )

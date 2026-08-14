@@ -115,6 +115,7 @@ class Orchestrator:
                     context.tempo_bpm,
                     context.section.value,
                 )
+                await self.interface.push_context(context)
                 if self.decision.should_propose(context):
                     await self._maybe_propose(context)
             except Exception:

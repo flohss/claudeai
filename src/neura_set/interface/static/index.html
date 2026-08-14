@@ -116,6 +116,17 @@
   .status[data-state="ok"] .status-dot { background: var(--accept); }
   .status[data-state="down"] .status-dot { background: var(--reject); }
 
+  .live-status {
+    text-align: center;
+    color: var(--text);
+    background: var(--accent-soft);
+    border-radius: 999px;
+    padding: 0.55rem 1rem;
+    font-size: 0.85rem;
+    margin-bottom: 1.5rem;
+    font-variant-numeric: tabular-nums; /* keeps the BPM digits from jittering in width as they update */
+  }
+
   .empty {
     text-align: center;
     color: var(--text-muted);
@@ -224,6 +235,13 @@
     <span id="status-text">Connexion en cours…</span>
   </div>
 
+  <!-- Updates every ~2s from the analysis loop — deliberately not
+       aria-live, so screen readers aren't spammed with a BPM/section
+       announcement on every tick. Sighted users get the live readout
+       visually; the proposals region below is the aria-live one, since
+       it only changes on meaningful discrete events. -->
+  <div class="live-status" id="live-status">🎧 en attente de signal…</div>
+
   <main id="proposals" aria-live="polite" aria-atomic="false">
     <div class="empty">
       <span class="big" aria-hidden="true">🎧</span>
@@ -263,6 +281,12 @@ function tempoFeel(bpm) {
 function keyLabel(ctx) {
   const name = NOTE_NAMES[ctx.key_root_pc] ?? "?";
   return `${name} ${ctx.key_is_minor ? "mineur" : "majeur"}`;
+}
+
+function chordLabel(ctx) {
+  if (ctx.chord_root_pc === null || ctx.chord_root_pc === undefined) return null;
+  const name = NOTE_NAMES[ctx.chord_root_pc] ?? "?";
+  return `${name}${ctx.chord_is_minor ? "m" : ""}`;
 }
 
 function pianoRollSVG(notes) {
@@ -331,7 +355,21 @@ function playProposal(proposal, button) {
 const proposalsEl = document.getElementById("proposals");
 const statusEl = document.getElementById("status");
 const statusTextEl = document.getElementById("status-text");
+const liveStatusEl = document.getElementById("live-status");
 const seen = new Map();
+
+function renderLiveStatus(ctx) {
+  if (!ctx || !(ctx.tempo_bpm > 0)) {
+    liveStatusEl.textContent = "🎧 en attente de signal…";
+    return;
+  }
+  const tempo = Math.round(ctx.tempo_bpm);
+  const parts = [`${tempo} BPM (${tempoFeel(tempo)})`, keyLabel(ctx)];
+  const chord = chordLabel(ctx);
+  if (chord) parts.push(`accord ${chord}`);
+  parts.push(SECTION_LABELS[ctx.section] ?? ctx.section);
+  liveStatusEl.textContent = parts.join(" · ");
+}
 
 function render() {
   if (seen.size === 0) {
@@ -402,6 +440,8 @@ function connect() {
     if (msg.type === "proposal") {
       seen.set(msg.proposal.id, msg.proposal);
       render();
+    } else if (msg.type === "context") {
+      renderLiveStatus(msg.context);
     }
   };
 }
