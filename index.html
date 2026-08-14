@@ -36,7 +36,8 @@ body {
 .app {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  min-height: 100vh;
+  min-height: 100dvh;
 }
 
 .app-header {
@@ -309,6 +310,7 @@ body {
   justify-content: center;
   overflow: auto;
   padding: 24px;
+  min-height: 320px;
   background:
     linear-gradient(45deg, #1a1d26 25%, transparent 25%),
     linear-gradient(-45deg, #1a1d26 25%, transparent 25%),
@@ -336,10 +338,19 @@ body {
   .app-body {
     flex-direction: column;
   }
+  .canvas-area {
+    order: -1;
+    flex: none;
+    min-height: 60vh;
+    min-height: 60dvh;
+    padding: 16px;
+  }
   .sidebar {
     width: 100%;
+    flex: none;
     border-right: none;
     border-bottom: 1px solid var(--panel-border);
+    overflow-y: visible;
   }
 }
 </style>
@@ -436,6 +447,7 @@ body {
 
   const canvas = document.getElementById("pixel-canvas");
   const ctx = canvas.getContext("2d");
+  const canvasAreaEl = document.querySelector(".canvas-area");
   const paletteEl = document.getElementById("palette");
   const hexInput = document.getElementById("hex-input");
   const activeSwatch = document.getElementById("active-color-swatch");
@@ -528,7 +540,10 @@ body {
   }
 
   function computeCellSize(size) {
-    return Math.max(MIN_CELL_PX, Math.floor(MAX_DISPLAY_PX / size));
+    const areaPadding = 32; // matches .canvas-area horizontal padding (16px * 2)
+    const availableWidth = canvasAreaEl.clientWidth - areaPadding;
+    const cap = Math.max(MIN_CELL_PX * size, Math.min(MAX_DISPLAY_PX, availableWidth));
+    return Math.max(MIN_CELL_PX, Math.floor(cap / size));
   }
 
   function setupCanvasSize() {
@@ -885,6 +900,15 @@ body {
     if (state.tool === "pencil" || state.tool === "eraser") {
       pushHistory();
     }
+  });
+
+  let resizeTimer = null;
+  window.addEventListener("resize", () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      setupCanvasSize();
+      render();
+    }, 120);
   });
 
   // Init
