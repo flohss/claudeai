@@ -44,7 +44,7 @@ Ableton via OSC. Les retours accept/reject repartent de l'UI vers la décision
 | `audio_features.py` | Tempo (`librosa.feature.tempo`), chroma, tonalité (corrélation avec les profils de Krumhansl-Kessler), RMS, centroïde spectral, densité d'onsets | Fonctionnel |
 | `chord_detection.py` | Détection d'accord par *template matching* sur le chromagramme (triades maj/min) | Fonctionnel, mais volontairement simple — voir "Écarts avec le brief" |
 | `structure_segmentation.py` | Segmentation par matrice d'auto-similarité + noyau damier (Foote 2000), étiquetage grossier par énergie relative | Fonctionnel, heuristique |
-| `analyzer.py` | Combine tout ça en un `MusicalContext`, verrouille la tonalité globale une fois détectée avec confiance | Fonctionnel |
+| `analyzer.py` | Combine tout ça en un `MusicalContext`, verrouille la tonalité globale une fois détectée avec confiance, lisse le tempo (moyenne mobile exponentielle) et la section (confirmation sur plusieurs mesures consécutives avant de changer) pour éviter le flicker d'une fenêtre de 4s à l'autre | Fonctionnel |
 
 ## 2. Génération — `neura_set/generation/`
 

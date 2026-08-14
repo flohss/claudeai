@@ -7,6 +7,13 @@ section boundaries. Sections are then coarsely labeled by relative
 energy, which is a useful proxy in electronic music (low energy =
 breakdown/intro, high energy = drop/chorus) without needing a trained
 classifier.
+
+`segment()` needs a real span of recorded audio to find boundaries in —
+it's for offline/batch analysis of a full take, not the live 4-second
+rolling window. The live pipeline (perception/analyzer.py) uses
+`label_section()` directly against a slow-moving energy baseline instead;
+importing `segment()` there produced a fresh, noisy self-similarity
+readout every 2 seconds with nothing but random flicker to segment.
 """
 
 from __future__ import annotations
