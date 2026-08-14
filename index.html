@@ -342,6 +342,34 @@ body {
   border-color: var(--danger-hover);
 }
 
+.preview3d-wrapper {
+  margin-top: 4px;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  overflow: hidden;
+  background: linear-gradient(135deg, #1a1d26, #0a0b0f);
+  cursor: grab;
+  touch-action: none;
+}
+
+.preview3d-wrapper:active {
+  cursor: grabbing;
+}
+
+#preview3d-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.preview3d-hint {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: var(--text-dim);
+  text-align: center;
+}
+
 .canvas-area {
   flex: 1;
   display: flex;
@@ -478,14 +506,15 @@ body {
         </section>
 
         <section class="panel">
-          <h2>Export 3D</h2>
+          <h2>Aperçu 3D</h2>
           <label class="checkbox-row">
             <input type="checkbox" id="base3d-checkbox" checked>
-            Socle plein (impression 3D)
+            Socle plein
           </label>
-          <div class="action-buttons">
-            <button id="export3d-btn" title="Chaque pixel devient un cube ; téléchargement d'un .zip contenant un modèle OBJ + MTL">🧱 Exporter en 3D</button>
+          <div id="preview3d-wrapper" class="preview3d-wrapper">
+            <canvas id="preview3d-canvas"></canvas>
           </div>
+          <p class="preview3d-hint">🖱️ Glisser pour pivoter · molette pour zoomer</p>
         </section>
       </aside>
 
@@ -676,7 +705,6 @@ body {
   const clearBtn = document.getElementById("clear-btn");
   const exportBtn = document.getElementById("export-btn");
   const base3dCheckbox = document.getElementById("base3d-checkbox");
-  const export3dBtn = document.getElementById("export3d-btn");
   const toolButtons = Array.from(document.querySelectorAll(".tool-btn"));
 
   const state = {
@@ -837,6 +865,8 @@ body {
       }
       ctx.restore();
     }
+
+    updatePreview3D();
   }
 
   function getSymmetricCells(x, y) {
@@ -1106,29 +1136,37 @@ body {
     }, "image/png");
   }
 
-  // ---- 3D export (extruded voxel mesh, OBJ + MTL bundled as a ZIP) ----
-  function buildVoxelMeshOBJ(addBase) {
+  // ---- 3D preview (extruded voxel mesh, rendered live with hand-rolled WebGL) ----
+  function buildVoxelMeshArrays(addBase) {
     const size = state.gridSize;
     const depth = 1;
     const baseThickness = 0.15;
-    const baseColor = "#202020";
+    const baseColorRgb = [0x20 / 255, 0x20 / 255, 0x20 / 255];
 
     const positions = [];
     const normals = [];
-    const groups = new Map(); // color -> array of { v:[4 indices], n: index }
+    const colors = [];
+    const indices = [];
 
-    function addQuad(color, p0, p1, p2, p3, normal) {
-      const baseIdx = positions.length;
-      positions.push(p0, p1, p2, p3);
-      const nIdx = normals.length;
-      normals.push(normal);
-      if (!groups.has(color)) groups.set(color, []);
-      groups.get(color).push({ v: [baseIdx, baseIdx + 1, baseIdx + 2, baseIdx + 3], n: nIdx });
+    function addQuad(rgb, p0, p1, p2, p3, normal) {
+      const base = positions.length / 3;
+      [p0, p1, p2, p3].forEach((p) => {
+        positions.push(p[0], p[1], p[2]);
+        normals.push(normal[0], normal[1], normal[2]);
+        colors.push(rgb[0], rgb[1], rgb[2]);
+      });
+      indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
     }
 
     const filled = (cx, cy) => cx >= 0 && cy >= 0 && cx < size && cy < size && !!state.grid[idx(cx, cy)];
-
-    let hasGeometry = false;
+    const rgbCache = new Map();
+    const colorRgb = (hex) => {
+      if (!rgbCache.has(hex)) {
+        const { r, g, b } = hexToRgb(hex);
+        rgbCache.set(hex, [r / 255, g / 255, b / 255]);
+      }
+      return rgbCache.get(hex);
+    };
 
     for (let y = 0; y < size; y++) {
       for (let x = 0; x < size; x++) {
@@ -1137,164 +1175,269 @@ body {
         const yTop = size - y, yBottom = size - y - 1;
 
         if (color) {
-          hasGeometry = true;
+          const rgb = colorRgb(color);
           const z0 = 0, z1 = depth;
-          addQuad(color, [x0, yBottom, z1], [x1, yBottom, z1], [x1, yTop, z1], [x0, yTop, z1], [0, 0, 1]);
-          if (!addBase) addQuad(color, [x1, yBottom, z0], [x0, yBottom, z0], [x0, yTop, z0], [x1, yTop, z0], [0, 0, -1]);
-          if (!filled(x - 1, y)) addQuad(color, [x0, yBottom, z1], [x0, yTop, z1], [x0, yTop, z0], [x0, yBottom, z0], [-1, 0, 0]);
-          if (!filled(x + 1, y)) addQuad(color, [x1, yBottom, z0], [x1, yTop, z0], [x1, yTop, z1], [x1, yBottom, z1], [1, 0, 0]);
-          if (!filled(x, y - 1)) addQuad(color, [x0, yTop, z0], [x0, yTop, z1], [x1, yTop, z1], [x1, yTop, z0], [0, 1, 0]);
-          if (!filled(x, y + 1)) addQuad(color, [x0, yBottom, z1], [x0, yBottom, z0], [x1, yBottom, z0], [x1, yBottom, z1], [0, -1, 0]);
+          addQuad(rgb, [x0, yBottom, z1], [x1, yBottom, z1], [x1, yTop, z1], [x0, yTop, z1], [0, 0, 1]);
+          if (!addBase) addQuad(rgb, [x1, yBottom, z0], [x0, yBottom, z0], [x0, yTop, z0], [x1, yTop, z0], [0, 0, -1]);
+          if (!filled(x - 1, y)) addQuad(rgb, [x0, yBottom, z1], [x0, yTop, z1], [x0, yTop, z0], [x0, yBottom, z0], [-1, 0, 0]);
+          if (!filled(x + 1, y)) addQuad(rgb, [x1, yBottom, z0], [x1, yTop, z0], [x1, yTop, z1], [x1, yBottom, z1], [1, 0, 0]);
+          if (!filled(x, y - 1)) addQuad(rgb, [x0, yTop, z0], [x0, yTop, z1], [x1, yTop, z1], [x1, yTop, z0], [0, 1, 0]);
+          if (!filled(x, y + 1)) addQuad(rgb, [x0, yBottom, z1], [x0, yBottom, z0], [x1, yBottom, z0], [x1, yBottom, z1], [0, -1, 0]);
         } else if (addBase) {
-          addQuad(baseColor, [x0, yBottom, 0], [x1, yBottom, 0], [x1, yTop, 0], [x0, yTop, 0], [0, 0, 1]);
+          addQuad(baseColorRgb, [x0, yBottom, 0], [x1, yBottom, 0], [x1, yTop, 0], [x0, yTop, 0], [0, 0, 1]);
         }
 
         if (addBase) {
-          hasGeometry = true;
           const zBack = -baseThickness;
-          // bottom (per cell, so it tiles edge-for-edge with the side walls below)
-          addQuad(baseColor, [x1, yBottom, zBack], [x0, yBottom, zBack], [x0, yTop, zBack], [x1, yTop, zBack], [0, 0, -1]);
-          // outer perimeter walls of the base slab, one segment per boundary cell
-          if (x === 0) addQuad(baseColor, [x0, yBottom, 0], [x0, yTop, 0], [x0, yTop, zBack], [x0, yBottom, zBack], [-1, 0, 0]);
-          if (x === size - 1) addQuad(baseColor, [x1, yBottom, zBack], [x1, yTop, zBack], [x1, yTop, 0], [x1, yBottom, 0], [1, 0, 0]);
-          if (y === 0) addQuad(baseColor, [x0, yTop, zBack], [x0, yTop, 0], [x1, yTop, 0], [x1, yTop, zBack], [0, 1, 0]);
-          if (y === size - 1) addQuad(baseColor, [x0, yBottom, 0], [x0, yBottom, zBack], [x1, yBottom, zBack], [x1, yBottom, 0], [0, -1, 0]);
+          addQuad(baseColorRgb, [x1, yBottom, zBack], [x0, yBottom, zBack], [x0, yTop, zBack], [x1, yTop, zBack], [0, 0, -1]);
+          if (x === 0) addQuad(baseColorRgb, [x0, yBottom, 0], [x0, yTop, 0], [x0, yTop, zBack], [x0, yBottom, zBack], [-1, 0, 0]);
+          if (x === size - 1) addQuad(baseColorRgb, [x1, yBottom, zBack], [x1, yTop, zBack], [x1, yTop, 0], [x1, yBottom, 0], [1, 0, 0]);
+          if (y === 0) addQuad(baseColorRgb, [x0, yTop, zBack], [x0, yTop, 0], [x1, yTop, 0], [x1, yTop, zBack], [0, 1, 0]);
+          if (y === size - 1) addQuad(baseColorRgb, [x0, yBottom, 0], [x0, yBottom, zBack], [x1, yBottom, zBack], [x1, yBottom, 0], [0, -1, 0]);
         }
       }
     }
 
-    if (!hasGeometry) return null;
-
-    const objLines = ["# Pixel Art Studio - export 3D (1 unite = 1 pixel)", "mtllib model.mtl", "o PixelArt"];
-    positions.forEach((p) => objLines.push(`v ${p[0]} ${p[1]} ${p[2]}`));
-    normals.forEach((n) => objLines.push(`vn ${n[0]} ${n[1]} ${n[2]}`));
-
-    const mtlLines = [];
-    const sortedColors = Array.from(groups.keys()).sort();
-    sortedColors.forEach((color) => {
-      const matName = "mat_" + color.replace("#", "");
-      const { r, g, b } = hexToRgb(color);
-      mtlLines.push(`newmtl ${matName}`, `Kd ${(r / 255).toFixed(4)} ${(g / 255).toFixed(4)} ${(b / 255).toFixed(4)}`, "Ka 0 0 0", "Ks 0 0 0", "d 1.0", "illum 1", "");
-
-      objLines.push(`usemtl ${matName}`);
-      groups.get(color).forEach((face) => {
-        const [a, bIdx, c, d] = face.v;
-        const n = face.n + 1;
-        objLines.push(`f ${a + 1}//${n} ${bIdx + 1}//${n} ${c + 1}//${n} ${d + 1}//${n}`);
-      });
-    });
-
-    return { obj: objLines.join("\n") + "\n", mtl: mtlLines.join("\n") + "\n" };
+    return {
+      positions: new Float32Array(positions),
+      normals: new Float32Array(normals),
+      colors: new Float32Array(colors),
+      indices: indices.length > 65535 ? new Uint32Array(indices) : new Uint16Array(indices),
+      indexType32: indices.length > 65535,
+      count: indices.length,
+      size,
+    };
   }
 
-  function crc32(bytes) {
-    if (!crc32.table) {
-      const table = new Uint32Array(256);
-      for (let n = 0; n < 256; n++) {
-        let c = n;
-        for (let k = 0; k < 8; k++) {
-          c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
-        }
-        table[n] = c >>> 0;
+  const Preview3D = (() => {
+    const canvas = document.getElementById("preview3d-canvas");
+    const wrapper = document.getElementById("preview3d-wrapper");
+    const gl = canvas.getContext("webgl", { antialias: true, alpha: false });
+    if (!gl) return null;
+
+    const vsSource = `
+      attribute vec3 aPosition;
+      attribute vec3 aNormal;
+      attribute vec3 aColor;
+      uniform mat4 uMVP;
+      varying vec3 vNormal;
+      varying vec3 vColor;
+      void main() {
+        vNormal = aNormal;
+        vColor = aColor;
+        gl_Position = uMVP * vec4(aPosition, 1.0);
       }
-      crc32.table = table;
+    `;
+    const fsSource = `
+      precision mediump float;
+      varying vec3 vNormal;
+      varying vec3 vColor;
+      uniform vec3 uLightDir;
+      void main() {
+        float diffuse = max(dot(normalize(vNormal), uLightDir), 0.0);
+        float light = 0.45 + 0.55 * diffuse;
+        gl_FragColor = vec4(vColor * light, 1.0);
+      }
+    `;
+
+    function compile(type, src) {
+      const shader = gl.createShader(type);
+      gl.shaderSource(shader, src);
+      gl.compileShader(shader);
+      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+        console.error(gl.getShaderInfoLog(shader));
+      }
+      return shader;
     }
-    let crc = 0xFFFFFFFF;
-    for (let i = 0; i < bytes.length; i++) {
-      crc = (crc >>> 8) ^ crc32.table[(crc ^ bytes[i]) & 0xFF];
+
+    const program = gl.createProgram();
+    gl.attachShader(program, compile(gl.VERTEX_SHADER, vsSource));
+    gl.attachShader(program, compile(gl.FRAGMENT_SHADER, fsSource));
+    gl.linkProgram(program);
+    gl.useProgram(program);
+
+    const aPosition = gl.getAttribLocation(program, "aPosition");
+    const aNormal = gl.getAttribLocation(program, "aNormal");
+    const aColor = gl.getAttribLocation(program, "aColor");
+    const uMVP = gl.getUniformLocation(program, "uMVP");
+    const uLightDir = gl.getUniformLocation(program, "uLightDir");
+
+    const positionBuffer = gl.createBuffer();
+    const normalBuffer = gl.createBuffer();
+    const colorBuffer = gl.createBuffer();
+    const indexBuffer = gl.createBuffer();
+
+    gl.enable(gl.DEPTH_TEST);
+    gl.enable(gl.CULL_FACE);
+    gl.cullFace(gl.BACK);
+
+    let indexCount = 0;
+    let use32 = false;
+    let modelSize = 16;
+
+    const view = { yaw: -0.6, pitch: 0.5, dist: 26 };
+
+    function setMesh(mesh) {
+      modelSize = mesh.size;
+      indexCount = mesh.count;
+      use32 = mesh.indexType32;
+
+      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, mesh.positions, gl.DYNAMIC_DRAW);
+
+      gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, mesh.normals, gl.DYNAMIC_DRAW);
+
+      gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, mesh.colors, gl.DYNAMIC_DRAW);
+
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, mesh.indices, gl.DYNAMIC_DRAW);
+
+      view.dist = Math.max(6, modelSize * 1.6);
     }
-    return (crc ^ 0xFFFFFFFF) >>> 0;
-  }
 
-  function createZip(files) {
-    const encoder = new TextEncoder();
-    const entries = files.map((f) => {
-      const data = typeof f.data === "string" ? encoder.encode(f.data) : f.data;
-      return { nameBytes: encoder.encode(f.name), data, crc: crc32(data) };
-    });
-
-    let localSize = 0;
-    entries.forEach((e) => { localSize += 30 + e.nameBytes.length + e.data.length; });
-    let centralSize = 0;
-    entries.forEach((e) => { centralSize += 46 + e.nameBytes.length; });
-    const total = localSize + centralSize + 22;
-
-    const buf = new Uint8Array(total);
-    const view = new DataView(buf.buffer);
-    let offset = 0;
-    const localOffsets = [];
-
-    entries.forEach((e) => {
-      localOffsets.push(offset);
-      view.setUint32(offset, 0x04034b50, true); offset += 4;
-      view.setUint16(offset, 20, true); offset += 2;
-      view.setUint16(offset, 0, true); offset += 2;
-      view.setUint16(offset, 0, true); offset += 2;
-      view.setUint16(offset, 0, true); offset += 2;
-      view.setUint16(offset, 0x21, true); offset += 2;
-      view.setUint32(offset, e.crc, true); offset += 4;
-      view.setUint32(offset, e.data.length, true); offset += 4;
-      view.setUint32(offset, e.data.length, true); offset += 4;
-      view.setUint16(offset, e.nameBytes.length, true); offset += 2;
-      view.setUint16(offset, 0, true); offset += 2;
-      buf.set(e.nameBytes, offset); offset += e.nameBytes.length;
-      buf.set(e.data, offset); offset += e.data.length;
-    });
-
-    const centralStart = offset;
-    entries.forEach((e, i) => {
-      view.setUint32(offset, 0x02014b50, true); offset += 4;
-      view.setUint16(offset, 20, true); offset += 2;
-      view.setUint16(offset, 20, true); offset += 2;
-      view.setUint16(offset, 0, true); offset += 2;
-      view.setUint16(offset, 0, true); offset += 2;
-      view.setUint16(offset, 0, true); offset += 2;
-      view.setUint16(offset, 0x21, true); offset += 2;
-      view.setUint32(offset, e.crc, true); offset += 4;
-      view.setUint32(offset, e.data.length, true); offset += 4;
-      view.setUint32(offset, e.data.length, true); offset += 4;
-      view.setUint16(offset, e.nameBytes.length, true); offset += 2;
-      view.setUint16(offset, 0, true); offset += 2;
-      view.setUint16(offset, 0, true); offset += 2;
-      view.setUint16(offset, 0, true); offset += 2;
-      view.setUint16(offset, 0, true); offset += 2;
-      view.setUint32(offset, 0, true); offset += 4;
-      view.setUint32(offset, localOffsets[i], true); offset += 4;
-      buf.set(e.nameBytes, offset); offset += e.nameBytes.length;
-    });
-    const centralSizeActual = offset - centralStart;
-
-    view.setUint32(offset, 0x06054b50, true); offset += 4;
-    view.setUint16(offset, 0, true); offset += 2;
-    view.setUint16(offset, 0, true); offset += 2;
-    view.setUint16(offset, entries.length, true); offset += 2;
-    view.setUint16(offset, entries.length, true); offset += 2;
-    view.setUint32(offset, centralSizeActual, true); offset += 4;
-    view.setUint32(offset, centralStart, true); offset += 4;
-    view.setUint16(offset, 0, true); offset += 2;
-
-    return buf;
-  }
-
-  function export3D() {
-    const mesh = buildVoxelMeshOBJ(base3dCheckbox.checked);
-    if (!mesh) {
-      alert("Le dessin est vide, rien à exporter en 3D.");
-      return;
+    // ---- minimal mat4/vec3 helpers ----
+    function perspective(fovy, aspect, near, far) {
+      const f = 1 / Math.tan(fovy / 2);
+      const nf = 1 / (near - far);
+      return new Float32Array([
+        f / aspect, 0, 0, 0,
+        0, f, 0, 0,
+        0, 0, (far + near) * nf, -1,
+        0, 0, 2 * far * near * nf, 0,
+      ]);
     }
-    const zipBytes = createZip([
-      { name: "model.obj", data: mesh.obj },
-      { name: "model.mtl", data: mesh.mtl },
-    ]);
-    const blob = new Blob([zipBytes], { type: "application/zip" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "pixel-art-3d.zip";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+
+    function lookAt(eye, center, up) {
+      let zx = eye[0] - center[0], zy = eye[1] - center[1], zz = eye[2] - center[2];
+      let len = Math.hypot(zx, zy, zz) || 1;
+      zx /= len; zy /= len; zz /= len;
+      let xx = up[1] * zz - up[2] * zy, xy = up[2] * zx - up[0] * zz, xz = up[0] * zy - up[1] * zx;
+      len = Math.hypot(xx, xy, xz) || 1;
+      xx /= len; xy /= len; xz /= len;
+      const yx = zy * xz - zz * xy, yy = zz * xx - zx * xz, yz = zx * xy - zy * xx;
+      return new Float32Array([
+        xx, yx, zx, 0,
+        xy, yy, zy, 0,
+        xz, yz, zz, 0,
+        -(xx * eye[0] + xy * eye[1] + xz * eye[2]),
+        -(yx * eye[0] + yy * eye[1] + yz * eye[2]),
+        -(zx * eye[0] + zy * eye[1] + zz * eye[2]),
+        1,
+      ]);
+    }
+
+    function multiply(a, b) {
+      const out = new Float32Array(16);
+      for (let c = 0; c < 4; c++) {
+        for (let r = 0; r < 4; r++) {
+          out[c * 4 + r] =
+            a[0 * 4 + r] * b[c * 4 + 0] +
+            a[1 * 4 + r] * b[c * 4 + 1] +
+            a[2 * 4 + r] * b[c * 4 + 2] +
+            a[3 * 4 + r] * b[c * 4 + 3];
+        }
+      }
+      return out;
+    }
+
+    function draw() {
+      const w = canvas.clientWidth || 240;
+      const h = canvas.clientHeight || 240;
+      if (canvas.width !== w || canvas.height !== h) {
+        canvas.width = w;
+        canvas.height = h;
+      }
+      gl.viewport(0, 0, canvas.width, canvas.height);
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+      if (indexCount === 0) return;
+
+      const center = [modelSize / 2, modelSize / 2, 0.3];
+      const cp = Math.cos(view.pitch), sp = Math.sin(view.pitch);
+      const cy = Math.cos(view.yaw), sy = Math.sin(view.yaw);
+      const eye = [
+        center[0] + view.dist * cp * sy,
+        center[1] + view.dist * sp,
+        center[2] + view.dist * cp * cy,
+      ];
+      const viewMatrix = lookAt(eye, center, [0, 1, 0]);
+      const projMatrix = perspective(Math.PI / 4, (canvas.width || 1) / (canvas.height || 1), 0.1, 500);
+      const mvp = multiply(projMatrix, viewMatrix);
+
+      gl.uniformMatrix4fv(uMVP, false, mvp);
+      const lightLen = Math.hypot(0.4, 0.8, 0.6);
+      gl.uniform3f(uLightDir, 0.4 / lightLen, 0.8 / lightLen, 0.6 / lightLen);
+
+      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+      gl.enableVertexAttribArray(aPosition);
+      gl.vertexAttribPointer(aPosition, 3, gl.FLOAT, false, 0, 0);
+
+      gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
+      gl.enableVertexAttribArray(aNormal);
+      gl.vertexAttribPointer(aNormal, 3, gl.FLOAT, false, 0, 0);
+
+      gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+      gl.enableVertexAttribArray(aColor);
+      gl.vertexAttribPointer(aColor, 3, gl.FLOAT, false, 0, 0);
+
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+      gl.drawElements(gl.TRIANGLES, indexCount, use32 ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT, 0);
+    }
+
+    let dragging = false;
+    let lastX = 0, lastY = 0;
+
+    function pointerDown(x, y) {
+      dragging = true;
+      lastX = x;
+      lastY = y;
+    }
+    function pointerMove(x, y) {
+      if (!dragging) return;
+      view.yaw += (x - lastX) * 0.012;
+      view.pitch = Math.max(-1.4, Math.min(1.4, view.pitch + (y - lastY) * 0.012));
+      lastX = x;
+      lastY = y;
+      draw();
+    }
+    function pointerUp() {
+      dragging = false;
+    }
+
+    wrapper.addEventListener("mousedown", (e) => pointerDown(e.clientX, e.clientY));
+    window.addEventListener("mousemove", (e) => pointerMove(e.clientX, e.clientY));
+    window.addEventListener("mouseup", pointerUp);
+
+    wrapper.addEventListener("touchstart", (e) => {
+      const t = e.touches[0];
+      pointerDown(t.clientX, t.clientY);
+    }, { passive: true });
+    wrapper.addEventListener("touchmove", (e) => {
+      const t = e.touches[0];
+      pointerMove(t.clientX, t.clientY);
+      e.preventDefault();
+    }, { passive: false });
+    window.addEventListener("touchend", pointerUp);
+
+    wrapper.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      view.dist = Math.max(4, Math.min(120, view.dist + e.deltaY * 0.03));
+      draw();
+    }, { passive: false });
+
+    window.addEventListener("resize", () => draw());
+
+    return { setMesh, draw };
+  })();
+
+  function updatePreview3D() {
+    if (!Preview3D) return;
+    const mesh = buildVoxelMeshArrays(base3dCheckbox.checked);
+    Preview3D.setMesh(mesh);
+    Preview3D.draw();
   }
 
   // Event wiring
@@ -1363,7 +1506,7 @@ body {
   undoBtn.addEventListener("click", undo);
   redoBtn.addEventListener("click", redo);
   exportBtn.addEventListener("click", exportPNG);
-  export3dBtn.addEventListener("click", export3D);
+  base3dCheckbox.addEventListener("change", updatePreview3D);
 
   document.addEventListener("keydown", (e) => {
     const mod = e.ctrlKey || e.metaKey;
