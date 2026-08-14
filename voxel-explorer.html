@@ -279,6 +279,18 @@ function surfaceHeight(wx, wz) {
   return { height: Math.max(2, Math.min(WORLD_HEIGHT - 6, h)), biome, temp, humid };
 }
 
+// Choisit au plus UNE colonne "candidate" à cascade par cellule de
+// CASCADE_CELL blocs, de façon déterministe : évite qu'un simple seuil de
+// bruit (continu par nature) ne fasse apparaître tout un mur de cascades
+// collées sur toute une zone de lac à la fois.
+const CASCADE_CELL = 10;
+function isCascadeCandidate(wx, wz) {
+  const cellX = Math.floor(wx / CASCADE_CELL), cellZ = Math.floor(wz / CASCADE_CELL);
+  const px = Math.floor(((treeNoise.noise2D(cellX * 13.7 + 500, cellZ * 13.7 + 500) + 1) / 2) * CASCADE_CELL);
+  const pz = Math.floor(((treeNoise.noise2D(cellX * 13.7 + 900, cellZ * 13.7 + 900) + 1) / 2) * CASCADE_CELL);
+  return wx === cellX * CASCADE_CELL + px && wz === cellZ * CASCADE_CELL + pz;
+}
+
 // ---------- Génération d'un chunk (voxel grid) ----------
 function generateChunk(cx, cz) {
   const data = new Uint8Array(CHUNK_SIZE * WORLD_HEIGHT * CHUNK_SIZE);
@@ -321,22 +333,22 @@ function generateChunk(cx, cz) {
 
       // Cascade : sur un fond de lac/mer (height < SEA_LEVEL), si une cavité
       // creusée existe plus bas dans la colonne, on perce un puits jusqu'à
-      // elle pour que l'eau s'y déverse. Rare (bruit dédié) pour que ça reste
-      // un évènement notable plutôt qu'un trou sous chaque lac.
-      if (height < SEA_LEVEL) {
-        const wf = treeNoise.noise2D(wx * 0.37 + 1000, wz * 0.37 + 1000);
-        if (wf > 0.5) {
-          // Uniquement du vide : viser une poche de lave ferait tomber l'eau
-          // directement dedans, sans aucune réaction — visuellement absurde.
-          let capY = -1;
-          for (let y = height - 5; y >= 3; y--) {
-            if (data[idx(x, y, z)] === LAVA) break;
-            if (data[idx(x, y, z)] === AIR) { capY = y; break; }
-          }
-          if (capY >= 3 && height - capY <= 24) {
-            for (let y = capY + 1; y < height; y++) data[idx(x, y, z)] = AIR;
-            waterfalls.push({ lx: x, lz: z, topY: height, bottomY: capY + 1 });
-          }
+      // elle pour que l'eau s'y déverse. Le bruit est un champ continu : un
+      // simple seuil (ancienne version) s'active sur toute une zone de
+      // colonnes voisines à la fois, donc un MUR de cascades collées plutôt
+      // qu'une seule — visible "sous l'eau" une fois dans le lac. On ne
+      // retient donc qu'une seule colonne candidate par grande cellule.
+      if (height < SEA_LEVEL && isCascadeCandidate(wx, wz)) {
+        // Uniquement du vide : viser une poche de lave ferait tomber l'eau
+        // directement dedans, sans aucune réaction — visuellement absurde.
+        let capY = -1;
+        for (let y = height - 5; y >= 3; y--) {
+          if (data[idx(x, y, z)] === LAVA) break;
+          if (data[idx(x, y, z)] === AIR) { capY = y; break; }
+        }
+        if (capY >= 3 && height - capY <= 24) {
+          for (let y = capY + 1; y < height; y++) data[idx(x, y, z)] = AIR;
+          waterfalls.push({ lx: x, lz: z, topY: height, bottomY: capY + 1 });
         }
       }
 
