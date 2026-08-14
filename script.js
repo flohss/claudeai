@@ -17,8 +17,13 @@
   const canvas = document.getElementById("pixel-canvas");
   const ctx = canvas.getContext("2d");
   const paletteEl = document.getElementById("palette");
-  const colorInput = document.getElementById("color-input");
+  const hexInput = document.getElementById("hex-input");
   const activeSwatch = document.getElementById("active-color-swatch");
+  const svCanvas = document.getElementById("sv-canvas");
+  const svCtx = svCanvas.getContext("2d");
+  const svWrapper = document.getElementById("sv-wrapper");
+  const svCursor = document.getElementById("sv-cursor");
+  const hueRange = document.getElementById("hue-range");
   const gridSizeSelect = document.getElementById("grid-size");
   const gridLinesCheckbox = document.getElementById("grid-lines");
   const undoBtn = document.getElementById("undo-btn");
@@ -33,10 +38,66 @@
     grid: [],
     tool: "pencil",
     activeColor: "#1d2b53",
+    hsv: { h: 230, s: 74, v: 33 },
     isPointerDown: false,
+    isSvDragging: false,
     history: [],
     historyIndex: -1,
   };
+
+  // ---- Color conversions ----
+  function hexToRgb(hex) {
+    let h = hex.replace("#", "");
+    if (h.length === 3) h = h.split("").map((c) => c + c).join("");
+    const num = parseInt(h, 16);
+    return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
+  }
+
+  function rgbToHex(r, g, b) {
+    return "#" + [r, g, b].map((x) => Math.round(x).toString(16).padStart(2, "0")).join("");
+  }
+
+  function rgbToHsv(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const d = max - min;
+    let h = 0;
+    if (d !== 0) {
+      if (max === r) h = ((g - b) / d) % 6;
+      else if (max === g) h = (b - r) / d + 2;
+      else h = (r - g) / d + 4;
+      h *= 60;
+      if (h < 0) h += 360;
+    }
+    const s = max === 0 ? 0 : d / max;
+    return { h, s: s * 100, v: max * 100 };
+  }
+
+  function hsvToRgb(h, s, v) {
+    s /= 100; v /= 100;
+    const c = v * s;
+    const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+    const m = v - c;
+    let r = 0, g = 0, b = 0;
+    if (h < 60) { r = c; g = x; b = 0; }
+    else if (h < 120) { r = x; g = c; b = 0; }
+    else if (h < 180) { r = 0; g = c; b = x; }
+    else if (h < 240) { r = 0; g = x; b = c; }
+    else if (h < 300) { r = x; g = 0; b = c; }
+    else { r = c; g = 0; b = x; }
+    return { r: (r + m) * 255, g: (g + m) * 255, b: (b + m) * 255 };
+  }
+
+  function hexToHsv(hex) {
+    const { r, g, b } = hexToRgb(hex);
+    return rgbToHsv(r, g, b);
+  }
+
+  function hsvToHex(h, s, v) {
+    const { r, g, b } = hsvToRgb(h, s, v);
+    return rgbToHex(r, g, b);
+  }
 
   function makeBlankGrid(size) {
     return new Array(size * size).fill(null);
@@ -133,11 +194,58 @@
     return rgb;
   }
 
-  function setActiveColor(color) {
+  function setActiveColor(color, options = {}) {
+    const { skipHsvSync = false } = options;
     state.activeColor = color;
-    colorInput.value = color;
     activeSwatch.style.background = color;
+    hexInput.value = color;
     syncPaletteSelection();
+    if (!skipHsvSync) {
+      state.hsv = hexToHsv(color);
+    }
+    hueRange.value = String(Math.round(state.hsv.h));
+    drawSvCanvas(state.hsv.h);
+    updateSvCursorPosition();
+  }
+
+  function setActiveColorFromHsv(h, s, v) {
+    state.hsv = { h, s, v };
+    const hex = hsvToHex(h, s, v);
+    setActiveColor(hex, { skipHsvSync: true });
+  }
+
+  function drawSvCanvas(hue) {
+    const w = svCanvas.width;
+    const h = svCanvas.height;
+    svCtx.fillStyle = hsvToHex(hue, 100, 100);
+    svCtx.fillRect(0, 0, w, h);
+
+    const whiteGrad = svCtx.createLinearGradient(0, 0, w, 0);
+    whiteGrad.addColorStop(0, "rgba(255,255,255,1)");
+    whiteGrad.addColorStop(1, "rgba(255,255,255,0)");
+    svCtx.fillStyle = whiteGrad;
+    svCtx.fillRect(0, 0, w, h);
+
+    const blackGrad = svCtx.createLinearGradient(0, 0, 0, h);
+    blackGrad.addColorStop(0, "rgba(0,0,0,0)");
+    blackGrad.addColorStop(1, "rgba(0,0,0,1)");
+    svCtx.fillStyle = blackGrad;
+    svCtx.fillRect(0, 0, w, h);
+  }
+
+  function updateSvCursorPosition() {
+    const { s, v } = state.hsv;
+    svCursor.style.left = s + "%";
+    svCursor.style.top = (100 - v) + "%";
+  }
+
+  function pickFromSvEvent(evt) {
+    const rect = svWrapper.getBoundingClientRect();
+    const x = Math.min(Math.max(evt.clientX - rect.left, 0), rect.width);
+    const y = Math.min(Math.max(evt.clientY - rect.top, 0), rect.height);
+    const s = (x / rect.width) * 100;
+    const v = 100 - (y / rect.height) * 100;
+    setActiveColorFromHsv(state.hsv.h, s, v);
   }
 
   function setTool(tool) {
@@ -270,7 +378,34 @@
     btn.addEventListener("click", () => setTool(btn.dataset.tool));
   });
 
-  colorInput.addEventListener("input", (e) => setActiveColor(e.target.value));
+  hueRange.addEventListener("input", (e) => {
+    setActiveColorFromHsv(Number(e.target.value), state.hsv.s, state.hsv.v);
+  });
+
+  hexInput.addEventListener("change", (e) => {
+    const raw = e.target.value.trim();
+    const match = /^#?([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/.exec(raw);
+    if (!match) {
+      hexInput.value = state.activeColor;
+      return;
+    }
+    setActiveColor("#" + match[1].toLowerCase().replace(/^([0-9a-f])([0-9a-f])([0-9a-f])$/, "$1$1$2$2$3$3"));
+  });
+
+  svWrapper.addEventListener("pointerdown", (e) => {
+    state.isSvDragging = true;
+    svWrapper.setPointerCapture(e.pointerId);
+    pickFromSvEvent(e);
+  });
+
+  svWrapper.addEventListener("pointermove", (e) => {
+    if (!state.isSvDragging) return;
+    pickFromSvEvent(e);
+  });
+
+  window.addEventListener("pointerup", () => {
+    state.isSvDragging = false;
+  });
 
   gridSizeSelect.addEventListener("change", (e) => {
     const newSize = parseInt(e.target.value, 10);

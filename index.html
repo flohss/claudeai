@@ -28,8 +28,13 @@
           <h2>Couleur active</h2>
           <div class="active-color-row">
             <div id="active-color-swatch" class="active-color-swatch"></div>
-            <input type="color" id="color-input" value="#1d2b53">
+            <input type="text" id="hex-input" class="hex-input" maxlength="7" value="#1d2b53" spellcheck="false">
           </div>
+          <div id="sv-wrapper" class="sv-wrapper">
+            <canvas id="sv-canvas" width="220" height="140"></canvas>
+            <div id="sv-cursor" class="sv-cursor"></div>
+          </div>
+          <input type="range" id="hue-range" class="hue-range" min="0" max="359" step="1" value="230">
         </section>
 
         <section class="panel">
