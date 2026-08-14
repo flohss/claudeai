@@ -31,6 +31,24 @@ from neura_set.types import MusicalContext, Proposal
 
 logger = logging.getLogger("neura_set.orchestrator")
 
+_MIN_NOTE_DURATION_BEATS = 0.25
+_MAX_NOTE_DURATION_BEATS = 2.0
+
+
+def _note_duration_from_context(context: MusicalContext) -> float:
+    """How long generated notes should be, from how sparse the human's
+    playing was — confirmed live: generation always used a fixed 0.5-beat
+    duration regardless of input, so long held/sung notes never came back
+    as long notes. `onset_density_per_beat` (attacks per beat) is already
+    computed by the perception layer but was never consumed anywhere:
+    few onsets per beat (a sustained note) should propose long notes back,
+    many onsets (rapid notes/syllables) should propose short ones.
+    """
+    density = context.onset_density_per_beat
+    if density <= 0:
+        return _MAX_NOTE_DURATION_BEATS  # no attacks detected at all: one long held tone
+    return max(_MIN_NOTE_DURATION_BEATS, min(_MAX_NOTE_DURATION_BEATS, 1.0 / density))
+
 
 class Orchestrator:
     def __init__(
@@ -104,7 +122,8 @@ class Orchestrator:
             await asyncio.sleep(self.analysis_interval_seconds)
 
     async def _maybe_propose(self, context: MusicalContext) -> None:
-        notes = self.generator.generate(context)
+        note_duration_beats = _note_duration_from_context(context)
+        notes = self.generator.generate(context, note_duration_beats=note_duration_beats)
         notes = apply_style(notes, self.style)
         if not notes:
             return
