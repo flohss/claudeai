@@ -30,13 +30,24 @@
   #overlay .key { display:inline-block; background:rgba(255,255,255,0.12); padding:2px 8px; border-radius:4px; margin:0 2px; }
   #overlay.hidden { display:none; }
 
+  #rerollBtn {
+    margin-top:16px; padding:9px 20px; border-radius:8px; border:1px solid rgba(255,255,255,0.4);
+    background:rgba(255,255,255,0.14); color:#fff; font-size:14px; font-family:inherit;
+    cursor:pointer;
+  }
+  #rerollBtn:hover { background:rgba(255,255,255,0.26); }
+  #rerollBtn:active { background:rgba(255,255,255,0.4); }
+  #rerollHint { font-size:11px !important; opacity:0.55 !important; margin-top:6px !important; }
+
   #loading {
     position:fixed; bottom:12px; left:12px; color:#fff; font-size:12px; opacity:0.6;
     pointer-events:none; z-index:10;
   }
 
   #minimapWrap {
-    position:fixed; top:12px; right:12px; z-index:10; pointer-events:none;
+    /* z-index au-dessus de #overlay : reste visible pendant l'écran de
+       démarrage, pour prévisualiser un paysage avant de lancer la partie. */
+    position:fixed; top:12px; right:12px; z-index:101; pointer-events:none;
     display:flex; flex-direction:column; align-items:center;
   }
   #minimapN {
@@ -139,6 +150,8 @@
   <p id="desktopHelp2"><span class="key">Souris</span> regarder &nbsp; <span class="key">Échap</span> sortir</p>
   <p id="desktopHelp3"><span class="key">Clic gauche</span> casser &nbsp; <span class="key">Clic droit</span> poser</p>
   <p id="mobileHelp" style="display:none;">Joystick à gauche pour marcher &nbsp;·&nbsp; glisse à droite pour regarder &nbsp;·&nbsp; ⛏ casser &nbsp;·&nbsp; ➕ poser</p>
+  <button id="rerollBtn" type="button">🎲 Nouveau paysage</button>
+  <p id="rerollHint">Aperçu sur la mini-carte en haut à droite</p>
 </div>
 
 <div id="touchControls">
@@ -216,12 +229,21 @@ class Perlin {
   }
 }
 
-const heightNoise = new Perlin(1337);
-const biomeNoise = new Perlin(4242);
-const humidNoise = new Perlin(9911);
-const caveNoise = new Perlin(555);
-const treeNoise = new Perlin(777);
-const cavernNoise = new Perlin(2024); // grandes cavernes, plus rares et plus larges
+// Toutes dérivées d'une même graine (worldSeed) pour pouvoir générer un
+// paysage entièrement différent à volonté, via initNoise().
+let heightNoise, biomeNoise, humidNoise, caveNoise, treeNoise, cavernNoise, lakeNoise;
+let worldSeed = 1337;
+function initNoise(seed) {
+  worldSeed = seed;
+  heightNoise = new Perlin(seed);
+  biomeNoise = new Perlin(seed + 2905);
+  humidNoise = new Perlin(seed + 8574);
+  caveNoise = new Perlin(seed + 4127);
+  treeNoise = new Perlin(seed + 6198);
+  cavernNoise = new Perlin(seed + 9051); // grandes cavernes, plus rares et plus larges
+  lakeNoise = new Perlin(seed + 3312);   // grandes dépressions : lacs/mers à large échelle
+}
+initNoise(worldSeed);
 
 // ---------- Constantes du monde ----------
 const CHUNK_SIZE = 16;
@@ -306,7 +328,6 @@ function getBiome(temp, humid) {
 }
 const BIOME_LABEL = { snow: '❄️ Toundra enneigée', desert: '🏜️ Désert', forest: '🌲 Forêt', plains: '🌾 Plaines' };
 
-const lakeNoise = new Perlin(6060); // grandes dépressions : lacs/mers à large échelle
 function surfaceHeight(wx, wz) {
   const temp = biomeNoise.fbm2D(wx * 0.004, wz * 0.004, 3);
   const humid = humidNoise.fbm2D(wx * 0.005 + 500, wz * 0.005 + 500, 3);
@@ -688,8 +709,18 @@ const breakBtn = document.getElementById('breakBtn');
 const placeBtn = document.getElementById('placeBtn');
 const joystickBase = document.getElementById('joystickBase');
 const joystickThumb = document.getElementById('joystickThumb');
+const rerollBtn = document.getElementById('rerollBtn');
 
 const touchState = { moveX: 0, moveY: 0, jumping: false, running: false };
+
+// Nouveau paysage aléatoire, avant d'entrer dans la partie. stopPropagation
+// est indispensable : le clic/tap remonterait sinon jusqu'à #overlay et
+// lancerait la partie immédiatement (verrouillage du pointeur / mode tactile).
+rerollBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  resetWorld(Math.floor(Math.random() * 2000000000) + 1);
+});
+rerollBtn.addEventListener('touchstart', (e) => { e.stopPropagation(); }, { passive: true });
 
 if (IS_TOUCH) {
   document.getElementById('desktopHelp').style.display = 'none';
@@ -981,6 +1012,33 @@ function meshPendingChunks(maxCount) {
     }
     done++;
   }
+}
+
+// Régénère entièrement le monde avec une nouvelle graine : vide les chunks
+// chargés (en libérant leurs géométries GPU), relance le bruit, replace le
+// joueur et recharge la zone de spawn. Utilisé par le bouton "Nouveau
+// paysage" de l'écran de démarrage.
+function resetWorld(seed) {
+  for (const c of chunks.values()) {
+    if (c.mesh) { scene.remove(c.mesh); c.mesh.geometry.dispose(); }
+    if (c.water) { scene.remove(c.water); c.water.geometry.dispose(); }
+    if (c.waterfallMeshes) for (const wf of c.waterfallMeshes) disposeWaterfallMesh(wf);
+  }
+  chunks.clear();
+  chunkQueue.length = 0;
+  queuedSet.clear();
+  lastPlayerChunk = { cx: null, cz: null };
+
+  initNoise(seed);
+  spawnPlayer();
+  player.vel.set(0, 0, 0);
+  player.yaw = 0; player.pitch = 0;
+  dayTime = 0.27;
+
+  requestChunksAround(0, 0);
+  processChunkQueue(300);
+  renderMinimapTerrain(player.pos.x, player.pos.z);
+  mmLastUpdate = { x: player.pos.x, z: player.pos.z };
 }
 
 // ---------- Casser / poser des blocs ----------
