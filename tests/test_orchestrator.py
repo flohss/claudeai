@@ -53,7 +53,7 @@ async def test_perception_loop_survives_analysis_exception():
 def test_note_duration_is_long_for_sustained_input():
     # a held note produces ~0 onsets per beat over the analysis window
     context = MusicalContext(onset_density_per_beat=0.0)
-    assert _note_duration_from_context(context) == 2.0
+    assert _note_duration_from_context(context) == 4.0
 
 
 def test_note_duration_is_short_for_rapid_input():

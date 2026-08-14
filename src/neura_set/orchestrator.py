@@ -32,7 +32,7 @@ from neura_set.types import MusicalContext, Proposal
 logger = logging.getLogger("neura_set.orchestrator")
 
 _MIN_NOTE_DURATION_BEATS = 0.25
-_MAX_NOTE_DURATION_BEATS = 2.0
+_MAX_NOTE_DURATION_BEATS = 4.0  # a whole note
 
 
 def _note_duration_from_context(context: MusicalContext) -> float:
