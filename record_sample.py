@@ -12,7 +12,63 @@ double-clic). Avec des arguments, il fonctionne comme avant :
 import argparse
 import re
 import sys
+import unicodedata
 from pathlib import Path
+
+EMOTION_SENTENCES = {
+    "joyeux": [
+        "C'est genial, je n'aurais jamais imagine que ca se passerait aussi bien ! "
+        "J'ai vraiment envie de faire la fete pour celebrer ca, tout de suite !",
+
+        "Regarde, on a enfin reussi, apres tout ce temps a y travailler ! "
+        "Je suis tellement content que j'en sourirais toute la journee.",
+
+        "Youpi, c'est exactement la nouvelle que j'attendais depuis des semaines ! "
+        "Il faut absolument qu'on partage ca avec tout le monde, c'est trop bien.",
+
+        "Franchement, cette journee restera gravee dans ma memoire pour longtemps. "
+        "Tout s'est enchaine a merveille, du matin jusqu'au soir, c'etait parfait.",
+    ],
+    "triste": [
+        "Je ne sais pas trop quoi dire... c'est vraiment difficile a accepter, "
+        "et j'ai l'impression que rien ne va pouvoir arranger les choses pour le moment.",
+
+        "Ca me rend triste d'y repenser, meme si je sais que le temps va finir par "
+        "attenuer un peu cette peine, ca reste dur en ce moment.",
+
+        "J'aurais tellement voulu que ca se passe autrement, mais on ne peut pas "
+        "toujours controler ce qui nous arrive, meme quand on fait de son mieux.",
+
+        "Il y a des jours ou tout parait plus lourd que d'habitude, ou meme les "
+        "petites choses du quotidien demandent un effort plus grand que d'habitude.",
+    ],
+    "colere": [
+        "Non, mais serieusement, c'est inadmissible ! On ne peut pas continuer a "
+        "accepter que les choses se passent comme ca, encore une fois.",
+
+        "J'en ai vraiment assez de devoir tout repeter dix fois avant que quelqu'un "
+        "ne m'ecoute, c'est franchement epuisant a la longue.",
+
+        "Ca me met hors de moi quand les gens ne respectent meme pas les regles "
+        "les plus elementaires, alors qu'on leur a explique plusieurs fois.",
+
+        "Il est hors de question que je laisse passer ca sans rien dire, "
+        "cette fois-ci, ca va vraiment trop loin.",
+    ],
+    "calme": [
+        "Prends ton temps, il n'y a vraiment aucune urgence. On peut tres bien "
+        "en reparler plus tard, une fois que tout le monde sera plus dispo.",
+
+        "Respire un bon coup, tout va bien se passer. On va avancer etape par "
+        "etape, sans se precipiter, et ca va tres bien se derouler.",
+
+        "C'est une belle soiree calme, sans rien de particulier a faire, "
+        "juste le plaisir de se poser tranquillement avec un bon livre.",
+
+        "On a largement le temps devant nous, alors autant en profiter "
+        "pour faire les choses correctement, sans stress inutile.",
+    ],
+}
 
 SUGGESTED_SENTENCES = [
     "Bonjour, je m'appelle... et voici un echantillon de ma voix. "
@@ -60,12 +116,20 @@ SUGGESTED_SENTENCES = [
 def parse_args():
     parser = argparse.ArgumentParser(description="Record microphone sample(s) to use as voice-cloning references.")
     parser.add_argument("--output-dir", type=Path, default=None,
-                         help="Directory to save numbered clips into (default: samples/).")
+                         help="Base directory to save numbered clips into (default: samples/).")
+    parser.add_argument("--emotion", type=str, default=None,
+                         help="Optional label (e.g. joyeux, triste, colere, calme). Saves clips into "
+                              "<output-dir>/<emotion>/ with matching suggested sentences, for emotion-specific cloning.")
     parser.add_argument("--prefix", type=str, default=None, help="Filename prefix for numbered clips.")
     parser.add_argument("--count", type=int, default=None, help="Number of clips to record (default: 5).")
     parser.add_argument("--duration", type=int, default=None, help="Duration per clip in seconds (default: 20).")
     parser.add_argument("--samplerate", type=int, default=24000, help="Sample rate in Hz.")
     return parser.parse_args()
+
+
+def normalize_label(label: str) -> str:
+    stripped = unicodedata.normalize("NFKD", label).encode("ascii", "ignore").decode("ascii")
+    return stripped.strip().lower()
 
 
 def ask(question, default, cast=str):
@@ -91,21 +155,29 @@ def record_clip(sd, duration, samplerate):
 
 def main():
     args = parse_args()
-    interactive = args.output_dir is None and args.prefix is None and args.count is None and args.duration is None
+    interactive = len(sys.argv) == 1
 
     if interactive:
         print("=== Enregistrement d'echantillons de ta voix ===")
         print("Reponds aux questions, ou appuie directement sur Entree pour garder la valeur par defaut.\n")
-        output_dir = Path(ask("Dossier ou enregistrer les fichiers", "samples"))
+        base_dir = Path(ask("Dossier de base ou enregistrer les fichiers", "samples"))
+        emotion = ask(
+            f"Etiquette emotion/style pour cette serie (options avec phrases dediees : "
+            f"{', '.join(EMOTION_SENTENCES)} ; vide = neutre)", "",
+        )
         prefix = ask("Prefixe des fichiers", "my_voice")
         count = ask("Combien de clips veux-tu enregistrer", 5, int)
         duration = ask("Duree de chaque clip, en secondes", 20, int)
         print()
     else:
-        output_dir = args.output_dir or Path("samples")
+        base_dir = args.output_dir or Path("samples")
+        emotion = args.emotion or ""
         prefix = args.prefix or "my_voice"
         count = args.count or 5
         duration = args.duration or 20
+
+    output_dir = base_dir / normalize_label(emotion) if emotion else base_dir
+    sentence_bank = EMOTION_SENTENCES.get(normalize_label(emotion), SUGGESTED_SENTENCES)
 
     import sounddevice as sd
     import soundfile as sf
@@ -117,7 +189,7 @@ def main():
     targets = [output_dir / f"{prefix}_{i:02d}.wav" for i in range(start, start + count)]
 
     for i, target in enumerate(targets):
-        sentence = SUGGESTED_SENTENCES[(start - 1 + i) % len(SUGGESTED_SENTENCES)]
+        sentence = sentence_bank[(start - 1 + i) % len(sentence_bank)]
         print(f"\n--- Clip {i + 1}/{len(targets)} : {target} ---")
         print(f"Phrase suggeree (ou dis ce que tu veux) : \"{sentence}\"")
         input("Appuie sur Entree quand tu es pret(e)...")

@@ -77,6 +77,22 @@ numerotation reprend automatiquement apres le dernier fichier existant
 Tu peux aussi utiliser directement des fichiers audio existants (wav/mp3/flac)
 de ta voix a la place.
 
+### Ameliorer le rendu des emotions
+
+XTTS-v2 reproduit ton timbre de voix, mais capte moins bien l'intonation
+emotionnelle a partir d'echantillons neutres. Pour ameliorer ca, tu peux
+enregistrer une serie de clips dediee a une emotion, avec des phrases
+adaptees (joie, tristesse, colere, calme) :
+
+```bash
+python record_sample.py --output-dir samples --emotion joyeux --count 4 --duration 20
+```
+
+Cela cree les clips dans `samples/joyeux/`, avec des phrases suggerees
+adaptees a cette emotion. Emotions disponibles avec phrases dediees :
+`joyeux`, `triste`, `colere`, `calme` (toute autre etiquette utilise les
+phrases generiques, dans son propre sous-dossier).
+
 ## 2. Generer de la parole avec ta voix clonee
 
 Lance sans argument pour repondre aux questions (ou double-clique sur
@@ -104,8 +120,25 @@ python clone_voice.py --speaker samples/my_voice_01.wav samples/my_voice_02.wav 
 python clone_voice.py --speaker samples/my_voice.wav --text "..." --output output.wav
 ```
 
+Pour une voix qui correspond a une emotion enregistree, pointe `--speaker`
+vers le sous-dossier correspondant, par exemple `samples/joyeux/`.
+
 Langues supportees : `en, es, fr, de, it, pt, pl, tr, ru, nl, cs, ar, zh-cn,
 ja, hu, ko, hi`.
+
+### Ajuster l'expressivite
+
+`--style expressif` (au lieu du `normal` par defaut) augmente l'intonation
+et l'emotion dans la voix generee, au prix d'un resultat un peu moins
+stable :
+
+```bash
+python clone_voice.py --speaker samples/joyeux/ --text "..." --style expressif
+```
+
+Pour un reglage plus fin : `--temperature` (plus haut = plus expressif),
+`--top-p` et `--speed` (vitesse de la voix). Ces options sont aussi
+proposees comme question lors de l'utilisation sans argument.
 
 ## Notes
 

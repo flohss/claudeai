@@ -16,6 +16,12 @@ SUPPORTED_LANGUAGES = [
     "cs", "ar", "zh-cn", "ja", "hu", "ko", "hi",
 ]
 AUDIO_EXTENSIONS = {".wav", ".mp3", ".flac"}
+# XTTS-v2 defaults are temperature=0.65, top_p=0.8. Raising them makes the
+# delivery more expressive/emotional, at some cost to stability.
+STYLE_PRESETS = {
+    "normal": {},
+    "expressif": {"temperature": 0.85, "top_p": 0.92},
+}
 
 
 def resolve_speaker_files(paths: list[Path]) -> list[Path]:
@@ -50,6 +56,14 @@ def parse_args():
     parser.add_argument("--language", default=None, choices=SUPPORTED_LANGUAGES,
                          help="Language of the text (default: fr).")
     parser.add_argument("--output", type=Path, default=None, help="Output audio file path (default: output.wav).")
+    parser.add_argument("--style", choices=list(STYLE_PRESETS), default=None,
+                         help="Generation preset: 'normal' (default) or 'expressif' (more emotion/intonation, "
+                              "slightly less stable).")
+    parser.add_argument("--temperature", type=float, default=None,
+                         help="Advanced: overrides --style. Higher = more expressive but less stable (XTTS default 0.65).")
+    parser.add_argument("--top-p", type=float, default=None, dest="top_p",
+                         help="Advanced: overrides --style (XTTS default 0.8).")
+    parser.add_argument("--speed", type=float, default=None, help="Speech speed multiplier (default: 1.0).")
     parser.add_argument("--device", default=None, choices=["cpu", "cuda"],
                          help="Device to run inference on (default: auto-detect).")
     return parser.parse_args()
@@ -90,11 +104,19 @@ def main():
 
     if interactive:
         print("=== Generation d'audio avec ta voix clonee ===")
-        print("Reponds aux questions, ou appuie directement sur Entree pour garder la valeur par defaut.\n")
+        print("Reponds aux questions, ou appuie directement sur Entree pour garder la valeur par defaut.")
+        print("Astuce : pointe --speaker vers un sous-dossier dedie a une emotion (ex: samples/joyeux) "
+              "pour une voix plus fidele a cette emotion.\n")
         speaker_files = ask_speaker_files()
         text = ask_text()
         language = ask("Langue du texte", "fr")
         output = Path(ask("Nom du fichier audio a generer", "output.wav"))
+        style = ask("Style de generation : normal ou expressif (plus d'emotion, un peu moins stable)", "normal")
+        style = style.strip().lower()
+        if style not in STYLE_PRESETS:
+            print("Style non reconnu, utilisation de 'normal'.")
+            style = "normal"
+        tts_kwargs = dict(STYLE_PRESETS[style])
         device = None
         print()
     else:
@@ -107,6 +129,13 @@ def main():
         language = args.language or "fr"
         output = args.output or Path("output.wav")
         device = args.device
+        tts_kwargs = dict(STYLE_PRESETS[args.style or "normal"])
+        if args.temperature is not None:
+            tts_kwargs["temperature"] = args.temperature
+        if args.top_p is not None:
+            tts_kwargs["top_p"] = args.top_p
+        if args.speed is not None:
+            tts_kwargs["speed"] = args.speed
 
     if not text.strip():
         sys.exit("Erreur : aucun texte a lire.")
@@ -120,11 +149,14 @@ def main():
 
     print(f"Generation de {len(text)} caracteres en '{language}' a partir de {len(speaker_files)} "
           f"echantillon(s) : {', '.join(str(f) for f in speaker_files)}")
+    if tts_kwargs:
+        print(f"Parametres de generation : {tts_kwargs}")
     tts.tts_to_file(
         text=text,
         speaker_wav=[str(f) for f in speaker_files],
         language=language,
         file_path=str(output),
+        **tts_kwargs,
     )
     print(f"Termine. Audio ecrit dans {output}")
 
