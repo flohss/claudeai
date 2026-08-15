@@ -1,7 +1,9 @@
 coqui-tts>=0.27.0
 # transformers>=5.1.0 removed isin_mps_friendly, which XTTS relies on.
 transformers>=4.57,<5.1.0
-torch>=2.1.0
-torchaudio>=2.1.0
+# torch>=2.9 requires the torchcodec extra (and a system FFmpeg install)
+# for audio IO; stay below it to keep setup simple.
+torch>=2.2,<2.9
+torchaudio>=2.2,<2.9
 sounddevice>=0.4.6
 soundfile>=0.12.1
