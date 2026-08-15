@@ -5,7 +5,9 @@ Outil en ligne de commande pour cloner ta propre voix et generer de la parole
 [Coqui XTTS-v2](https://github.com/coqui-ai/TTS).
 
 Le clonage est "zero-shot" : un seul echantillon audio de ta voix (10-30
-secondes) suffit, pas besoin d'entrainer un modele.
+secondes) suffit, pas besoin d'entrainer un modele. Fournir **plusieurs**
+echantillons (phrases, tons et rythmes differents) ameliore nettement la
+qualite et la fidelite de la voix generee.
 
 ## ⚠️ Usage responsable
 
@@ -28,33 +30,40 @@ pip install -r requirements.txt
 
 Le premier lancement telecharge le modele XTTS-v2 (~2 Go).
 
-## 1. Enregistrer un echantillon de ta voix
+## 1. Enregistrer plusieurs echantillons de ta voix
 
-Utilise ton micro pour enregistrer 15-20 secondes de toi en train de parler
-naturellement (lis un paragraphe a voix haute, dans un endroit calme, sans
-bruit de fond) :
+Utilise ton micro pour enregistrer plusieurs clips de 10-20 secondes, dans
+un endroit calme et sans bruit de fond. Le script te guide clip par clip
+avec des phrases suggerees (varie le ton, le rythme, les emotions pour
+enrichir la voix clonee) :
 
 ```bash
-python record_sample.py --output samples/my_voice.wav --duration 20
+python record_sample.py --output-dir samples --count 5 --duration 15
 ```
 
-Tu peux aussi fournir directement un fichier audio existant (wav/mp3/flac)
+Cela cree `samples/my_voice_01.wav` a `samples/my_voice_05.wav`. Pour un
+seul clip : `python record_sample.py --output samples/my_voice.wav --duration 20`.
+
+Tu peux aussi utiliser directement des fichiers audio existants (wav/mp3/flac)
 de ta voix a la place.
 
 ## 2. Generer de la parole avec ta voix clonee
 
+Passe tout le dossier d'echantillons (recommande, meilleure qualite) :
+
 ```bash
 python clone_voice.py \
-  --speaker samples/my_voice.wav \
+  --speaker samples/ \
   --text "Bonjour, ceci est un test de clonage de ma propre voix." \
   --language fr \
   --output output.wav
 ```
 
-Ou a partir d'un fichier texte :
+Ou liste des fichiers precis, ou un seul :
 
 ```bash
-python clone_voice.py --speaker samples/my_voice.wav --text-file script.txt --output output.wav
+python clone_voice.py --speaker samples/my_voice_01.wav samples/my_voice_02.wav --text-file script.txt --output output.wav
+python clone_voice.py --speaker samples/my_voice.wav --text "..." --output output.wav
 ```
 
 Langues supportees : `en, es, fr, de, it, pt, pl, tr, ru, nl, cs, ar, zh-cn,
