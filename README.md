@@ -36,17 +36,21 @@ Le premier lancement telecharge le modele XTTS-v2 (~2 Go).
 
 ## 1. Enregistrer plusieurs echantillons de ta voix
 
-Utilise ton micro pour enregistrer plusieurs clips de 10-20 secondes, dans
+Utilise ton micro pour enregistrer plusieurs clips de 15-25 secondes, dans
 un endroit calme et sans bruit de fond. Le script te guide clip par clip
-avec des phrases suggerees (varie le ton, le rythme, les emotions pour
-enrichir la voix clonee) :
+avec des phrases suggerees assez longues pour bien remplir la duree (varie
+le ton, le rythme, les emotions pour enrichir la voix clonee) :
 
 ```bash
-python record_sample.py --output-dir samples --count 5 --duration 15
+python record_sample.py --output-dir samples --count 5 --duration 20
 ```
 
 Cela cree `samples/my_voice_01.wav` a `samples/my_voice_05.wav`. Pour un
 seul clip : `python record_sample.py --output samples/my_voice.wav --duration 20`.
+
+Tu peux relancer la commande plus tard pour ajouter davantage de clips : la
+numerotation reprend automatiquement apres le dernier fichier existant
+(les clips precedents ne sont jamais ecrases).
 
 Tu peux aussi utiliser directement des fichiers audio existants (wav/mp3/flac)
 de ta voix a la place.
