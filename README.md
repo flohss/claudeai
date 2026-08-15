@@ -34,21 +34,43 @@ supportait pas Python 3.12+.
 
 Le premier lancement telecharge le modele XTTS-v2 (~2 Go).
 
+## Mode facile (double-clic, Windows)
+
+Pas a l'aise avec la ligne de commande ? Une fois l'installation ci-dessus
+faite une premiere fois, tu peux double-cliquer directement sur :
+
+- **`1_enregistrer_voix.bat`** pour enregistrer ta voix : le programme te
+  pose les questions une par une (dossier, nombre de clips, duree...) dans
+  la fenetre qui s'ouvre.
+- **`2_generer_audio.bat`** pour generer un audio avec ta voix clonee : il
+  te demande le dossier des echantillons, le texte a lire, la langue et le
+  nom du fichier de sortie.
+
+La fenetre reste ouverte a la fin (ou en cas d'erreur) pour que tu puisses
+lire ce qui s'est passe.
+
 ## 1. Enregistrer plusieurs echantillons de ta voix
 
 Utilise ton micro pour enregistrer plusieurs clips de 15-25 secondes, dans
 un endroit calme et sans bruit de fond. Le script te guide clip par clip
 avec des phrases suggerees assez longues pour bien remplir la duree (varie
-le ton, le rythme, les emotions pour enrichir la voix clonee) :
+le ton, le rythme, les emotions pour enrichir la voix clonee).
+
+Lance-le sans argument pour repondre aux questions (ou double-clique sur
+`1_enregistrer_voix.bat`) :
+
+```bash
+python record_sample.py
+```
+
+Ou passe directement les options si tu preferes :
 
 ```bash
 python record_sample.py --output-dir samples --count 5 --duration 20
 ```
 
-Cela cree `samples/my_voice_01.wav` a `samples/my_voice_05.wav`. Pour un
-seul clip : `python record_sample.py --output samples/my_voice.wav --duration 20`.
-
-Tu peux relancer la commande plus tard pour ajouter davantage de clips : la
+Cela cree `samples/my_voice_01.wav` a `samples/my_voice_05.wav`. Tu peux
+relancer le script plus tard pour ajouter davantage de clips : la
 numerotation reprend automatiquement apres le dernier fichier existant
 (les clips precedents ne sont jamais ecrases).
 
@@ -57,7 +79,15 @@ de ta voix a la place.
 
 ## 2. Generer de la parole avec ta voix clonee
 
-Passe tout le dossier d'echantillons (recommande, meilleure qualite) :
+Lance sans argument pour repondre aux questions (ou double-clique sur
+`2_generer_audio.bat`) :
+
+```bash
+python clone_voice.py
+```
+
+Ou passe directement les options, en donnant tout le dossier d'echantillons
+(recommande, meilleure qualite) :
 
 ```bash
 python clone_voice.py \

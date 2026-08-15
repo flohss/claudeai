@@ -5,12 +5,13 @@ Recording several clips (different sentences, tones, paces) gives XTTS-v2 a
 richer voice embedding and noticeably improves cloning quality compared to a
 single sample.
 
-Usage:
-    python record_sample.py --output-dir samples --count 5 --duration 15
-    python record_sample.py --output samples/my_voice.wav --duration 20   # single clip
+Sans argument, le script pose les questions directement (utile en cas de
+double-clic). Avec des arguments, il fonctionne comme avant :
+    python record_sample.py --output-dir samples --count 5 --duration 20
 """
 import argparse
 import re
+import sys
 from pathlib import Path
 
 SUGGESTED_SENTENCES = [
@@ -58,60 +59,84 @@ SUGGESTED_SENTENCES = [
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Record microphone sample(s) to use as voice-cloning references.")
-    parser.add_argument("--output", type=Path, default=None,
-                         help="Output wav file path for a single recording (overrides --output-dir/--prefix).")
-    parser.add_argument("--output-dir", type=Path, default=Path("samples"),
+    parser.add_argument("--output-dir", type=Path, default=None,
                          help="Directory to save numbered clips into (default: samples/).")
-    parser.add_argument("--prefix", type=str, default="my_voice", help="Filename prefix for numbered clips.")
-    parser.add_argument("--count", type=int, default=3, help="Number of clips to record (default: 3).")
-    parser.add_argument("--duration", type=int, default=20, help="Duration per clip in seconds (15-25 recommended).")
+    parser.add_argument("--prefix", type=str, default=None, help="Filename prefix for numbered clips.")
+    parser.add_argument("--count", type=int, default=None, help="Number of clips to record (default: 5).")
+    parser.add_argument("--duration", type=int, default=None, help="Duration per clip in seconds (default: 20).")
     parser.add_argument("--samplerate", type=int, default=24000, help="Sample rate in Hz.")
     return parser.parse_args()
 
 
+def ask(question, default, cast=str):
+    raw = input(f"{question} [{default}] : ").strip()
+    if not raw:
+        return default
+    try:
+        return cast(raw)
+    except ValueError:
+        print(f"Valeur non comprise, on garde la valeur par defaut : {default}")
+        return default
+
+
 def record_clip(sd, duration, samplerate):
-    print("Recording in 3 seconds. Speak naturally and clearly.")
+    print("Enregistrement dans 3 secondes. Parle naturellement et clairement.")
     sd.sleep(3000)
-    print("Recording...")
+    print("Enregistrement en cours...")
     audio = sd.rec(int(duration * samplerate), samplerate=samplerate, channels=1)
     sd.wait()
-    print("Recording finished.")
+    print("Enregistrement termine.")
     return audio
 
 
 def main():
     args = parse_args()
+    interactive = args.output_dir is None and args.prefix is None and args.count is None and args.duration is None
+
+    if interactive:
+        print("=== Enregistrement d'echantillons de ta voix ===")
+        print("Reponds aux questions, ou appuie directement sur Entree pour garder la valeur par defaut.\n")
+        output_dir = Path(ask("Dossier ou enregistrer les fichiers", "samples"))
+        prefix = ask("Prefixe des fichiers", "my_voice")
+        count = ask("Combien de clips veux-tu enregistrer", 5, int)
+        duration = ask("Duree de chaque clip, en secondes", 20, int)
+        print()
+    else:
+        output_dir = args.output_dir or Path("samples")
+        prefix = args.prefix or "my_voice"
+        count = args.count or 5
+        duration = args.duration or 20
 
     import sounddevice as sd
     import soundfile as sf
 
-    if args.output is not None:
-        targets = [args.output]
-    else:
-        args.output_dir.mkdir(parents=True, exist_ok=True)
-        pattern = re.compile(rf"^{re.escape(args.prefix)}_(\d+)\.wav$")
-        existing = [int(m.group(1)) for f in args.output_dir.iterdir() if (m := pattern.match(f.name))]
-        start = max(existing, default=0) + 1
-        targets = [args.output_dir / f"{args.prefix}_{i:02d}.wav" for i in range(start, start + args.count)]
+    output_dir.mkdir(parents=True, exist_ok=True)
+    pattern = re.compile(rf"^{re.escape(prefix)}_(\d+)\.wav$")
+    existing = [int(m.group(1)) for f in output_dir.iterdir() if (m := pattern.match(f.name))]
+    start = max(existing, default=0) + 1
+    targets = [output_dir / f"{prefix}_{i:02d}.wav" for i in range(start, start + count)]
 
-    sentence_offset = (start - 1) if args.output is None else 0
     for i, target in enumerate(targets):
-        target.parent.mkdir(parents=True, exist_ok=True)
-        print(f"\n--- Clip {i + 1}/{len(targets)}: {target} ---")
-        sentence = SUGGESTED_SENTENCES[(sentence_offset + i) % len(SUGGESTED_SENTENCES)]
-        print(f"Suggested sentence (or say your own): \"{sentence}\"")
-        input("Press Enter when ready...")
+        sentence = SUGGESTED_SENTENCES[(start - 1 + i) % len(SUGGESTED_SENTENCES)]
+        print(f"\n--- Clip {i + 1}/{len(targets)} : {target} ---")
+        print(f"Phrase suggeree (ou dis ce que tu veux) : \"{sentence}\"")
+        input("Appuie sur Entree quand tu es pret(e)...")
 
-        audio = record_clip(sd, args.duration, args.samplerate)
+        audio = record_clip(sd, duration, args.samplerate)
         sf.write(str(target), audio, args.samplerate)
-        print(f"Saved to {target}")
+        print(f"Enregistre dans {target}")
 
-    print(f"\nDone. {len(targets)} clip(s) saved. Use them all for better quality, e.g.:")
-    if args.output is not None:
-        print(f"  python clone_voice.py --speaker {args.output} --text \"...\"")
-    else:
-        print(f"  python clone_voice.py --speaker {args.output_dir} --text \"...\"")
+    print(f"\nTermine. {len(targets)} clip(s) enregistre(s) dans {output_dir}/")
+    print("Tu peux relancer ce script plus tard pour ajouter d'autres clips sans ecraser ceux-ci.")
+    print(f"Prochaine etape : lance clone_voice.py en utilisant {output_dir}/ comme voix de reference.")
 
 
 if __name__ == "__main__":
-    main()
+    interactive_run = len(sys.argv) == 1
+    try:
+        main()
+    except Exception as exc:
+        print(f"\nUne erreur est survenue : {exc}")
+    finally:
+        if interactive_run:
+            input("\nAppuie sur Entree pour fermer cette fenetre...")

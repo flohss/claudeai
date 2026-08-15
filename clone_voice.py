@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """CLI tool to synthesize speech in a cloned voice using Coqui XTTS-v2.
 
-Usage:
+Sans argument, le script pose les questions directement (utile en cas de
+double-clic). Avec des arguments, il fonctionne comme avant :
     python clone_voice.py --speaker samples/my_voice.wav --text "Bonjour, ceci est ma voix clonee."
     python clone_voice.py --speaker samples/*.wav --text-file script.txt --language fr --output out.wav
     python clone_voice.py --speaker samples/ --text "..." --output out.wav
@@ -22,15 +23,14 @@ def resolve_speaker_files(paths: list[Path]) -> list[Path]:
     files = []
     for path in paths:
         if not path.exists():
-            sys.exit(f"Error: speaker reference path not found: {path}")
+            sys.exit(f"Erreur : chemin de reference introuvable : {path}")
         if path.is_dir():
             found = sorted(p for p in path.iterdir() if p.suffix.lower() in AUDIO_EXTENSIONS)
             if not found:
-                sys.exit(f"Error: no audio files ({', '.join(AUDIO_EXTENSIONS)}) found in {path}")
+                sys.exit(f"Erreur : aucun fichier audio ({', '.join(AUDIO_EXTENSIONS)}) trouve dans {path}")
             files.extend(found)
         else:
             files.append(path)
-    # Deduplicate while preserving order.
     seen = set()
     unique_files = []
     for f in files:
@@ -42,46 +42,99 @@ def resolve_speaker_files(paths: list[Path]) -> list[Path]:
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Generate speech in a cloned voice from one or more reference audio samples.")
-    parser.add_argument("--speaker", required=True, type=Path, nargs="+",
-                         help="One or more reference audio files, and/or a directory of them (6-30s each, wav/mp3/flac). "
-                              "Providing several clips (different sentences/tones) improves cloning quality.")
-    text_group = parser.add_mutually_exclusive_group(required=True)
+    parser.add_argument("--speaker", type=Path, nargs="+",
+                         help="One or more reference audio files, and/or a directory of them (6-30s each, wav/mp3/flac).")
+    text_group = parser.add_mutually_exclusive_group()
     text_group.add_argument("--text", type=str, help="Text to synthesize.")
     text_group.add_argument("--text-file", type=Path, help="Path to a text file to synthesize.")
-    parser.add_argument("--language", default="fr", choices=SUPPORTED_LANGUAGES,
+    parser.add_argument("--language", default=None, choices=SUPPORTED_LANGUAGES,
                          help="Language of the text (default: fr).")
-    parser.add_argument("--output", type=Path, default=Path("output.wav"), help="Output audio file path.")
+    parser.add_argument("--output", type=Path, default=None, help="Output audio file path (default: output.wav).")
     parser.add_argument("--device", default=None, choices=["cpu", "cuda"],
                          help="Device to run inference on (default: auto-detect).")
     return parser.parse_args()
 
 
+def ask(question, default, cast=str):
+    raw = input(f"{question} [{default}] : ").strip()
+    if not raw:
+        return default
+    try:
+        return cast(raw)
+    except ValueError:
+        print(f"Valeur non comprise, on garde la valeur par defaut : {default}")
+        return default
+
+
+def ask_speaker_files():
+    raw = ask("Dossier ou fichier(s) audio de ta voix (separes par une virgule)", "samples")
+    return resolve_speaker_files([Path(p.strip()) for p in raw.split(",") if p.strip()])
+
+
+def ask_text():
+    print("Tape ou colle le texte a faire lire, puis laisse une ligne vide pour terminer :")
+    lines = []
+    while True:
+        line = input()
+        if line == "":
+            if lines:
+                break
+            continue
+        lines.append(line)
+    return "\n".join(lines)
+
+
 def main():
     args = parse_args()
+    interactive = len(sys.argv) == 1
 
-    speaker_files = resolve_speaker_files(args.speaker)
+    if interactive:
+        print("=== Generation d'audio avec ta voix clonee ===")
+        print("Reponds aux questions, ou appuie directement sur Entree pour garder la valeur par defaut.\n")
+        speaker_files = ask_speaker_files()
+        text = ask_text()
+        language = ask("Langue du texte", "fr")
+        output = Path(ask("Nom du fichier audio a generer", "output.wav"))
+        device = None
+        print()
+    else:
+        if not args.speaker:
+            sys.exit("Erreur : --speaker est requis (fichier(s) ou dossier de reference).")
+        if not args.text and not args.text_file:
+            sys.exit("Erreur : utilise --text \"...\" ou --text-file chemin.txt.")
+        speaker_files = resolve_speaker_files(args.speaker)
+        text = args.text if args.text else args.text_file.read_text(encoding="utf-8")
+        language = args.language or "fr"
+        output = args.output or Path("output.wav")
+        device = args.device
 
-    text = args.text if args.text else args.text_file.read_text(encoding="utf-8")
     if not text.strip():
-        sys.exit("Error: no text to synthesize.")
+        sys.exit("Erreur : aucun texte a lire.")
 
     import torch
     from TTS.api import TTS
 
-    device = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Loading XTTS-v2 model on {device} (first run downloads ~2GB, be patient)...")
+    device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Chargement du modele XTTS-v2 sur {device} (le premier lancement telecharge ~2 Go, patience)...")
     tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2").to(device)
 
-    print(f"Synthesizing {len(text)} characters in '{args.language}' using {len(speaker_files)} "
-          f"voice sample(s): {', '.join(str(f) for f in speaker_files)}")
+    print(f"Generation de {len(text)} caracteres en '{language}' a partir de {len(speaker_files)} "
+          f"echantillon(s) : {', '.join(str(f) for f in speaker_files)}")
     tts.tts_to_file(
         text=text,
         speaker_wav=[str(f) for f in speaker_files],
-        language=args.language,
-        file_path=str(args.output),
+        language=language,
+        file_path=str(output),
     )
-    print(f"Done. Audio written to {args.output}")
+    print(f"Termine. Audio ecrit dans {output}")
 
 
 if __name__ == "__main__":
-    main()
+    interactive_run = len(sys.argv) == 1
+    try:
+        main()
+    except Exception as exc:
+        print(f"\nUne erreur est survenue : {exc}")
+    finally:
+        if interactive_run:
+            input("\nAppuie sur Entree pour fermer cette fenetre...")
