@@ -31,9 +31,10 @@ def resolve_speaker_files(paths: list[Path]) -> list[Path]:
         if not path.exists():
             sys.exit(f"Erreur : chemin de reference introuvable : {path}")
         if path.is_dir():
-            found = sorted(p for p in path.iterdir() if p.suffix.lower() in AUDIO_EXTENSIONS)
+            found = sorted(p for p in path.rglob("*") if p.is_file() and p.suffix.lower() in AUDIO_EXTENSIONS)
             if not found:
-                sys.exit(f"Erreur : aucun fichier audio ({', '.join(AUDIO_EXTENSIONS)}) trouve dans {path}")
+                sys.exit(f"Erreur : aucun fichier audio ({', '.join(AUDIO_EXTENSIONS)}) "
+                          f"trouve dans {path} (ni dans ses sous-dossiers)")
             files.extend(found)
         else:
             files.append(path)

@@ -113,6 +113,12 @@ python clone_voice.py \
   --output output.wav
 ```
 
+Le dossier par defaut est `samples/` : si tu pointes vers ce dossier racine,
+**tous** les fichiers audio de ses sous-dossiers (`samples/joyeux/`,
+`samples/triste/`, etc.) sont inclus automatiquement, en plus de ceux a la
+racine. Pour cibler une seule emotion, pointe directement vers son
+sous-dossier, par exemple `--speaker samples/joyeux/`.
+
 Ou liste des fichiers precis, ou un seul :
 
 ```bash
