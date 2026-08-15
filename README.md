@@ -20,13 +20,17 @@ qualite et la fidelite de la voix generee.
 
 ## Installation
 
-Necessite Python 3.9-3.11.
+Necessite Python 3.10 ou plus recent.
 
 ```bash
 python3 -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate      # Windows : .venv\Scripts\activate
 pip install -r requirements.txt
 ```
+
+Le paquet `coqui-tts` (fork communautaire maintenu de Coqui TTS, module
+Python `TTS`) est utilise a la place du paquet historique `TTS`, qui ne
+supportait pas Python 3.12+.
 
 Le premier lancement telecharge le modele XTTS-v2 (~2 Go).
 
