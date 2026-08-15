@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Voice samples and generated audio are personal data - never commit them.
+*.wav
+*.mp3
+*.flac
+!samples/.gitkeep
+
+# Model cache
+.local/share/tts/
