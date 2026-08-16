@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>
+(function(){
+  var t = localStorage.getItem('theme');
+  if (!t) t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'clair';
+  if (t === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+})();
+</script>
+<title>SPECIAL — c'est vous le professeur</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<a class="retour" href="{{ url_for('accueil') }}">&larr; Retour aux modules</a>
+<header>
+  <h1>Module 10 — SPECIAL : c'est vous le professeur</h1>
+  <p>Ici, aucun exemple n'est préparé à l'avance : c'est vous qui les tapez, un par un. Choisissez d'abord ce que vous voulez lui enseigner.</p>
+</header>
+
+{% if erreurs %}
+<div class="erreurs">
+  {% for erreur in erreurs %}
+  <p>{{ erreur }}</p>
+  {% endfor %}
+</div>
+{% endif %}
+
+<form method="post" action="{{ url_for('special_lancer') }}" class="formulaire formulaire-special" id="formulaire-special">
+  <label>
+    <span>Que voulez-vous lui apprendre ?</span>
+    <select name="type_lecon" id="type-lecon">
+      <option value="categories" {% if valeurs.get('type_lecon', 'categories') == 'categories' %}selected{% endif %}>Reconnaître entre deux catégories (ex : Grand / Petit)</option>
+      <option value="nombre" {% if valeurs.get('type_lecon') == 'nombre' %}selected{% endif %}>Deviner un nombre (ex : un prix)</option>
+    </select>
+  </label>
+
+  <fieldset id="bloc-categories" class="bloc-lecon">
+    <legend>Deux catégories</legend>
+    <label>
+      <span>Nom de la 1ère caractéristique</span>
+      <input type="text" name="nom_car1" value="{{ valeurs.get('nom_car1', 'taille') }}" required>
+    </label>
+    <label>
+      <span>Nom de la 2ème caractéristique</span>
+      <input type="text" name="nom_car2" value="{{ valeurs.get('nom_car2', 'poids') }}" required>
+    </label>
+    <label>
+      <span>Nom de la 1ère catégorie</span>
+      <input type="text" name="categorie_a" value="{{ valeurs.get('categorie_a', 'Petit') }}" required>
+    </label>
+    <label>
+      <span>Nom de la 2ème catégorie</span>
+      <input type="text" name="categorie_b" value="{{ valeurs.get('categorie_b', 'Grand') }}" required>
+    </label>
+
+    <h2>Vos exemples</h2>
+    <p class="astuce">Donnez au moins 4 exemples, avec les deux catégories représentées.</p>
+    <table class="table-exemples" id="table-categories">
+      <thead>
+        <tr><th class="entete-car1">caractéristique 1</th><th class="entete-car2">caractéristique 2</th><th>catégorie</th><th></th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <button type="button" class="bouton-secondaire" id="ajouter-ligne-categories">+ Ajouter un exemple</button>
+  </fieldset>
+
+  <fieldset id="bloc-nombre" class="bloc-lecon" hidden>
+    <legend>Deviner un nombre</legend>
+    <label>
+      <span>Nom de la caractéristique de départ</span>
+      <input type="text" name="nom_car" value="{{ valeurs.get('nom_car', 'taille') }}" required>
+    </label>
+    <label>
+      <span>Nom du nombre à deviner</span>
+      <input type="text" name="nom_sortie" value="{{ valeurs.get('nom_sortie', 'prix') }}" required>
+    </label>
+
+    <h2>Vos exemples</h2>
+    <p class="astuce">Donnez au moins 4 exemples.</p>
+    <table class="table-exemples" id="table-nombre">
+      <thead>
+        <tr><th class="entete-car">caractéristique</th><th class="entete-sortie">à deviner</th><th></th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <button type="button" class="bouton-secondaire" id="ajouter-ligne-nombre">+ Ajouter un exemple</button>
+  </fieldset>
+
+  <label>
+    <span>Nombre d'essais</span>
+    <input type="number" step="1" name="nb_essais" value="{{ valeurs.get('nb_essais', 2000) }}" required>
+  </label>
+  <label>
+    <span>Vitesse d'apprentissage</span>
+    <input type="number" step="0.01" name="vitesse_apprentissage" value="{{ valeurs.get('vitesse_apprentissage', 0.1) }}" required>
+  </label>
+
+  <button type="submit">Lancer l'entraînement</button>
+</form>
+
+<script>
+window.EXEMPLES_PREREMPLIS = {
+  categories: {
+    {% if erreurs %}
+    v1: {{ valeurs.getlist('v1[]') | tojson }},
+    v2: {{ valeurs.getlist('v2[]') | tojson }},
+    categorie: {{ valeurs.getlist('categorie[]') | tojson }}
+    {% else %}
+    v1: [], v2: [], categorie: []
+    {% endif %}
+  },
+  nombre: {
+    {% if erreurs %}
+    v: {{ valeurs.getlist('v[]') | tojson }},
+    cible: {{ valeurs.getlist('cible[]') | tojson }}
+    {% else %}
+    v: [], cible: []
+    {% endif %}
+  }
+};
+</script>
+<script src="{{ url_for('static', filename='special.js') }}"></script>
+<script src="{{ url_for('static', filename='theme.js') }}"></script>
+</body>
+</html>

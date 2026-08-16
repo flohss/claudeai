@@ -60,11 +60,17 @@ valeur de chaque bouton), un nuage de points pour le module 6 (les
 animaux qui changent de couleur de groupe au fil des essais), une
 grille animée pour le module 7 (le rat qui explore le labyrinthe), un
 mot qui évolue lettre par lettre pour le module 9 (algorithme
-génétique), et le fil de pensée de l'IA qui défile — pour les modules
-1 à 9 (le module 10 reste pour l'instant réservé à la ligne de
-commande, car il vous demande de taper vos exemples un par un). Le
-module 8 (plusieurs catégories) affiche même un schéma à PLUSIEURS
-sorties : un nœud par fruit possible, chacun avec ses propres boutons.
+génétique), et le fil de pensée de l'IA qui défile — pour tous les
+modules, y compris le module 10 (SPECIAL) : un formulaire dédié vous
+laisse taper vos propres exemples un par un (au lieu du terminal), et
+une fois l'entraînement terminé, une petite zone "Tester avec un
+nouveau cas" apparaît pour interroger l'IA en direct sur ce que vous
+venez de lui apprendre. Le module 8 (plusieurs catégories) affiche même
+un schéma à PLUSIEURS sorties : un nœud par fruit possible, chacun avec
+ses propres boutons.
+
+Un bouton "🌙 Mode sombre" en haut à droite de chaque page bascule
+toute l'interface en thème sombre (mémorisé d'une visite à l'autre).
 
 Un bouton "Arrêter" permet d'interrompre un entraînement en cours. Et
 un mode comparaison (lien "Comparer deux vitesses d'apprentissage" sur
@@ -173,8 +179,6 @@ l'historique de l'erreur (ou des scores/récompenses) au fil des essais.
 
 ## Suite envisagée (à prioriser ensemble)
 
-- Amener le module 10 (SPECIAL) dans l'interface graphique, avec un
-  formulaire pour taper les exemples au lieu du terminal
 - Un mode "rejouer" pour recharger un checkpoint et reprendre l'entrainement,
   ou revoir le film d'un apprentissage passé
 - Comparer plus de deux vitesses à la fois (3-4 côte à côte)
@@ -190,6 +194,8 @@ sur une grille fixe), le module 8 (plusieurs catégories à la fois,
 extension du module 3), le module 9 (algorithme génétique : une
 population qui évolue au lieu d'une IA qui se corrige), le module 10
 (c'est vous qui enseignez l'IA à partir de zéro), l'interface graphique
-dans le navigateur pour les modules 1 à 9 (avec un schéma à plusieurs
-sorties pour le module 8, et un mot qui évolue pour le module 9), le
-nuage de points animé, le bouton "Arrêter", et le mode comparaison.
+dans le navigateur pour tous les modules y compris le 10 (avec un
+formulaire dédié pour taper ses propres exemples et une zone pour
+tester l'IA une fois entraînée, un schéma à plusieurs sorties pour le
+module 8, et un mot qui évolue pour le module 9), le nuage de points
+animé, le bouton "Arrêter", le mode comparaison, et le mode sombre.

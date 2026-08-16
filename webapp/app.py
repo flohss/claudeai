@@ -15,9 +15,9 @@ memes fonctions entrainer() que la ligne de commande, avec juste des
 rappels (callbacks) qui poussent chaque essai vers le navigateur au
 fur et a mesure, via un flux "Server-Sent Events".
 
-Le module 10 (SPECIAL) n'est pas encore disponible ici, car il vous
-demande de taper vos exemples un par un : pour l'instant, utilisez-le
-en ligne de commande (python -m modules.module10_special).
+Le module 10 (SPECIAL) est different des autres : vous donnez vos
+propres exemples via un formulaire dedie (/special), plutot qu'un
+formulaire de parametres standard.
 
 Usage :
     pip install -r requirements-web.txt
@@ -34,7 +34,7 @@ import time
 import uuid
 from pathlib import Path
 
-from flask import Flask, Response, abort, redirect, render_template, request, url_for
+from flask import Flask, Response, abort, jsonify, redirect, render_template, request, url_for
 
 # Permet de lancer ce fichier de plusieurs facons (python -m webapp.app,
 # ou python webapp/app.py) en trouvant toujours le package "modules" a
@@ -50,8 +50,14 @@ from modules import module6_regroupement as module6  # noqa: E402
 from modules import module7_labyrinthe as module7  # noqa: E402
 from modules import module8_fruits_multiples as module8  # noqa: E402
 from modules import module9_genetique as module9  # noqa: E402
+from modules import module10_special as module10  # noqa: E402
 
 app = Flask(__name__)
+
+# session_id -> parametres du modele entraine par le module 10, pour
+# pouvoir repondre aux tests interactifs (/special/predire) une fois
+# l'entrainement termine.
+MODELES_SPECIAL = {}
 
 
 class EntrainementInterrompu(Exception):
@@ -361,12 +367,18 @@ def suivi(session_id):
     session = SESSIONS.get(session_id)
     if session is None:
         abort(404)
-    config_module = MODULES[session["num"]]
+    # Le module 10 (SPECIAL) n'a pas d'entree fixe dans MODULES (ses noms
+    # de caracteristiques/categories viennent de VOS reponses au
+    # formulaire) : sa configuration d'affichage est stockee directement
+    # dans la session plutot que dans MODULES.
+    config_module = MODULES.get(session["num"], {})
     return render_template("suivi.html", session_id=session_id, num=session["num"],
                             titre=session["titre"], parametres=session["parametres"],
-                            reseau=config_module.get("reseau"), nuage=config_module.get("nuage"),
+                            reseau=session.get("reseau", config_module.get("reseau")),
+                            nuage=config_module.get("nuage"),
                             evolution=config_module.get("evolution"),
-                            grille_exemples=config_module.get("grille_exemples"))
+                            grille_exemples=session.get("grille_exemples", config_module.get("grille_exemples")),
+                            tester_special=session.get("tester_special"))
 
 
 @app.route("/arreter/<session_id>", methods=["POST"])
@@ -435,6 +447,184 @@ def comparer_suivi(num, id_a, id_b):
                             id_a=id_a, id_b=id_b,
                             parametres_a=session_a["parametres"], parametres_b=session_b["parametres"],
                             reseau=reseau, grille_exemples=grille_exemples)
+
+
+@app.route("/special")
+def special_formulaire():
+    return render_template("special_formulaire.html", erreurs=None, valeurs={})
+
+
+@app.route("/special/lancer", methods=["POST"])
+def special_lancer():
+    type_lecon = request.form.get("type_lecon", "categories")
+    try:
+        nb_essais = max(1, int(float(request.form.get("nb_essais", 2000))))
+    except ValueError:
+        nb_essais = 2000
+    try:
+        vitesse_apprentissage = float(request.form.get("vitesse_apprentissage", 0.1))
+    except ValueError:
+        vitesse_apprentissage = 0.1
+    afficher_tous_les = max(1, nb_essais // 10)
+
+    import numpy as np
+
+    if type_lecon == "categories":
+        nom_car1 = (request.form.get("nom_car1") or "caracteristique 1").strip()
+        nom_car2 = (request.form.get("nom_car2") or "caracteristique 2").strip()
+        categorie_a = (request.form.get("categorie_a") or "A").strip()
+        categorie_b = (request.form.get("categorie_b") or "B").strip()
+
+        entrees, sorties, labels = [], [], []
+        for v1, v2, cat in zip(request.form.getlist("v1[]"), request.form.getlist("v2[]"),
+                                request.form.getlist("categorie[]")):
+            try:
+                entrees.append([float(v1), float(v2)])
+            except ValueError:
+                continue
+            sorties.append(0.0 if cat == categorie_a else 1.0)
+            labels.append(f"{v1} / {v2}")
+
+        if len(entrees) < module10.NB_ESSAIS_MINIMUM_EXEMPLES or len(set(sorties)) < 2:
+            erreur = (f"Il faut au moins {module10.NB_ESSAIS_MINIMUM_EXEMPLES} exemples valides, "
+                      f"avec les deux categories representees ({len(entrees)} donne(s) pour l'instant).")
+            return render_template("special_formulaire.html", erreurs=[erreur], valeurs=request.form), 400
+
+        entrees_np = np.array(entrees, dtype=float)
+        sorties_np = np.array(sorties, dtype=float).reshape(-1, 1)
+
+        session_id = uuid.uuid4().hex
+        file_evenements = queue.Queue()
+        arret_event = threading.Event()
+        SESSIONS[session_id] = {
+            "file": file_evenements, "arret": arret_event, "num": 10,
+            "titre": "SPECIAL : c'est vous le professeur",
+            "parametres": {"nb_essais": nb_essais, "vitesse_apprentissage": vitesse_apprentissage,
+                           "type_lecon": "categories", "nom_car1": nom_car1, "nom_car2": nom_car2},
+            "reseau": {"entrees": [nom_car1, nom_car2], "sortie": f"{categorie_a} / {categorie_b}"},
+            "grille_exemples": labels,
+            "tester_special": {"type_lecon": "categories", "nom_car1": nom_car1, "nom_car2": nom_car2},
+        }
+
+        intervalle = max(1, nb_essais // NB_POINTS_CIBLE)
+
+        def sur_essai(info):
+            if arret_event.is_set():
+                raise EntrainementInterrompu()
+            if (info["essai"] <= NB_POINTS_CIBLE or info["essai"] % intervalle == 0
+                    or info["essai"] == nb_essais):
+                file_evenements.put({"type": "essai", **info})
+                time.sleep(0.03)
+
+        def travail():
+            try:
+                boutons, seuil_de_base, echelles, _ = module10.entrainer_categories(
+                    entrees_np, sorties_np, nom_car1, nom_car2, categorie_a, categorie_b,
+                    vitesse_apprentissage, nb_essais, False, afficher_tous_les, False,
+                    sur_essai=sur_essai)
+                MODELES_SPECIAL[session_id] = {
+                    "type_lecon": "categories", "boutons": boutons, "seuil_de_base": seuil_de_base,
+                    "echelles": echelles, "categorie_a": categorie_a, "categorie_b": categorie_b,
+                }
+                file_evenements.put({"type": "fin"})
+            except EntrainementInterrompu:
+                file_evenements.put({"type": "arrete"})
+            except Exception as exc:  # pylint: disable=broad-except
+                file_evenements.put({"type": "erreur", "message": str(exc)})
+
+        threading.Thread(target=travail, daemon=True).start()
+        return redirect(url_for("suivi", session_id=session_id))
+
+    # type_lecon == "nombre"
+    nom_car = (request.form.get("nom_car") or "caracteristique").strip()
+    nom_sortie = (request.form.get("nom_sortie") or "resultat").strip()
+
+    entrees, sorties, labels = [], [], []
+    for v, cible in zip(request.form.getlist("v[]"), request.form.getlist("cible[]")):
+        try:
+            entrees.append([float(v)])
+            sorties.append(float(cible))
+            labels.append(v)
+        except ValueError:
+            continue
+
+    if len(entrees) < module10.NB_ESSAIS_MINIMUM_EXEMPLES:
+        erreur = (f"Il faut au moins {module10.NB_ESSAIS_MINIMUM_EXEMPLES} exemples valides "
+                  f"({len(entrees)} donne(s) pour l'instant).")
+        return render_template("special_formulaire.html", erreurs=[erreur], valeurs=request.form), 400
+
+    entrees_np = np.array(entrees, dtype=float)
+    sorties_np = np.array(sorties, dtype=float).reshape(-1, 1)
+
+    session_id = uuid.uuid4().hex
+    file_evenements = queue.Queue()
+    arret_event = threading.Event()
+    SESSIONS[session_id] = {
+        "file": file_evenements, "arret": arret_event, "num": 10,
+        "titre": "SPECIAL : c'est vous le professeur",
+        "parametres": {"nb_essais": nb_essais, "vitesse_apprentissage": vitesse_apprentissage,
+                       "type_lecon": "nombre", "nom_car": nom_car, "nom_sortie": nom_sortie},
+        "reseau": {"entrees": [nom_car], "sortie": nom_sortie},
+        "grille_exemples": labels,
+        "tester_special": {"type_lecon": "nombre", "nom_car": nom_car, "nom_sortie": nom_sortie},
+    }
+
+    intervalle = max(1, nb_essais // NB_POINTS_CIBLE)
+
+    def sur_essai(info):
+        if arret_event.is_set():
+            raise EntrainementInterrompu()
+        if (info["essai"] <= NB_POINTS_CIBLE or info["essai"] % intervalle == 0
+                or info["essai"] == nb_essais):
+            file_evenements.put({"type": "essai", **info})
+            time.sleep(0.03)
+
+    def travail():
+        try:
+            multiplicateur, valeur_de_base, echelle_car, echelle_sortie, _ = module10.entrainer_nombre(
+                entrees_np, sorties_np, nom_car, nom_sortie,
+                vitesse_apprentissage, nb_essais, False, afficher_tous_les, False,
+                sur_essai=sur_essai)
+            MODELES_SPECIAL[session_id] = {
+                "type_lecon": "nombre", "multiplicateur": multiplicateur, "valeur_de_base": valeur_de_base,
+                "echelle_car": echelle_car, "echelle_sortie": echelle_sortie, "nom_sortie": nom_sortie,
+            }
+            file_evenements.put({"type": "fin"})
+        except EntrainementInterrompu:
+            file_evenements.put({"type": "arrete"})
+        except Exception as exc:  # pylint: disable=broad-except
+            file_evenements.put({"type": "erreur", "message": str(exc)})
+
+    threading.Thread(target=travail, daemon=True).start()
+    return redirect(url_for("suivi", session_id=session_id))
+
+
+@app.route("/special/predire/<session_id>", methods=["POST"])
+def special_predire(session_id):
+    import numpy as np
+
+    modele = MODELES_SPECIAL.get(session_id)
+    if modele is None:
+        return jsonify({"texte": "Modele introuvable : l'entrainement n'est peut-etre pas encore termine."}), 404
+
+    if modele["type_lecon"] == "categories":
+        try:
+            v1 = float(request.form.get("v1", ""))
+            v2 = float(request.form.get("v2", ""))
+        except ValueError:
+            return jsonify({"texte": "Merci d'entrer deux nombres valides."}), 400
+        devine_nom, pourcentage = module10.predire_categorie(
+            v1, v2, modele["boutons"], modele["seuil_de_base"], modele["echelles"],
+            modele["categorie_a"], modele["categorie_b"])
+        return jsonify({"texte": f"L'IA pense '{devine_nom}' à {pourcentage:.0f}% de confiance."})
+
+    try:
+        v = float(request.form.get("v", ""))
+    except ValueError:
+        return jsonify({"texte": "Merci d'entrer un nombre valide."}), 400
+    devine = module10.predire_nombre(v, modele["multiplicateur"], modele["valeur_de_base"],
+                                      modele["echelle_car"], modele["echelle_sortie"])
+    return jsonify({"texte": f"L'IA devine {modele['nom_sortie']} : {devine:.2f}"})
 
 
 if __name__ == "__main__":

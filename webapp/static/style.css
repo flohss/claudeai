@@ -9,6 +9,17 @@
     --mauvais: #dc2626;
 }
 
+[data-theme="dark"] {
+    --fond: #0f172a;
+    --carte: #1e293b;
+    --texte: #e2e8f0;
+    --texte-attenue: #94a3b8;
+    --bordure: #334155;
+    --accent: #60a5fa;
+    --bon: #4ade80;
+    --mauvais: #f87171;
+}
+
 * {
     box-sizing: border-box;
 }
@@ -22,6 +33,26 @@ body {
     max-width: 960px;
     margin: 0 auto;
     line-height: 1.5;
+    transition: background 0.15s, color 0.15s;
+}
+
+.bouton-theme {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    padding: 6px 14px;
+    background: var(--carte);
+    border: 1px solid var(--bordure);
+    border-radius: 999px;
+    font-size: 0.8rem;
+    color: var(--texte);
+    cursor: pointer;
+    z-index: 100;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.bouton-theme:hover {
+    background: var(--fond);
 }
 
 header {
@@ -118,6 +149,8 @@ h1 {
     border: 1px solid var(--bordure);
     border-radius: 8px;
     font-size: 1rem;
+    background: var(--carte);
+    color: var(--texte);
 }
 
 .formulaire button {
@@ -348,7 +381,7 @@ canvas {
 }
 
 .reseau .noeud {
-    fill: #1e293b;
+    fill: var(--texte);
 }
 
 .reseau .noeud-texte {
@@ -507,4 +540,151 @@ canvas {
     background: #dcfce7;
     border-color: var(--bon);
     color: var(--bon);
+}
+
+[data-theme="dark"] .lettre-correcte {
+    background: rgba(74, 222, 128, 0.15);
+}
+
+.erreurs {
+    background: #fef2f2;
+    border: 1px solid var(--mauvais);
+    color: var(--mauvais);
+    border-radius: 10px;
+    padding: 10px 16px;
+    max-width: 480px;
+    margin-bottom: 16px;
+}
+
+[data-theme="dark"] .erreurs {
+    background: rgba(248, 113, 113, 0.12);
+}
+
+.erreurs p {
+    margin: 4px 0;
+}
+
+.formulaire-special {
+    max-width: 520px;
+}
+
+.bloc-lecon {
+    border: 1px solid var(--bordure);
+    border-radius: 10px;
+    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.bloc-lecon legend {
+    padding: 0 6px;
+    color: var(--texte-attenue);
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.bloc-lecon h2 {
+    font-size: 0.95rem;
+    margin: 4px 0 0;
+}
+
+.table-exemples {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.table-exemples th, .table-exemples td {
+    padding: 4px 6px;
+    text-align: left;
+}
+
+.table-exemples input, .table-exemples select {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid var(--bordure);
+    border-radius: 6px;
+    font-size: 0.9rem;
+    background: var(--carte);
+    color: var(--texte);
+}
+
+.bouton-secondaire {
+    align-self: flex-start;
+    padding: 6px 12px;
+    background: var(--fond);
+    color: var(--texte);
+    border: 1px solid var(--bordure);
+    border-radius: 8px;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+.bouton-secondaire:hover {
+    background: var(--bordure);
+}
+
+.bouton-supprimer {
+    background: none;
+    border: none;
+    color: var(--mauvais);
+    font-size: 1.1rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 4px 8px;
+}
+
+.section-tester {
+    margin-top: 24px;
+    background: var(--carte);
+    border: 1px solid var(--bordure);
+    border-radius: 12px;
+    padding: 16px 20px;
+}
+
+.section-tester h2 {
+    font-size: 1.05rem;
+    margin-top: 0;
+}
+
+.formulaire-tester {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: flex-end;
+}
+
+.formulaire-tester label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 0.9rem;
+}
+
+.formulaire-tester input {
+    padding: 8px 10px;
+    border: 1px solid var(--bordure);
+    border-radius: 8px;
+    font-size: 1rem;
+    background: var(--carte);
+    color: var(--texte);
+}
+
+.formulaire-tester button {
+    padding: 10px 16px;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    cursor: pointer;
+    height: fit-content;
+}
+
+.tester-resultat {
+    margin-top: 12px;
+    font-weight: 600;
+    font-size: 1.05rem;
 }

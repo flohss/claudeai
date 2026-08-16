@@ -3,6 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<script>
+(function(){
+  var t = localStorage.getItem('theme');
+  if (!t) t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'clair';
+  if (t === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+})();
+</script>
 <title>Module {{ num }} — {{ m.titre }}</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
@@ -38,5 +45,6 @@
 {% if m.champs | selectattr("nom", "equalto", "vitesse_apprentissage") | list %}
 <p><a class="lien-comparer" href="{{ url_for('comparer_formulaire', num=num) }}">Comparer deux vitesses d'apprentissage côte à côte &rarr;</a></p>
 {% endif %}
+<script src="{{ url_for('static', filename='theme.js') }}"></script>
 </body>
 </html>

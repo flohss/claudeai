@@ -276,8 +276,25 @@ function initialiserSuivi(conteneur, reseauConfig) {
     const statProgres = conteneur.querySelector(".stat-progres");
     const statMeilleur = conteneur.querySelector(".stat-meilleur");
     const statVitesse = conteneur.querySelector(".stat-vitesse");
+    const sectionTester = conteneur.querySelector(".section-tester");
+    const formulaireTester = conteneur.querySelector(".formulaire-tester");
+    const zoneTesterResultat = conteneur.querySelector(".tester-resultat");
 
     if (sectionDemo) sectionDemo.hidden = true;
+
+    if (formulaireTester) {
+        formulaireTester.addEventListener("submit", (evenement) => {
+            evenement.preventDefault();
+            zoneTesterResultat.textContent = "L'IA réfléchit...";
+            fetch(`/special/predire/${sessionId}`, {
+                method: "POST",
+                body: new FormData(formulaireTester),
+            })
+                .then((reponse) => reponse.json())
+                .then((donnees) => { zoneTesterResultat.textContent = donnees.texte; })
+                .catch(() => { zoneTesterResultat.textContent = "Erreur de connexion avec le serveur."; });
+        });
+    }
 
     let points = [];
     const MAX_POINTS = 300;
@@ -365,6 +382,7 @@ function initialiserSuivi(conteneur, reseauConfig) {
         zoneStatut.textContent = texte;
         zoneStatut.className = "statut " + classe;
         if (boutonArreter) boutonArreter.hidden = true;
+        if (sectionTester && classe === "statut-termine") sectionTester.hidden = false;
     }
 
     const source = new EventSource(`/flux/${sessionId}`);

@@ -159,8 +159,22 @@ def calculer_echelles(valeurs):
     return echelles
 
 
-def raconter_la_pensee_categories(essai, entrees, sorties, confiances, nom_car1, nom_car2, categorie_a, categorie_b):
-    print(f"\n--- Essai {essai} : ce que l'IA pense de chaque exemple ---")
+def predire_categorie(v1, v2, boutons, seuil_de_base, echelles, categorie_a, categorie_b):
+    """Fonction reutilisee a la fois par le test interactif en ligne de
+    commande et par l'interface graphique, pour ne pas dupliquer le calcul."""
+    entree = np.array([[v1, v2]]) / echelles
+    confiance = float(tasser_entre_0_et_1(entree @ boutons + seuil_de_base)[0, 0])
+    devine_nom = categorie_b if confiance >= 0.5 else categorie_a
+    pourcentage = (confiance if confiance >= 0.5 else 1 - confiance) * 100
+    return devine_nom, pourcentage
+
+
+def predire_nombre(v, multiplicateur, valeur_de_base, echelle_car, echelle_sortie):
+    return (v / echelle_car * multiplicateur + valeur_de_base) * echelle_sortie
+
+
+def construire_pensee_categories(entrees, sorties, confiances, nom_car1, nom_car2, categorie_a, categorie_b):
+    lignes = []
     for (v1, v2), vraie_categorie, confiance in zip(entrees, sorties, confiances):
         vrai_nom = categorie_b if vraie_categorie[0] == 1.0 else categorie_a
         devine_b = confiance[0] >= 0.5
@@ -169,12 +183,19 @@ def raconter_la_pensee_categories(essai, entrees, sorties, confiances, nom_car1,
         bonne_reponse = devine_nom == vrai_nom
         commentaire = ("Bonne reponse, elle va juste renforcer un peu sa confiance." if bonne_reponse
                         else "Mauvaise reponse, elle va corriger ses boutons plus fort.")
-        print(f"  {nom_car1} {v1:g}, {nom_car2} {v2:g} (vous avez dit: {vrai_nom}) "
-              f"-> l'IA pense '{devine_nom}' a {pourcentage}%. -> {commentaire}")
+        lignes.append(f"{nom_car1} {v1:g}, {nom_car2} {v2:g} (vous avez dit: {vrai_nom}) "
+                       f"-> l'IA pense '{devine_nom}' a {pourcentage}%. -> {commentaire}")
+    return lignes
+
+
+def calculer_corrects_categories(sorties, confiances):
+    return [bool((confiance[0] >= 0.5) == (vraie_categorie[0] == 1.0))
+            for vraie_categorie, confiance in zip(sorties, confiances)]
 
 
 def entrainer_categories(entrees, sorties, nom_car1, nom_car2, categorie_a, categorie_b,
-                          vitesse_apprentissage, nb_essais, details, afficher_tous_les, pas_a_pas_actif):
+                          vitesse_apprentissage, nb_essais, details, afficher_tous_les, pas_a_pas_actif,
+                          sur_essai=None):
     echelles = calculer_echelles(entrees)
     entrees_normalisees = entrees / echelles
 
@@ -199,9 +220,23 @@ def entrainer_categories(entrees, sorties, nom_car1, nom_car2, categorie_a, cate
         seuil_de_base += vitesse_apprentissage * float(np.mean(correction))
 
         if details:
-            raconter_la_pensee_categories(essai, entrees, sorties, confiances, nom_car1, nom_car2, categorie_a, categorie_b)
+            print(f"\n--- Essai {essai} : ce que l'IA pense de chaque exemple ---")
+            for ligne in construire_pensee_categories(entrees, sorties, confiances, nom_car1, nom_car2, categorie_a, categorie_b):
+                print(f"  {ligne}")
         elif essai == 1 or essai % afficher_tous_les == 0:
             print(f"Essai {essai:>6} | erreur moyenne : {erreur_moyenne:.4f}")
+
+        if sur_essai is not None:
+            sur_essai({
+                "essai": essai,
+                "nb_essais": nb_essais,
+                "erreur": erreur_moyenne,
+                "pensees": construire_pensee_categories(entrees, sorties, confiances, nom_car1, nom_car2, categorie_a, categorie_b),
+                "corrects": calculer_corrects_categories(sorties, confiances),
+                "poids1": boutons.tolist(),
+                "poids2": None,
+                "biais_sortie": seuil_de_base,
+            })
 
         pas_a_pas(pas_a_pas_actif)
 
@@ -232,15 +267,12 @@ def essayer_interactif_categories(boutons, seuil_de_base, echelles, nom_car1, no
         if v1 is None:
             break
         v2 = demander_nombre(f"{nom_car2} : ")
-        entree = np.array([[v1, v2]]) / echelles
-        confiance = float(tasser_entre_0_et_1(entree @ boutons + seuil_de_base)[0, 0])
-        devine_nom = categorie_b if confiance >= 0.5 else categorie_a
-        pourcentage = (confiance if confiance >= 0.5 else 1 - confiance) * 100
+        devine_nom, pourcentage = predire_categorie(v1, v2, boutons, seuil_de_base, echelles, categorie_a, categorie_b)
         print(f"   -> l'IA pense '{devine_nom}' a {pourcentage:.0f}% de confiance.")
 
 
-def raconter_la_pensee_nombre(essai, entrees, sorties, devines, nom_car, nom_sortie):
-    print(f"\n--- Essai {essai} : ce que l'IA pense de chaque exemple ---")
+def construire_pensee_nombre(entrees, sorties, devines, nom_car, nom_sortie):
+    lignes = []
     for (v,), sortie_reelle, devine in zip(entrees, sorties.flatten(), devines.flatten()):
         ecart = abs(devine - sortie_reelle)
         seuil = max(0.5, abs(sortie_reelle) * 0.05)
@@ -250,12 +282,14 @@ def raconter_la_pensee_nombre(essai, entrees, sorties, devines, nom_car, nom_sor
             commentaire = "Elle a devine trop haut, elle va baisser un peu ses boutons."
         else:
             commentaire = "Elle a devine trop bas, elle va augmenter un peu ses boutons."
-        print(f"  {nom_car} {v:g} (vous avez dit {nom_sortie}: {sortie_reelle:g}) "
-              f"-> l'IA devine {devine:.2f}. -> {commentaire}")
+        lignes.append(f"{nom_car} {v:g} (vous avez dit {nom_sortie}: {sortie_reelle:g}) "
+                       f"-> l'IA devine {devine:.2f}. -> {commentaire}")
+    return lignes
 
 
 def entrainer_nombre(entrees, sorties, nom_car, nom_sortie,
-                      vitesse_apprentissage, nb_essais, details, afficher_tous_les, pas_a_pas_actif):
+                      vitesse_apprentissage, nb_essais, details, afficher_tous_les, pas_a_pas_actif,
+                      sur_essai=None):
     echelle_car = calculer_echelles(entrees)[0]
     echelle_sortie = float(max(np.abs(sorties).max(), 1) * 1.2)
 
@@ -283,11 +317,25 @@ def entrainer_nombre(entrees, sorties, nom_car, nom_sortie,
         multiplicateur += vitesse_apprentissage * correction_multiplicateur
         valeur_de_base += vitesse_apprentissage * correction_valeur_de_base
 
+        devines = (devines_normalisees * echelle_sortie).reshape(-1, 1)
+
         if details:
-            devines = (devines_normalisees * echelle_sortie).reshape(-1, 1)
-            raconter_la_pensee_nombre(essai, entrees, sorties, devines, nom_car, nom_sortie)
+            print(f"\n--- Essai {essai} : ce que l'IA pense de chaque exemple ---")
+            for ligne in construire_pensee_nombre(entrees, sorties, devines, nom_car, nom_sortie):
+                print(f"  {ligne}")
         elif essai == 1 or essai % afficher_tous_les == 0:
             print(f"Essai {essai:>6} | ecart moyen : {erreur_moyenne:.2f}")
+
+        if sur_essai is not None:
+            sur_essai({
+                "essai": essai,
+                "nb_essais": nb_essais,
+                "erreur": erreur_moyenne,
+                "pensees": construire_pensee_nombre(entrees, sorties, devines, nom_car, nom_sortie),
+                "poids1": [[multiplicateur]],
+                "poids2": None,
+                "biais_sortie": valeur_de_base,
+            })
 
         pas_a_pas(pas_a_pas_actif)
 
@@ -307,7 +355,7 @@ def essayer_interactif_nombre(multiplicateur, valeur_de_base, echelle_car, echel
         v = demander_valeur_ou_fin(f"\n{nom_car} (ou 'fini') : ")
         if v is None:
             break
-        devine = (v / echelle_car * multiplicateur + valeur_de_base) * echelle_sortie
+        devine = predire_nombre(v, multiplicateur, valeur_de_base, echelle_car, echelle_sortie)
         print(f"   -> l'IA devine {nom_sortie} : {devine:.2f}")
 
 

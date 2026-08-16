@@ -3,6 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<script>
+(function(){
+  var t = localStorage.getItem('theme');
+  if (!t) t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'clair';
+  if (t === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+})();
+</script>
 <title>Suivi — {{ titre }}</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
@@ -96,11 +103,28 @@
       <p class="demo-info"></p>
     </div>
   </section>
+
+  {% if tester_special %}
+  <section class="section-tester" hidden>
+    <h2>Tester avec un nouveau cas</h2>
+    <form class="formulaire-tester">
+      {% if tester_special.type_lecon == "categories" %}
+      <label><span>{{ tester_special.nom_car1 }}</span><input type="number" step="any" name="v1" required></label>
+      <label><span>{{ tester_special.nom_car2 }}</span><input type="number" step="any" name="v2" required></label>
+      {% else %}
+      <label><span>{{ tester_special.nom_car }}</span><input type="number" step="any" name="v" required></label>
+      {% endif %}
+      <button type="submit">Demander à l'IA</button>
+    </form>
+    <p class="tester-resultat"></p>
+  </section>
+  {% endif %}
 </div>
 
 {% if reseau %}
 <script>window.RESEAU_CONFIG = {{ reseau|tojson }};</script>
 {% endif %}
 <script src="{{ url_for('static', filename='suivi.js') }}"></script>
+<script src="{{ url_for('static', filename='theme.js') }}"></script>
 </body>
 </html>

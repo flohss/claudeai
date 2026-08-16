@@ -3,6 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<script>
+(function(){
+  var t = localStorage.getItem('theme');
+  if (!t) t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'clair';
+  if (t === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+})();
+</script>
 <title>Comparaison — {{ titre }}</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
@@ -109,5 +116,6 @@
 <script>window.RESEAU_CONFIG = {{ reseau|tojson }};</script>
 {% endif %}
 <script src="{{ url_for('static', filename='suivi.js') }}"></script>
+<script src="{{ url_for('static', filename='theme.js') }}"></script>
 </body>
 </html>
