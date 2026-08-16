@@ -139,6 +139,9 @@ def entrainer(nb_essais=5000, vitesse_apprentissage=0.01, details=False,
                 "nb_essais": nb_essais,
                 "erreur": erreur_moyenne_euros,
                 "pensees": construire_pensee(TAILLES_ENTRAINEMENT, PRIX_ENTRAINEMENT, prix_devines),
+                "poids1": [[multiplicateur]],
+                "poids2": None,
+                "biais_sortie": valeur_de_base,
             })
 
         pas_a_pas(pas_a_pas_actif)

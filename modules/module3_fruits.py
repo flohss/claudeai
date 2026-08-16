@@ -21,11 +21,11 @@ import argparse
 import numpy as np
 
 try:
-    from .utils import barre_erreur, pas_a_pas, sauvegarder_checkpoint
+    from .utils import arrondi_sur, barre_erreur, pas_a_pas, sauvegarder_checkpoint
 except ImportError:
     # Permet aussi de lancer ce fichier tout seul (ex: bouton "Run" de
     # Pydroid3 sur Android), qui l'execute hors du package "modules".
-    from utils import barre_erreur, pas_a_pas, sauvegarder_checkpoint
+    from utils import arrondi_sur, barre_erreur, pas_a_pas, sauvegarder_checkpoint
 
 # poids (g), rougeur (0-10)
 FRUITS_ENTRAINEMENT = np.array([
@@ -76,7 +76,7 @@ def construire_pensee(fruits, categories, confiances):
         vrai_nom = NOMS_CATEGORIES[int(vraie_categorie[0])]
         devine_index = 1 if confiance[0] >= 0.5 else 0
         devine_nom = NOMS_CATEGORIES[devine_index]
-        pourcentage = round(confiance[0] * 100) if devine_index == 1 else round((1 - confiance[0]) * 100)
+        pourcentage = arrondi_sur(confiance[0] * 100) if devine_index == 1 else arrondi_sur((1 - confiance[0]) * 100)
         bonne_reponse = devine_nom == vrai_nom
         if bonne_reponse:
             commentaire = "Bonne reponse, elle va juste renforcer un peu sa confiance."
@@ -143,6 +143,9 @@ def entrainer(nb_essais=3000, vitesse_apprentissage=0.1, details=False,
                 "nb_essais": nb_essais,
                 "erreur": erreur_moyenne,
                 "pensees": construire_pensee(FRUITS_ENTRAINEMENT, VRAIES_CATEGORIES, confiances),
+                "poids1": boutons.tolist(),
+                "poids2": None,
+                "biais_sortie": seuil_de_base,
             })
 
         pas_a_pas(pas_a_pas_actif)

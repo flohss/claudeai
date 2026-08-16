@@ -33,15 +33,16 @@ Usage :
 """
 
 import argparse
+import math
 
 import numpy as np
 
 try:
-    from .utils import barre_erreur, pas_a_pas, sauvegarder_checkpoint
+    from .utils import arrondi_sur, barre_erreur, pas_a_pas, sauvegarder_checkpoint
 except ImportError:
     # Permet aussi de lancer ce fichier tout seul (ex: bouton "Run" de
     # Pydroid3 sur Android), qui l'execute hors du package "modules".
-    from utils import barre_erreur, pas_a_pas, sauvegarder_checkpoint
+    from utils import arrondi_sur, barre_erreur, pas_a_pas, sauvegarder_checkpoint
 
 FENETRE = 3          # combien de nombres precedents l'IA regarde
 NB_NEURONES_CACHES = 6
@@ -66,6 +67,8 @@ def lettre_vers_nombre(lettre):
 
 
 def nombre_vers_lettre(nombre):
+    if not math.isfinite(nombre):
+        return "?"
     n = int(round(nombre))
     n = max(1, min(26, n))
     return chr(n - 1 + ord("A"))
@@ -152,7 +155,7 @@ def construire_pensee(entrees, cibles, reponses):
         else:
             commentaire = "Loin du compte, elle va corriger ses boutons plus fort."
         lignes.append(f"Suite: {texte_fenetre} (vrai suivant: {vrai:.0f}) "
-                       f"-> l'IA devine {devine:.1f} (arrondi: {round(devine)}). -> {commentaire}")
+                       f"-> l'IA devine {devine:.1f} (arrondi: {arrondi_sur(devine)}). -> {commentaire}")
     return lignes
 
 
@@ -172,7 +175,7 @@ def tester(famille, boutons_couche_1, boutons_couche_2, valeur_de_base, echelle)
     nb_corrects = 0
     for (fenetre, vrai), reponse in zip(exemples, reponses):
         texte_fenetre = ", ".join(str(n) for n in fenetre)
-        devine = round(float(reponse[0]))
+        devine = arrondi_sur(float(reponse[0]))
         correct = devine == vrai
         nb_corrects += int(correct)
         symbole = "OK" if correct else "X "
@@ -242,6 +245,9 @@ def entrainer(nb_essais=9000, vitesse_apprentissage=0.05, details=False,
                 "nb_essais": nb_essais,
                 "erreur": erreur_moyenne,
                 "pensees": construire_pensee(entrees, cibles, reponses),
+                "poids1": boutons_couche_1.tolist(),
+                "poids2": boutons_couche_2.tolist(),
+                "biais_sortie": valeur_de_base,
             })
 
         pas_a_pas(pas_a_pas_actif)

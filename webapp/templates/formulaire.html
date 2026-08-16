@@ -31,6 +31,8 @@
   <button type="submit">Lancer l'entraînement</button>
 </form>
 
-<p class="astuce">La page suivante va suivre l'entraînement en direct : la courbe d'erreur, et ce que l'IA pense de chaque exemple, mises à jour au fil des essais.</p>
+<p class="astuce">La page suivante va suivre l'entraînement en direct : la courbe d'erreur, ce que valent ses boutons, et ce que l'IA pense de chaque exemple, mises à jour au fil des essais. Vous pourrez l'arrêter à tout moment.</p>
+
+<p><a class="lien-comparer" href="{{ url_for('comparer_formulaire', num=num) }}">Comparer deux vitesses d'apprentissage côte à côte &rarr;</a></p>
 </body>
 </html>

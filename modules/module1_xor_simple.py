@@ -24,11 +24,11 @@ import argparse
 import numpy as np
 
 try:
-    from .utils import barre_erreur, pas_a_pas, sauvegarder_checkpoint
+    from .utils import arrondi_sur, barre_erreur, pas_a_pas, sauvegarder_checkpoint
 except ImportError:
     # Permet aussi de lancer ce fichier tout seul (ex: bouton "Run" de
     # Pydroid3 sur Android), qui l'execute hors du package "modules".
-    from utils import barre_erreur, pas_a_pas, sauvegarder_checkpoint
+    from utils import arrondi_sur, barre_erreur, pas_a_pas, sauvegarder_checkpoint
 
 EXEMPLES_ENTREE = np.array([
     [0, 0],
@@ -85,7 +85,7 @@ def construire_pensee(reponse):
     for i in range(len(EXEMPLES_ENTREE)):
         vrai = int(EXEMPLES_VRAIE_REPONSE[i, 0])
         pense = float(reponse[i, 0])
-        pourcentage = round(pense * 100)
+        pourcentage = arrondi_sur(pense * 100)
         verdict = "vrai (1)" if pense >= 0.5 else "faux (0)"
         bon = (pense >= 0.5) == (vrai == 1)
         commentaire = "Bonne reponse" if bon else "Mauvaise reponse, elle va corriger ses boutons"
@@ -158,6 +158,9 @@ def entrainer(nb_essais=10000, vitesse_apprentissage=0.5, details=False,
                 "nb_essais": nb_essais,
                 "erreur": erreur_moyenne,
                 "pensees": construire_pensee(reponse),
+                "poids1": boutons_couche_1.tolist(),
+                "poids2": boutons_couche_2.tolist(),
+                "biais_sortie": None,
             })
 
         pas_a_pas(pas_a_pas_actif)

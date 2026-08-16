@@ -6,7 +6,7 @@
 <title>Suivi — {{ titre }}</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body data-session-id="{{ session_id }}" data-num="{{ num }}">
+<body>
 <a class="retour" href="{{ url_for('accueil') }}">&larr; Retour aux modules</a>
 <header>
   <h1>Module {{ num }} — {{ titre }}</h1>
@@ -15,31 +15,48 @@
     <span class="tag">{{ nom }} : {{ valeur }}</span>
     {% endfor %}
   </p>
-  <p id="statut" class="statut statut-en-cours">Entraînement en cours...</p>
 </header>
 
-<section id="section-entrainement">
-  <div class="colonne">
-    <h2 id="titre-graphique">Courbe d'erreur</h2>
-    <canvas id="graphique" width="640" height="280"></canvas>
-    <p id="progression"></p>
+<div class="suivi" data-session-id="{{ session_id }}" data-num="{{ num }}">
+  <div class="entete-suivi">
+    <p class="statut statut-en-cours">Entraînement en cours...</p>
+    <button type="button" class="bouton-arreter">Arrêter</button>
   </div>
-  <div class="colonne">
-    <h2>Ce qu'elle pense maintenant</h2>
-    <div id="pensees" class="pensees"></div>
-    <h3>Historique</h3>
-    <div id="historique" class="historique"></div>
-  </div>
-</section>
 
-<section id="section-demo" hidden>
-  <h2>Démonstration : une partie jouée par l'IA</h2>
-  <div class="demo">
-    <div id="grille" class="grille"></div>
-    <p id="demo-info"></p>
-  </div>
-</section>
+  <section class="section-entrainement">
+    {% if reseau %}
+    <div class="colonne">
+      <h2>Ce que valent ses boutons</h2>
+      <svg class="reseau"></svg>
+    </div>
+    {% endif %}
+    <div class="colonne">
+      <h2 class="titre-graphique">{{ "Score par partie" if num == 5 else "Courbe d'erreur" }}</h2>
+      <canvas class="graphique" width="480" height="220"></canvas>
+      <p class="progression"></p>
+    </div>
+    <div class="colonne">
+      {% if num != 5 %}
+      <h2>Ce qu'elle pense maintenant</h2>
+      <div class="pensees"></div>
+      {% endif %}
+      <h3>Historique</h3>
+      <div class="historique"></div>
+    </div>
+  </section>
 
+  <section class="section-demo" hidden>
+    <h2>Démonstration : une partie jouée par l'IA</h2>
+    <div class="demo">
+      <div class="grille"></div>
+      <p class="demo-info"></p>
+    </div>
+  </section>
+</div>
+
+{% if reseau %}
+<script>window.RESEAU_CONFIG = {{ reseau|tojson }};</script>
+{% endif %}
 <script src="{{ url_for('static', filename='suivi.js') }}"></script>
 </body>
 </html>

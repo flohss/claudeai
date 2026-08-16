@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Comparer — {{ m.titre }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<a class="retour" href="{{ url_for('formulaire', num=num) }}">&larr; Retour au module {{ num }}</a>
+<header>
+  <h1>Comparer deux vitesses d'apprentissage</h1>
+  <p>Module {{ num }} — {{ m.titre }}. Tout est identique entre les deux essais, sauf la vitesse d'apprentissage : c'est ce qui permet de voir concrètement pourquoi une vitesse trop grande fait diverger l'IA, et une trop petite lui fait apprendre trop lentement.</p>
+</header>
+
+<form method="post" action="{{ url_for('comparer_lancer', num=num) }}" class="formulaire">
+  <label>
+    <span>{{ champ_vitesse.label }} — essai A</span>
+    <input type="number" step="{{ champ_vitesse.pas or '0.01' }}" name="vitesse_a" value="{{ champ_vitesse.defaut }}" required>
+  </label>
+  <label>
+    <span>{{ champ_vitesse.label }} — essai B</span>
+    <input type="number" step="{{ champ_vitesse.pas or '0.01' }}" name="vitesse_b" value="{{ (champ_vitesse.defaut * 5) | round(4) }}" required>
+  </label>
+
+  {% for champ in autres_champs %}
+  <label>
+    <span>{{ champ.label }}</span>
+    {% if champ.type == "select" %}
+    <select name="{{ champ.nom }}">
+      {% for option in champ.options %}
+      <option value="{{ option }}" {% if option == champ.defaut %}selected{% endif %}>{{ option }}</option>
+      {% endfor %}
+    </select>
+    {% else %}
+    <input type="number" step="{{ champ.pas or '1' }}" name="{{ champ.nom }}" value="{{ champ.defaut }}" required>
+    {% endif %}
+  </label>
+  {% endfor %}
+
+  <button type="submit">Lancer les deux entraînements</button>
+</form>
+</body>
+</html>

@@ -173,16 +173,42 @@ h1 {
     color: var(--mauvais);
 }
 
-#section-entrainement {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 24px;
+.statut-arrete {
+    color: var(--texte-attenue);
 }
 
-@media (max-width: 720px) {
-    #section-entrainement {
-        grid-template-columns: 1fr;
-    }
+.entete-suivi {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.bouton-arreter {
+    padding: 6px 14px;
+    background: white;
+    color: var(--mauvais);
+    border: 1px solid var(--mauvais);
+    border-radius: 8px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.bouton-arreter:hover {
+    background: #fef2f2;
+}
+
+.bouton-arreter:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.section-entrainement {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 24px;
+    margin-top: 12px;
 }
 
 .colonne h2 {
@@ -198,9 +224,61 @@ canvas {
     border-radius: 12px;
 }
 
-#progression {
+.progression {
     color: var(--texte-attenue);
     font-size: 0.85rem;
+}
+
+.reseau {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 320 / 200;
+    background: var(--carte);
+    border: 1px solid var(--bordure);
+    border-radius: 12px;
+}
+
+.reseau .noeud {
+    fill: #1e293b;
+}
+
+.reseau .noeud-texte {
+    font-size: 9px;
+    fill: var(--texte-attenue);
+    text-anchor: middle;
+}
+
+.lien-comparer {
+    color: var(--accent);
+    font-size: 0.9rem;
+}
+
+.comparaison {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+}
+
+@media (max-width: 900px) {
+    .comparaison {
+        grid-template-columns: 1fr;
+    }
+}
+
+.comparaison-colonne .suivi {
+    border: 1px solid var(--bordure);
+    border-radius: 12px;
+    padding: 16px;
+    background: rgba(255, 255, 255, 0.4);
+}
+
+.comparaison-colonne .section-entrainement {
+    grid-template-columns: 1fr;
+}
+
+.etiquette-comparaison {
+    font-size: 1rem;
+    margin-bottom: 8px;
 }
 
 .pensees {
@@ -272,6 +350,6 @@ canvas {
     border-radius: 50%;
 }
 
-#demo-info {
+.demo-info {
     font-weight: 600;
 }

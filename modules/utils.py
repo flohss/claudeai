@@ -9,9 +9,20 @@ partout.
 """
 
 import json
+import math
 import os
 
 DOSSIER_CHECKPOINTS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "checkpoints")
+
+
+def arrondi_sur(valeur):
+    """Arrondit un nombre, ou renvoie "instable" s'il est devenu NaN ou
+    infini — en general le signe d'une vitesse d'apprentissage beaucoup
+    trop grande, qui fait "exploser" les boutons au lieu de les affiner.
+    """
+    if not math.isfinite(valeur):
+        return "instable"
+    return round(valeur)
 
 
 def euros(montant):
@@ -19,6 +30,8 @@ def euros(montant):
 
     Exemple : euros(215000) -> "215 000 €"
     """
+    if not math.isfinite(montant):
+        return "montant instable (vitesse d'apprentissage trop grande)"
     entier = int(round(montant))
     signe = "-" if entier < 0 else ""
     entier = abs(entier)

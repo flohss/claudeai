@@ -4,13 +4,16 @@ INTERFACE WEB — voir l'IA reflechir dans le navigateur
 
 Petite application web locale (Flask) qui permet de choisir les
 parametres d'un module, de lancer son entrainement, et de le suivre EN
-DIRECT dans le navigateur : la courbe d'erreur qui descend, et le fil
-de pensee de l'IA (les memes phrases que le mode --details du terminal).
+DIRECT dans le navigateur : la courbe d'erreur qui descend, le schema
+des boutons qui bougent, et le fil de pensee de l'IA (les memes
+phrases que le mode --details du terminal). On peut aussi arreter un
+entrainement en cours, ou comparer deux vitesses d'apprentissage cote
+a cote sur le meme module.
 
 Elle ne refait AUCUN calcul elle-meme : elle appelle exactement les
-memes fonctions entrainer() que la ligne de commande, avec juste un
-rappel (callback) qui pousse chaque essai vers le navigateur au fur et
-a mesure, via un flux "Server-Sent Events".
+memes fonctions entrainer() que la ligne de commande, avec juste des
+rappels (callbacks) qui poussent chaque essai vers le navigateur au
+fur et a mesure, via un flux "Server-Sent Events".
 
 Le module 6 (SPECIAL) n'est pas encore disponible ici, car il vous
 demande de taper vos exemples un par un : pour l'instant, utilisez-le
@@ -23,6 +26,7 @@ Puis ouvrez http://localhost:5000 dans votre navigateur.
 """
 
 import json
+import math
 import queue
 import sys
 import threading
@@ -45,7 +49,14 @@ from modules import module5_serpent as module5  # noqa: E402
 
 app = Flask(__name__)
 
-# session_id -> {"file": queue.Queue, "num": int, "titre": str, "parametres": dict}
+
+class EntrainementInterrompu(Exception):
+    """Levee depuis un rappel (sur_essai/sur_partie/sur_mouvement) quand
+    l'utilisateur a clique sur "Arreter" dans le navigateur."""
+
+
+# session_id -> {"file": queue.Queue, "arret": threading.Event, "num": int,
+#                "titre": str, "parametres": dict}
 SESSIONS = {}
 
 MODULES = {
@@ -56,6 +67,7 @@ MODULES = {
             {"nom": "nb_essais", "label": "Nombre d'essais", "defaut": 10000, "pas": "1"},
             {"nom": "vitesse_apprentissage", "label": "Vitesse d'apprentissage", "defaut": 0.5, "pas": "0.01"},
         ],
+        "reseau": {"entrees": ["entree A", "entree B"], "sortie": "OU EXCLUSIF"},
     },
     2: {
         "titre": "Deviner un prix",
@@ -64,6 +76,7 @@ MODULES = {
             {"nom": "nb_essais", "label": "Nombre d'essais", "defaut": 5000, "pas": "1"},
             {"nom": "vitesse_apprentissage", "label": "Vitesse d'apprentissage", "defaut": 0.01, "pas": "0.001"},
         ],
+        "reseau": {"entrees": ["taille"], "sortie": "prix"},
     },
     3: {
         "titre": "Reconnaitre un fruit",
@@ -72,6 +85,7 @@ MODULES = {
             {"nom": "nb_essais", "label": "Nombre d'essais", "defaut": 3000, "pas": "1"},
             {"nom": "vitesse_apprentissage", "label": "Vitesse d'apprentissage", "defaut": 0.1, "pas": "0.01"},
         ],
+        "reseau": {"entrees": ["poids", "rougeur"], "sortie": "categorie"},
     },
     4: {
         "titre": "Deviner la suite",
@@ -82,6 +96,7 @@ MODULES = {
             {"nom": "famille", "label": "Famille de suite", "type": "select",
              "options": ["addition", "multiplication", "fibonacci"], "defaut": "addition"},
         ],
+        "reseau": {"entrees": ["t-3", "t-2", "t-1"], "sortie": "suivant"},
     },
     5: {
         "titre": "Le serpent qui apprend tout seul",
@@ -91,6 +106,8 @@ MODULES = {
             {"nom": "vitesse_apprentissage", "label": "Vitesse d'apprentissage", "defaut": 0.1, "pas": "0.01"},
             {"nom": "patience", "label": "Patience (importance du futur)", "defaut": 0.9, "pas": "0.01"},
         ],
+        # Pas de "reseau" : le module 5 n'a pas de boutons, mais une
+        # memoire des choix (table), qui ne se dessine pas comme un reseau.
     },
 }
 
@@ -100,24 +117,61 @@ MODULES = {
 NB_POINTS_CIBLE = 250
 
 
+def nettoyer_pour_json(valeur):
+    """Remplace les NaN/infinis (numeriquement valides en Python, mais
+    invalides en JSON strict) par None, pour qu'une vitesse d'apprentissage
+    trop grande qui fait "exploser" les boutons ne casse jamais le flux
+    envoye au navigateur."""
+    if isinstance(valeur, float):
+        return valeur if math.isfinite(valeur) else None
+    if isinstance(valeur, list):
+        return [nettoyer_pour_json(v) for v in valeur]
+    if isinstance(valeur, dict):
+        return {cle: nettoyer_pour_json(v) for cle, v in valeur.items()}
+    return valeur
+
+
+def convertir_valeur(champ, valeur_brute):
+    if champ.get("type") == "select":
+        return valeur_brute
+    if champ["nom"] in ("nb_essais", "nb_parties"):
+        return int(float(valeur_brute))
+    return float(valeur_brute)
+
+
 def lire_parametres(num, formulaire):
     parametres = {}
     for champ in MODULES[num]["champs"]:
         valeur_brute = formulaire.get(champ["nom"], champ["defaut"])
-        if champ.get("type") == "select":
-            parametres[champ["nom"]] = valeur_brute
-        elif champ["nom"] in ("nb_essais", "nb_parties"):
-            parametres[champ["nom"]] = int(float(valeur_brute))
-        else:
-            parametres[champ["nom"]] = float(valeur_brute)
+        parametres[champ["nom"]] = convertir_valeur(champ, valeur_brute)
     return parametres
+
+
+def lire_parametres_comparaison(num, formulaire):
+    """Comme lire_parametres, mais separe la vitesse d'apprentissage en
+    deux valeurs (vitesse_a / vitesse_b) : tout le reste est partage,
+    pour isoler son effet."""
+    partages = {}
+    for champ in MODULES[num]["champs"]:
+        if champ["nom"] == "vitesse_apprentissage":
+            continue
+        valeur_brute = formulaire.get(champ["nom"], champ["defaut"])
+        partages[champ["nom"]] = convertir_valeur(champ, valeur_brute)
+
+    champ_vitesse = next(c for c in MODULES[num]["champs"] if c["nom"] == "vitesse_apprentissage")
+    vitesse_a = float(formulaire.get("vitesse_a", champ_vitesse["defaut"]))
+    vitesse_b = float(formulaire.get("vitesse_b", champ_vitesse["defaut"]))
+
+    return dict(partages, vitesse_apprentissage=vitesse_a), dict(partages, vitesse_apprentissage=vitesse_b)
 
 
 def lancer_entrainement(num, parametres):
     session_id = uuid.uuid4().hex
     file_evenements = queue.Queue()
+    arret_event = threading.Event()
     SESSIONS[session_id] = {
         "file": file_evenements,
+        "arret": arret_event,
         "num": num,
         "titre": MODULES[num]["titre"],
         "parametres": parametres,
@@ -131,15 +185,21 @@ def lancer_entrainement(num, parametres):
     # d'un coup et la page ne "verrait" rien defiler. Cette pause ne
     # ralentit que l'affichage, jamais l'entrainement lui-meme.
     def sur_essai(info):
+        if arret_event.is_set():
+            raise EntrainementInterrompu()
         if info["essai"] % intervalle == 0 or info["essai"] == info["nb_essais"]:
             file_evenements.put({"type": "essai", **info})
             time.sleep(0.03)
 
     def sur_partie(info):
+        if arret_event.is_set():
+            raise EntrainementInterrompu()
         file_evenements.put({"type": "partie", **info})
         time.sleep(0.02)
 
     def sur_mouvement(info):
+        if arret_event.is_set():
+            raise EntrainementInterrompu()
         file_evenements.put({"type": "mouvement", **info})
 
     def travail():
@@ -172,6 +232,8 @@ def lancer_entrainement(num, parametres):
                 module5.jouer_une_partie_demo(table_des_choix, rng_demo, vitesse_affichage=0.2,
                                                sur_mouvement=sur_mouvement)
             file_evenements.put({"type": "fin"})
+        except EntrainementInterrompu:
+            file_evenements.put({"type": "arrete"})
         except Exception as exc:  # pylint: disable=broad-except
             file_evenements.put({"type": "erreur", "message": str(exc)})
 
@@ -205,8 +267,17 @@ def suivi(session_id):
     session = SESSIONS.get(session_id)
     if session is None:
         abort(404)
+    reseau = MODULES[session["num"]].get("reseau")
     return render_template("suivi.html", session_id=session_id, num=session["num"],
-                            titre=session["titre"], parametres=session["parametres"])
+                            titre=session["titre"], parametres=session["parametres"], reseau=reseau)
+
+
+@app.route("/arreter/<session_id>", methods=["POST"])
+def arreter(session_id):
+    session = SESSIONS.get(session_id)
+    if session is not None:
+        session["arret"].set()
+    return ("", 204)
 
 
 @app.route("/flux/<session_id>")
@@ -219,12 +290,45 @@ def flux(session_id):
         file_evenements = session["file"]
         while True:
             evenement = file_evenements.get()
-            yield f"data: {json.dumps(evenement)}\n\n"
-            if evenement.get("type") in ("fin", "erreur"):
+            yield f"data: {json.dumps(nettoyer_pour_json(evenement))}\n\n"
+            if evenement.get("type") in ("fin", "erreur", "arrete"):
                 break
         SESSIONS.pop(session_id, None)
 
     return Response(generer(), mimetype="text/event-stream")
+
+
+@app.route("/comparer/<int:num>")
+def comparer_formulaire(num):
+    if num not in MODULES:
+        abort(404)
+    champ_vitesse = next(c for c in MODULES[num]["champs"] if c["nom"] == "vitesse_apprentissage")
+    autres_champs = [c for c in MODULES[num]["champs"] if c["nom"] != "vitesse_apprentissage"]
+    return render_template("comparer_formulaire.html", num=num, m=MODULES[num],
+                            champ_vitesse=champ_vitesse, autres_champs=autres_champs)
+
+
+@app.route("/comparer/<int:num>/lancer", methods=["POST"])
+def comparer_lancer(num):
+    if num not in MODULES:
+        abort(404)
+    params_a, params_b = lire_parametres_comparaison(num, request.form)
+    id_a = lancer_entrainement(num, params_a)
+    id_b = lancer_entrainement(num, params_b)
+    return redirect(url_for("comparer_suivi", num=num, id_a=id_a, id_b=id_b))
+
+
+@app.route("/comparer-suivi/<int:num>/<id_a>/<id_b>")
+def comparer_suivi(num, id_a, id_b):
+    session_a = SESSIONS.get(id_a)
+    session_b = SESSIONS.get(id_b)
+    if session_a is None or session_b is None:
+        abort(404)
+    reseau = MODULES[num].get("reseau")
+    return render_template("comparaison.html", num=num, titre=MODULES[num]["titre"],
+                            id_a=id_a, id_b=id_b,
+                            parametres_a=session_a["parametres"], parametres_b=session_b["parametres"],
+                            reseau=reseau)
 
 
 if __name__ == "__main__":
