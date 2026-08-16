@@ -234,12 +234,15 @@ def entrainer(nb_parties=400, vitesse_apprentissage=0.1, patience=0.9,
             pas_a_pas(pas_a_pas_actif)
 
         if sur_partie is not None:
+            valeurs_connues = [float(v) for valeurs in table_des_choix.values() for v in valeurs if v != 0.0]
             sur_partie({
                 "partie": numero_partie,
                 "nb_parties": nb_parties,
                 "score": partie["score"],
                 "moyenne_recente": moyenne_recente,
                 "curiosite": curiosite,
+                "nb_situations_apprises": len(table_des_choix),
+                "meilleure_valeur_connue": max(valeurs_connues) if valeurs_connues else None,
             })
 
     meilleur_score = max(historique_scores)

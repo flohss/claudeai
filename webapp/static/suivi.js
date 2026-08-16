@@ -240,10 +240,17 @@ function afficherPopulation(container, population) {
     });
 }
 
+// Le module 5 (serpent) a une grille carree, mais le module 7
+// (labyrinthe) est plus large que haute : sans corriger le rapport
+// largeur/hauteur du conteneur pour suivre la grille reelle, les
+// dernieres lignes debordaient hors du cadre visible.
 function dessinerGrille(container, grille) {
     container.innerHTML = "";
+    const nbLignes = grille.length;
     const nbColonnes = grille[0].length;
     container.style.gridTemplateColumns = `repeat(${nbColonnes}, 1fr)`;
+    container.style.gridTemplateRows = `repeat(${nbLignes}, 1fr)`;
+    container.style.aspectRatio = `${nbColonnes} / ${nbLignes}`;
     grille.forEach((ligne) => {
         ligne.forEach((type) => {
             const cellule = document.createElement("div");
@@ -251,6 +258,70 @@ function dessinerGrille(container, grille) {
             container.appendChild(cellule);
         });
     });
+}
+
+const FLECHES_ACTION = ["↑", "→", "↓", "←"]; // haut, droite, bas, gauche
+
+// Montre ce que le rat a comprends du labyrinthe AU FIL de l'entrainement :
+// une fleche par case deja visitee (la direction qu'il pense etre la
+// meilleure pour l'instant), plus coloree quand il en est plus sur.
+// "mur" = case grisee, null = case pas encore visitee (presque blanche).
+function dessinerCarteValeurs(container, carte) {
+    const nbLignes = carte.length;
+    const nbColonnes = carte[0].length;
+    if (container.children.length !== nbLignes * nbColonnes) {
+        container.innerHTML = "";
+        container.style.gridTemplateColumns = `repeat(${nbColonnes}, 1fr)`;
+        container.style.gridTemplateRows = `repeat(${nbLignes}, 1fr)`;
+        container.style.aspectRatio = `${nbColonnes} / ${nbLignes}`;
+        for (let i = 0; i < nbLignes * nbColonnes; i++) {
+            container.appendChild(document.createElement("div"));
+        }
+    }
+
+    const valeursConnues = carte.flat().filter((c) => c && typeof c === "object").map((c) => c.valeur);
+    const vMin = valeursConnues.length ? Math.min(...valeursConnues) : 0;
+    const vMax = valeursConnues.length ? Math.max(...valeursConnues) : 1;
+
+    let i = 0;
+    carte.forEach((ligne) => {
+        ligne.forEach((donneesCase) => {
+            const el = container.children[i++];
+            if (donneesCase === "mur") {
+                el.className = "case-carte case-carte-mur";
+                el.textContent = "";
+            } else if (donneesCase === null) {
+                el.className = "case-carte";
+                el.style.background = "";
+                el.textContent = "";
+            } else {
+                const intensite = vMax > vMin ? (donneesCase.valeur - vMin) / (vMax - vMin) : 0.5;
+                el.className = "case-carte";
+                el.style.background = `rgba(59,130,246,${0.15 + intensite * 0.75})`;
+                el.textContent = FLECHES_ACTION[donneesCase.action];
+            }
+        });
+    });
+}
+
+// Compare les boutons de l'essai actuel a ceux de l'essai precedent, et
+// renvoie de combien a change celui qui a le PLUS bouge — une facon
+// concrete de voir "combien l'IA corrige en ce moment", au dela de la
+// seule courbe d'erreur.
+function calculerPlusGrosseCorrection(precedents, poids1, poids2, biaisSortie) {
+    let maxDelta = 0;
+    function comparer(a, b) {
+        if (a === null || a === undefined || b === null || b === undefined) return;
+        if (Array.isArray(a)) {
+            a.forEach((v, i) => comparer(v, b[i]));
+        } else if (typeof a === "number" && typeof b === "number") {
+            maxDelta = Math.max(maxDelta, Math.abs(a - b));
+        }
+    }
+    comparer(poids1, precedents.poids1);
+    comparer(poids2, precedents.poids2);
+    comparer(biaisSortie, precedents.biaisSortie);
+    return maxDelta;
 }
 
 function initialiserSuivi(conteneur, reseauConfig) {
@@ -276,11 +347,17 @@ function initialiserSuivi(conteneur, reseauConfig) {
     const statProgres = conteneur.querySelector(".stat-progres");
     const statMeilleur = conteneur.querySelector(".stat-meilleur");
     const statVitesse = conteneur.querySelector(".stat-vitesse");
+    const statCorrectionBloc = conteneur.querySelector(".stat-correction-bloc");
+    const statCorrection = conteneur.querySelector(".stat-correction");
+    const zoneCarteValeurs = conteneur.querySelector(".carte-valeurs");
     const sectionTester = conteneur.querySelector(".section-tester");
     const formulaireTester = conteneur.querySelector(".formulaire-tester");
     const zoneTesterResultat = conteneur.querySelector(".tester-resultat");
 
     if (sectionDemo) sectionDemo.hidden = true;
+    if (statCorrectionBloc) statCorrectionBloc.hidden = !reseauConfig;
+    let poidsPrecedents = null;
+    let groupesPrecedents = null;
 
     if (formulaireTester) {
         formulaireTester.addEventListener("submit", (evenement) => {
@@ -407,17 +484,29 @@ function initialiserSuivi(conteneur, reseauConfig) {
             }
             mettreAJourProgression(donnees.essai, donnees.nb_essais);
             mettreAJourVitesse();
-            zoneProgression.textContent = `Essai ${donnees.essai} / ${donnees.nb_essais} — ${texteErreur}`;
-            ajouterHistorique(`Essai ${donnees.essai} — ${texteErreur}`);
-            if (zonePensees && donnees.pensees) {
-                afficherPensees(donnees.pensees, `Essai ${donnees.essai} :`);
-            }
+            let texteEssai = `Essai ${donnees.essai} / ${donnees.nb_essais} — ${texteErreur}`;
             if (svgReseau && reseauConfig) {
                 dessinerReseau(svgReseau, donnees.poids1, donnees.poids2, donnees.biais_sortie,
                     reseauConfig.entrees, reseauConfig.sortie);
+                if (poidsPrecedents && statCorrection) {
+                    const delta = calculerPlusGrosseCorrection(poidsPrecedents, donnees.poids1, donnees.poids2, donnees.biais_sortie);
+                    statCorrection.textContent = delta.toFixed(delta < 1 ? 4 : 2);
+                }
+                poidsPrecedents = { poids1: donnees.poids1, poids2: donnees.poids2, biaisSortie: donnees.biais_sortie };
             }
             if (zoneNuage && donnees.points) {
                 dessinerNuage(zoneNuage, donnees.points, donnees.groupes, donnees.centres);
+            }
+            if (numModule === 6 && donnees.groupes) {
+                const nbChanges = groupesPrecedents
+                    ? donnees.groupes.filter((g, i) => g !== groupesPrecedents[i]).length : 0;
+                groupesPrecedents = donnees.groupes;
+                texteEssai += ` — déplacement des centres : ${donnees.deplacement.toFixed(4)} — ${nbChanges} animal(aux) ont changé de groupe`;
+            }
+            zoneProgression.textContent = texteEssai;
+            ajouterHistorique(texteEssai);
+            if (zonePensees && donnees.pensees) {
+                afficherPensees(donnees.pensees, `Essai ${donnees.essai} :`);
             }
             if (zoneGrilleExemples && donnees.corrects) {
                 dessinerGrilleExemples(zoneGrilleExemples, donnees.corrects);
@@ -431,8 +520,17 @@ function initialiserSuivi(conteneur, reseauConfig) {
             if (numModule === 7) {
                 zoneProgression.textContent = `Partie ${donnees.partie} / ${donnees.nb_parties} — récompense : ${valeur.toFixed(2)} — réussite récente : ${donnees.taux_reussite_recent.toFixed(0)}% — curiosité : ${donnees.curiosite.toFixed(2)}`;
                 ajouterHistorique(`Partie ${donnees.partie} — récompense : ${valeur.toFixed(2)} — réussite récente : ${donnees.taux_reussite_recent.toFixed(0)}%`);
+                if (zoneCarteValeurs && donnees.carte_valeurs) {
+                    dessinerCarteValeurs(zoneCarteValeurs, donnees.carte_valeurs);
+                }
             } else {
-                zoneProgression.textContent = `Partie ${donnees.partie} / ${donnees.nb_parties} — score : ${valeur} — curiosité : ${donnees.curiosite.toFixed(2)}`;
+                let texteSituations = "";
+                if (donnees.nb_situations_apprises !== undefined) {
+                    const meilleure = donnees.meilleure_valeur_connue;
+                    texteSituations = ` — situations apprises : ${donnees.nb_situations_apprises}`
+                        + (meilleure !== null && meilleure !== undefined ? ` — meilleure valeur connue : ${meilleure.toFixed(2)}` : "");
+                }
+                zoneProgression.textContent = `Partie ${donnees.partie} / ${donnees.nb_parties} — score : ${valeur} — curiosité : ${donnees.curiosite.toFixed(2)}${texteSituations}`;
                 ajouterHistorique(`Partie ${donnees.partie} — score : ${valeur} — moyenne récente : ${donnees.moyenne_recente.toFixed(1)}`);
             }
         } else if (donnees.type === "generation") {

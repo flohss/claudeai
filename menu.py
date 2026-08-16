@@ -22,6 +22,7 @@ from modules import module7_labyrinthe as module7
 from modules import module8_fruits_multiples as module8
 from modules import module9_genetique as module9
 from modules import module10_special as module10
+from modules import module11_images as module11
 
 
 BANNIERE = r"""
@@ -76,7 +77,11 @@ def afficher_accueil():
     print("  [10] SPECIAL : c'est vous le professeur")
     print("      Vous donnez vous-meme les exemples a l'IA, en direct,")
     print("      et elle apprend uniquement de ce que VOUS lui montrez.\n")
-    print("  [11] Quitter\n")
+    print("  [11] Reconnaitre une petite image")
+    print("      Une IA qui regarde directement une image de 16 pixels, sans")
+    print("      caracteristiques deja resumees pour elle. Premier pas vers")
+    print("      la reconnaissance d'image.\n")
+    print("  [12] Quitter\n")
 
 
 def demander_details():
@@ -228,10 +233,19 @@ def lancer_module_10():
     pause_avant_retour()
 
 
+def lancer_module_11():
+    print("\n--- MODULE 11 : Reconnaitre une petite image ---\n")
+    details, pas_a_pas_actif, nb_essais = demander_mode(3000)
+    module11.entrainer(nb_essais=nb_essais, vitesse_apprentissage=0.5,
+                        details=details, afficher_tous_les=400,
+                        pas_a_pas_actif=pas_a_pas_actif)
+    pause_avant_retour()
+
+
 def boucle_principale():
     while True:
         afficher_accueil()
-        choix = input("Votre choix (1-11) : ").strip()
+        choix = input("Votre choix (1-12) : ").strip()
 
         if choix == "1":
             lancer_module_1()
@@ -254,10 +268,12 @@ def boucle_principale():
         elif choix == "10":
             lancer_module_10()
         elif choix == "11":
+            lancer_module_11()
+        elif choix == "12":
             print("\nA bientot !")
             sys.exit(0)
         else:
-            print("\nChoix non reconnu, merci de taper un chiffre entre 1 et 11.\n")
+            print("\nChoix non reconnu, merci de taper un chiffre entre 1 et 12.\n")
 
 
 if __name__ == "__main__":

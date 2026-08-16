@@ -51,6 +51,7 @@ from modules import module7_labyrinthe as module7  # noqa: E402
 from modules import module8_fruits_multiples as module8  # noqa: E402
 from modules import module9_genetique as module9  # noqa: E402
 from modules import module10_special as module10  # noqa: E402
+from modules import module11_images as module11  # noqa: E402
 
 app = Flask(__name__)
 
@@ -144,7 +145,9 @@ MODULES = {
             {"nom": "patience", "label": "Patience (importance du futur)", "defaut": 0.9, "pas": "0.01"},
         ],
         # Pas de "reseau" : comme le module 5, il a une memoire des choix
-        # (table), pas des boutons.
+        # (table), pas des boutons. A la place, une petite carte du
+        # labyrinthe qui montre ce qu'il a compris case par case.
+        "carte_labyrinthe": True,
     },
     8: {
         "titre": "Reconnaitre PLUSIEURS fruits",
@@ -169,6 +172,19 @@ MODULES = {
         # Pas de "reseau" (aucun bouton, aucune vitesse d'apprentissage) :
         # affichage du mot qui evolue, lettre par lettre, a la place.
         "evolution": True,
+    },
+    11: {
+        "titre": "Reconnaitre une petite image",
+        "description": "Une IA qui regarde directement 16 pixels, sans caracteristiques deja resumees pour elle.",
+        "champs": [
+            {"nom": "nb_essais", "label": "Nombre d'essais", "defaut": 3000, "pas": "1"},
+            {"nom": "vitesse_apprentissage", "label": "Vitesse d'apprentissage", "defaut": 0.5, "pas": "0.01"},
+        ],
+        # 16 entrees (un pixel chacune) : pas de nom individuel, la grille
+        # de reference ci-dessous suffit a montrer ce que l'IA regarde.
+        "reseau": {"entrees": [""] * module11.NB_PIXELS, "sortie": module11.NOMS_CATEGORIES},
+        "grille_exemples": [f"Image {i + 1}" for i in range(module11.NB_EXEMPLES_PAR_FORME * len(module11.NOMS_CATEGORIES))],
+        "formes_legende": {nom: forme.tolist() for nom, forme in module11.FORMES_REFERENCE.items()},
     },
 }
 
@@ -331,6 +347,10 @@ def lancer_entrainement(num, parametres):
                                    taux_mutation=parametres["taux_mutation"],
                                    mot_cible=parametres["mot_cible"],
                                    sur_generation=sur_generation)
+            elif num == 11:
+                module11.entrainer(nb_essais=parametres["nb_essais"],
+                                    vitesse_apprentissage=parametres["vitesse_apprentissage"],
+                                    sur_essai=sur_essai)
             file_evenements.put({"type": "fin"})
         except EntrainementInterrompu:
             file_evenements.put({"type": "arrete"})
@@ -378,7 +398,9 @@ def suivi(session_id):
                             nuage=config_module.get("nuage"),
                             evolution=config_module.get("evolution"),
                             grille_exemples=session.get("grille_exemples", config_module.get("grille_exemples")),
-                            tester_special=session.get("tester_special"))
+                            tester_special=session.get("tester_special"),
+                            carte_labyrinthe=config_module.get("carte_labyrinthe"),
+                            formes_legende=config_module.get("formes_legende"))
 
 
 @app.route("/arreter/<session_id>", methods=["POST"])
@@ -446,7 +468,8 @@ def comparer_suivi(num, id_a, id_b):
     return render_template("comparaison.html", num=num, titre=MODULES[num]["titre"],
                             id_a=id_a, id_b=id_b,
                             parametres_a=session_a["parametres"], parametres_b=session_b["parametres"],
-                            reseau=reseau, grille_exemples=grille_exemples)
+                            reseau=reseau, grille_exemples=grille_exemples,
+                            carte_labyrinthe=MODULES[num].get("carte_labyrinthe"))
 
 
 @app.route("/special")

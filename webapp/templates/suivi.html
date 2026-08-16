@@ -45,6 +45,10 @@
       <span class="stat-valeur stat-vitesse">—</span>
       <span class="stat-label">essais / s</span>
     </div>
+    <div class="stat stat-correction-bloc" hidden>
+      <span class="stat-valeur stat-correction">—</span>
+      <span class="stat-label">plus grosse correction</span>
+    </div>
   </div>
 
   <section class="section-entrainement">
@@ -52,6 +56,32 @@
     <div class="colonne">
       <h2>Ce que valent ses boutons</h2>
       <svg class="reseau"></svg>
+    </div>
+    {% endif %}
+    {% if carte_labyrinthe %}
+    <div class="colonne">
+      <h2>Ce qu'il a compris du labyrinthe</h2>
+      <div class="carte-valeurs"></div>
+      <p class="carte-valeurs-legende">Une flèche = la direction qu'il pense être la meilleure depuis cette case. Plus c'est coloré, plus il en est sûr.</p>
+    </div>
+    {% endif %}
+    {% if formes_legende %}
+    <div class="colonne">
+      <h2>Les formes de référence</h2>
+      <div class="legende-formes">
+        {% for nom, forme in formes_legende.items() %}
+        <div class="legende-forme">
+          <div class="mini-grille-pixels">
+            {% for ligne in forme %}
+            {% for pixel in ligne %}
+            <div class="pixel{{ ' pixel-allume' if pixel else '' }}"></div>
+            {% endfor %}
+            {% endfor %}
+          </div>
+          <span>{{ nom }}</span>
+        </div>
+        {% endfor %}
+      </div>
     </div>
     {% endif %}
     {% if nuage %}

@@ -33,12 +33,18 @@
         <div class="stat"><span class="stat-valeur stat-progres">0%</span><span class="stat-label">avancement</span></div>
         <div class="stat"><span class="stat-valeur stat-meilleur">—</span><span class="stat-label">meilleur</span></div>
         <div class="stat"><span class="stat-valeur stat-vitesse">—</span><span class="stat-label">essais/s</span></div>
+        <div class="stat stat-correction-bloc" hidden><span class="stat-valeur stat-correction">—</span><span class="stat-label">plus grosse correction</span></div>
       </div>
       <section class="section-entrainement">
         {% if reseau %}
         <div class="colonne">
           <h2>Ses boutons</h2>
           <svg class="reseau"></svg>
+        </div>
+        {% endif %}
+        {% if carte_labyrinthe %}
+        <div class="colonne">
+          <div class="carte-valeurs"></div>
         </div>
         {% endif %}
         {% if grille_exemples %}
@@ -78,12 +84,18 @@
         <div class="stat"><span class="stat-valeur stat-progres">0%</span><span class="stat-label">avancement</span></div>
         <div class="stat"><span class="stat-valeur stat-meilleur">—</span><span class="stat-label">meilleur</span></div>
         <div class="stat"><span class="stat-valeur stat-vitesse">—</span><span class="stat-label">essais/s</span></div>
+        <div class="stat stat-correction-bloc" hidden><span class="stat-valeur stat-correction">—</span><span class="stat-label">plus grosse correction</span></div>
       </div>
       <section class="section-entrainement">
         {% if reseau %}
         <div class="colonne">
           <h2>Ses boutons</h2>
           <svg class="reseau"></svg>
+        </div>
+        {% endif %}
+        {% if carte_labyrinthe %}
+        <div class="colonne">
+          <div class="carte-valeurs"></div>
         </div>
         {% endif %}
         {% if grille_exemples %}

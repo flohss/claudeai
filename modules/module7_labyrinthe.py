@@ -135,6 +135,27 @@ def expliquer_le_probleme():
     print("   haut / droite / bas / gauche\n")
 
 
+def construire_carte_valeurs(table_des_choix):
+    """Pour chaque case du labyrinthe (sauf les murs), la meilleure valeur
+    connue et la direction qu'il pense etre la meilleure pour l'instant.
+    Utilise par l'interface graphique pour montrer ce que le rat a compris
+    du labyrinthe AU FIL de l'entrainement, pas seulement a la toute fin."""
+    carte = []
+    for y in range(HAUTEUR):
+        ligne = []
+        for x in range(LARGEUR):
+            if LABYRINTHE[y][x] == "#":
+                ligne.append("mur")
+                continue
+            valeurs = table_des_choix.get((x, y))
+            if valeurs is None:
+                ligne.append(None)  # case jamais visitee pour l'instant
+            else:
+                ligne.append({"valeur": float(np.max(valeurs)), "action": int(np.argmax(valeurs))})
+        carte.append(ligne)
+    return carte
+
+
 def raconter_la_pensee(numero_partie, partie, position_avant, indice_action, exploration, message):
     origine = "explore un mouvement au hasard" if exploration else "joue le mouvement qu'il pense etre le meilleur"
     print(f"  Partie {numero_partie}, mouvement {partie['mouvements']}: en {position_avant} "
@@ -201,6 +222,7 @@ def entrainer(nb_parties=300, vitesse_apprentissage=0.1, patience=0.9,
                 "taux_reussite_recent": taux_reussite_recent,
                 "curiosite": curiosite,
                 "trouve": trouve,
+                "carte_valeurs": construire_carte_valeurs(table_des_choix),
             })
 
     meilleure_recompense = max(historique_recompenses)

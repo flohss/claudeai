@@ -38,6 +38,7 @@ python -m modules.module8_fruits_multiples --details --essais 5
 python -m modules.module9_genetique --details --generations 3
 python -m modules.module9_genetique --mot PYTHON
 python -m modules.module10_special --details
+python -m modules.module11_images --details
 ```
 
 Le mode `--details` fait "raconter sa pensée" à l'IA en vraies phrases
@@ -80,12 +81,31 @@ pourquoi une vitesse trop grande fait diverger l'IA.
 
 Chaque page de suivi affiche aussi une barre de progression, le
 meilleur résultat obtenu jusqu'ici et la vitesse d'entraînement
-(essais/s) en direct. Les modules 1, 3 et 8 (classification) ont en
+(essais/s) en direct. Les modules 1, 3, 8 et 11 (classification) ont en
 plus une grille de suivi, une case par exemple, qui passe au vert dès
 que l'IA le reconnaît correctement — pour voir d'un coup d'œil combien
 d'exemples sont déjà acquis. Le module 9 (algorithme génétique) montre
 les 8 meilleurs individus de la population à chaque génération, pas
 seulement le meilleur, pour voir la diversité de l'évolution.
+
+Plusieurs détails supplémentaires montrent comment l'IA avance, pas
+seulement où elle en est :
+- Sur tous les modules à boutons (1 à 4, 8, 10, 11), une nouvelle
+  statistique "plus grosse correction" affiche, à chaque essai, de
+  combien a changé le bouton qui a le plus bougé — pour voir
+  concrètement l'ampleur de la correction en cours, pas juste la
+  courbe d'erreur qui descend.
+- Le module 7 (labyrinthe) affiche maintenant une carte du labyrinthe
+  EN DIRECT pendant l'entraînement (pas seulement à la toute fin) :
+  une flèche par case déjà visitée, indiquant la direction que le rat
+  pense être la meilleure pour l'instant, de plus en plus colorée à
+  mesure qu'il en devient sûr — on voit littéralement le chemin se
+  dessiner vers le fromage.
+- Le module 5 (serpent) affiche le nombre de situations déjà
+  rencontrées et la meilleure valeur connue dans sa mémoire des choix,
+  au fil des parties.
+- Le module 6 (regroupement) affiche le déplacement des centres et
+  combien d'animaux ont changé de groupe à chaque essai.
 
 ```bash
 pip install -r requirements-web.txt
@@ -120,6 +140,7 @@ internet.
 | 8 | `module8_fruits_multiples` | Reconnaître Pomme, Orange ou Banane (extension du module 3 à 3+ catégories) | Partager 100% de confiance entre plusieurs réponses possibles |
 | 9 | `module9_genetique` | Faire évoluer une population de mots pour deviner un mot secret | Aucune correction : sélection, croisement et mutation, comme la sélection naturelle |
 | 10 | `module10_special` | Ce que VOUS lui enseignez, en direct (deux catégories, ou un nombre) | C'est vous le professeur, pas un jeu d'exemples préparé à l'avance |
+| 11 | `module11_images` | Reconnaître une petite image de 16 pixels parmi 3 formes (Carré, Croix, Ligne) | Elle regarde directement les pixels, sans caractéristiques déjà résumées pour elle |
 
 ## Vocabulaire (aucun jargon technique)
 
@@ -161,6 +182,7 @@ modules/
     module8_fruits_multiples.py
     module9_genetique.py
     module10_special.py
+    module11_images.py
 checkpoints/                  -> checkpoints JSON sauvegardés après chaque entrainement
 webapp/                       -> interface graphique (Flask), optionnelle
     app.py
@@ -174,17 +196,17 @@ lancer_interface_web.bat       -> double-clic Windows pour lancer l'interface gr
 Chaque module sauvegarde un checkpoint JSON (`checkpoints/moduleX_*.json`)
 avec ses boutons finaux (ou sa mémoire des choix pour les modules 5 et 7,
 ses centres de groupes pour le module 6, son meilleur mot trouvé pour le
-module 9, ou ce que vous lui avez enseigné pour le module 10) et
-l'historique de l'erreur (ou des scores/récompenses) au fil des essais.
+module 9, ce que vous lui avez enseigné pour le module 10, ou ses boutons
+par pixel pour le module 11) et l'historique de l'erreur (ou des
+scores/récompenses) au fil des essais.
 
 ## Suite envisagée (à prioriser ensemble)
 
 - Un mode "rejouer" pour recharger un checkpoint et reprendre l'entrainement,
   ou revoir le film d'un apprentissage passé
 - Comparer plus de deux vitesses à la fois (3-4 côte à côte)
-- D'autres modules : reconnaissance d'image simplifiée (petite grille de
-  pixels), un module sur le sur-apprentissage/sous-apprentissage, ou un
-  chatbot ultra simple (extension du module 4 à de vrais mots)
+- D'autres modules : un module sur le sur-apprentissage/sous-apprentissage,
+  ou un chatbot ultra simple (extension du module 4 à de vrais mots)
 
 Déjà fait : le mode "pas à pas" (branché dans le menu), le module 5
 (serpent, essai-erreur sans exemples fournis à l'avance), le module 6
@@ -193,9 +215,13 @@ Déjà fait : le mode "pas à pas" (branché dans le menu), le module 5
 sur une grille fixe), le module 8 (plusieurs catégories à la fois,
 extension du module 3), le module 9 (algorithme génétique : une
 population qui évolue au lieu d'une IA qui se corrige), le module 10
-(c'est vous qui enseignez l'IA à partir de zéro), l'interface graphique
-dans le navigateur pour tous les modules y compris le 10 (avec un
-formulaire dédié pour taper ses propres exemples et une zone pour
-tester l'IA une fois entraînée, un schéma à plusieurs sorties pour le
-module 8, et un mot qui évolue pour le module 9), le nuage de points
-animé, le bouton "Arrêter", le mode comparaison, et le mode sombre.
+(c'est vous qui enseignez l'IA à partir de zéro), le module 11
+(reconnaissance d'image simplifiée, une petite grille de pixels),
+l'interface graphique dans le navigateur pour tous les modules y compris
+le 10 (avec un formulaire dédié pour taper ses propres exemples et une
+zone pour tester l'IA une fois entraînée, un schéma à plusieurs sorties
+pour le module 8, et un mot qui évolue pour le module 9), le nuage de
+points animé, le bouton "Arrêter", le mode comparaison, le mode sombre,
+et plus de détails en direct sur comment chaque IA avance (plus grosse
+correction, carte du labyrinthe en direct, mémoire du serpent,
+déplacement des groupes).

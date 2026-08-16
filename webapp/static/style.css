@@ -265,6 +265,10 @@ h1 {
     flex-direction: column;
 }
 
+.stat[hidden] {
+    display: none;
+}
+
 .stat-valeur {
     font-size: 1.3rem;
     font-weight: 700;
@@ -687,4 +691,70 @@ canvas {
     margin-top: 12px;
     font-weight: 600;
     font-size: 1.05rem;
+}
+
+.carte-valeurs {
+    display: grid;
+    gap: 2px;
+    background: var(--bordure);
+    padding: 4px;
+    border-radius: 8px;
+    width: min(420px, 90vw);
+}
+
+.case-carte {
+    aspect-ratio: 1 / 1;
+    border-radius: 2px;
+    background: var(--carte);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    color: white;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+.case-carte-mur {
+    background: #475569;
+}
+
+.carte-valeurs-legende {
+    font-size: 0.78rem;
+    color: var(--texte-attenue);
+    margin-top: 8px;
+}
+
+.legende-formes {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.legende-forme {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85rem;
+    color: var(--texte-attenue);
+}
+
+.mini-grille-pixels {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 2px;
+    width: 72px;
+    height: 72px;
+    background: var(--bordure);
+    padding: 3px;
+    border-radius: 6px;
+}
+
+.pixel {
+    background: var(--carte);
+    border-radius: 1px;
+}
+
+.pixel-allume {
+    background: var(--texte);
 }
