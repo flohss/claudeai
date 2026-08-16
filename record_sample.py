@@ -15,6 +15,8 @@ import sys
 import unicodedata
 from pathlib import Path
 
+from audio_utils import normalize_loudness, trim_silence
+
 EMOTION_SENTENCES = {
     "joyeux": [
         "C'est genial, je n'aurais jamais imagine que ca se passerait aussi bien ! "
@@ -195,8 +197,14 @@ def main():
         input("Appuie sur Entree quand tu es pret(e)...")
 
         audio = record_clip(sd, duration, args.samplerate)
+        audio = trim_silence(audio, args.samplerate)
+        speech_seconds = len(audio) / args.samplerate
+        if speech_seconds < 3:
+            print(f"Attention : seulement {speech_seconds:.1f}s de parole detectee (silence ou micro trop bas). "
+                  f"Tu peux refaire ce clip juste apres si besoin.")
+        audio = normalize_loudness(audio)
         sf.write(str(target), audio, args.samplerate)
-        print(f"Enregistre dans {target}")
+        print(f"Enregistre dans {target} ({speech_seconds:.1f}s de parole, nettoye et normalise)")
 
     print(f"\nTermine. {len(targets)} clip(s) enregistre(s) dans {output_dir}/")
     print("Tu peux relancer ce script plus tard pour ajouter d'autres clips sans ecraser ceux-ci.")

@@ -74,6 +74,11 @@ relancer le script plus tard pour ajouter davantage de clips : la
 numerotation reprend automatiquement apres le dernier fichier existant
 (les clips precedents ne sont jamais ecrases).
 
+Chaque clip est automatiquement nettoye apres l'enregistrement (silence de
+debut/fin coupe, volume normalise) pour ameliorer la fidelite du clonage. Si
+un clip contient moins de 3 secondes de parole detectee (silence, micro trop
+bas...), le script te previent pour que tu puisses le refaire.
+
 Tu peux aussi utiliser directement des fichiers audio existants (wav/mp3/flac)
 de ta voix a la place.
 
@@ -126,9 +131,6 @@ python clone_voice.py --speaker samples/my_voice_01.wav samples/my_voice_02.wav 
 python clone_voice.py --speaker samples/my_voice.wav --text "..." --output output.wav
 ```
 
-Pour une voix qui correspond a une emotion enregistree, pointe `--speaker`
-vers le sous-dossier correspondant, par exemple `samples/joyeux/`.
-
 Langues supportees : `en, es, fr, de, it, pt, pl, tr, ru, nl, cs, ar, zh-cn,
 ja, hu, ko, hi`.
 
@@ -145,6 +147,30 @@ python clone_voice.py --speaker samples/joyeux/ --text "..." --style expressif
 Pour un reglage plus fin : `--temperature` (plus haut = plus expressif),
 `--top-p` et `--speed` (vitesse de la voix). Ces options sont aussi
 proposees comme question lors de l'utilisation sans argument.
+
+### Verification automatique de la fidelite du texte
+
+XTTS peut parfois sauter, repeter ou deformer un mot, surtout sur des
+textes longs. Par defaut, `clone_voice.py` reecoute l'audio genere avec un
+modele de reconnaissance vocale local ([faster-whisper](https://github.com/SYSTRAN/faster-whisper)),
+le compare au texte demande, et **relance automatiquement la generation**
+(jusqu'a `--max-retries`, 2 par defaut) si la correspondance est insuffisante,
+en gardant la meilleure tentative. Le script affiche le score de fidelite
+obtenu et, si le seuil n'est pas atteint, un resume des mots qui different.
+
+Cette verification ralentit la generation (chargement d'un modele
+supplementaire + une transcription par tentative). Pour la desactiver :
+
+```bash
+python clone_voice.py --speaker samples/ --text "..." --no-verify
+```
+
+Options associees : `--similarity-threshold` (seuil requis, 0.92 par
+defaut), `--max-retries`, `--whisper-model` (taille du modele de
+verification : `tiny`, `base`, `small` par defaut, `medium`, `large-v3` —
+plus grand = plus precis mais plus lent). Le premier lancement telecharge
+ce modele de verification separement (quelques centaines de Mo selon la
+taille choisie).
 
 ## Notes
 

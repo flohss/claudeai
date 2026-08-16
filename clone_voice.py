@@ -8,7 +8,11 @@ double-clic). Avec des arguments, il fonctionne comme avant :
     python clone_voice.py --speaker samples/ --text "..." --output out.wav
 """
 import argparse
+import difflib
+import re
+import shutil
 import sys
+import tempfile
 from pathlib import Path
 
 SUPPORTED_LANGUAGES = [
@@ -22,6 +26,8 @@ STYLE_PRESETS = {
     "normal": {},
     "expressif": {"temperature": 0.85, "top_p": 0.92},
 }
+# faster-whisper uses "zh" where XTTS uses "zh-cn".
+WHISPER_LANGUAGE_OVERRIDES = {"zh-cn": "zh"}
 
 
 def resolve_speaker_files(paths: list[Path]) -> list[Path]:
@@ -67,7 +73,41 @@ def parse_args():
     parser.add_argument("--speed", type=float, default=None, help="Speech speed multiplier (default: 1.0).")
     parser.add_argument("--device", default=None, choices=["cpu", "cuda"],
                          help="Device to run inference on (default: auto-detect).")
+    parser.add_argument("--no-verify", action="store_true",
+                         help="Skip automatic text-fidelity verification/retry (faster, no accuracy guarantee).")
+    parser.add_argument("--max-retries", type=int, default=2,
+                         help="Retries if the generated speech doesn't match the input text closely enough (default: 2).")
+    parser.add_argument("--similarity-threshold", type=float, default=0.92,
+                         help="Required text similarity (0-1) between input and re-transcribed output (default: 0.92).")
+    parser.add_argument("--whisper-model", default="small",
+                         help="faster-whisper model size used for verification: tiny, base, small, medium, "
+                              "large-v3 (default: small). Bigger = more accurate but slower.")
     return parser.parse_args()
+
+
+def normalize_text_for_compare(text: str) -> str:
+    text = text.lower()
+    text = re.sub(r"[^\w\s]", " ", text, flags=re.UNICODE)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def diff_summary(expected: str, actual: str) -> str:
+    expected_words = expected.split()
+    actual_words = actual.split()
+    matcher = difflib.SequenceMatcher(None, expected_words, actual_words)
+    lines = []
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            continue
+        exp = " ".join(expected_words[i1:i2])
+        act = " ".join(actual_words[j1:j2])
+        if tag == "delete":
+            lines.append(f"  - manquant : \"{exp}\"")
+        elif tag == "insert":
+            lines.append(f"  - ajoute par erreur : \"{act}\"")
+        elif tag == "replace":
+            lines.append(f"  - attendu \"{exp}\", entendu \"{act}\"")
+    return "\n".join(lines) if lines else "  (aucune difference notable)"
 
 
 def ask(question, default, cast=str):
@@ -119,6 +159,11 @@ def main():
             style = "normal"
         tts_kwargs = dict(STYLE_PRESETS[style])
         device = None
+        verify_choice = ask("Verifier automatiquement que le texte genere correspond exactement (recommande)", "oui")
+        verify = verify_choice.strip().lower() not in ("non", "n", "no")
+        max_retries = 2
+        similarity_threshold = 0.92
+        whisper_model_size = "small"
         print()
     else:
         if not args.speaker:
@@ -137,6 +182,10 @@ def main():
             tts_kwargs["top_p"] = args.top_p
         if args.speed is not None:
             tts_kwargs["speed"] = args.speed
+        verify = not args.no_verify
+        max_retries = args.max_retries
+        similarity_threshold = args.similarity_threshold
+        whisper_model_size = args.whisper_model
 
     if not text.strip():
         sys.exit("Erreur : aucun texte a lire.")
@@ -152,13 +201,60 @@ def main():
           f"echantillon(s) : {', '.join(str(f) for f in speaker_files)}")
     if tts_kwargs:
         print(f"Parametres de generation : {tts_kwargs}")
-    tts.tts_to_file(
-        text=text,
-        speaker_wav=[str(f) for f in speaker_files],
-        language=language,
-        file_path=str(output),
-        **tts_kwargs,
-    )
+
+    def synthesize(target_path):
+        tts.tts_to_file(
+            text=text,
+            speaker_wav=[str(f) for f in speaker_files],
+            language=language,
+            file_path=str(target_path),
+            **tts_kwargs,
+        )
+
+    if not verify:
+        synthesize(output)
+        print(f"Termine. Audio ecrit dans {output}")
+        return
+
+    from faster_whisper import WhisperModel
+
+    print(f"Chargement du modele de verification (Whisper {whisper_model_size})...")
+    whisper_compute = "float16" if device == "cuda" else "int8"
+    whisper_model = WhisperModel(whisper_model_size, device=device, compute_type=whisper_compute)
+    whisper_language = WHISPER_LANGUAGE_OVERRIDES.get(language, language)
+    expected_norm = normalize_text_for_compare(text)
+
+    attempts = max_retries + 1
+    best_ratio = -1.0
+    best_transcript = ""
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        for attempt in range(1, attempts + 1):
+            print(f"Generation (tentative {attempt}/{attempts})...")
+            attempt_path = Path(tmp_dir) / f"attempt_{attempt}.wav"
+            synthesize(attempt_path)
+
+            segments, _ = whisper_model.transcribe(str(attempt_path), language=whisper_language)
+            transcript = " ".join(seg.text for seg in segments).strip()
+            ratio = difflib.SequenceMatcher(
+                None, expected_norm, normalize_text_for_compare(transcript)
+            ).ratio()
+            print(f"  Fidelite du texte : {ratio:.0%}")
+
+            if ratio > best_ratio:
+                best_ratio = ratio
+                best_transcript = transcript
+                shutil.copyfile(attempt_path, output)
+
+            if ratio >= similarity_threshold:
+                break
+            if attempt < attempts:
+                print("  Le texte genere s'ecarte trop de l'original, nouvelle tentative...")
+
+    print(f"\nMeilleure fidelite obtenue : {best_ratio:.0%} (seuil vise : {similarity_threshold:.0%})")
+    if best_ratio < similarity_threshold:
+        print("Le resultat n'atteint pas le seuil vise. Differences par rapport au texte demande :")
+        print(diff_summary(expected_norm, normalize_text_for_compare(best_transcript)))
+        print("Tu peux relancer la generation, ou augmenter --max-retries.")
     print(f"Termine. Audio ecrit dans {output}")
 
 
