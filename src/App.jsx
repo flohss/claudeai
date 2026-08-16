@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Undo2, Redo2, Trash2, Check, X, Sparkles, PenLine } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Undo2, Redo2, Trash2, Check, X, Sparkles, PenLine, Pencil, MousePointer2 } from 'lucide-react';
 
 /**
  * ATELIER — assistant de dessin avec correction de traits (façon Autodraw)
@@ -11,17 +11,22 @@ import { Undo2, Redo2, Trash2, Check, X, Sparkles, PenLine } from 'lucide-react'
  * levée est remplacé par une version nette) ou l'ignorer (le trait reste
  * tel quel, légèrement lissé).
  *
+ * Le rendu est vectoriel (SVG), ce qui permet d'éditer une forme après
+ * coup en mode Sélection : déplacer un sommet, redimensionner une
+ * ellipse, déplacer ou supprimer un tracé.
+ *
  * Points d'extension prévus :
  * 1. classifyShape() — remplacer/compléter l'heuristique géométrique par
  *    un vrai modèle (appel à une API de classification, ou un modèle
  *    entraîné sur des contours) pour reconnaître plus de formes (flèches,
  *    étoiles, icônes) comme le fait Autodraw avec sa bibliothèque de dessins.
- * 2. renderStroke() — passer à un rendu vectoriel (SVG) pour permettre
- *    l'édition après-coup (déplacer un sommet, redimensionner une forme).
+ * 2. Bibliothèque de formes — au lieu de formes géométriques pures,
+ *    associer le contour détecté à des icônes prédessinées.
  * 3. Persistance — sérialiser `strokes` (déjà un JSON simple) vers un
  *    stockage pour reprendre un dessin plus tard.
- * 4. Bibliothèque de formes — au lieu de formes géométriques pures,
- *    associer le contour détecté à des icônes prédessinées.
+ * 4. Historique d'édition — les déplacements/redimensionnements en mode
+ *    Sélection ne passent pas par la pile annuler/rétablir (qui ne suit
+ *    que l'ajout/suppression de tracés) ; à raffiner si besoin.
  */
 
 // ---------------------------------------------------------------------
@@ -210,71 +215,156 @@ function classifyShape(rawPoints) {
 }
 
 // ---------------------------------------------------------------------
-// Rendu
+// Rendu vectoriel (SVG) — voir aussi les composants StrokeView / EditHandles
 // ---------------------------------------------------------------------
 
-function drawSmoothPath(ctx, points) {
-  if (points.length < 2) return;
-  if (points.length < 3) {
-    ctx.beginPath();
-    ctx.moveTo(points[0].x, points[0].y);
-    ctx.lineTo(points[1].x, points[1].y);
-    ctx.stroke();
-    return;
+function smoothPathD(points) {
+  if (points.length < 2) return '';
+  if (points.length === 2) {
+    return `M ${points[0].x} ${points[0].y} L ${points[1].x} ${points[1].y}`;
   }
-  ctx.beginPath();
-  ctx.moveTo(points[0].x, points[0].y);
+  let d = `M ${points[0].x} ${points[0].y}`;
   for (let i = 1; i < points.length - 1; i++) {
     const midX = (points[i].x + points[i + 1].x) / 2;
     const midY = (points[i].y + points[i + 1].y) / 2;
-    ctx.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+    d += ` Q ${points[i].x} ${points[i].y} ${midX} ${midY}`;
   }
   const p = points[points.length - 1];
-  ctx.lineTo(p.x, p.y);
-  ctx.stroke();
+  d += ` L ${p.x} ${p.y}`;
+  return d;
 }
 
-function renderStroke(ctx, stroke) {
-  ctx.strokeStyle = stroke.color;
-  ctx.lineWidth = stroke.width;
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
+// bbox englobante d'un tracé, qu'il soit resté à main levée ou corrigé en forme nette.
+function strokeBBox(stroke) {
+  if (stroke.shape) {
+    return stroke.shape.type === 'ellipse' ? stroke.shape.bbox : getBBox(stroke.shape.points);
+  }
+  return getBBox(stroke.points);
+}
+
+// Sommets éditables d'une forme corrigée : les 4 coins de la bbox pour une
+// ellipse (poignées de redimensionnement), les points réels sinon.
+function shapeHandlePoints(shape) {
+  if (shape.type === 'ellipse') {
+    const { minX, minY, maxX, maxY } = shape.bbox;
+    return [
+      { x: minX, y: minY },
+      { x: maxX, y: minY },
+      { x: maxX, y: maxY },
+      { x: minX, y: maxY },
+    ];
+  }
+  return shape.points;
+}
+
+function updateShapeHandle(shape, index, pos) {
+  if (shape.type === 'ellipse') {
+    const corners = shapeHandlePoints(shape);
+    const opposite = corners[(index + 2) % 4];
+    const minX = Math.min(opposite.x, pos.x), maxX = Math.max(opposite.x, pos.x);
+    const minY = Math.min(opposite.y, pos.y), maxY = Math.max(opposite.y, pos.y);
+    return { ...shape, bbox: { minX, minY, maxX, maxY, w: maxX - minX, h: maxY - minY, cx: (minX + maxX) / 2, cy: (minY + maxY) / 2 } };
+  }
+  const points = shape.points.map((p, i) => (i === index ? pos : p));
+  return { ...shape, points };
+}
+
+function translateShape(shape, dx, dy) {
+  if (shape.type === 'ellipse') {
+    const b = shape.bbox;
+    const minX = b.minX + dx, maxX = b.maxX + dx, minY = b.minY + dy, maxY = b.maxY + dy;
+    return { ...shape, bbox: { minX, minY, maxX, maxY, w: b.w, h: b.h, cx: b.cx + dx, cy: b.cy + dy } };
+  }
+  return { ...shape, points: shape.points.map((p) => ({ x: p.x + dx, y: p.y + dy })) };
+}
+
+function translateStroke(stroke, dx, dy) {
+  return {
+    ...stroke,
+    points: stroke.points.map((p) => ({ x: p.x + dx, y: p.y + dy })),
+    shape: stroke.shape ? translateShape(stroke.shape, dx, dy) : null,
+  };
+}
+
+function StrokeView({ stroke, interactive, onGrab }) {
+  const grabProps = interactive ? { onPointerDown: (e) => onGrab(e, stroke), style: { cursor: 'move' } } : {};
+  const hitPointerEvents = interactive ? 'auto' : 'none';
 
   if (stroke.type === 'corrected' && stroke.shape) {
     const s = stroke.shape;
-    ctx.beginPath();
     if (s.type === 'line') {
-      ctx.moveTo(s.points[0].x, s.points[0].y);
-      ctx.lineTo(s.points[1].x, s.points[1].y);
-    } else if (s.type === 'ellipse') {
-      ctx.ellipse(s.bbox.cx, s.bbox.cy, Math.max(s.bbox.w / 2, 1), Math.max(s.bbox.h / 2, 1), 0, 0, Math.PI * 2);
-    } else if (s.type === 'polygon') {
-      ctx.moveTo(s.points[0].x, s.points[0].y);
-      for (let i = 1; i < s.points.length; i++) ctx.lineTo(s.points[i].x, s.points[i].y);
-      ctx.closePath();
+      return (
+        <g>
+          <line x1={s.points[0].x} y1={s.points[0].y} x2={s.points[1].x} y2={s.points[1].y}
+            stroke={stroke.color} strokeWidth={stroke.width} strokeLinecap="round" pointerEvents="none" />
+          <line x1={s.points[0].x} y1={s.points[0].y} x2={s.points[1].x} y2={s.points[1].y}
+            stroke="transparent" strokeWidth={Math.max(stroke.width, 18)} pointerEvents={hitPointerEvents} {...grabProps} />
+        </g>
+      );
     }
-    ctx.stroke();
-    return;
+    if (s.type === 'ellipse') {
+      const rx = Math.max(s.bbox.w / 2, 1), ry = Math.max(s.bbox.h / 2, 1);
+      return (
+        <g>
+          <ellipse cx={s.bbox.cx} cy={s.bbox.cy} rx={rx} ry={ry} fill="none"
+            stroke={stroke.color} strokeWidth={stroke.width} pointerEvents="none" />
+          <ellipse cx={s.bbox.cx} cy={s.bbox.cy} rx={rx} ry={ry} fill="transparent"
+            stroke="transparent" strokeWidth={18} pointerEvents={hitPointerEvents} {...grabProps} />
+        </g>
+      );
+    }
+    const pts = s.points.map((p) => `${p.x},${p.y}`).join(' ');
+    return (
+      <g>
+        <polygon points={pts} fill="none" stroke={stroke.color} strokeWidth={stroke.width} strokeLinejoin="round" pointerEvents="none" />
+        <polygon points={pts} fill="transparent" stroke="transparent" strokeWidth={18} pointerEvents={hitPointerEvents} {...grabProps} />
+      </g>
+    );
   }
-  drawSmoothPath(ctx, stroke.points);
+
+  const d = smoothPathD(stroke.points);
+  return (
+    <g>
+      <path d={d} fill="none" stroke={stroke.color} strokeWidth={stroke.width} strokeLinecap="round" strokeLinejoin="round" pointerEvents="none" />
+      <path d={d} fill="none" stroke="transparent" strokeWidth={Math.max(stroke.width, 18)} pointerEvents={hitPointerEvents} {...grabProps} />
+    </g>
+  );
 }
 
-function drawPaper(ctx, w, h) {
-  ctx.save();
-  ctx.strokeStyle = '#E4DCC8';
-  ctx.lineWidth = 1;
-  for (let y = 34; y < h; y += 32) {
-    ctx.beginPath();
-    ctx.moveTo(0, y + 0.5);
-    ctx.lineTo(w, y + 0.5);
-    ctx.stroke();
-  }
-  ctx.strokeStyle = '#D8B9A8';
-  ctx.beginPath();
-  ctx.moveTo(46.5, 0);
-  ctx.lineTo(46.5, h);
-  ctx.stroke();
-  ctx.restore();
+function EditHandles({ stroke, onHandleGrab }) {
+  if (!stroke.shape) return null;
+  const points = shapeHandlePoints(stroke.shape);
+  const resizeHandle = stroke.shape.type === 'ellipse';
+  return (
+    <>
+      {points.map((p, i) => (
+        <circle
+          key={i}
+          cx={p.x}
+          cy={p.y}
+          r={6}
+          fill="#FFFFFF"
+          stroke="#1F6F63"
+          strokeWidth={2}
+          style={{ cursor: resizeHandle ? 'nwse-resize' : 'grab' }}
+          onPointerDown={(e) => onHandleGrab(e, stroke, i)}
+        />
+      ))}
+    </>
+  );
+}
+
+function Paper({ w, h }) {
+  const lines = [];
+  for (let y = 34; y < h; y += 32) lines.push(y);
+  return (
+    <g pointerEvents="none">
+      {lines.map((y) => (
+        <line key={y} x1={0} y1={y + 0.5} x2={w} y2={y + 0.5} stroke="#E4DCC8" strokeWidth={1} />
+      ))}
+      <line x1={46.5} y1={0} x2={46.5} y2={h} stroke="#D8B9A8" strokeWidth={1} />
+    </g>
+  );
 }
 
 // ---------------------------------------------------------------------
@@ -294,12 +384,13 @@ const WIDTHS = [
   { label: 'Épais', value: 9 },
 ];
 export default function DrawingAssistant() {
-  const canvasRef = useRef(null);
+  const svgRef = useRef(null);
   const containerRef = useRef(null);
-  const strokesRef = useRef([]);
+  const currentPathRef = useRef(null);
   const currentPointsRef = useRef([]);
   const isDrawingRef = useRef(false);
   const dismissTimerRef = useRef(null);
+  const dragRef = useRef(null);
 
   const [strokes, setStrokes] = useState([]);
   const [redoStack, setRedoStack] = useState([]);
@@ -308,49 +399,31 @@ export default function DrawingAssistant() {
   const [autoCorrect, setAutoCorrect] = useState(true);
   const [pendingSuggestion, setPendingSuggestion] = useState(null);
   const [containerSize, setContainerSize] = useState({ w: 800, h: 500 });
-
-  const redraw = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    const rect = canvas.getBoundingClientRect();
-    ctx.clearRect(0, 0, rect.width, rect.height);
-    drawPaper(ctx, rect.width, rect.height);
-    strokesRef.current.forEach((s) => renderStroke(ctx, s));
-    if (isDrawingRef.current && currentPointsRef.current.length > 1) {
-      renderStroke(ctx, { color, width, type: 'freehand', points: currentPointsRef.current });
-    }
-  }, [color, width]);
+  const [mode, setMode] = useState('draw'); // 'draw' | 'select'
+  const [selectedId, setSelectedId] = useState(null);
 
   useEffect(() => {
-    strokesRef.current = strokes;
-    redraw();
-  }, [strokes, redraw]);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
     const container = containerRef.current;
-    if (!canvas || !container) return;
+    if (!container) return;
     function resize() {
       const rect = container.getBoundingClientRect();
-      const dpr = window.devicePixelRatio || 1;
-      canvas.width = rect.width * dpr;
-      canvas.height = rect.height * dpr;
-      canvas.style.width = rect.width + 'px';
-      canvas.style.height = rect.height + 'px';
-      const ctx = canvas.getContext('2d');
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       setContainerSize({ w: rect.width, h: rect.height });
-      redraw();
     }
     resize();
     const ro = new ResizeObserver(resize);
     ro.observe(container);
     return () => ro.disconnect();
-  }, [redraw]);
+  }, []);
+
+  // Nettoie une sélection qui pointerait vers un tracé supprimé (undo, effacer, suppr).
+  useEffect(() => {
+    if (selectedId && !strokes.some((s) => s.id === selectedId)) {
+      setSelectedId(null);
+    }
+  }, [strokes, selectedId]);
 
   function getPos(e) {
-    const rect = canvasRef.current.getBoundingClientRect();
+    const rect = svgRef.current.getBoundingClientRect();
     return { x: e.clientX - rect.left, y: e.clientY - rect.top };
   }
 
@@ -362,25 +435,29 @@ export default function DrawingAssistant() {
     setPendingSuggestion(null);
   }
 
+  // -- Dessin (mode 'draw') ------------------------------------------------
+
   function handlePointerDown(e) {
     e.preventDefault();
-    canvasRef.current.setPointerCapture(e.pointerId);
+    svgRef.current.setPointerCapture(e.pointerId);
     clearPendingSuggestion();
     isDrawingRef.current = true;
     currentPointsRef.current = [getPos(e)];
-    redraw();
   }
   function handlePointerMove(e) {
     if (!isDrawingRef.current) return;
     currentPointsRef.current.push(getPos(e));
-    redraw();
+    if (currentPathRef.current) {
+      currentPathRef.current.setAttribute('d', smoothPathD(currentPointsRef.current));
+    }
   }
   function handlePointerUp() {
     if (!isDrawingRef.current) return;
     isDrawingRef.current = false;
     const points = currentPointsRef.current;
     currentPointsRef.current = [];
-    if (points.length < 2) { redraw(); return; }
+    if (currentPathRef.current) currentPathRef.current.setAttribute('d', '');
+    if (points.length < 2) return;
 
     const stroke = {
       id: Date.now() + Math.random().toString(36).slice(2),
@@ -398,6 +475,77 @@ export default function DrawingAssistant() {
     }
   }
 
+  // -- Sélection / édition (mode 'select') ---------------------------------
+
+  function handleStrokeGrab(e, stroke) {
+    e.stopPropagation();
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setSelectedId(stroke.id);
+    dragRef.current = { type: 'move', strokeId: stroke.id, start: getPos(e), original: stroke };
+  }
+  function handleHandleGrab(e, stroke, index) {
+    e.stopPropagation();
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setSelectedId(stroke.id);
+    dragRef.current = { type: 'handle', strokeId: stroke.id, index, original: stroke };
+  }
+
+  function deleteSelected() {
+    if (!selectedId) return;
+    setStrokes((prev) => prev.filter((s) => s.id !== selectedId));
+    setSelectedId(null);
+  }
+
+  useEffect(() => {
+    function onKeyDown(e) {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && mode === 'select' && selectedId) {
+        e.preventDefault();
+        setStrokes((prev) => prev.filter((s) => s.id !== selectedId));
+        setSelectedId(null);
+      }
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [mode, selectedId]);
+
+  // -- Dispatch au niveau du canevas SVG selon le mode actif ---------------
+
+  function handleSvgPointerDown(e) {
+    if (mode === 'select') { setSelectedId(null); return; }
+    handlePointerDown(e);
+  }
+  function handleSvgPointerMove(e) {
+    if (mode === 'select') {
+      const drag = dragRef.current;
+      if (!drag) return;
+      const pos = getPos(e);
+      setStrokes((prev) => prev.map((s) => {
+        if (s.id !== drag.strokeId) return s;
+        if (drag.type === 'move') return translateStroke(drag.original, pos.x - drag.start.x, pos.y - drag.start.y);
+        return { ...drag.original, shape: updateShapeHandle(drag.original.shape, drag.index, pos) };
+      }));
+      return;
+    }
+    handlePointerMove(e);
+  }
+  function handleSvgPointerUp(e) {
+    if (mode === 'select') { dragRef.current = null; return; }
+    handlePointerUp(e);
+  }
+
+  function switchMode(next) {
+    if (next === mode) return;
+    clearPendingSuggestion();
+    isDrawingRef.current = false;
+    currentPointsRef.current = [];
+    if (currentPathRef.current) currentPathRef.current.setAttribute('d', '');
+    dragRef.current = null;
+    setSelectedId(null);
+    setMode(next);
+  }
+
   useEffect(() => {
     if (!pendingSuggestion) return;
     dismissTimerRef.current = setTimeout(() => setPendingSuggestion(null), 4500);
@@ -413,9 +561,9 @@ export default function DrawingAssistant() {
   }
 
   function undo() {
-    if (strokesRef.current.length === 0) return;
+    if (strokes.length === 0) return;
     clearPendingSuggestion();
-    const last = strokesRef.current[strokesRef.current.length - 1];
+    const last = strokes[strokes.length - 1];
     setStrokes((prev) => prev.slice(0, -1));
     setRedoStack((prev) => [...prev, last]);
   }
@@ -435,6 +583,11 @@ export default function DrawingAssistant() {
   const popupLeft = pendingSuggestion ? Math.min(pendingSuggestion.anchor.x + 14, containerSize.w - 200) : 0;
   const popupTop = pendingSuggestion ? Math.max(pendingSuggestion.anchor.y - 56, 8) : 0;
 
+  const selectedStroke = mode === 'select' ? strokes.find((s) => s.id === selectedId) || null : null;
+  const selBBox = selectedStroke ? strokeBBox(selectedStroke) : null;
+  const deleteLeft = selBBox ? Math.min(selBBox.maxX + 10, containerSize.w - 40) : 0;
+  const deleteTop = selBBox ? Math.max(selBBox.minY - 44, 8) : 0;
+
   return (
     <div className="w-full h-screen flex flex-col" style={{ background: '#F3EFE6', color: '#2A2620', fontFamily: 'ui-sans-serif, system-ui, sans-serif' }}>
       {/* Barre d'outils */}
@@ -442,6 +595,25 @@ export default function DrawingAssistant() {
         <div className="flex items-center gap-2 pr-3 mr-1 border-r" style={{ borderColor: '#E3DCC9' }}>
           <PenLine size={18} style={{ color: '#A6432E' }} />
           <span className="text-sm font-semibold tracking-wide" style={{ fontFamily: 'ui-serif, Georgia, serif' }}>Atelier</span>
+        </div>
+
+        <div className="flex items-center gap-1 pr-2 border-r" style={{ borderColor: '#E3DCC9' }}>
+          <button
+            onClick={() => switchMode('draw')}
+            title="Dessiner"
+            className="w-8 h-8 rounded-md flex items-center justify-center"
+            style={{ background: mode === 'draw' ? '#EAE3D1' : 'transparent' }}
+          >
+            <Pencil size={16} style={{ color: mode === 'draw' ? '#2A2620' : '#A19A85' }} />
+          </button>
+          <button
+            onClick={() => switchMode('select')}
+            title="Sélectionner et modifier une forme"
+            className="w-8 h-8 rounded-md flex items-center justify-center"
+            style={{ background: mode === 'select' ? '#EAE3D1' : 'transparent' }}
+          >
+            <MousePointer2 size={16} style={{ color: mode === 'select' ? '#2A2620' : '#A19A85' }} />
+          </button>
         </div>
 
         <div className="flex items-center gap-1.5">
@@ -507,14 +679,35 @@ export default function DrawingAssistant() {
 
       {/* Zone de dessin */}
       <div ref={containerRef} className="flex-1 relative overflow-hidden touch-none">
-        <canvas
-          ref={canvasRef}
-          className="absolute inset-0 cursor-crosshair touch-none"
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          onPointerLeave={handlePointerUp}
-        />
+        <svg
+          ref={svgRef}
+          width={containerSize.w}
+          height={containerSize.h}
+          className="absolute inset-0 touch-none"
+          style={{ cursor: mode === 'draw' ? 'crosshair' : 'default' }}
+          onPointerDown={handleSvgPointerDown}
+          onPointerMove={handleSvgPointerMove}
+          onPointerUp={handleSvgPointerUp}
+          onPointerLeave={handleSvgPointerUp}
+        >
+          <Paper w={containerSize.w} h={containerSize.h} />
+
+          {strokes.map((s) => (
+            <StrokeView key={s.id} stroke={s} interactive={mode === 'select'} onGrab={handleStrokeGrab} />
+          ))}
+
+          <path ref={currentPathRef} fill="none" stroke={color} strokeWidth={width} strokeLinecap="round" strokeLinejoin="round" pointerEvents="none" />
+
+          {selectedStroke && selBBox && (
+            <rect
+              x={selBBox.minX - 6} y={selBBox.minY - 6}
+              width={selBBox.w + 12} height={selBBox.h + 12}
+              fill="none" stroke="#1F6F63" strokeWidth={1.5} strokeDasharray="4 3"
+              pointerEvents="none"
+            />
+          )}
+          {selectedStroke && <EditHandles stroke={selectedStroke} onHandleGrab={handleHandleGrab} />}
+        </svg>
 
         {pendingSuggestion && (
           <div
@@ -533,12 +726,24 @@ export default function DrawingAssistant() {
           </div>
         )}
 
+        {selectedStroke && (
+          <div
+            className="absolute z-10 flex items-center gap-1 p-1 rounded-lg shadow-lg"
+            style={{ left: deleteLeft, top: deleteTop, background: '#FFFFFF', border: '1px solid #E3DCC9' }}
+          >
+            <button onClick={deleteSelected} className="p-1.5 rounded-md" style={{ background: '#F6EFE9' }} title="Supprimer (Suppr)">
+              <Trash2 size={14} color="#A6432E" />
+            </button>
+          </div>
+        )}
+
         {strokes.length === 0 && !pendingSuggestion && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <p className="text-sm text-center max-w-xs" style={{ color: '#A19A85' }}>
               Dessinez un trait droit ou une forme fermée (cercle, carré, rectangle,
               losange, triangle, pentagone, hexagone, étoile…) — une version nette
-              sera proposée.
+              sera proposée. Passez en mode sélection pour déplacer, redimensionner
+              ou supprimer une forme.
             </p>
           </div>
         )}
