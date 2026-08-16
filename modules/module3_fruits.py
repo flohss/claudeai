@@ -87,6 +87,17 @@ def construire_pensee(fruits, categories, confiances):
     return lignes
 
 
+def calculer_corrects(categories, confiances):
+    """Pour chaque fruit, l'IA a-t-elle actuellement la bonne reponse ?
+    Utilise par l'interface graphique pour dessiner une petite grille
+    qui se colore en vert au fil de l'entrainement."""
+    resultats = []
+    for vraie_categorie, confiance in zip(categories, confiances):
+        devine_index = 1 if confiance[0] >= 0.5 else 0
+        resultats.append(bool(devine_index == int(vraie_categorie[0])))
+    return resultats
+
+
 def tester(boutons, seuil_de_base):
     fruits_normalises = normaliser(FRUITS_ENTRAINEMENT)
     confiances = tasser_entre_0_et_1(fruits_normalises @ boutons + seuil_de_base)
@@ -143,6 +154,7 @@ def entrainer(nb_essais=3000, vitesse_apprentissage=0.1, details=False,
                 "nb_essais": nb_essais,
                 "erreur": erreur_moyenne,
                 "pensees": construire_pensee(FRUITS_ENTRAINEMENT, VRAIES_CATEGORIES, confiances),
+                "corrects": calculer_corrects(VRAIES_CATEGORIES, confiances),
                 "poids1": boutons.tolist(),
                 "poids2": None,
                 "biais_sortie": seuil_de_base,

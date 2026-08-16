@@ -209,6 +209,37 @@ function dessinerNuage(canvas, points, groupes, centres) {
     });
 }
 
+// Une petite case par exemple d'entrainement, verte si l'IA le reussit
+// EN CE MOMENT, grise sinon — pour voir d'un coup d'oeil combien
+// d'exemples sont deja acquis et lesquels posent encore probleme.
+function dessinerGrilleExemples(container, corrects, labels) {
+    if (container.children.length !== corrects.length) {
+        container.innerHTML = "";
+        corrects.forEach((_, i) => {
+            const cellule = document.createElement("div");
+            cellule.className = "case-exemple";
+            if (labels && labels[i]) cellule.title = labels[i];
+            container.appendChild(cellule);
+        });
+    }
+    corrects.forEach((correct, i) => {
+        container.children[i].classList.toggle("case-exemple-correcte", correct);
+        container.children[i].classList.toggle("case-exemple-incorrecte", !correct);
+    });
+}
+
+// Montre plusieurs individus de la population actuelle (pas seulement le
+// meilleur), pour voir la diversite de l'evolution generation par generation.
+function afficherPopulation(container, population) {
+    container.innerHTML = "";
+    population.forEach(({ mot, score }) => {
+        const ligne = document.createElement("div");
+        ligne.className = "population-ligne";
+        ligne.innerHTML = `<span class="population-mot">${mot}</span><span class="population-score">${score}</span>`;
+        container.appendChild(ligne);
+    });
+}
+
 function dessinerGrille(container, grille) {
     container.innerHTML = "";
     const nbColonnes = grille[0].length;
@@ -235,15 +266,62 @@ function initialiserSuivi(conteneur, reseauConfig) {
     const svgReseau = conteneur.querySelector(".reseau");
     const zoneNuage = conteneur.querySelector(".nuage");
     const zoneMotEvolution = conteneur.querySelector(".mot-evolution");
+    const zonePopulation = conteneur.querySelector(".population-liste");
+    const zoneGrilleExemples = conteneur.querySelector(".grille-exemples");
     const sectionEntrainement = conteneur.querySelector(".section-entrainement");
     const sectionDemo = conteneur.querySelector(".section-demo");
     const zoneGrille = conteneur.querySelector(".grille");
     const zoneDemoInfo = conteneur.querySelector(".demo-info");
+    const barreProgressionRemplie = conteneur.querySelector(".barre-progression-remplie");
+    const statProgres = conteneur.querySelector(".stat-progres");
+    const statMeilleur = conteneur.querySelector(".stat-meilleur");
+    const statVitesse = conteneur.querySelector(".stat-vitesse");
 
     if (sectionDemo) sectionDemo.hidden = true;
 
     let points = [];
     const MAX_POINTS = 300;
+
+    // Pour les modules 5/7/9 (score, recompense, meilleur_score), plus
+    // c'est haut mieux c'est. Pour tous les autres (une erreur), c'est
+    // l'inverse : plus c'est bas, mieux c'est.
+    const ameliorationVersLeHaut = [5, 7, 9].includes(numModule);
+    let meilleureValeur = null;
+    let nbEvenementsRecus = 0;
+    let dernierHorodatage = null;
+    let vitesseLissee = null;
+
+    function mettreAJourProgression(actuel, total) {
+        if (!barreProgressionRemplie || !total) return;
+        const pourcentage = Math.max(0, Math.min(100, (actuel / total) * 100));
+        barreProgressionRemplie.style.width = `${pourcentage}%`;
+        if (statProgres) statProgres.textContent = `${Math.round(pourcentage)}%`;
+    }
+
+    function mettreAJourMeilleur(valeur, decimales) {
+        if (!statMeilleur || valeur === null || valeur === undefined) return;
+        if (meilleureValeur === null
+            || (ameliorationVersLeHaut && valeur > meilleureValeur)
+            || (!ameliorationVersLeHaut && valeur < meilleureValeur)) {
+            meilleureValeur = valeur;
+            statMeilleur.textContent = typeof valeur === "number" ? valeur.toFixed(decimales) : valeur;
+        }
+    }
+
+    function mettreAJourVitesse() {
+        if (!statVitesse) return;
+        const maintenant = performance.now();
+        nbEvenementsRecus += 1;
+        if (dernierHorodatage !== null) {
+            const ecartSecondes = (maintenant - dernierHorodatage) / 1000;
+            if (ecartSecondes > 0) {
+                const instantanee = 1 / ecartSecondes;
+                vitesseLissee = vitesseLissee === null ? instantanee : vitesseLissee * 0.8 + instantanee * 0.2;
+                statVitesse.textContent = vitesseLissee >= 10 ? Math.round(vitesseLissee) : vitesseLissee.toFixed(1);
+            }
+        }
+        dernierHorodatage = maintenant;
+    }
 
     function ajouterPoint(x, y) {
         points.push({ x, y });
@@ -305,7 +383,12 @@ function initialiserSuivi(conteneur, reseauConfig) {
         if (donnees.type === "essai") {
             const erreurInstable = donnees.erreur === null;
             const texteErreur = erreurInstable ? "devenue instable (vitesse trop grande)" : `erreur : ${donnees.erreur.toFixed(4)}`;
-            if (!erreurInstable) ajouterPoint(donnees.essai, donnees.erreur);
+            if (!erreurInstable) {
+                ajouterPoint(donnees.essai, donnees.erreur);
+                mettreAJourMeilleur(donnees.erreur, 4);
+            }
+            mettreAJourProgression(donnees.essai, donnees.nb_essais);
+            mettreAJourVitesse();
             zoneProgression.textContent = `Essai ${donnees.essai} / ${donnees.nb_essais} — ${texteErreur}`;
             ajouterHistorique(`Essai ${donnees.essai} — ${texteErreur}`);
             if (zonePensees && donnees.pensees) {
@@ -318,9 +401,15 @@ function initialiserSuivi(conteneur, reseauConfig) {
             if (zoneNuage && donnees.points) {
                 dessinerNuage(zoneNuage, donnees.points, donnees.groupes, donnees.centres);
             }
+            if (zoneGrilleExemples && donnees.corrects) {
+                dessinerGrilleExemples(zoneGrilleExemples, donnees.corrects);
+            }
         } else if (donnees.type === "partie") {
             const valeur = donnees.score !== undefined ? donnees.score : donnees.recompense;
             ajouterPoint(donnees.partie, valeur);
+            mettreAJourProgression(donnees.partie, donnees.nb_parties);
+            mettreAJourMeilleur(valeur, 2);
+            mettreAJourVitesse();
             if (numModule === 7) {
                 zoneProgression.textContent = `Partie ${donnees.partie} / ${donnees.nb_parties} — récompense : ${valeur.toFixed(2)} — réussite récente : ${donnees.taux_reussite_recent.toFixed(0)}% — curiosité : ${donnees.curiosite.toFixed(2)}`;
                 ajouterHistorique(`Partie ${donnees.partie} — récompense : ${valeur.toFixed(2)} — réussite récente : ${donnees.taux_reussite_recent.toFixed(0)}%`);
@@ -330,7 +419,11 @@ function initialiserSuivi(conteneur, reseauConfig) {
             }
         } else if (donnees.type === "generation") {
             ajouterPoint(donnees.generation, donnees.meilleur_score);
+            mettreAJourProgression(donnees.generation, donnees.nb_generations);
+            mettreAJourMeilleur(donnees.meilleur_score, 0);
+            mettreAJourVitesse();
             if (zoneMotEvolution) afficherMotEvolution(donnees.meilleur_mot, donnees.lettres_correctes);
+            if (zonePopulation && donnees.population) afficherPopulation(zonePopulation, donnees.population);
             zoneProgression.textContent = `Génération ${donnees.generation} / ${donnees.nb_generations} — meilleur : '${donnees.meilleur_mot}' (${donnees.meilleur_score}/${donnees.n_lettres}) — moyenne : ${donnees.moyenne_score.toFixed(1)}/${donnees.n_lettres}`;
             ajouterHistorique(`Génération ${donnees.generation} — meilleur : '${donnees.meilleur_mot}' (${donnees.meilleur_score}/${donnees.n_lettres})`);
         } else if (donnees.type === "fin_entrainement") {
@@ -343,6 +436,8 @@ function initialiserSuivi(conteneur, reseauConfig) {
             const valeur = donnees.score !== undefined ? donnees.score : donnees.recompense;
             zoneDemoInfo.textContent = `${libelle} : ${typeof valeur === "number" ? valeur.toFixed(2) : valeur} — ${donnees.message}`;
         } else if (donnees.type === "fin") {
+            if (barreProgressionRemplie) barreProgressionRemplie.style.width = "100%";
+            if (statProgres) statProgres.textContent = "100%";
             terminerAffichage("Terminé !", "statut-termine");
             source.close();
         } else if (donnees.type === "arrete") {

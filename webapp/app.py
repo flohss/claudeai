@@ -72,6 +72,9 @@ MODULES = {
             {"nom": "vitesse_apprentissage", "label": "Vitesse d'apprentissage", "defaut": 0.5, "pas": "0.01"},
         ],
         "reseau": {"entrees": ["entree A", "entree B"], "sortie": "OU EXCLUSIF"},
+        # Grille de suivi : un carre par exemple, colore selon si l'IA le
+        # reussit actuellement, pour voir la progression exemple par exemple.
+        "grille_exemples": ["0 et 0", "0 et 1", "1 et 0", "1 et 1"],
     },
     2: {
         "titre": "Deviner un prix",
@@ -90,6 +93,7 @@ MODULES = {
             {"nom": "vitesse_apprentissage", "label": "Vitesse d'apprentissage", "defaut": 0.1, "pas": "0.01"},
         ],
         "reseau": {"entrees": ["poids", "rougeur"], "sortie": "categorie"},
+        "grille_exemples": [f"Fruit {i + 1}" for i in range(10)],
     },
     4: {
         "titre": "Deviner la suite",
@@ -144,6 +148,7 @@ MODULES = {
             {"nom": "vitesse_apprentissage", "label": "Vitesse d'apprentissage", "defaut": 0.5, "pas": "0.01"},
         ],
         "reseau": {"entrees": ["poids", "forme"], "sortie": ["Pomme", "Orange", "Banane"]},
+        "grille_exemples": [f"Fruit {i + 1}" for i in range(24)],
     },
     9: {
         "titre": "Algorithme génétique",
@@ -360,7 +365,8 @@ def suivi(session_id):
     return render_template("suivi.html", session_id=session_id, num=session["num"],
                             titre=session["titre"], parametres=session["parametres"],
                             reseau=config_module.get("reseau"), nuage=config_module.get("nuage"),
-                            evolution=config_module.get("evolution"))
+                            evolution=config_module.get("evolution"),
+                            grille_exemples=config_module.get("grille_exemples"))
 
 
 @app.route("/arreter/<session_id>", methods=["POST"])
@@ -424,10 +430,11 @@ def comparer_suivi(num, id_a, id_b):
     if session_a is None or session_b is None:
         abort(404)
     reseau = MODULES[num].get("reseau")
+    grille_exemples = MODULES[num].get("grille_exemples")
     return render_template("comparaison.html", num=num, titre=MODULES[num]["titre"],
                             id_a=id_a, id_b=id_b,
                             parametres_a=session_a["parametres"], parametres_b=session_b["parametres"],
-                            reseau=reseau)
+                            reseau=reseau, grille_exemples=grille_exemples)
 
 
 if __name__ == "__main__":

@@ -23,6 +23,23 @@
     <button type="button" class="bouton-arreter">Arrêter</button>
   </div>
 
+  <div class="barre-progression"><div class="barre-progression-remplie"></div></div>
+
+  <div class="stats-rapides">
+    <div class="stat">
+      <span class="stat-valeur stat-progres">0%</span>
+      <span class="stat-label">avancement</span>
+    </div>
+    <div class="stat">
+      <span class="stat-valeur stat-meilleur">—</span>
+      <span class="stat-label">meilleur jusqu'ici</span>
+    </div>
+    <div class="stat">
+      <span class="stat-valeur stat-vitesse">—</span>
+      <span class="stat-label">essais / s</span>
+    </div>
+  </div>
+
   <section class="section-entrainement">
     {% if reseau %}
     <div class="colonne">
@@ -40,6 +57,15 @@
     <div class="colonne">
       <h2>Le mot qui évolue</h2>
       <div class="mot-evolution"></div>
+      <h3>Population actuelle (8 premiers)</h3>
+      <div class="population-liste"></div>
+    </div>
+    {% endif %}
+    {% if grille_exemples %}
+    <div class="colonne">
+      <h2>Suivi par exemple</h2>
+      <div class="grille-exemples"></div>
+      <p class="grille-exemples-legende"><span class="pastille pastille-correcte"></span> réussi maintenant &nbsp; <span class="pastille pastille-incorrecte"></span> pas encore</p>
     </div>
     {% endif %}
     <div class="colonne">

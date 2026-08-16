@@ -72,6 +72,15 @@ chaque page de module) lance deux entraînements identiques sauf sur la
 vitesse d'apprentissage, affichés côte à côte, pour voir concrètement
 pourquoi une vitesse trop grande fait diverger l'IA.
 
+Chaque page de suivi affiche aussi une barre de progression, le
+meilleur résultat obtenu jusqu'ici et la vitesse d'entraînement
+(essais/s) en direct. Les modules 1, 3 et 8 (classification) ont en
+plus une grille de suivi, une case par exemple, qui passe au vert dès
+que l'IA le reconnaît correctement — pour voir d'un coup d'œil combien
+d'exemples sont déjà acquis. Le module 9 (algorithme génétique) montre
+les 8 meilleurs individus de la population à chaque génération, pas
+seulement le meilleur, pour voir la diversité de l'évolution.
+
 ```bash
 pip install -r requirements-web.txt
 python -m webapp.app

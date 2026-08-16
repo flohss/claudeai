@@ -93,6 +93,14 @@ def construire_pensee(reponse):
     return lignes
 
 
+def calculer_corrects(reponse):
+    """Pour chaque exemple, l'IA a-t-elle actuellement la bonne reponse ?
+    Utilise par l'interface graphique pour dessiner une petite grille
+    qui se colore en vert au fil de l'entrainement."""
+    return [bool((float(reponse[i, 0]) >= 0.5) == (EXEMPLES_VRAIE_REPONSE[i, 0] == 1))
+            for i in range(len(EXEMPLES_ENTREE))]
+
+
 def tester(boutons_couche_1, boutons_couche_2):
     reflexion = tasser_entre_0_et_1(EXEMPLES_ENTREE @ boutons_couche_1)
     reponse = tasser_entre_0_et_1(reflexion @ boutons_couche_2)
@@ -158,6 +166,7 @@ def entrainer(nb_essais=10000, vitesse_apprentissage=0.5, details=False,
                 "nb_essais": nb_essais,
                 "erreur": erreur_moyenne,
                 "pensees": construire_pensee(reponse),
+                "corrects": calculer_corrects(reponse),
                 "poids1": boutons_couche_1.tolist(),
                 "poids2": boutons_couche_2.tolist(),
                 "biais_sortie": None,

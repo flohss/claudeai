@@ -143,6 +143,9 @@ def entrainer(nb_generations=150, taille_population=40, nb_survivants=10, taux_m
                 "n_lettres": n_lettres,
                 "lettres_correctes": [lettre == vraie for lettre, vraie in zip(mots[0], mot_cible)],
                 "moyenne_score": sum(scores) / len(scores),
+                "population": [{"mot": mot, "score": score} for mot, score in zip(mots[:8], scores[:8])],
+                "taille_population": len(population),
+                "nb_survivants": nb_survivants,
             })
 
         pas_a_pas(pas_a_pas_actif)

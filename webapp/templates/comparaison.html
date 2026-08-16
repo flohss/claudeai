@@ -21,11 +21,22 @@
         <p class="statut statut-en-cours">Entraînement en cours...</p>
         <button type="button" class="bouton-arreter">Arrêter</button>
       </div>
+      <div class="barre-progression"><div class="barre-progression-remplie"></div></div>
+      <div class="stats-rapides">
+        <div class="stat"><span class="stat-valeur stat-progres">0%</span><span class="stat-label">avancement</span></div>
+        <div class="stat"><span class="stat-valeur stat-meilleur">—</span><span class="stat-label">meilleur</span></div>
+        <div class="stat"><span class="stat-valeur stat-vitesse">—</span><span class="stat-label">essais/s</span></div>
+      </div>
       <section class="section-entrainement">
         {% if reseau %}
         <div class="colonne">
           <h2>Ses boutons</h2>
           <svg class="reseau"></svg>
+        </div>
+        {% endif %}
+        {% if grille_exemples %}
+        <div class="colonne">
+          <div class="grille-exemples"></div>
         </div>
         {% endif %}
         <div class="colonne">
@@ -55,11 +66,22 @@
         <p class="statut statut-en-cours">Entraînement en cours...</p>
         <button type="button" class="bouton-arreter">Arrêter</button>
       </div>
+      <div class="barre-progression"><div class="barre-progression-remplie"></div></div>
+      <div class="stats-rapides">
+        <div class="stat"><span class="stat-valeur stat-progres">0%</span><span class="stat-label">avancement</span></div>
+        <div class="stat"><span class="stat-valeur stat-meilleur">—</span><span class="stat-label">meilleur</span></div>
+        <div class="stat"><span class="stat-valeur stat-vitesse">—</span><span class="stat-label">essais/s</span></div>
+      </div>
       <section class="section-entrainement">
         {% if reseau %}
         <div class="colonne">
           <h2>Ses boutons</h2>
           <svg class="reseau"></svg>
+        </div>
+        {% endif %}
+        {% if grille_exemples %}
+        <div class="colonne">
+          <div class="grille-exemples"></div>
         </div>
         {% endif %}
         <div class="colonne">

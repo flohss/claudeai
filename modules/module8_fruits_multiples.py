@@ -100,6 +100,13 @@ def construire_pensee(fruits, vraies_categories, probabilites):
     return lignes
 
 
+def calculer_corrects(vraies_categories, probabilites):
+    """Pour chaque fruit, l'IA a-t-elle actuellement la bonne reponse ?
+    Utilise par l'interface graphique pour dessiner une petite grille
+    qui se colore en vert au fil de l'entrainement."""
+    return [bool(int(np.argmax(probas)) == vraie) for vraie, probas in zip(vraies_categories, probabilites)]
+
+
 def tester(boutons, seuils_de_base):
     fruits_normalises = normaliser(FRUITS_ENTRAINEMENT)
     probabilites = repartir_les_scores(fruits_normalises @ boutons + seuils_de_base)
@@ -155,6 +162,7 @@ def entrainer(nb_essais=2000, vitesse_apprentissage=0.5, details=False,
                 "nb_essais": nb_essais,
                 "erreur": erreur_moyenne,
                 "pensees": construire_pensee(FRUITS_ENTRAINEMENT, VRAIES_CATEGORIES, probabilites),
+                "corrects": calculer_corrects(VRAIES_CATEGORIES, probabilites),
                 "poids1": boutons.tolist(),
                 "poids2": None,
                 "biais_sortie": seuils_de_base.tolist(),
