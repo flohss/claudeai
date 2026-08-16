@@ -350,11 +350,25 @@ h1 {
     font-weight: 700;
 }
 
+/* Empilement en "colonnes de journal" plutot qu'une grille classique :
+   avec une grille, une rangee entiere attend le panneau le plus haut
+   avant de commencer la suivante, ce qui laissait de grands vides sous
+   les panneaux courts (ex: la legende des formes a cote d'un reseau
+   deux fois plus haut). Ici, chaque colonne se remplit independamment
+   de haut en bas. */
 .section-entrainement {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 24px;
+    columns: 260px 3;
+    column-gap: 24px;
     margin-top: 12px;
+}
+
+.colonne {
+    break-inside: avoid;
+    -webkit-column-break-inside: avoid;
+    display: inline-block;
+    width: 100%;
+    vertical-align: top;
+    margin-bottom: 24px;
 }
 
 .colonne h2 {
@@ -415,11 +429,11 @@ canvas {
     border: 1px solid var(--bordure);
     border-radius: 12px;
     padding: 16px;
-    background: rgba(255, 255, 255, 0.4);
+    background: var(--carte);
 }
 
 .comparaison-colonne .section-entrainement {
-    grid-template-columns: 1fr;
+    columns: 1;
 }
 
 .etiquette-comparaison {
@@ -433,6 +447,8 @@ canvas {
     border-radius: 12px;
     padding: 12px 16px;
     min-height: 140px;
+    max-height: 320px;
+    overflow-y: auto;
     font-size: 0.9rem;
 }
 

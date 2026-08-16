@@ -96,11 +96,22 @@ function dessinerReseau(svg, poids1, poids2, biaisSortie, labelsEntrees, labelSo
     const yCaches = aCoucheCachee ? positionsY(nbCaches, hauteur) : [];
     const ySorties = positionsY(nbSorties, hauteur);
 
+    // Avec beaucoup d'entrees (ex: module 11, un pixel par entree), le
+    // nombre de lignes explose (16 x 3 = 48) et le schema devient un
+    // enchevetrement illisible si chaque ligne reste aussi epaisse et
+    // opaque qu'avec 2 entrees. On adoucit les lignes en proportion du
+    // nombre d'entrees, pour garder un schema lisible tout en montrant
+    // toujours les boutons les plus forts plus marques que les autres.
+    const nbLignesEnviron = aCoucheCachee ? (nbEntrees * nbCaches + nbCaches) : (nbEntrees * nbSorties);
+    const facteurDensite = Math.min(1, 14 / Math.max(1, nbLignesEnviron));
+
     function styleBouton(valeur) {
         const v = Math.max(-3, Math.min(3, valeur));
         const intensite = Math.min(1, Math.abs(v) / 3);
         const couleur = v >= 0 ? "59,130,246" : "239,68,68";
-        return { couleur: `rgba(${couleur},${0.25 + intensite * 0.75})`, epaisseur: 1 + intensite * 4 };
+        const opacite = (0.08 + intensite * 0.72) * facteurDensite + 0.06;
+        const epaisseur = (1 + intensite * 4) * (0.4 + 0.6 * facteurDensite);
+        return { couleur: `rgba(${couleur},${Math.min(1, opacite)})`, epaisseur };
     }
 
     function ligne(x1, y1, x2, y2, valeur) {
