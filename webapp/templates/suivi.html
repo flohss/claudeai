@@ -40,13 +40,14 @@
       <h2 class="titre-graphique">
         {%- if num == 5 %}Score par partie
         {%- elif num == 6 %}Distance moyenne aux centres
+        {%- elif num == 7 %}Récompense par partie
         {%- else %}Courbe d'erreur{% endif -%}
       </h2>
       <canvas class="graphique" width="480" height="220"></canvas>
       <p class="progression"></p>
     </div>
     <div class="colonne">
-      {% if num not in (5, 6) %}
+      {% if num not in (5, 6, 7) %}
       <h2>Ce qu'elle pense maintenant</h2>
       <div class="pensees"></div>
       {% endif %}

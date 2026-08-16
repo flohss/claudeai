@@ -350,6 +350,20 @@ canvas {
     border-radius: 50%;
 }
 
+.case-mur {
+    background: #475569;
+}
+
+.case-fromage {
+    background: #f59e0b;
+    border-radius: 50%;
+}
+
+.case-rat {
+    background: #7c3aed;
+    border-radius: 50%;
+}
+
 .demo-info {
     font-weight: 600;
 }

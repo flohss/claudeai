@@ -10,6 +10,9 @@ const COULEUR_CASE = {
     tete: "case-tete",
     corps: "case-corps",
     nourriture: "case-nourriture",
+    rat: "case-rat",
+    mur: "case-mur",
+    fromage: "case-fromage",
     vide: "case-vide",
 };
 
@@ -211,7 +214,6 @@ function dessinerGrille(container, grille) {
 function initialiserSuivi(conteneur, reseauConfig) {
     const sessionId = conteneur.dataset.sessionId;
     const numModule = parseInt(conteneur.dataset.num, 10);
-    const estModule5 = numModule === 5;
 
     const canvas = conteneur.querySelector(".graphique");
     const zoneProgression = conteneur.querySelector(".progression");
@@ -295,16 +297,24 @@ function initialiserSuivi(conteneur, reseauConfig) {
                 dessinerNuage(zoneNuage, donnees.points, donnees.groupes, donnees.centres);
             }
         } else if (donnees.type === "partie") {
-            ajouterPoint(donnees.partie, donnees.score);
-            zoneProgression.textContent = `Partie ${donnees.partie} / ${donnees.nb_parties} — score : ${donnees.score} — curiosité : ${donnees.curiosite.toFixed(2)}`;
-            ajouterHistorique(`Partie ${donnees.partie} — score : ${donnees.score} — moyenne récente : ${donnees.moyenne_recente.toFixed(1)}`);
+            const valeur = donnees.score !== undefined ? donnees.score : donnees.recompense;
+            ajouterPoint(donnees.partie, valeur);
+            if (numModule === 7) {
+                zoneProgression.textContent = `Partie ${donnees.partie} / ${donnees.nb_parties} — récompense : ${valeur.toFixed(2)} — réussite récente : ${donnees.taux_reussite_recent.toFixed(0)}% — curiosité : ${donnees.curiosite.toFixed(2)}`;
+                ajouterHistorique(`Partie ${donnees.partie} — récompense : ${valeur.toFixed(2)} — réussite récente : ${donnees.taux_reussite_recent.toFixed(0)}%`);
+            } else {
+                zoneProgression.textContent = `Partie ${donnees.partie} / ${donnees.nb_parties} — score : ${valeur} — curiosité : ${donnees.curiosite.toFixed(2)}`;
+                ajouterHistorique(`Partie ${donnees.partie} — score : ${valeur} — moyenne récente : ${donnees.moyenne_recente.toFixed(1)}`);
+            }
         } else if (donnees.type === "fin_entrainement") {
             zoneStatut.textContent = "Entraînement terminé, on regarde une partie jouée par l'IA...";
             if (sectionEntrainement) sectionEntrainement.hidden = true;
             if (sectionDemo) sectionDemo.hidden = false;
         } else if (donnees.type === "mouvement") {
             dessinerGrille(zoneGrille, donnees.grille);
-            zoneDemoInfo.textContent = `Score : ${donnees.score} — ${donnees.message}`;
+            const libelle = numModule === 7 ? "Récompense" : "Score";
+            const valeur = donnees.score !== undefined ? donnees.score : donnees.recompense;
+            zoneDemoInfo.textContent = `${libelle} : ${typeof valeur === "number" ? valeur.toFixed(2) : valeur} — ${donnees.message}`;
         } else if (donnees.type === "fin") {
             terminerAffichage("Terminé !", "statut-termine");
             source.close();

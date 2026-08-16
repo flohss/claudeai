@@ -33,7 +33,7 @@
           <p class="progression"></p>
         </div>
         <div class="colonne">
-          {% if num != 5 %}
+          {% if num not in (5, 6, 7) %}
           <div class="pensees"></div>
           {% endif %}
           <div class="historique"></div>
@@ -67,7 +67,7 @@
           <p class="progression"></p>
         </div>
         <div class="colonne">
-          {% if num != 5 %}
+          {% if num not in (5, 6, 7) %}
           <div class="pensees"></div>
           {% endif %}
           <div class="historique"></div>

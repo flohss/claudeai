@@ -15,9 +15,9 @@ memes fonctions entrainer() que la ligne de commande, avec juste des
 rappels (callbacks) qui poussent chaque essai vers le navigateur au
 fur et a mesure, via un flux "Server-Sent Events".
 
-Le module 6 (SPECIAL) n'est pas encore disponible ici, car il vous
+Le module 8 (SPECIAL) n'est pas encore disponible ici, car il vous
 demande de taper vos exemples un par un : pour l'instant, utilisez-le
-en ligne de commande (python -m modules.module6_special).
+en ligne de commande (python -m modules.module8_special).
 
 Usage :
     pip install -r requirements-web.txt
@@ -47,6 +47,7 @@ from modules import module3_fruits as module3  # noqa: E402
 from modules import module4_sequence as module4  # noqa: E402
 from modules import module5_serpent as module5  # noqa: E402
 from modules import module6_regroupement as module6  # noqa: E402
+from modules import module7_labyrinthe as module7  # noqa: E402
 
 app = Flask(__name__)
 
@@ -121,6 +122,17 @@ MODULES = {
         # (elle recalcule directement le milieu de chaque groupe, elle
         # n'y va pas doucement) : affichage en nuage de points a la place.
         "nuage": True,
+    },
+    7: {
+        "titre": "Le rat dans le labyrinthe",
+        "description": "Une IA qui apprend par essai-erreur a trouver le fromage dans un labyrinthe fixe.",
+        "champs": [
+            {"nom": "nb_parties", "label": "Nombre de parties", "defaut": 300, "pas": "1"},
+            {"nom": "vitesse_apprentissage", "label": "Vitesse d'apprentissage", "defaut": 0.1, "pas": "0.01"},
+            {"nom": "patience", "label": "Patience (importance du futur)", "defaut": 0.9, "pas": "0.01"},
+        ],
+        # Pas de "reseau" : comme le module 5, il a une memoire des choix
+        # (table), pas des boutons.
     },
 }
 
@@ -248,6 +260,15 @@ def lancer_entrainement(num, parametres):
                 module6.entrainer(nb_essais=parametres["nb_essais"],
                                    nb_groupes=parametres["nb_groupes"],
                                    sur_essai=sur_essai)
+            elif num == 7:
+                table_des_choix, _ = module7.entrainer(
+                    nb_parties=parametres["nb_parties"],
+                    vitesse_apprentissage=parametres["vitesse_apprentissage"],
+                    patience=parametres["patience"],
+                    sur_partie=sur_partie, jouer_demo_finale=False)
+                file_evenements.put({"type": "fin_entrainement"})
+                module7.jouer_une_partie_demo(table_des_choix, vitesse_affichage=0.3,
+                                               sur_mouvement=sur_mouvement)
             file_evenements.put({"type": "fin"})
         except EntrainementInterrompu:
             file_evenements.put({"type": "arrete"})
