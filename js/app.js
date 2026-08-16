@@ -63,17 +63,11 @@
       return window.PRESET_LIST.find((p) => p.id === id);
     }
 
-    async function loadPreset(id) {
+    function loadPreset(id) {
       const preset = findPreset(id);
       if (!preset) return;
       presetDesc.textContent = preset.desc;
-      try {
-        const res = await fetch(preset.file);
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        editor.value = await res.text();
-      } catch (e) {
-        setStatus("Impossible de charger le fichier preset (ouvrez la page via un serveur local).", true);
-      }
+      editor.value = preset.code;
     }
 
     function setStatus(text, isError) {
