@@ -21,6 +21,10 @@ proposer une version nette du trait. À côté, des outils de tracé direct
   couleur personnalisée.
 - **Export** PNG ou SVG (rognés au contenu), **sauvegarde/ouverture** du
   projet en fichier `.json`, sauvegarde automatique locale.
+- **Arrière-plans** : ligné, quadrillé, pointillé ou blanc, au choix à la
+  création d'un nouveau projet.
+- **OCR** : reconnaissance du texte manuscrit (sélection, sinon tout le
+  dessin visible) via Tesseract.js, avec copier-coller du résultat.
 
 ## Raccourcis clavier
 
@@ -47,3 +51,5 @@ npm run build
 - `src/canvasElements.jsx` — sous-composants SVG (tracés, poignées, papier).
 - `src/theme.js` — palettes clair/sombre.
 - `src/App.jsx` — état, interactions, mise en page.
+- `public/tesseract/` — worker et moteur OCR (Tesseract.js) auto-hébergés,
+  pour ne dépendre d'un CDN externe que pour les modèles de langue.

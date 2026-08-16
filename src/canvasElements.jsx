@@ -60,13 +60,15 @@ export function StrokeView({ stroke, interactive, onGrab }) {
 
   if (stroke.shape) {
     return (
-      <ShapeGeometry shape={stroke.shape} stroke={stroke} hitWidth={hitWidth} pointerEvents={hitPointerEvents} grabProps={grabProps} />
+      <g data-stroke-id={stroke.id}>
+        <ShapeGeometry shape={stroke.shape} stroke={stroke} hitWidth={hitWidth} pointerEvents={hitPointerEvents} grabProps={grabProps} />
+      </g>
     );
   }
 
   const d = smoothPathD(stroke.points);
   return (
-    <g>
+    <g data-stroke-id={stroke.id}>
       <path d={d} fill="none" stroke={stroke.color} strokeWidth={stroke.width} strokeLinecap="round" strokeLinejoin="round" pointerEvents="none" />
       <path d={d} fill="none" stroke="transparent" strokeWidth={hitWidth} pointerEvents={hitPointerEvents} {...grabProps} />
     </g>

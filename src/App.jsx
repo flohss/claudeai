@@ -3,7 +3,7 @@ import {
   Undo2, Redo2, Trash2, Check, X, Sparkles, PenLine, Pencil, MousePointer2,
   Download, Save, FolderOpen, Layers, Sun, Moon, FileCode2, Minus, Plus,
   Hand, Square, Circle, Slash, ArrowRight, ChevronUp, ChevronDown, Eye, EyeOff,
-  FilePlus2,
+  FilePlus2, ScanText, Clipboard, ClipboardCheck, LoaderCircle,
 } from 'lucide-react';
 import {
   dist, classifyShape, getBBox, smoothPathD, strokeBBox, shapeHandlePoints,
@@ -271,6 +271,8 @@ export default function DrawingAssistant() {
   const [layersPanelOpen, setLayersPanelOpen] = useState(false);
   const [background, setBackground] = useState(() => loadProject().background);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
+  const [ocr, setOcr] = useState(null); // null | { status: 'loading' } | { status: 'done', text } | { status: 'error', message }
+  const [ocrCopied, setOcrCopied] = useState(false);
 
   const [color, setColor] = useState(colors.penColors[0].hex);
   const [width, setWidth] = useState(WIDTHS[1].value);
@@ -749,6 +751,123 @@ export default function DrawingAssistant() {
     URL.revokeObjectURL(link.href);
   }
 
+  // -- OCR (reconnaissance de texte manuscrit) ------------------------------------
+  // Rastérise le sous-ensemble de tracés visé (sélection, sinon tout le dessin
+  // visible) en forçant une encre noire sur fond blanc — quel que soit le thème
+  // ou les couleurs choisies — pour maximiser le contraste avant la reconnaissance.
+
+  function buildRasterClone(strokesToInclude, padding = 16) {
+    const box = unionBBox(strokesToInclude.map(strokeBBox));
+    if (!box || !svgRef.current) return null;
+    const w = box.w + padding * 2, h = box.h + padding * 2;
+
+    const clone = svgRef.current.cloneNode(true);
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    clone.setAttribute('width', String(w));
+    clone.setAttribute('height', String(h));
+    clone.setAttribute('viewBox', `0 0 ${w} ${h}`);
+
+    const g = clone.querySelector('[data-world-group]');
+    if (g) g.setAttribute('transform', `translate(${padding - box.minX} ${padding - box.minY})`);
+    clone.querySelectorAll('[data-ui-only]').forEach((el) => el.remove());
+
+    const wantedIds = new Set(strokesToInclude.map((s) => s.id));
+    clone.querySelectorAll('[data-stroke-id]').forEach((el) => {
+      if (!wantedIds.has(el.getAttribute('data-stroke-id'))) {
+        el.remove();
+        return;
+      }
+      el.querySelectorAll('[stroke], [fill]').forEach((shapeEl) => {
+        const strokeAttr = shapeEl.getAttribute('stroke');
+        if (strokeAttr && strokeAttr !== 'none' && strokeAttr !== 'transparent') shapeEl.setAttribute('stroke', '#000000');
+        const fillAttr = shapeEl.getAttribute('fill');
+        if (fillAttr && fillAttr !== 'none' && fillAttr !== 'transparent') shapeEl.setAttribute('fill', '#000000');
+      });
+    });
+
+    const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    bg.setAttribute('width', String(w));
+    bg.setAttribute('height', String(h));
+    bg.setAttribute('fill', '#FFFFFF');
+    clone.insertBefore(bg, clone.firstChild);
+
+    return { clone, w, h };
+  }
+
+  async function runOCR() {
+    const targets = selectedStrokes.length > 0 ? selectedStrokes : strokes.filter((s) => isLayerVisible(s.layerId));
+    setOcrCopied(false);
+    if (targets.length === 0) {
+      setOcr({ status: 'error', message: 'Aucun tracé à analyser — dessinez ou sélectionnez du texte à main levée.' });
+      return;
+    }
+    setOcr({ status: 'loading' });
+    // Un échec réseau à l'intérieur du worker (ex. téléchargement du modèle de
+    // langue bloqué) ne rejette pas toujours proprement la promesse — un
+    // timeout garantit que l'interface ne reste jamais bloquée sur "Analyse en
+    // cours…".
+    let worker = null;
+    try {
+      const built = buildRasterClone(targets);
+      if (!built) throw new Error('empty');
+      const { clone, w, h } = built;
+      const svgUrl = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(clone)], { type: 'image/svg+xml;charset=utf-8' }));
+      const canvas = await new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+          const scale = 3;
+          const c = document.createElement('canvas');
+          c.width = w * scale;
+          c.height = h * scale;
+          const ctx = c.getContext('2d');
+          ctx.scale(scale, scale);
+          ctx.drawImage(img, 0, 0, w, h);
+          URL.revokeObjectURL(svgUrl);
+          resolve(c);
+        };
+        img.onerror = (err) => { URL.revokeObjectURL(svgUrl); reject(err); };
+        img.src = svgUrl;
+      });
+
+      const withTimeout = (promise, ms) => Promise.race([
+        promise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms)),
+      ]);
+
+      const { createWorker } = await import('tesseract.js');
+      worker = await withTimeout(
+        createWorker('fra+eng', undefined, {
+          workerPath: '/tesseract/worker.min.js',
+          corePath: '/tesseract/tesseract-core-simd-lstm.js',
+          // Chemins servis depuis notre propre origine : la résolution relative du
+          // binaire .wasm casse si le worker est instancié via un Blob URL.
+          workerBlobURL: false,
+        }),
+        45000,
+      );
+      const { data } = await withTimeout(worker.recognize(canvas), 45000);
+      await worker.terminate();
+      worker = null;
+      const text = (data.text || '').trim();
+      setOcr({ status: 'done', text: text || '(aucun texte détecté)' });
+    } catch {
+      setOcr({ status: 'error', message: "La reconnaissance de texte a échoué (réseau indisponible, ou trop lent). Réessayez." });
+    } finally {
+      if (worker) worker.terminate().catch(() => {});
+    }
+  }
+
+  async function copyOcrText() {
+    if (!ocr || ocr.status !== 'done') return;
+    try {
+      await navigator.clipboard.writeText(ocr.text);
+      setOcrCopied(true);
+      setTimeout(() => setOcrCopied(false), 1800);
+    } catch {
+      // presse-papiers indisponible (permissions, contexte non sécurisé) — on ignore.
+    }
+  }
+
   function saveProjectFile() {
     const data = { version: 1, strokes, layers, background };
     const link = document.createElement('a');
@@ -880,6 +999,14 @@ export default function DrawingAssistant() {
         </button>
 
         <div className="flex items-center gap-1 ml-auto pl-2 border-l flex-wrap justify-end" style={{ borderColor: colors.border }}>
+          <ToolbarButton
+            onClick={runOCR}
+            disabled={ocr?.status === 'loading'}
+            title="Reconnaître le texte manuscrit (OCR) — sélection, sinon tout le dessin"
+            colors={colors}
+          >
+            {ocr?.status === 'loading' ? <LoaderCircle size={17} className="animate-spin" /> : <ScanText size={17} />}
+          </ToolbarButton>
           <ToolbarButton active={newProjectOpen} onClick={() => setNewProjectOpen((v) => !v)} title="Nouveau projet" colors={colors}>
             <FilePlus2 size={17} />
           </ToolbarButton>
@@ -1044,6 +1171,55 @@ export default function DrawingAssistant() {
                   colors={colors}
                 />
               ))}
+            </div>
+          </div>
+        )}
+
+        {ocr && (
+          <div
+            className="absolute inset-0 z-30 flex items-center justify-center"
+            style={{ background: 'rgba(0,0,0,0.35)' }}
+            onClick={() => setOcr(null)}
+          >
+            <div
+              className="w-[420px] max-w-[90%] rounded-lg shadow-lg overflow-hidden"
+              style={{ background: colors.panelBg, border: `1px solid ${colors.border}` }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-3 py-2 border-b" style={{ borderColor: colors.border }}>
+                <span className="text-xs font-semibold uppercase tracking-wide flex items-center gap-1.5" style={{ color: colors.textMuted }}>
+                  <ScanText size={14} /> Texte reconnu
+                </span>
+                <button onClick={() => setOcr(null)} className="p-1 rounded" title="Fermer"><X size={14} /></button>
+              </div>
+              <div className="p-3">
+                {ocr.status === 'loading' && (
+                  <div className="flex items-center gap-2 py-6 justify-center text-sm" style={{ color: colors.textMuted }}>
+                    <LoaderCircle size={16} className="animate-spin" /> Analyse en cours…
+                  </div>
+                )}
+                {ocr.status === 'error' && (
+                  <p className="text-sm py-2" style={{ color: colors.danger }}>{ocr.message}</p>
+                )}
+                {ocr.status === 'done' && (
+                  <>
+                    <textarea
+                      value={ocr.text}
+                      onChange={(e) => setOcr({ ...ocr, text: e.target.value })}
+                      rows={6}
+                      className="w-full text-sm p-2 rounded-md resize-none"
+                      style={{ background: colors.appBg, color: colors.text, border: `1px solid ${colors.border}` }}
+                    />
+                    <button
+                      onClick={copyOcrText}
+                      className="mt-2 w-full flex items-center justify-center gap-2 py-2 rounded-md text-sm"
+                      style={{ background: colors.accent, color: colors.accentText }}
+                    >
+                      {ocrCopied ? <><ClipboardCheck size={15} /> Copié !</> : <><Clipboard size={15} /> Copier</>}
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         )}
