@@ -15,9 +15,9 @@ memes fonctions entrainer() que la ligne de commande, avec juste des
 rappels (callbacks) qui poussent chaque essai vers le navigateur au
 fur et a mesure, via un flux "Server-Sent Events".
 
-Le module 8 (SPECIAL) n'est pas encore disponible ici, car il vous
+Le module 9 (SPECIAL) n'est pas encore disponible ici, car il vous
 demande de taper vos exemples un par un : pour l'instant, utilisez-le
-en ligne de commande (python -m modules.module8_special).
+en ligne de commande (python -m modules.module9_special).
 
 Usage :
     pip install -r requirements-web.txt
@@ -48,6 +48,7 @@ from modules import module4_sequence as module4  # noqa: E402
 from modules import module5_serpent as module5  # noqa: E402
 from modules import module6_regroupement as module6  # noqa: E402
 from modules import module7_labyrinthe as module7  # noqa: E402
+from modules import module8_fruits_multiples as module8  # noqa: E402
 
 app = Flask(__name__)
 
@@ -133,6 +134,15 @@ MODULES = {
         ],
         # Pas de "reseau" : comme le module 5, il a une memoire des choix
         # (table), pas des boutons.
+    },
+    8: {
+        "titre": "Reconnaitre PLUSIEURS fruits",
+        "description": "L'extension du module 3 : choisir entre Pomme, Orange ou Banane, pas seulement deux categories.",
+        "champs": [
+            {"nom": "nb_essais", "label": "Nombre d'essais", "defaut": 2000, "pas": "1"},
+            {"nom": "vitesse_apprentissage", "label": "Vitesse d'apprentissage", "defaut": 0.5, "pas": "0.01"},
+        ],
+        "reseau": {"entrees": ["poids", "forme"], "sortie": ["Pomme", "Orange", "Banane"]},
     },
 }
 
@@ -274,6 +284,10 @@ def lancer_entrainement(num, parametres):
                 file_evenements.put({"type": "fin_entrainement"})
                 module7.jouer_une_partie_demo(table_des_choix, vitesse_affichage=0.3,
                                                sur_mouvement=sur_mouvement)
+            elif num == 8:
+                module8.entrainer(nb_essais=parametres["nb_essais"],
+                                   vitesse_apprentissage=parametres["vitesse_apprentissage"],
+                                   sur_essai=sur_essai)
             file_evenements.put({"type": "fin"})
         except EntrainementInterrompu:
             file_evenements.put({"type": "arrete"})

@@ -61,9 +61,11 @@ function dessinerCourbe(canvas, points) {
     ctx.stroke();
 }
 
-// Dessine un petit schema "entrees -> (couche cachee) -> sortie", avec
+// Dessine un petit schema "entrees -> (couche cachee) -> sortie(s)", avec
 // une ligne par bouton : bleu = positif, rouge = negatif, plus la ligne
 // est epaisse et opaque, plus le bouton pese lourd dans la decision.
+// Gere aussi PLUSIEURS sorties a la fois (module 8 : un fruit par sortie),
+// avec un biais par sortie dans ce cas.
 function dessinerReseau(svg, poids1, poids2, biaisSortie, labelsEntrees, labelSortie) {
     while (svg.firstChild) svg.removeChild(svg.firstChild);
 
@@ -74,6 +76,10 @@ function dessinerReseau(svg, poids1, poids2, biaisSortie, labelsEntrees, labelSo
     const nbEntrees = poids1.length;
     const aCoucheCachee = poids2 !== null && poids2 !== undefined;
     const nbCaches = aCoucheCachee ? poids1[0].length : 0;
+    const nbSorties = aCoucheCachee ? 1 : poids1[0].length;
+
+    const labelsSorties = Array.isArray(labelSortie) ? labelSortie : [labelSortie];
+    const biaisParSortie = Array.isArray(biaisSortie) ? biaisSortie : [biaisSortie];
 
     const xEntrees = 30;
     const xCaches = aCoucheCachee ? largeur / 2 : null;
@@ -88,7 +94,7 @@ function dessinerReseau(svg, poids1, poids2, biaisSortie, labelsEntrees, labelSo
 
     const yEntrees = positionsY(nbEntrees, hauteur);
     const yCaches = aCoucheCachee ? positionsY(nbCaches, hauteur) : [];
-    const ySortie = hauteur / 2;
+    const ySorties = positionsY(nbSorties, hauteur);
 
     function styleBouton(valeur) {
         const v = Math.max(-3, Math.min(3, valeur));
@@ -133,26 +139,31 @@ function dessinerReseau(svg, poids1, poids2, biaisSortie, labelsEntrees, labelSo
                 ligne(xEntrees, yEntrees[i], xCaches, yCaches[j], poids1[i][j]);
             }
         }
-        // couche cachee -> sortie
+        // couche cachee -> sortie (une seule sortie dans ce cas)
         for (let j = 0; j < nbCaches; j++) {
-            ligne(xCaches, yCaches[j], xSortie, ySortie, poids2[j][0]);
+            ligne(xCaches, yCaches[j], xSortie, ySorties[0], poids2[j][0]);
         }
     } else {
-        // entrees -> sortie directement
+        // entrees -> sortie(s) directement, une ligne par bouton et par sortie
         for (let i = 0; i < nbEntrees; i++) {
-            ligne(xEntrees, yEntrees[i], xSortie, ySortie, poids1[i][0]);
+            for (let s = 0; s < nbSorties; s++) {
+                ligne(xEntrees, yEntrees[i], xSortie, ySorties[s], poids1[i][s]);
+            }
         }
     }
 
-    if (biaisSortie !== null && biaisSortie !== undefined) {
-        const yBiais = hauteur - 12;
-        ligne(xSortie, yBiais, xSortie, ySortie, biaisSortie);
-        noeud(xSortie, yBiais, "biais");
-    }
+    ySorties.forEach((yS, s) => {
+        const biais = biaisParSortie[s];
+        if (biais !== null && biais !== undefined) {
+            const yBiais = Math.min(hauteur - 8, yS + 18);
+            ligne(xSortie, yBiais, xSortie, yS, biais);
+            if (nbSorties === 1) noeud(xSortie + 22, yBiais, "biais");
+        }
+    });
 
     yEntrees.forEach((y, i) => noeud(xEntrees, y, labelsEntrees[i] || ""));
     if (aCoucheCachee) yCaches.forEach((y) => noeud(xCaches, y));
-    noeud(xSortie, ySortie, labelSortie);
+    ySorties.forEach((y, s) => noeud(xSortie, y, labelsSorties[s] || ""));
 }
 
 const COULEURS_GROUPES = ["#3b82f6", "#ef4444", "#16a34a", "#f59e0b", "#8b5cf6", "#ec4899"];

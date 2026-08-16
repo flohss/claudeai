@@ -34,7 +34,8 @@ python -m modules.module4_sequence --details
 python -m modules.module5_serpent --details --parties 5
 python -m modules.module6_regroupement --details --essais 5
 python -m modules.module7_labyrinthe --details --parties 5
-python -m modules.module8_special --details
+python -m modules.module8_fruits_multiples --details --essais 5
+python -m modules.module9_special --details
 ```
 
 Le mode `--details` fait "raconter sa pensée" à l'IA en vraies phrases
@@ -56,9 +57,11 @@ boutons qui s'anime (entrées → couche cachée → sortie, coloré selon la
 valeur de chaque bouton), un nuage de points pour le module 6 (les
 animaux qui changent de couleur de groupe au fil des essais), une
 grille animée pour le module 7 (le rat qui explore le labyrinthe), et
-le fil de pensée de l'IA qui défile — pour les modules 1 à 7 (le
-module 8 reste pour l'instant réservé à la ligne de commande, car il
-vous demande de taper vos exemples un par un).
+le fil de pensée de l'IA qui défile — pour les modules 1 à 8 (le
+module 9 reste pour l'instant réservé à la ligne de commande, car il
+vous demande de taper vos exemples un par un). Le module 8 (plusieurs
+catégories) affiche même un schéma à PLUSIEURS sorties : un nœud par
+fruit possible, chacun avec ses propres boutons.
 
 Un bouton "Arrêter" permet d'interrompre un entraînement en cours. Et
 un mode comparaison (lien "Comparer deux vitesses d'apprentissage" sur
@@ -96,7 +99,8 @@ internet.
 | 5 | `module5_serpent` | Jouer au serpent sans jamais recevoir de bonnes réponses à l'avance | L'apprentissage par renforcement (essai-erreur + récompenses) |
 | 6 | `module6_regroupement` | Ranger des animaux en groupes à partir de leur taille et poids, sans jamais connaître leur espèce | L'apprentissage NON supervisé (aucune bonne réponse fournie) |
 | 7 | `module7_labyrinthe` | Trouver le fromage dans un labyrinthe fixe, par essai-erreur | Une situation = juste une position sur une grille (pas de dangers à deviner comme le serpent) |
-| 8 | `module8_special` | Ce que VOUS lui enseignez, en direct (deux catégories, ou un nombre) | C'est vous le professeur, pas un jeu d'exemples préparé à l'avance |
+| 8 | `module8_fruits_multiples` | Reconnaître Pomme, Orange ou Banane (extension du module 3 à 3+ catégories) | Partager 100% de confiance entre plusieurs réponses possibles |
+| 9 | `module9_special` | Ce que VOUS lui enseignez, en direct (deux catégories, ou un nombre) | C'est vous le professeur, pas un jeu d'exemples préparé à l'avance |
 
 ## Vocabulaire (aucun jargon technique)
 
@@ -131,7 +135,8 @@ modules/
     module5_serpent.py
     module6_regroupement.py
     module7_labyrinthe.py
-    module8_special.py
+    module8_fruits_multiples.py
+    module9_special.py
 checkpoints/                  -> checkpoints JSON sauvegardés après chaque entrainement
 webapp/                       -> interface graphique (Flask), optionnelle
     app.py
@@ -145,25 +150,26 @@ lancer_interface_web.bat       -> double-clic Windows pour lancer l'interface gr
 Chaque module sauvegarde un checkpoint JSON (`checkpoints/moduleX_*.json`)
 avec ses boutons finaux (ou sa mémoire des choix pour les modules 5 et 7,
 ses centres de groupes pour le module 6, ou ce que vous lui avez enseigné
-pour le module 8) et l'historique de l'erreur (ou des scores/récompenses)
+pour le module 9) et l'historique de l'erreur (ou des scores/récompenses)
 au fil des essais.
 
 ## Suite envisagée (à prioriser ensemble)
 
-- Amener le module 8 (SPECIAL) dans l'interface graphique, avec un
+- Amener le module 9 (SPECIAL) dans l'interface graphique, avec un
   formulaire pour taper les exemples au lieu du terminal
 - Un mode "rejouer" pour recharger un checkpoint et reprendre l'entrainement,
   ou revoir le film d'un apprentissage passé
 - Comparer plus de deux vitesses à la fois (3-4 côte à côte)
-- D'autres modules avant le SPECIAL : plusieurs catégories à la fois
-  (3+ au lieu de 2), reconnaissance d'image simplifiée (petite grille de
-  pixels), ou un module sur le sur-apprentissage/sous-apprentissage
+- D'autres modules avant le SPECIAL : reconnaissance d'image simplifiée
+  (petite grille de pixels), ou un module sur le sur-apprentissage/
+  sous-apprentissage
 
 Déjà fait : le mode "pas à pas" (branché dans le menu), le module 5
 (serpent, essai-erreur sans exemples fournis à l'avance), le module 6
 (regroupement sans étiquettes, apprentissage non supervisé), le module 7
 (le rat dans le labyrinthe, essai-erreur avec une situation = position
-sur une grille fixe), le module 8 (c'est vous qui enseignez l'IA à
+sur une grille fixe), le module 8 (plusieurs catégories à la fois,
+extension du module 3), le module 9 (c'est vous qui enseignez l'IA à
 partir de zéro), l'interface graphique dans le navigateur pour les
-modules 1 à 7, le schéma des boutons en direct, le nuage de points
-animé, le bouton "Arrêter", et le mode comparaison.
+modules 1 à 8 (avec un schéma à plusieurs sorties pour le module 8), le
+nuage de points animé, le bouton "Arrêter", et le mode comparaison.

@@ -19,7 +19,8 @@ from modules import module4_sequence as module4
 from modules import module5_serpent as module5
 from modules import module6_regroupement as module6
 from modules import module7_labyrinthe as module7
-from modules import module8_special as module8
+from modules import module8_fruits_multiples as module8
+from modules import module9_special as module9
 
 
 BANNIERE = r"""
@@ -63,10 +64,14 @@ def afficher_accueil():
     print("      Une autre IA qui apprend par essai-erreur, mais cette fois")
     print("      dans un labyrinthe fixe : sa situation est juste sa position")
     print("      sur la grille, pas des dangers a deviner comme le serpent.\n")
-    print("  [8] SPECIAL : c'est vous le professeur")
+    print("  [8] Reconnaitre PLUSIEURS fruits")
+    print("      L'extension du module 3 : choisir entre Pomme, Orange ou")
+    print("      Banane (au lieu de 2 categories seulement), en partageant")
+    print("      100% de confiance entre les trois.\n")
+    print("  [9] SPECIAL : c'est vous le professeur")
     print("      Vous donnez vous-meme les exemples a l'IA, en direct,")
     print("      et elle apprend uniquement de ce que VOUS lui montrez.\n")
-    print("  [9] Quitter\n")
+    print("  [10] Quitter\n")
 
 
 def demander_details():
@@ -183,9 +188,18 @@ def lancer_module_7():
 
 
 def lancer_module_8():
-    print("\n--- MODULE 8 : SPECIAL, c'est vous le professeur ---\n")
+    print("\n--- MODULE 8 : Reconnaitre PLUSIEURS fruits ---\n")
+    details, pas_a_pas_actif, nb_essais = demander_mode(2000)
+    module8.entrainer(nb_essais=nb_essais, vitesse_apprentissage=0.5,
+                       details=details, afficher_tous_les=400,
+                       pas_a_pas_actif=pas_a_pas_actif)
+    pause_avant_retour()
+
+
+def lancer_module_9():
+    print("\n--- MODULE 9 : SPECIAL, c'est vous le professeur ---\n")
     details, pas_a_pas_actif, nb_essais = demander_mode(4000)
-    module8.entrainer(nb_essais=nb_essais, vitesse_apprentissage=0.1,
+    module9.entrainer(nb_essais=nb_essais, vitesse_apprentissage=0.1,
                        details=details, afficher_tous_les=400,
                        pas_a_pas_actif=pas_a_pas_actif)
     pause_avant_retour()
@@ -194,7 +208,7 @@ def lancer_module_8():
 def boucle_principale():
     while True:
         afficher_accueil()
-        choix = input("Votre choix (1-9) : ").strip()
+        choix = input("Votre choix (1-10) : ").strip()
 
         if choix == "1":
             lancer_module_1()
@@ -213,10 +227,12 @@ def boucle_principale():
         elif choix == "8":
             lancer_module_8()
         elif choix == "9":
+            lancer_module_9()
+        elif choix == "10":
             print("\nA bientot !")
             sys.exit(0)
         else:
-            print("\nChoix non reconnu, merci de taper un chiffre entre 1 et 9.\n")
+            print("\nChoix non reconnu, merci de taper un chiffre entre 1 et 10.\n")
 
 
 if __name__ == "__main__":
