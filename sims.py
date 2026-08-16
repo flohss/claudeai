@@ -41,6 +41,7 @@ def _cont():
 
 def bar(value, max_value=100, length=20):
     """Affiche une barre de progression colorée."""
+    value = int(round(value))
     filled = int(length * value / max_value)
     empty = length - filled
     if value > 60:
@@ -1824,6 +1825,45 @@ def _process_addictions(sim):
             slow_print(f"\n{msg}", 0.02)
 
 
+def _trigger_addiction_temptation(sim):
+    """Tentation nocturne : premier contact avec une substance (adultes uniquement).
+
+    Les priorités diurnes de l'IA (carrière, santé, besoins) accaparent la quasi-
+    totalité des décisions ; une amorce d'addiction ne peut donc pas dépendre
+    d'atteindre le fond de la pile de priorités, sous peine de ne jamais se
+    déclencher en pratique. Elle est tirée une fois par nuit à la place, comme
+    les autres événements nocturnes (trait/partenaire/saison/marché). Une fois
+    accro, la compulsion diurne (PRIORITÉ 2c de ai_choose_action) prend le relais.
+    """
+    _, stage = get_stage(sim.age)
+    if stage[1] in ("Enfant", "Adolescent"):
+        return None
+    # (chance de base, hausse par jour de streak déjà en cours, plafond) :
+    # modélise l'accoutumance — plus on a consommé récemment, plus la tentation
+    # suivante est forte. Sans ça, le streak (+1 usage / -1 abstinence) a une
+    # dérive négative avec une chance fixe basse et n'atteint jamais le seuil.
+    _profiles = {
+        "cafe":   (0.15, 0.15, 0.85),
+        "alcool": (0.11, 0.14, 0.45),
+        "tabac":  (0.12, 0.13, 0.45),
+    }
+    msgs = []
+    for sub, (base, ramp, cap) in _profiles.items():
+        st = sim.addictions.get(sub)
+        data = ADDICTIONS[sub]
+        if st is None or st.get("addicted"):
+            continue
+        if sim.money < data["cout"]:
+            continue
+        chance = min(cap, base + st["streak"] * ramp)
+        if random.random() < chance:
+            _use_substance(sim, sub)
+            msgs.append(f" {data['emoji']} Tu t'es laissé(e) tenter par {data['nom'].lower()} hier soir...")
+    if not msgs:
+        return None
+    return "\n".join([f"\n {C.BOLD}━━ TENTATION ━━{C.RESET}"] + msgs)
+
+
 def _trigger_market_event(sim):
     """Tire éventuellement un événement de marché, applique le choc, retourne le texte ou None."""
     if random.randint(1, 100) > _MARKET_EVENT_CHANCE:
@@ -2173,6 +2213,9 @@ def action_dormir(sim):
     if _mkt_event:
         sim.last_market_event = _mkt_event
 
+    # ── Tentation nocturne : amorce d'addiction (adultes, hors accros) ──
+    _temptation_msg = _trigger_addiction_temptation(sim)
+
     # ── Événements nocturnes : trait > partenaire > aléatoire (40%) ──
     trait_msg = trigger_trait_event(sim)
     if trait_msg:
@@ -2189,12 +2232,13 @@ def action_dormir(sim):
                 sim.last_event = trigger_random_event(sim)
             else:
                 sim.last_event = None
-    # Événement marché indépendant : s'affiche en plus si actif, sinon alimente last_event
-    if _mkt_event:
-        if sim.last_event:
-            sim.last_event = sim.last_event + "\n" + _mkt_event
-        else:
-            sim.last_event = _mkt_event
+    # Événements indépendants : s'affichent en plus si actifs, sinon alimentent last_event
+    for _extra_event in (_mkt_event, _temptation_msg):
+        if _extra_event:
+            if sim.last_event:
+                sim.last_event = sim.last_event + "\n" + _extra_event
+            else:
+                sim.last_event = _extra_event
 
     # ── Récupération du stress au repos ────────────────────────────
     stress_rec = 15
@@ -3806,6 +3850,32 @@ def ai_choose_action(sim):
     if n["social"] < 55:                                                   return "appel"
 
     # ═══════════════════════════════════════════════════════════════
+    # PRIORITÉ 2c : compulsion addictive — passe devant le planning pro.
+    # PRIORITÉ 3 (carrière/études) capte quasiment tout le lun-ven ; si la
+    # compulsion attendait après, un sim accro ne consommerait plus que le
+    # week-end, le streak retombant à 0 chaque semaine → addiction figée à
+    # vie sans jamais pouvoir progresser (ni se voir, ni se soigner).
+    # Dans la vraie vie, la dépendance ne respecte pas les horaires de
+    # bureau. Bloquée si hp < 65 (seuil "urgence santé" de PRIORITÉ 2) pour
+    # l'alcool/tabac : un sim malade sans le sou pour un médecin ne doit
+    # pas aggraver sa santé au pire moment. Le café est inoffensif (pas de
+    # coût santé), donc pas de garde hp nécessaire.
+    # ═══════════════════════════════════════════════════════════════
+    _adst = getattr(sim, 'addictions', {})
+    _cafe_st = _adst.get("cafe", {})
+    if ("boire_cafe" not in blocked and sim.money >= 3
+            and _cafe_st.get("addicted") and _cafe_st.get("days_since_used", 999) > 0):
+        return "boire_cafe"
+    _alc_st = _adst.get("alcool", {})
+    if ("boire_alcool" not in blocked and sim.money >= 15 and h.hp > 65
+            and _alc_st.get("addicted") and _alc_st.get("days_since_used", 999) > 0):
+        return "boire_alcool"
+    _tab_st = _adst.get("tabac", {})
+    if ("fumer" not in blocked and sim.money >= 8 and h.hp > 65
+            and _tab_st.get("addicted") and _tab_st.get("days_since_used", 999) > 0):
+        return "fumer"
+
+    # ═══════════════════════════════════════════════════════════════
     # PRIORITÉ 3 : carrière & études — engagements fermes
     # Études : 7j/7. Travail : lun-ven.
     # Seule l'urgence physique (énergie/faim sous seuil minimal) peut différer.
@@ -3902,36 +3972,31 @@ def ai_choose_action(sim):
                 return "freelance"
 
     # ═══════════════════════════════════════════════════════════════
-    # PRIORITÉ 4d : substances — compulsion si addict, usage rare si conditions OK
-    # Compulsion bloquée si hp < 65 (seuil "urgence santé" de PRIORITÉ 2) :
-    # un sim malade et sans le sou pour un médecin ne doit pas boire/fumer
-    # au lieu de se soigner — ça aggraverait sa santé au pire moment.
+    # PRIORITÉ 4d : substances — premier usage (occasionnel, pas encore accro)
+    # La compulsion d'un sim déjà accro est gérée en PRIORITÉ 2c (avant la
+    # carrière). Ici on ne traite que l'amorçage : seuils calés sur les
+    # plages réellement atteintes en jeu (stress dépasse rarement 30-40 vu
+    # la gestion préventive de PRIORITÉ 2b/5 ; l'énergie oscille surtout
+    # entre 36-70 hors sommeil), sinon ces branches ne se déclenchent
+    # jamais et l'addiction ne peut tout simplement pas apparaître.
     # ═══════════════════════════════════════════════════════════════
-    _adst = getattr(sim, 'addictions', {})
-
-    # Café : compulsion matinale si addict, sinon coup de boost rare
     _cafe_st = _adst.get("cafe", {})
-    if "boire_cafe" not in blocked and sim.money >= 3:
-        if _cafe_st.get("addicted") and _cafe_st.get("days_since_used", 999) > 0:
-            return "boire_cafe"
-        if not _cafe_st.get("addicted") and n["energie"] < 50 and sim.hour < 14 and random.random() < 0.12:
-            return "boire_cafe"
+    if ("boire_cafe" not in blocked and sim.money >= 3
+            and not _cafe_st.get("addicted")
+            and n["energie"] < 60 and random.random() < 0.15):
+        return "boire_cafe"
 
-    # Alcool : compulsion si addict + hp au-dessus du seuil d'urgence santé
     _alc_st = _adst.get("alcool", {})
-    if "boire_alcool" not in blocked and sim.money >= 15:
-        if _alc_st.get("addicted") and _alc_st.get("days_since_used", 999) > 0 and sim.health.hp > 65:
-            return "boire_alcool"
-        if not _alc_st.get("addicted") and sim.stress > 65 and sim.hour >= 18 and random.random() < 0.08:
-            return "boire_alcool"
+    if ("boire_alcool" not in blocked and sim.money >= 15
+            and not _alc_st.get("addicted")
+            and sim.stress > 30 and sim.hour >= 18 and random.random() < 0.15):
+        return "boire_alcool"
 
-    # Tabac : compulsion si addict + hp au-dessus du seuil d'urgence santé
     _tab_st = _adst.get("tabac", {})
-    if "fumer" not in blocked and sim.money >= 8:
-        if _tab_st.get("addicted") and _tab_st.get("days_since_used", 999) > 0 and sim.health.hp > 65:
-            return "fumer"
-        if not _tab_st.get("addicted") and sim.stress > 55 and random.random() < 0.10:
-            return "fumer"
+    if ("fumer" not in blocked and sim.money >= 8
+            and not _tab_st.get("addicted")
+            and sim.stress > 25 and random.random() < 0.15):
+        return "fumer"
 
     # ═══════════════════════════════════════════════════════════════
     # PRIORITÉ 5 : récupération préventive (loisirs / social / sieste)
