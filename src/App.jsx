@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Undo2, Redo2, Trash2, Check, X, Sparkles, PenLine, Pencil, MousePointer2 } from 'lucide-react';
+import { Undo2, Redo2, Trash2, Check, X, Sparkles, PenLine, Pencil, MousePointer2, Download } from 'lucide-react';
 
 /**
  * ATELIER — assistant de dessin avec correction de traits (façon Autodraw)
@@ -383,6 +383,18 @@ const WIDTHS = [
   { label: 'Moyen', value: 5 },
   { label: 'Épais', value: 9 },
 ];
+
+const STORAGE_KEY = 'atelier-drawing-v1';
+
+function loadSavedStrokes() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
 export default function DrawingAssistant() {
   const svgRef = useRef(null);
   const containerRef = useRef(null);
@@ -392,7 +404,7 @@ export default function DrawingAssistant() {
   const dismissTimerRef = useRef(null);
   const dragRef = useRef(null);
 
-  const [strokes, setStrokes] = useState([]);
+  const [strokes, setStrokes] = useState(loadSavedStrokes);
   const [redoStack, setRedoStack] = useState([]);
   const [color, setColor] = useState(COLORS[0].hex);
   const [width, setWidth] = useState(WIDTHS[1].value);
@@ -421,6 +433,36 @@ export default function DrawingAssistant() {
       setSelectedId(null);
     }
   }, [strokes, selectedId]);
+
+  // Sauvegarde locale (différée) pour retrouver le dessin après un rechargement.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(strokes));
+      } catch {
+        // stockage indisponible (navigation privée, quota…) — on ignore.
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [strokes]);
+
+  // Filet de sécurité : si l'onglet se ferme/recharge avant que le délai
+  // ci-dessus n'ait eu le temps de s'écouler, on force l'écriture immédiate.
+  useEffect(() => {
+    function flush() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(strokes));
+      } catch {
+        // stockage indisponible — on ignore.
+      }
+    }
+    window.addEventListener('beforeunload', flush);
+    window.addEventListener('pagehide', flush);
+    return () => {
+      window.removeEventListener('beforeunload', flush);
+      window.removeEventListener('pagehide', flush);
+    };
+  }, [strokes]);
 
   function getPos(e) {
     const rect = svgRef.current.getBoundingClientRect();
@@ -500,6 +542,18 @@ export default function DrawingAssistant() {
 
   useEffect(() => {
     function onKeyDown(e) {
+      const meta = e.ctrlKey || e.metaKey;
+      if (meta && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) redo();
+        else undo();
+        return;
+      }
+      if (meta && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        redo();
+        return;
+      }
       if ((e.key === 'Delete' || e.key === 'Backspace') && mode === 'select' && selectedId) {
         e.preventDefault();
         setStrokes((prev) => prev.filter((s) => s.id !== selectedId));
@@ -508,7 +562,7 @@ export default function DrawingAssistant() {
     }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [mode, selectedId]);
+  }, [mode, selectedId, strokes, redoStack, undo, redo]);
 
   // -- Dispatch au niveau du canevas SVG selon le mode actif ---------------
 
@@ -578,6 +632,46 @@ export default function DrawingAssistant() {
     clearPendingSuggestion();
     setStrokes([]);
     setRedoStack([]);
+  }
+
+  function exportPNG() {
+    const svg = svgRef.current;
+    if (!svg || strokes.length === 0) return;
+    const { w, h } = containerSize;
+
+    const clone = svg.cloneNode(true);
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    clone.setAttribute('width', w);
+    clone.setAttribute('height', h);
+    const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    bg.setAttribute('width', String(w));
+    bg.setAttribute('height', String(h));
+    bg.setAttribute('fill', '#F3EFE6');
+    clone.insertBefore(bg, clone.firstChild);
+
+    const svgString = new XMLSerializer().serializeToString(clone);
+    const svgUrl = URL.createObjectURL(new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' }));
+
+    const img = new Image();
+    img.onload = () => {
+      const scale = 2;
+      const canvas = document.createElement('canvas');
+      canvas.width = w * scale;
+      canvas.height = h * scale;
+      const ctx = canvas.getContext('2d');
+      ctx.scale(scale, scale);
+      ctx.drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(svgUrl);
+      canvas.toBlob((blob) => {
+        if (!blob) return;
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = 'atelier.png';
+        link.click();
+        URL.revokeObjectURL(link.href);
+      }, 'image/png');
+    };
+    img.src = svgUrl;
   }
 
   const popupLeft = pendingSuggestion ? Math.min(pendingSuggestion.anchor.x + 14, containerSize.w - 200) : 0;
@@ -673,6 +767,9 @@ export default function DrawingAssistant() {
           </button>
           <button onClick={clearAll} disabled={strokes.length === 0} className="p-2 rounded-md disabled:opacity-30" style={{ background: '#FBF9F3' }}>
             <Trash2 size={17} style={{ color: '#A6432E' }} />
+          </button>
+          <button onClick={exportPNG} disabled={strokes.length === 0} title="Télécharger en PNG" className="p-2 rounded-md disabled:opacity-30" style={{ background: '#FBF9F3' }}>
+            <Download size={17} />
           </button>
         </div>
       </div>
