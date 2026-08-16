@@ -30,13 +30,23 @@
       <svg class="reseau"></svg>
     </div>
     {% endif %}
+    {% if nuage %}
     <div class="colonne">
-      <h2 class="titre-graphique">{{ "Score par partie" if num == 5 else "Courbe d'erreur" }}</h2>
+      <h2>Les groupes en ce moment</h2>
+      <canvas class="nuage" width="380" height="280"></canvas>
+    </div>
+    {% endif %}
+    <div class="colonne">
+      <h2 class="titre-graphique">
+        {%- if num == 5 %}Score par partie
+        {%- elif num == 6 %}Distance moyenne aux centres
+        {%- else %}Courbe d'erreur{% endif -%}
+      </h2>
       <canvas class="graphique" width="480" height="220"></canvas>
       <p class="progression"></p>
     </div>
     <div class="colonne">
-      {% if num != 5 %}
+      {% if num not in (5, 6) %}
       <h2>Ce qu'elle pense maintenant</h2>
       <div class="pensees"></div>
       {% endif %}

@@ -46,6 +46,7 @@ from modules import module2_prix as module2  # noqa: E402
 from modules import module3_fruits as module3  # noqa: E402
 from modules import module4_sequence as module4  # noqa: E402
 from modules import module5_serpent as module5  # noqa: E402
+from modules import module6_regroupement as module6  # noqa: E402
 
 app = Flask(__name__)
 
@@ -109,6 +110,18 @@ MODULES = {
         # Pas de "reseau" : le module 5 n'a pas de boutons, mais une
         # memoire des choix (table), qui ne se dessine pas comme un reseau.
     },
+    6: {
+        "titre": "Regrouper sans étiquettes",
+        "description": "Une IA qui range des animaux en groupes a partir de leur taille et leur poids, sans jamais qu'on lui dise leur espece.",
+        "champs": [
+            {"nom": "nb_essais", "label": "Nombre d'essais maximum", "defaut": 10, "pas": "1"},
+            {"nom": "nb_groupes", "label": "Nombre de groupes a chercher", "defaut": 3, "pas": "1"},
+        ],
+        # Pas de "reseau" (pas de boutons) ni de "vitesse_apprentissage"
+        # (elle recalcule directement le milieu de chaque groupe, elle
+        # n'y va pas doucement) : affichage en nuage de points a la place.
+        "nuage": True,
+    },
 }
 
 # Au dela de ce nombre d'essais/parties, on n'envoie pas un evenement a
@@ -134,7 +147,7 @@ def nettoyer_pour_json(valeur):
 def convertir_valeur(champ, valeur_brute):
     if champ.get("type") == "select":
         return valeur_brute
-    if champ["nom"] in ("nb_essais", "nb_parties"):
+    if champ["nom"] in ("nb_essais", "nb_parties", "nb_groupes"):
         return int(float(valeur_brute))
     return float(valeur_brute)
 
@@ -231,6 +244,10 @@ def lancer_entrainement(num, parametres):
                 rng_demo = np.random.default_rng()
                 module5.jouer_une_partie_demo(table_des_choix, rng_demo, vitesse_affichage=0.2,
                                                sur_mouvement=sur_mouvement)
+            elif num == 6:
+                module6.entrainer(nb_essais=parametres["nb_essais"],
+                                   nb_groupes=parametres["nb_groupes"],
+                                   sur_essai=sur_essai)
             file_evenements.put({"type": "fin"})
         except EntrainementInterrompu:
             file_evenements.put({"type": "arrete"})
@@ -267,9 +284,10 @@ def suivi(session_id):
     session = SESSIONS.get(session_id)
     if session is None:
         abort(404)
-    reseau = MODULES[session["num"]].get("reseau")
+    config_module = MODULES[session["num"]]
     return render_template("suivi.html", session_id=session_id, num=session["num"],
-                            titre=session["titre"], parametres=session["parametres"], reseau=reseau)
+                            titre=session["titre"], parametres=session["parametres"],
+                            reseau=config_module.get("reseau"), nuage=config_module.get("nuage"))
 
 
 @app.route("/arreter/<session_id>", methods=["POST"])
@@ -298,11 +316,19 @@ def flux(session_id):
     return Response(generer(), mimetype="text/event-stream")
 
 
+def champ_vitesse_de(num):
+    """Renvoie la description du champ vitesse_apprentissage d'un module,
+    ou None s'il n'en a pas (ex: le module 6, qui n'a pas de vitesse)."""
+    return next((c for c in MODULES[num]["champs"] if c["nom"] == "vitesse_apprentissage"), None)
+
+
 @app.route("/comparer/<int:num>")
 def comparer_formulaire(num):
     if num not in MODULES:
         abort(404)
-    champ_vitesse = next(c for c in MODULES[num]["champs"] if c["nom"] == "vitesse_apprentissage")
+    champ_vitesse = champ_vitesse_de(num)
+    if champ_vitesse is None:
+        abort(404)
     autres_champs = [c for c in MODULES[num]["champs"] if c["nom"] != "vitesse_apprentissage"]
     return render_template("comparer_formulaire.html", num=num, m=MODULES[num],
                             champ_vitesse=champ_vitesse, autres_champs=autres_champs)
@@ -310,7 +336,7 @@ def comparer_formulaire(num):
 
 @app.route("/comparer/<int:num>/lancer", methods=["POST"])
 def comparer_lancer(num):
-    if num not in MODULES:
+    if num not in MODULES or champ_vitesse_de(num) is None:
         abort(404)
     params_a, params_b = lire_parametres_comparaison(num, request.form)
     id_a = lancer_entrainement(num, params_a)

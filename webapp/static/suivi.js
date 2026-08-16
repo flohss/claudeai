@@ -152,6 +152,49 @@ function dessinerReseau(svg, poids1, poids2, biaisSortie, labelsEntrees, labelSo
     noeud(xSortie, ySortie, labelSortie);
 }
 
+const COULEURS_GROUPES = ["#3b82f6", "#ef4444", "#16a34a", "#f59e0b", "#8b5cf6", "#ec4899"];
+
+// Dessine chaque animal (point) colore selon le groupe auquel il est
+// actuellement rattache, avec un gros disque pour le centre de chaque
+// groupe (cercle noir autour pour bien le distinguer des animaux).
+function dessinerNuage(canvas, points, groupes, centres) {
+    const ctx = canvas.getContext("2d");
+    const w = canvas.width;
+    const h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+    if (!points || points.length === 0) return;
+
+    const marge = 24;
+    const xs = points.map((p) => p[0]).concat((centres || []).map((c) => c[0]));
+    const ys = points.map((p) => p[1]).concat((centres || []).map((c) => c[1]));
+    const xMin = Math.min(...xs);
+    const xMax = Math.max(...xs);
+    const yMin = Math.min(...ys);
+    const yMax = Math.max(...ys);
+
+    const px = (x) => marge + ((x - xMin) / ((xMax - xMin) || 1)) * (w - marge * 2);
+    const py = (y) => h - marge - ((y - yMin) / ((yMax - yMin) || 1)) * (h - marge * 2);
+
+    points.forEach((point, i) => {
+        const couleur = COULEURS_GROUPES[(groupes ? groupes[i] : 0) % COULEURS_GROUPES.length];
+        ctx.beginPath();
+        ctx.arc(px(point[0]), py(point[1]), 4, 0, 2 * Math.PI);
+        ctx.fillStyle = couleur;
+        ctx.fill();
+    });
+
+    (centres || []).forEach((centre, i) => {
+        const couleur = COULEURS_GROUPES[i % COULEURS_GROUPES.length];
+        ctx.beginPath();
+        ctx.arc(px(centre[0]), py(centre[1]), 8, 0, 2 * Math.PI);
+        ctx.fillStyle = couleur;
+        ctx.strokeStyle = "#1e293b";
+        ctx.lineWidth = 2;
+        ctx.fill();
+        ctx.stroke();
+    });
+}
+
 function dessinerGrille(container, grille) {
     container.innerHTML = "";
     const nbColonnes = grille[0].length;
@@ -177,6 +220,7 @@ function initialiserSuivi(conteneur, reseauConfig) {
     const zoneStatut = conteneur.querySelector(".statut");
     const boutonArreter = conteneur.querySelector(".bouton-arreter");
     const svgReseau = conteneur.querySelector(".reseau");
+    const zoneNuage = conteneur.querySelector(".nuage");
     const sectionEntrainement = conteneur.querySelector(".section-entrainement");
     const sectionDemo = conteneur.querySelector(".section-demo");
     const zoneGrille = conteneur.querySelector(".grille");
@@ -236,15 +280,19 @@ function initialiserSuivi(conteneur, reseauConfig) {
 
         if (donnees.type === "essai") {
             const erreurInstable = donnees.erreur === null;
+            const texteErreur = erreurInstable ? "devenue instable (vitesse trop grande)" : `erreur : ${donnees.erreur.toFixed(4)}`;
             if (!erreurInstable) ajouterPoint(donnees.essai, donnees.erreur);
-            zoneProgression.textContent = erreurInstable
-                ? `Essai ${donnees.essai} / ${donnees.nb_essais} — devenue instable (vitesse trop grande)`
-                : `Essai ${donnees.essai} / ${donnees.nb_essais} — erreur : ${donnees.erreur.toFixed(4)}`;
-            afficherPensees(donnees.pensees, `Essai ${donnees.essai} :`);
-            ajouterHistorique(`Essai ${donnees.essai} — erreur : ${donnees.erreur.toFixed(4)}`);
+            zoneProgression.textContent = `Essai ${donnees.essai} / ${donnees.nb_essais} — ${texteErreur}`;
+            ajouterHistorique(`Essai ${donnees.essai} — ${texteErreur}`);
+            if (zonePensees && donnees.pensees) {
+                afficherPensees(donnees.pensees, `Essai ${donnees.essai} :`);
+            }
             if (svgReseau && reseauConfig) {
                 dessinerReseau(svgReseau, donnees.poids1, donnees.poids2, donnees.biais_sortie,
                     reseauConfig.entrees, reseauConfig.sortie);
+            }
+            if (zoneNuage && donnees.points) {
+                dessinerNuage(zoneNuage, donnees.points, donnees.groupes, donnees.centres);
             }
         } else if (donnees.type === "partie") {
             ajouterPoint(donnees.partie, donnees.score);

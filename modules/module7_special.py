@@ -1,5 +1,5 @@
 """
-MODULE 6 — SPECIAL : c'est vous le professeur
+MODULE 7 — SPECIAL : c'est vous le professeur
 ================================================
 
 Dans tous les autres modules, les exemples etaient deja prepares a
@@ -15,8 +15,8 @@ Deux types de lecons possibles :
       caracteristique numerique -> un nombre)
 
 Usage :
-    python -m modules.module6_special
-    python -m modules.module6_special --details
+    python -m modules.module7_special
+    python -m modules.module7_special --details
 """
 
 import argparse
@@ -327,7 +327,7 @@ def entrainer(vitesse_apprentissage=0.1, nb_essais=4000, details=False,
 
         tester_categories(entrees, sorties, boutons, seuil_de_base, echelles, nom_car1, nom_car2, categorie_a, categorie_b)
 
-        sauvegarder_checkpoint("module6_special_categories.json", {
+        sauvegarder_checkpoint("module7_special_categories.json", {
             "type_lecon": "categories",
             "noms_caracteristiques": [nom_car1, nom_car2],
             "categories": [categorie_a, categorie_b],
@@ -349,7 +349,7 @@ def entrainer(vitesse_apprentissage=0.1, nb_essais=4000, details=False,
 
     tester_nombre(entrees, sorties, multiplicateur, valeur_de_base, echelle_car, echelle_sortie, nom_car, nom_sortie)
 
-    sauvegarder_checkpoint("module6_special_nombre.json", {
+    sauvegarder_checkpoint("module7_special_nombre.json", {
         "type_lecon": "nombre",
         "nom_caracteristique": nom_car,
         "nom_sortie": nom_sortie,
@@ -365,7 +365,7 @@ def entrainer(vitesse_apprentissage=0.1, nb_essais=4000, details=False,
 
 
 def construire_analyseur():
-    analyseur = argparse.ArgumentParser(description="Module 6 : vous enseignez quelque chose a l'IA a partir de zero.")
+    analyseur = argparse.ArgumentParser(description="Module 7 : vous enseignez quelque chose a l'IA a partir de zero.")
     analyseur.add_argument("--details", action="store_true", help="Raconte la pensee de l'IA a chaque essai.")
     analyseur.add_argument("--essais", type=int, default=2000, help="Nombre d'essais (par defaut 2000).")
     analyseur.add_argument("--vitesse", type=float, default=0.1, help="Vitesse d'apprentissage (par defaut 0.1).")

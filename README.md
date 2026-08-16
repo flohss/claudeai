@@ -32,7 +32,8 @@ python -m modules.module2_prix --essais 8000 --vitesse 0.02
 python -m modules.module3_fruits --details --afficher-tous-les 200
 python -m modules.module4_sequence --details
 python -m modules.module5_serpent --details --parties 5
-python -m modules.module6_special --details
+python -m modules.module6_regroupement --details --essais 5
+python -m modules.module7_special --details
 ```
 
 Le mode `--details` fait "raconter sa pensée" à l'IA en vraies phrases
@@ -51,9 +52,11 @@ En plus de la ligne de commande, une petite interface web locale permet
 de choisir les paramètres, lancer l'entraînement, et le suivre EN DIRECT
 dans le navigateur : la courbe d'erreur qui descend, un schéma des
 boutons qui s'anime (entrées → couche cachée → sortie, coloré selon la
-valeur de chaque bouton), et le fil de pensée de l'IA qui défile — pour
-les modules 1 à 5 (le module 6 reste pour l'instant réservé à la ligne
-de commande, car il vous demande de taper vos exemples un par un).
+valeur de chaque bouton), un nuage de points pour le module 6 (les
+animaux qui changent de couleur de groupe au fil des essais), et le fil
+de pensée de l'IA qui défile — pour les modules 1 à 6 (le module 7 reste
+pour l'instant réservé à la ligne de commande, car il vous demande de
+taper vos exemples un par un).
 
 Un bouton "Arrêter" permet d'interrompre un entraînement en cours. Et
 un mode comparaison (lien "Comparer deux vitesses d'apprentissage" sur
@@ -85,7 +88,8 @@ internet.
 | 3 | `module3_fruits` | Distinguer une pomme d'une orange (poids + couleur) | Choisir entre plusieurs catégories |
 | 4 | `module4_sequence` | Deviner le nombre (ou la lettre) suivant d'une suite | La "fenêtre" de contexte, comme dans les IA de texte |
 | 5 | `module5_serpent` | Jouer au serpent sans jamais recevoir de bonnes réponses à l'avance | L'apprentissage par renforcement (essai-erreur + récompenses) |
-| 6 | `module6_special` | Ce que VOUS lui enseignez, en direct (deux catégories, ou un nombre) | C'est vous le professeur, pas un jeu d'exemples préparé à l'avance |
+| 6 | `module6_regroupement` | Ranger des animaux en groupes à partir de leur taille et poids, sans jamais connaître leur espèce | L'apprentissage NON supervisé (aucune bonne réponse fournie) |
+| 7 | `module7_special` | Ce que VOUS lui enseignez, en direct (deux catégories, ou un nombre) | C'est vous le professeur, pas un jeu d'exemples préparé à l'avance |
 
 ## Vocabulaire (aucun jargon technique)
 
@@ -103,6 +107,9 @@ internet.
 | curiosité | taux d'exploration / epsilon (module 5) |
 | patience | facteur d'actualisation / gamma (module 5) |
 | partie | épisode (module 5) |
+| groupe | cluster (module 6) |
+| centre du groupe | centroïde (module 6) |
+| regrouper | clustering (module 6) |
 
 ## Structure du projet
 
@@ -115,7 +122,8 @@ modules/
     module3_fruits.py
     module4_sequence.py
     module5_serpent.py
-    module6_special.py
+    module6_regroupement.py
+    module7_special.py
 checkpoints/                  -> checkpoints JSON sauvegardés après chaque entrainement
 webapp/                       -> interface graphique (Flask), optionnelle
     app.py
@@ -126,20 +134,26 @@ requirements-web.txt           -> dépendance en plus pour l'interface graphique
 ```
 
 Chaque module sauvegarde un checkpoint JSON (`checkpoints/moduleX_*.json`)
-avec ses boutons finaux (ou sa mémoire des choix pour le module 5, ou ce
-que vous lui avez enseigné pour le module 6) et l'historique de l'erreur
-(ou des scores) au fil des essais.
+avec ses boutons finaux (ou sa mémoire des choix pour le module 5, ses
+centres de groupes pour le module 6, ou ce que vous lui avez enseigné
+pour le module 7) et l'historique de l'erreur (ou des scores) au fil
+des essais.
 
 ## Suite envisagée (à prioriser ensemble)
 
-- Amener le module 6 (SPECIAL) dans l'interface graphique, avec un
+- Amener le module 7 (SPECIAL) dans l'interface graphique, avec un
   formulaire pour taper les exemples au lieu du terminal
 - Un mode "rejouer" pour recharger un checkpoint et reprendre l'entrainement,
   ou revoir le film d'un apprentissage passé
 - Comparer plus de deux vitesses à la fois (3-4 côte à côte)
+- D'autres modules avant le SPECIAL : plusieurs catégories à la fois
+  (3+ au lieu de 2), reconnaissance d'image simplifiée (petite grille de
+  pixels), ou un module sur le sur-apprentissage/sous-apprentissage
 
 Déjà fait : le mode "pas à pas" (branché dans le menu), le module 5
 (jeu appris par essai-erreur, sans exemples fournis à l'avance), le
-module 6 (c'est vous qui enseignez l'IA à partir de zéro), l'interface
-graphique dans le navigateur pour les modules 1 à 5, le schéma des
-boutons en direct, le bouton "Arrêter", et le mode comparaison.
+module 6 (regroupement sans étiquettes, apprentissage non supervisé),
+le module 7 (c'est vous qui enseignez l'IA à partir de zéro), l'interface
+graphique dans le navigateur pour les modules 1 à 6, le schéma des
+boutons en direct, le nuage de points animé, le bouton "Arrêter", et le
+mode comparaison.
