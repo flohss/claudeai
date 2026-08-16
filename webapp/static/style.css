@@ -357,7 +357,7 @@ h1 {
    deux fois plus haut). Ici, chaque colonne se remplit independamment
    de haut en bas. */
 .section-entrainement {
-    columns: 260px 3;
+    columns: 320px 2;
     column-gap: 24px;
     margin-top: 12px;
 }
