@@ -1,401 +1,202 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Undo2, Redo2, Trash2, Check, X, Sparkles, PenLine, Pencil, MousePointer2, Download } from 'lucide-react';
+import React, { useEffect, useReducer, useRef, useState } from 'react';
+import {
+  Undo2, Redo2, Trash2, Check, X, Sparkles, PenLine, Pencil, MousePointer2,
+  Download, Save, FolderOpen, Layers, Sun, Moon, FileCode2, Minus, Plus,
+  Hand, Square, Circle, Slash, ArrowRight, ChevronUp, ChevronDown, Eye, EyeOff,
+} from 'lucide-react';
+import {
+  dist, classifyShape, getBBox, smoothPathD, strokeBBox, shapeHandlePoints,
+  updateShapeHandle, translateStroke, bboxesIntersect, bboxFromPoints,
+  unionBBox, shapeFromDrag,
+} from './geometry';
+import { StrokeView, EditHandles, SelectionOutline, Marquee, DraftShape, Paper } from './canvasElements';
+import { useTheme } from './theme';
 
 /**
- * ATELIER — assistant de dessin avec correction de traits (façon Autodraw)
+ * ATELIER — studio de dessin assisté par IA
  * ------------------------------------------------------------------------
- * Quand l'utilisateur termine un trait fermé ou une ligne, un classifieur
- * géométrique heuristique essaie de reconnaître une forme simple (ligne,
- * rectangle, triangle, cercle/ellipse). Si une forme est reconnue, une
- * suggestion apparaît : l'utilisateur peut la valider (le trait à main
- * levée est remplacé par une version nette) ou l'ignorer (le trait reste
- * tel quel, légèrement lissé).
+ * Un crayon à main levée avec correction de traits (façon Autodraw) : un
+ * classifieur géométrique heuristique reconnaît les formes simples et
+ * propose une version nette. À côté, des outils de tracé direct (ligne,
+ * flèche, rectangle, ellipse) pour un résultat propre du premier coup, un
+ * mode Sélection avec multi-sélection au lasso, déplacement/redimension-
+ * nement/suppression, un système de calques, le zoom/pan, un historique
+ * annuler/rétablir complet, le mode sombre, et l'export PNG/SVG ou la
+ * sauvegarde du projet en fichier.
  *
- * Le rendu est vectoriel (SVG), ce qui permet d'éditer une forme après
- * coup en mode Sélection : déplacer un sommet, redimensionner une
- * ellipse, déplacer ou supprimer un tracé.
+ * Le rendu est vectoriel (SVG) — voir geometry.js pour la géométrie pure
+ * et canvasElements.jsx pour les sous-composants de rendu.
  *
  * Points d'extension prévus :
- * 1. classifyShape() — remplacer/compléter l'heuristique géométrique par
- *    un vrai modèle (appel à une API de classification, ou un modèle
- *    entraîné sur des contours) pour reconnaître plus de formes (flèches,
- *    étoiles, icônes) comme le fait Autodraw avec sa bibliothèque de dessins.
- * 2. Bibliothèque de formes — au lieu de formes géométriques pures,
- *    associer le contour détecté à des icônes prédessinées.
- * 3. Persistance — sérialiser `strokes` (déjà un JSON simple) vers un
- *    stockage pour reprendre un dessin plus tard.
- * 4. Historique d'édition — les déplacements/redimensionnements en mode
- *    Sélection ne passent pas par la pile annuler/rétablir (qui ne suit
- *    que l'ajout/suppression de tracés) ; à raffiner si besoin.
+ * 1. classifyShape() (geometry.js) — remplacer/compléter l'heuristique par
+ *    un vrai modèle pour reconnaître plus de formes (icônes, écriture).
+ * 2. Bibliothèque de formes — associer un contour détecté à des icônes
+ *    prédessinées plutôt qu'à une forme géométrique pure.
+ * 3. Collaboration — le state {strokes, layers} est un JSON simple,
+ *    sérialisable vers un canal temps réel pour du dessin partagé.
  */
 
-// ---------------------------------------------------------------------
-// Géométrie
-// ---------------------------------------------------------------------
-
-function dist(a, b) {
-  return Math.hypot(a.x - b.x, a.y - b.y);
-}
-
-function getBBox(points) {
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  for (const p of points) {
-    if (p.x < minX) minX = p.x;
-    if (p.x > maxX) maxX = p.x;
-    if (p.y < minY) minY = p.y;
-    if (p.y > maxY) maxY = p.y;
-  }
-  return { minX, minY, maxX, maxY, w: maxX - minX, h: maxY - minY, cx: (minX + maxX) / 2, cy: (minY + maxY) / 2 };
-}
-
-function perpDist(p, a, b) {
-  const num = Math.abs((b.y - a.y) * p.x - (b.x - a.x) * p.y + b.x * a.y - b.y * a.x);
-  const den = Math.hypot(b.y - a.y, b.x - a.x) || 1e-6;
-  return num / den;
-}
-
-// Simplification de Ramer-Douglas-Peucker : réduit un tracé bruité à ses
-// points de rupture significatifs.
-function rdp(points, epsilon) {
-  if (points.length < 3) return points.slice();
-  let dmax = 0, index = 0;
-  const end = points.length - 1;
-  for (let i = 1; i < end; i++) {
-    const d = perpDist(points[i], points[0], points[end]);
-    if (d > dmax) { dmax = d; index = i; }
-  }
-  if (dmax > epsilon) {
-    const left = rdp(points.slice(0, index + 1), epsilon);
-    const right = rdp(points.slice(index), epsilon);
-    return left.slice(0, -1).concat(right);
-  }
-  return [points[0], points[end]];
-}
-
-function pathLength(points) {
-  let len = 0;
-  for (let i = 1; i < points.length; i++) len += dist(points[i - 1], points[i]);
-  return len;
-}
-
-function dedupeClose(points, minDist) {
-  const out = [points[0]];
-  for (let i = 1; i < points.length; i++) {
-    if (dist(points[i], out[out.length - 1]) > minDist) out.push(points[i]);
-  }
-  return out;
-}
-
-function angleAt(p0, p1, p2) {
-  const v1 = { x: p0.x - p1.x, y: p0.y - p1.y };
-  const v2 = { x: p2.x - p1.x, y: p2.y - p1.y };
-  const m1 = Math.hypot(v1.x, v1.y), m2 = Math.hypot(v2.x, v2.y);
-  if (m1 < 1e-6 || m2 < 1e-6) return 180;
-  let cos = (v1.x * v2.x + v1.y * v2.y) / (m1 * m2);
-  cos = Math.max(-1, Math.min(1, cos));
-  return (Math.acos(cos) * 180) / Math.PI;
-}
-
-// ---------------------------------------------------------------------
-// Classifieur de formes (heuristique v1 — voir point d'extension n°1)
-// ---------------------------------------------------------------------
-
-// Sommets d'un polygone fermé, dans l'ordre du tracé (utilisé pour dédupliquer
-// le point de fermeture après simplification RDP).
-function closedCorners(rawPoints, epsilon, mergeDist) {
-  let simplified = rdp(rawPoints, epsilon);
-  simplified = dedupeClose(simplified, mergeDist);
-  if (simplified.length > 1 && dist(simplified[0], simplified[simplified.length - 1]) < mergeDist * 1.3) {
-    simplified = simplified.slice(0, -1);
-  }
-  return simplified;
-}
-
-// Vérifie que les sommets tournent tous dans le même sens (polygone convexe),
-// avec une tolérance pour le bruit du tracé à main levée.
-function isConvex(points) {
-  const n = points.length;
-  let sign = 0;
-  for (let i = 0; i < n; i++) {
-    const a = points[i], b = points[(i + 1) % n], c = points[(i + 2) % n];
-    const cross = (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x);
-    if (Math.abs(cross) < 1e-3) continue;
-    const s = cross > 0 ? 1 : -1;
-    if (sign === 0) sign = s;
-    else if (s !== sign) return false;
-  }
-  return true;
-}
-
-const POLYGON_NAMES = { 5: 'un pentagone', 6: 'un hexagone', 7: 'un heptagone', 8: 'un octogone' };
-
-function classifyShape(rawPoints) {
-  if (rawPoints.length < 5) return null;
-  const bbox = getBBox(rawPoints);
-  const diag = Math.hypot(bbox.w, bbox.h);
-  if (diag < 20) return null; // trop petit, probablement un point
-
-  const first = rawPoints[0];
-  const last = rawPoints[rawPoints.length - 1];
-  const closed = dist(first, last) < Math.max(20, diag * 0.18);
-  const length = pathLength(rawPoints);
-
-  if (!closed) {
-    // Point d'extension : reconnaître une flèche (trait + chevron) ici.
-    const maxDev = Math.max(...rawPoints.map((p) => perpDist(p, first, last)));
-    if (maxDev < Math.max(6, diag * 0.06) && length > 25) {
-      return { type: 'line', points: [first, last], label: 'un trait droit' };
-    }
-    return null;
-  }
-
-  const { cx, cy } = bbox;
-
-  // 1. Circularité : variance des rayons autour du centre de la bbox
-  const radii = rawPoints.map((p) => Math.hypot(p.x - cx, p.y - cy));
-  const meanR = radii.reduce((a, b) => a + b, 0) / radii.length;
-  const variance = radii.reduce((a, r) => a + (r - meanR) ** 2, 0) / radii.length;
-  const stdR = Math.sqrt(variance);
-  if (meanR > 0 && stdR / meanR < 0.22) {
-    const aspect = bbox.w / (bbox.h || 1);
-    const isCircle = aspect <= 1.35 && aspect >= 0.74;
-    return { type: 'ellipse', bbox, label: isCircle ? 'un cercle' : 'une ellipse' };
-  }
-
-  // 2. Étoile : sommets alternant pointes (loin du centre) et creux (près du
-  // centre). On utilise un epsilon plus fin pour capter les petites entailles.
-  if (diag > 40) {
-    const starEpsilon = Math.max(6, diag * 0.025);
-    const starMerge = Math.max(8, diag * 0.035);
-    const starCorners = closedCorners(rawPoints, starEpsilon, starMerge);
-    if (starCorners.length >= 8 && starCorners.length <= 14 && starCorners.length % 2 === 0) {
-      const rs = starCorners.map((p) => Math.hypot(p.x - cx, p.y - cy));
-      const groupA = rs.filter((_, i) => i % 2 === 0);
-      const groupB = rs.filter((_, i) => i % 2 === 1);
-      const avg = (arr) => arr.reduce((a, b) => a + b, 0) / arr.length;
-      const std = (arr, m) => Math.sqrt(arr.reduce((a, r) => a + (r - m) ** 2, 0) / arr.length);
-      const avgA = avg(groupA), avgB = avg(groupB);
-      const outer = avgA >= avgB ? groupA : groupB;
-      const inner = avgA >= avgB ? groupB : groupA;
-      const outerAvg = avg(outer), innerAvg = avg(inner);
-      const spiky = outerAvg > 0 && innerAvg / outerAvg < 0.75;
-      const consistent = std(outer, outerAvg) / outerAvg < 0.3 && std(inner, innerAvg) / (innerAvg || 1) < 0.35;
-      if (spiky && consistent) {
-        return { type: 'polygon', points: starCorners, label: 'une étoile' };
-      }
-    }
-  }
-
-  // 3. Polygones (triangle, carré/rectangle/losange, pentagone à octogone),
-  // à partir des sommets détectés — on garde les points réels, pas de forme
-  // idéalisée, pour respecter l'orientation et les proportions du tracé.
-  const epsilon = Math.max(8, diag * 0.045);
-  const merge = Math.max(10, diag * 0.06);
-  const corners = closedCorners(rawPoints, epsilon, merge);
-  const n = corners.length;
-
-  if (n === 3) {
-    return { type: 'polygon', points: corners, label: 'un triangle' };
-  }
-  if (n === 4) {
-    const sides = [0, 1, 2, 3].map((i) => dist(corners[i], corners[(i + 1) % 4]));
-    const angles = [0, 1, 2, 3].map((i) => angleAt(corners[(i + 3) % 4], corners[i], corners[(i + 1) % 4]));
-    const rightAngled = angles.every((a) => Math.abs(a - 90) < 28);
-    const equalSides = Math.max(...sides) / Math.min(...sides) < 1.3;
-    let label = 'un quadrilatère';
-    if (rightAngled && equalSides) label = 'un carré';
-    else if (rightAngled) label = 'un rectangle';
-    else if (equalSides) label = 'un losange';
-    return { type: 'polygon', points: corners, label };
-  }
-  if (n >= 5 && n <= 8 && isConvex(corners)) {
-    return { type: 'polygon', points: corners, label: POLYGON_NAMES[n] };
-  }
-  return null;
-}
-
-// ---------------------------------------------------------------------
-// Rendu vectoriel (SVG) — voir aussi les composants StrokeView / EditHandles
-// ---------------------------------------------------------------------
-
-function smoothPathD(points) {
-  if (points.length < 2) return '';
-  if (points.length === 2) {
-    return `M ${points[0].x} ${points[0].y} L ${points[1].x} ${points[1].y}`;
-  }
-  let d = `M ${points[0].x} ${points[0].y}`;
-  for (let i = 1; i < points.length - 1; i++) {
-    const midX = (points[i].x + points[i + 1].x) / 2;
-    const midY = (points[i].y + points[i + 1].y) / 2;
-    d += ` Q ${points[i].x} ${points[i].y} ${midX} ${midY}`;
-  }
-  const p = points[points.length - 1];
-  d += ` L ${p.x} ${p.y}`;
-  return d;
-}
-
-// bbox englobante d'un tracé, qu'il soit resté à main levée ou corrigé en forme nette.
-function strokeBBox(stroke) {
-  if (stroke.shape) {
-    return stroke.shape.type === 'ellipse' ? stroke.shape.bbox : getBBox(stroke.shape.points);
-  }
-  return getBBox(stroke.points);
-}
-
-// Sommets éditables d'une forme corrigée : les 4 coins de la bbox pour une
-// ellipse (poignées de redimensionnement), les points réels sinon.
-function shapeHandlePoints(shape) {
-  if (shape.type === 'ellipse') {
-    const { minX, minY, maxX, maxY } = shape.bbox;
-    return [
-      { x: minX, y: minY },
-      { x: maxX, y: minY },
-      { x: maxX, y: maxY },
-      { x: minX, y: maxY },
-    ];
-  }
-  return shape.points;
-}
-
-function updateShapeHandle(shape, index, pos) {
-  if (shape.type === 'ellipse') {
-    const corners = shapeHandlePoints(shape);
-    const opposite = corners[(index + 2) % 4];
-    const minX = Math.min(opposite.x, pos.x), maxX = Math.max(opposite.x, pos.x);
-    const minY = Math.min(opposite.y, pos.y), maxY = Math.max(opposite.y, pos.y);
-    return { ...shape, bbox: { minX, minY, maxX, maxY, w: maxX - minX, h: maxY - minY, cx: (minX + maxX) / 2, cy: (minY + maxY) / 2 } };
-  }
-  const points = shape.points.map((p, i) => (i === index ? pos : p));
-  return { ...shape, points };
-}
-
-function translateShape(shape, dx, dy) {
-  if (shape.type === 'ellipse') {
-    const b = shape.bbox;
-    const minX = b.minX + dx, maxX = b.maxX + dx, minY = b.minY + dy, maxY = b.maxY + dy;
-    return { ...shape, bbox: { minX, minY, maxX, maxY, w: b.w, h: b.h, cx: b.cx + dx, cy: b.cy + dy } };
-  }
-  return { ...shape, points: shape.points.map((p) => ({ x: p.x + dx, y: p.y + dy })) };
-}
-
-function translateStroke(stroke, dx, dy) {
-  return {
-    ...stroke,
-    points: stroke.points.map((p) => ({ x: p.x + dx, y: p.y + dy })),
-    shape: stroke.shape ? translateShape(stroke.shape, dx, dy) : null,
-  };
-}
-
-function StrokeView({ stroke, interactive, onGrab }) {
-  const grabProps = interactive ? { onPointerDown: (e) => onGrab(e, stroke), style: { cursor: 'move' } } : {};
-  const hitPointerEvents = interactive ? 'auto' : 'none';
-
-  if (stroke.type === 'corrected' && stroke.shape) {
-    const s = stroke.shape;
-    if (s.type === 'line') {
-      return (
-        <g>
-          <line x1={s.points[0].x} y1={s.points[0].y} x2={s.points[1].x} y2={s.points[1].y}
-            stroke={stroke.color} strokeWidth={stroke.width} strokeLinecap="round" pointerEvents="none" />
-          <line x1={s.points[0].x} y1={s.points[0].y} x2={s.points[1].x} y2={s.points[1].y}
-            stroke="transparent" strokeWidth={Math.max(stroke.width, 18)} pointerEvents={hitPointerEvents} {...grabProps} />
-        </g>
-      );
-    }
-    if (s.type === 'ellipse') {
-      const rx = Math.max(s.bbox.w / 2, 1), ry = Math.max(s.bbox.h / 2, 1);
-      return (
-        <g>
-          <ellipse cx={s.bbox.cx} cy={s.bbox.cy} rx={rx} ry={ry} fill="none"
-            stroke={stroke.color} strokeWidth={stroke.width} pointerEvents="none" />
-          <ellipse cx={s.bbox.cx} cy={s.bbox.cy} rx={rx} ry={ry} fill="transparent"
-            stroke="transparent" strokeWidth={18} pointerEvents={hitPointerEvents} {...grabProps} />
-        </g>
-      );
-    }
-    const pts = s.points.map((p) => `${p.x},${p.y}`).join(' ');
-    return (
-      <g>
-        <polygon points={pts} fill="none" stroke={stroke.color} strokeWidth={stroke.width} strokeLinejoin="round" pointerEvents="none" />
-        <polygon points={pts} fill="transparent" stroke="transparent" strokeWidth={18} pointerEvents={hitPointerEvents} {...grabProps} />
-      </g>
-    );
-  }
-
-  const d = smoothPathD(stroke.points);
-  return (
-    <g>
-      <path d={d} fill="none" stroke={stroke.color} strokeWidth={stroke.width} strokeLinecap="round" strokeLinejoin="round" pointerEvents="none" />
-      <path d={d} fill="none" stroke="transparent" strokeWidth={Math.max(stroke.width, 18)} pointerEvents={hitPointerEvents} {...grabProps} />
-    </g>
-  );
-}
-
-function EditHandles({ stroke, onHandleGrab }) {
-  if (!stroke.shape) return null;
-  const points = shapeHandlePoints(stroke.shape);
-  const resizeHandle = stroke.shape.type === 'ellipse';
-  return (
-    <>
-      {points.map((p, i) => (
-        <circle
-          key={i}
-          cx={p.x}
-          cy={p.y}
-          r={6}
-          fill="#FFFFFF"
-          stroke="#1F6F63"
-          strokeWidth={2}
-          style={{ cursor: resizeHandle ? 'nwse-resize' : 'grab' }}
-          onPointerDown={(e) => onHandleGrab(e, stroke, i)}
-        />
-      ))}
-    </>
-  );
-}
-
-function Paper({ w, h }) {
-  const lines = [];
-  for (let y = 34; y < h; y += 32) lines.push(y);
-  return (
-    <g pointerEvents="none">
-      {lines.map((y) => (
-        <line key={y} x1={0} y1={y + 0.5} x2={w} y2={y + 0.5} stroke="#E4DCC8" strokeWidth={1} />
-      ))}
-      <line x1={46.5} y1={0} x2={46.5} y2={h} stroke="#D8B9A8" strokeWidth={1} />
-    </g>
-  );
-}
-
-// ---------------------------------------------------------------------
-// Palette / constantes UI
-// ---------------------------------------------------------------------
-
-const COLORS = [
-  { name: 'Graphite', hex: '#2A2620' },
-  { name: 'Rouille', hex: '#A6432E' },
-  { name: 'Sarcelle', hex: '#1F6F63' },
-  { name: 'Indigo', hex: '#2C3E66' },
-  { name: 'Mousse', hex: '#4B6A45' },
-];
 const WIDTHS = [
   { label: 'Fin', value: 2.5 },
   { label: 'Moyen', value: 5 },
   { label: 'Épais', value: 9 },
 ];
 
-const STORAGE_KEY = 'atelier-drawing-v1';
+const TOOLS = [
+  { id: 'draw', label: 'Crayon (P)', icon: Pencil },
+  { id: 'select', label: 'Sélection (V)', icon: MousePointer2 },
+  { id: 'line', label: 'Ligne (L)', icon: Slash },
+  { id: 'arrow', label: 'Flèche (A)', icon: ArrowRight },
+  { id: 'rect', label: 'Rectangle (R)', icon: Square },
+  { id: 'ellipse', label: 'Ellipse (O)', icon: Circle },
+  { id: 'pan', label: 'Main (H)', icon: Hand },
+];
+const TOOL_SHORTCUTS = { p: 'draw', v: 'select', l: 'line', a: 'arrow', r: 'rect', o: 'ellipse', h: 'pan' };
 
-function loadSavedStrokes() {
+const STORAGE_KEY = 'atelier-drawing-v1';
+const DEFAULT_LAYERS = [{ id: 'layer-1', name: 'Calque 1', visible: true }];
+const MAX_HISTORY = 100;
+
+function newId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2);
+}
+
+function loadProject() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
+    if (!raw) return { strokes: [], layers: DEFAULT_LAYERS };
+    const data = JSON.parse(raw);
+    const layers = Array.isArray(data?.layers) && data.layers.length > 0 ? data.layers : DEFAULT_LAYERS;
+    const fallbackLayerId = layers[0].id;
+    const rawStrokes = Array.isArray(data) ? data : Array.isArray(data?.strokes) ? data.strokes : [];
+    const strokes = rawStrokes.map((s) => ({ ...s, layerId: s.layerId || fallbackLayerId }));
+    return { strokes, layers };
   } catch {
-    return [];
+    return { strokes: [], layers: DEFAULT_LAYERS };
   }
 }
 
+// -- Historique annuler/rétablir -------------------------------------------
+// 'commit' = une action ponctuelle (ajout, suppression, forme validée…) :
+// un pas d'historique. 'begin-drag' capture l'état AVANT un geste continu
+// (déplacer/redimensionner) ; les 'update' qui suivent pendant le glisser
+// ne créent pas de pas supplémentaires — tout le geste s'annule en un clic.
+function historyReducer(state, action) {
+  switch (action.type) {
+    case 'commit': {
+      const strokes = action.updater(state.strokes);
+      const past = [...state.past, state.strokes];
+      if (past.length > MAX_HISTORY) past.shift();
+      return { strokes, past, future: [] };
+    }
+    case 'begin-drag': {
+      const past = [...state.past, state.strokes];
+      if (past.length > MAX_HISTORY) past.shift();
+      return { ...state, past, future: [] };
+    }
+    case 'update':
+      return { ...state, strokes: action.updater(state.strokes) };
+    case 'undo': {
+      if (state.past.length === 0) return state;
+      const strokes = state.past[state.past.length - 1];
+      return { strokes, past: state.past.slice(0, -1), future: [state.strokes, ...state.future] };
+    }
+    case 'redo': {
+      if (state.future.length === 0) return state;
+      const strokes = state.future[0];
+      return { strokes, past: [...state.past, state.strokes], future: state.future.slice(1) };
+    }
+    case 'set':
+      return { strokes: action.strokes, past: [], future: [] };
+    default:
+      return state;
+  }
+}
+
+// -- Petits composants de présentation --------------------------------------
+
+function ToolbarButton({ active, disabled, onClick, title, colors, children }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className="w-8 h-8 rounded-md flex items-center justify-center shrink-0 disabled:opacity-30"
+      style={{ background: active ? colors.activeBg : 'transparent', color: active ? colors.text : colors.textMuted }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function LayerRow({ layer, active, onActivate, onToggleVisible, onRename, onDelete, onMoveUp, onMoveDown, canDelete, colors }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(layer.name);
+
+  useEffect(() => {
+    setDraft(layer.name);
+  }, [layer.name]);
+
+  function commit() {
+    setEditing(false);
+    const trimmed = draft.trim();
+    if (trimmed && trimmed !== layer.name) onRename(trimmed);
+    else setDraft(layer.name);
+  }
+
+  return (
+    <div
+      onClick={onActivate}
+      className="flex items-center gap-1 px-2 py-1.5 cursor-pointer text-sm"
+      style={{ background: active ? colors.activeBg : 'transparent' }}
+    >
+      <button onClick={(e) => { e.stopPropagation(); onToggleVisible(); }} className="p-0.5 rounded shrink-0" title={layer.visible ? 'Masquer' : 'Afficher'}>
+        {layer.visible ? <Eye size={14} /> : <EyeOff size={14} style={{ color: colors.textMuted }} />}
+      </button>
+      {editing ? (
+        <input
+          autoFocus
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') commit();
+            if (e.key === 'Escape') { setDraft(layer.name); setEditing(false); }
+          }}
+          onClick={(e) => e.stopPropagation()}
+          className="flex-1 min-w-0 px-1 rounded text-sm"
+          style={{ background: colors.appBg, color: colors.text, border: `1px solid ${colors.border}` }}
+        />
+      ) : (
+        <span
+          onDoubleClick={(e) => { e.stopPropagation(); setEditing(true); }}
+          className="flex-1 min-w-0 truncate select-none"
+          style={{ opacity: layer.visible ? 1 : 0.5 }}
+        >
+          {layer.name}
+        </span>
+      )}
+      <button onClick={(e) => { e.stopPropagation(); onMoveUp(); }} className="p-0.5 rounded shrink-0" title="Monter">
+        <ChevronUp size={13} />
+      </button>
+      <button onClick={(e) => { e.stopPropagation(); onMoveDown(); }} className="p-0.5 rounded shrink-0" title="Descendre">
+        <ChevronDown size={13} />
+      </button>
+      <button
+        onClick={(e) => { e.stopPropagation(); onDelete(); }}
+        disabled={!canDelete}
+        className="p-0.5 rounded shrink-0 disabled:opacity-30"
+        title="Supprimer le calque"
+      >
+        <Trash2 size={13} style={{ color: colors.danger }} />
+      </button>
+    </div>
+  );
+}
+
 export default function DrawingAssistant() {
+  const { setPref: setThemePref, resolved: themeResolved, colors } = useTheme();
+
   const svgRef = useRef(null);
   const containerRef = useRef(null);
   const currentPathRef = useRef(null);
@@ -403,16 +204,30 @@ export default function DrawingAssistant() {
   const isDrawingRef = useRef(false);
   const dismissTimerRef = useRef(null);
   const dragRef = useRef(null);
+  const panRef = useRef(null);
+  const marqueeRef = useRef(null);
+  const draftRef = useRef(null);
+  const openFileRef = useRef(null);
 
-  const [strokes, setStrokes] = useState(loadSavedStrokes);
-  const [redoStack, setRedoStack] = useState([]);
-  const [color, setColor] = useState(COLORS[0].hex);
+  const [history, dispatch] = useReducer(historyReducer, undefined, () => ({
+    strokes: loadProject().strokes, past: [], future: [],
+  }));
+  const strokes = history.strokes;
+
+  const [layers, setLayers] = useState(() => loadProject().layers);
+  const [activeLayerId, setActiveLayerId] = useState(() => loadProject().layers[0]?.id ?? DEFAULT_LAYERS[0].id);
+  const [layersPanelOpen, setLayersPanelOpen] = useState(false);
+
+  const [color, setColor] = useState(colors.penColors[0].hex);
   const [width, setWidth] = useState(WIDTHS[1].value);
   const [autoCorrect, setAutoCorrect] = useState(true);
   const [pendingSuggestion, setPendingSuggestion] = useState(null);
   const [containerSize, setContainerSize] = useState({ w: 800, h: 500 });
-  const [mode, setMode] = useState('draw'); // 'draw' | 'select'
-  const [selectedId, setSelectedId] = useState(null);
+  const [tool, setTool] = useState('draw');
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [view, setView] = useState({ x: 0, y: 0, scale: 1 });
+  const [draft, setDraft] = useState(null);
+  const [marquee, setMarquee] = useState(null);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -427,31 +242,50 @@ export default function DrawingAssistant() {
     return () => ro.disconnect();
   }, []);
 
-  // Nettoie une sélection qui pointerait vers un tracé supprimé (undo, effacer, suppr).
+  // Molette = zoom centré sur le curseur. Écouteur natif (non passif) pour
+  // pouvoir bloquer le défilement de la page pendant qu'on zoome le canevas.
   useEffect(() => {
-    if (selectedId && !strokes.some((s) => s.id === selectedId)) {
-      setSelectedId(null);
+    const el = svgRef.current;
+    if (!el) return;
+    function onWheel(e) {
+      e.preventDefault();
+      const rect = el.getBoundingClientRect();
+      const sx = e.clientX - rect.left, sy = e.clientY - rect.top;
+      const factor = Math.exp(-e.deltaY * 0.0015);
+      setView((v) => {
+        const newScale = Math.min(6, Math.max(0.15, v.scale * factor));
+        const worldX = (sx - v.x) / v.scale, worldY = (sy - v.y) / v.scale;
+        return { scale: newScale, x: sx - worldX * newScale, y: sy - worldY * newScale };
+      });
     }
-  }, [strokes, selectedId]);
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
 
-  // Sauvegarde locale (différée) pour retrouver le dessin après un rechargement.
+  // Nettoie la sélection des tracés supprimés (undo, effacer, suppr, calque supprimé).
+  useEffect(() => {
+    setSelectedIds((prev) => {
+      const next = new Set([...prev].filter((id) => strokes.some((s) => s.id === id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [strokes]);
+
+  // Sauvegarde locale (différée) + filet de sécurité si l'onglet se ferme trop vite.
   useEffect(() => {
     const timer = setTimeout(() => {
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(strokes));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ strokes, layers }));
       } catch {
         // stockage indisponible (navigation privée, quota…) — on ignore.
       }
     }, 400);
     return () => clearTimeout(timer);
-  }, [strokes]);
+  }, [strokes, layers]);
 
-  // Filet de sécurité : si l'onglet se ferme/recharge avant que le délai
-  // ci-dessus n'ait eu le temps de s'écouler, on force l'écriture immédiate.
   useEffect(() => {
     function flush() {
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(strokes));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ strokes, layers }));
       } catch {
         // stockage indisponible — on ignore.
       }
@@ -462,11 +296,61 @@ export default function DrawingAssistant() {
       window.removeEventListener('beforeunload', flush);
       window.removeEventListener('pagehide', flush);
     };
-  }, [strokes]);
+  }, [strokes, layers]);
 
-  function getPos(e) {
+  useEffect(() => {
+    if (!pendingSuggestion) return;
+    dismissTimerRef.current = setTimeout(() => setPendingSuggestion(null), 4500);
+    return () => clearTimeout(dismissTimerRef.current);
+  }, [pendingSuggestion]);
+
+  // -- Raccourcis clavier ---------------------------------------------------
+
+  useEffect(() => {
+    function onKeyDown(e) {
+      const meta = e.ctrlKey || e.metaKey;
+      if (meta && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        dispatch({ type: e.shiftKey ? 'redo' : 'undo' });
+        return;
+      }
+      if (meta && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        dispatch({ type: 'redo' });
+        return;
+      }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && tool === 'select' && selectedIds.size > 0) {
+        e.preventDefault();
+        dispatch({ type: 'commit', updater: (prev) => prev.filter((s) => !selectedIds.has(s.id)) });
+        setSelectedIds(new Set());
+        return;
+      }
+      const tag = document.activeElement?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || meta || e.altKey) return;
+      const next = TOOL_SHORTCUTS[e.key.toLowerCase()];
+      if (next) { e.preventDefault(); switchTool(next); }
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tool, selectedIds]);
+
+  // -- Coordonnées : écran (px du conteneur) <-> monde (indépendant du zoom) --
+
+  function getScreenPos(e) {
     const rect = svgRef.current.getBoundingClientRect();
     return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  }
+  function getWorldPos(e) {
+    const s = getScreenPos(e);
+    return { x: (s.x - view.x) / view.scale, y: (s.y - view.y) / view.scale };
+  }
+  function worldToScreen(p) {
+    return { x: p.x * view.scale + view.x, y: p.y * view.scale + view.y };
+  }
+
+  function isLayerVisible(layerId) {
+    return layers.find((l) => l.id === layerId)?.visible !== false;
   }
 
   function clearPendingSuggestion() {
@@ -477,18 +361,18 @@ export default function DrawingAssistant() {
     setPendingSuggestion(null);
   }
 
-  // -- Dessin (mode 'draw') ------------------------------------------------
+  // -- Crayon (outil 'draw', à main levée + correction) ------------------------
 
   function handlePointerDown(e) {
     e.preventDefault();
     svgRef.current.setPointerCapture(e.pointerId);
     clearPendingSuggestion();
     isDrawingRef.current = true;
-    currentPointsRef.current = [getPos(e)];
+    currentPointsRef.current = [getWorldPos(e)];
   }
   function handlePointerMove(e) {
     if (!isDrawingRef.current) return;
-    currentPointsRef.current.push(getPos(e));
+    currentPointsRef.current.push(getWorldPos(e));
     if (currentPathRef.current) {
       currentPathRef.current.setAttribute('d', smoothPathD(currentPointsRef.current));
     }
@@ -501,12 +385,8 @@ export default function DrawingAssistant() {
     if (currentPathRef.current) currentPathRef.current.setAttribute('d', '');
     if (points.length < 2) return;
 
-    const stroke = {
-      id: Date.now() + Math.random().toString(36).slice(2),
-      color, width, type: 'freehand', shape: null, points,
-    };
-    setStrokes((prev) => [...prev, stroke]);
-    setRedoStack([]);
+    const stroke = { id: newId(), layerId: activeLayerId, color, width, type: 'freehand', shape: null, points };
+    dispatch({ type: 'commit', updater: (prev) => [...prev, stroke] });
 
     if (autoCorrect) {
       const shape = classifyShape(points);
@@ -517,141 +397,258 @@ export default function DrawingAssistant() {
     }
   }
 
-  // -- Sélection / édition (mode 'select') ---------------------------------
+  function acceptSuggestion() {
+    if (!pendingSuggestion) return;
+    dispatch({
+      type: 'commit',
+      updater: (prev) => prev.map((s) => (s.id === pendingSuggestion.strokeId ? { ...s, type: 'corrected', shape: pendingSuggestion.shape } : s)),
+    });
+    clearPendingSuggestion();
+  }
+
+  // -- Sélection / édition (outil 'select') ------------------------------------
 
   function handleStrokeGrab(e, stroke) {
     e.stopPropagation();
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
-    setSelectedId(stroke.id);
-    dragRef.current = { type: 'move', strokeId: stroke.id, start: getPos(e), original: stroke };
+    const world = getWorldPos(e);
+
+    let nextSelected;
+    if (e.shiftKey) {
+      nextSelected = new Set(selectedIds);
+      if (nextSelected.has(stroke.id)) nextSelected.delete(stroke.id);
+      else nextSelected.add(stroke.id);
+    } else if (selectedIds.has(stroke.id)) {
+      nextSelected = selectedIds;
+    } else {
+      nextSelected = new Set([stroke.id]);
+    }
+    setSelectedIds(nextSelected);
+    if (nextSelected.size === 0) { dragRef.current = null; return; }
+
+    dispatch({ type: 'begin-drag' });
+    const originals = new Map();
+    for (const s of strokes) if (nextSelected.has(s.id)) originals.set(s.id, s);
+    dragRef.current = { type: 'move', ids: nextSelected, start: world, originals };
   }
+
   function handleHandleGrab(e, stroke, index) {
     e.stopPropagation();
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
-    setSelectedId(stroke.id);
+    setSelectedIds(new Set([stroke.id]));
+    dispatch({ type: 'begin-drag' });
     dragRef.current = { type: 'handle', strokeId: stroke.id, index, original: stroke };
   }
 
   function deleteSelected() {
-    if (!selectedId) return;
-    setStrokes((prev) => prev.filter((s) => s.id !== selectedId));
-    setSelectedId(null);
+    if (selectedIds.size === 0) return;
+    dispatch({ type: 'commit', updater: (prev) => prev.filter((s) => !selectedIds.has(s.id)) });
+    setSelectedIds(new Set());
   }
 
-  useEffect(() => {
-    function onKeyDown(e) {
-      const meta = e.ctrlKey || e.metaKey;
-      if (meta && e.key.toLowerCase() === 'z') {
-        e.preventDefault();
-        if (e.shiftKey) redo();
-        else undo();
-        return;
-      }
-      if (meta && e.key.toLowerCase() === 'y') {
-        e.preventDefault();
-        redo();
-        return;
-      }
-      if ((e.key === 'Delete' || e.key === 'Backspace') && mode === 'select' && selectedId) {
-        e.preventDefault();
-        setStrokes((prev) => prev.filter((s) => s.id !== selectedId));
-        setSelectedId(null);
-      }
-    }
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [mode, selectedId, strokes, redoStack, undo, redo]);
-
-  // -- Dispatch au niveau du canevas SVG selon le mode actif ---------------
+  // -- Dispatch au niveau du canevas SVG selon l'outil actif -------------------
 
   function handleSvgPointerDown(e) {
-    if (mode === 'select') { setSelectedId(null); return; }
-    handlePointerDown(e);
-  }
-  function handleSvgPointerMove(e) {
-    if (mode === 'select') {
-      const drag = dragRef.current;
-      if (!drag) return;
-      const pos = getPos(e);
-      setStrokes((prev) => prev.map((s) => {
-        if (s.id !== drag.strokeId) return s;
-        if (drag.type === 'move') return translateStroke(drag.original, pos.x - drag.start.x, pos.y - drag.start.y);
-        return { ...drag.original, shape: updateShapeHandle(drag.original.shape, drag.index, pos) };
-      }));
+    if (e.button === 1 || (tool === 'pan' && e.button === 0)) {
+      e.preventDefault();
+      svgRef.current.setPointerCapture(e.pointerId);
+      panRef.current = { startScreen: getScreenPos(e), startView: view };
       return;
     }
-    handlePointerMove(e);
-  }
-  function handleSvgPointerUp(e) {
-    if (mode === 'select') { dragRef.current = null; return; }
-    handlePointerUp(e);
+    if (e.button !== 0) return;
+
+    if (tool === 'select') {
+      setSelectedIds(new Set());
+      svgRef.current.setPointerCapture(e.pointerId);
+      const world = getWorldPos(e);
+      marqueeRef.current = { start: world };
+      setMarquee({ start: world, end: world });
+      return;
+    }
+    if (tool === 'draw') {
+      handlePointerDown(e);
+      return;
+    }
+    // outils de tracé direct : ligne, flèche, rectangle, ellipse
+    svgRef.current.setPointerCapture(e.pointerId);
+    const world = getWorldPos(e);
+    draftRef.current = { start: world };
+    setDraft({ tool, start: world, end: world });
   }
 
-  function switchMode(next) {
-    if (next === mode) return;
+  function handleSvgPointerMove(e) {
+    if (panRef.current) {
+      const s = getScreenPos(e);
+      const dx = s.x - panRef.current.startScreen.x, dy = s.y - panRef.current.startScreen.y;
+      setView({ ...panRef.current.startView, x: panRef.current.startView.x + dx, y: panRef.current.startView.y + dy });
+      return;
+    }
+    if (marqueeRef.current) {
+      setMarquee({ start: marqueeRef.current.start, end: getWorldPos(e) });
+      return;
+    }
+    if (draftRef.current) {
+      setDraft({ tool, start: draftRef.current.start, end: getWorldPos(e) });
+      return;
+    }
+    if (dragRef.current) {
+      const world = getWorldPos(e);
+      const drag = dragRef.current;
+      dispatch({
+        type: 'update',
+        updater: (prev) => prev.map((s) => {
+          if (drag.type === 'move') {
+            if (!drag.ids.has(s.id)) return s;
+            const original = drag.originals.get(s.id);
+            return translateStroke(original, world.x - drag.start.x, world.y - drag.start.y);
+          }
+          if (drag.type === 'handle') {
+            if (s.id !== drag.strokeId) return s;
+            return { ...drag.original, shape: updateShapeHandle(drag.original.shape, drag.index, world) };
+          }
+          return s;
+        }),
+      });
+      return;
+    }
+    if (tool === 'draw') handlePointerMove(e);
+  }
+
+  function handleSvgPointerUp(e) {
+    if (panRef.current) { panRef.current = null; return; }
+
+    if (marqueeRef.current) {
+      const m = marqueeRef.current;
+      marqueeRef.current = null;
+      setMarquee(null);
+      const world = getWorldPos(e);
+      if (dist(m.start, world) < 4 / view.scale) return; // simple clic : déjà désélectionné
+      const box = bboxFromPoints(m.start, world);
+      const hits = strokes.filter((s) => isLayerVisible(s.layerId) && bboxesIntersect(strokeBBox(s), box));
+      setSelectedIds(new Set(hits.map((s) => s.id)));
+      return;
+    }
+
+    if (draftRef.current) {
+      const d = draftRef.current;
+      draftRef.current = null;
+      setDraft(null);
+      const world = getWorldPos(e);
+      if (dist(d.start, world) > 3 / view.scale) {
+        const shape = shapeFromDrag(tool, d.start, world);
+        const stroke = { id: newId(), layerId: activeLayerId, color, width, type: 'shape', shape, points: shapeHandlePoints(shape) };
+        dispatch({ type: 'commit', updater: (prev) => [...prev, stroke] });
+        setSelectedIds(new Set([stroke.id]));
+      }
+      return;
+    }
+
+    if (dragRef.current) { dragRef.current = null; return; }
+    if (tool === 'draw') handlePointerUp(e);
+  }
+
+  function switchTool(next) {
+    if (next === tool) { setTool(next); return; }
     clearPendingSuggestion();
     isDrawingRef.current = false;
     currentPointsRef.current = [];
     if (currentPathRef.current) currentPathRef.current.setAttribute('d', '');
     dragRef.current = null;
-    setSelectedId(null);
-    setMode(next);
+    marqueeRef.current = null;
+    draftRef.current = null;
+    setMarquee(null);
+    setDraft(null);
+    setSelectedIds(new Set());
+    setTool(next);
   }
 
-  useEffect(() => {
-    if (!pendingSuggestion) return;
-    dismissTimerRef.current = setTimeout(() => setPendingSuggestion(null), 4500);
-    return () => clearTimeout(dismissTimerRef.current);
-  }, [pendingSuggestion]);
-
-  function acceptSuggestion() {
-    if (!pendingSuggestion) return;
-    setStrokes((prev) =>
-      prev.map((s) => (s.id === pendingSuggestion.strokeId ? { ...s, type: 'corrected', shape: pendingSuggestion.shape } : s))
-    );
-    clearPendingSuggestion();
+  function zoomBy(factor) {
+    setView((v) => {
+      const cx = containerSize.w / 2, cy = containerSize.h / 2;
+      const newScale = Math.min(6, Math.max(0.15, v.scale * factor));
+      const worldX = (cx - v.x) / v.scale, worldY = (cy - v.y) / v.scale;
+      return { scale: newScale, x: cx - worldX * newScale, y: cy - worldY * newScale };
+    });
+  }
+  function resetView() {
+    setView({ x: 0, y: 0, scale: 1 });
   }
 
-  function undo() {
-    if (strokes.length === 0) return;
-    clearPendingSuggestion();
-    const last = strokes[strokes.length - 1];
-    setStrokes((prev) => prev.slice(0, -1));
-    setRedoStack((prev) => [...prev, last]);
-  }
-  function redo() {
-    if (redoStack.length === 0) return;
-    clearPendingSuggestion();
-    const item = redoStack[redoStack.length - 1];
-    setRedoStack((prev) => prev.slice(0, -1));
-    setStrokes((prev) => [...prev, item]);
-  }
   function clearAll() {
     clearPendingSuggestion();
-    setStrokes([]);
-    setRedoStack([]);
+    setSelectedIds(new Set());
+    dispatch({ type: 'commit', updater: () => [] });
   }
 
-  function exportPNG() {
-    const svg = svgRef.current;
-    if (!svg || strokes.length === 0) return;
-    const { w, h } = containerSize;
+  // -- Calques -----------------------------------------------------------------
 
-    const clone = svg.cloneNode(true);
+  function addLayer() {
+    const id = newId();
+    setLayers((prev) => [...prev, { id, name: `Calque ${prev.length + 1}`, visible: true }]);
+    setActiveLayerId(id);
+  }
+  function renameLayer(id, name) {
+    setLayers((prev) => prev.map((l) => (l.id === id ? { ...l, name } : l)));
+  }
+  function toggleLayerVisible(id) {
+    setLayers((prev) => prev.map((l) => (l.id === id ? { ...l, visible: !l.visible } : l)));
+  }
+  function deleteLayer(id) {
+    if (layers.length <= 1) return;
+    const remaining = layers.filter((l) => l.id !== id);
+    setLayers(remaining);
+    dispatch({ type: 'commit', updater: (prev) => prev.filter((s) => s.layerId !== id) });
+    if (activeLayerId === id) setActiveLayerId(remaining[0]?.id);
+  }
+  function moveLayer(id, dir) {
+    setLayers((prev) => {
+      const idx = prev.findIndex((l) => l.id === id);
+      const swapWith = idx + dir;
+      if (idx === -1 || swapWith < 0 || swapWith >= prev.length) return prev;
+      const next = prev.slice();
+      [next[idx], next[swapWith]] = [next[swapWith], next[idx]];
+      return next;
+    });
+  }
+
+  // -- Export / sauvegarde -------------------------------------------------------
+
+  function computeContentBBox() {
+    const boxes = strokes.filter((s) => isLayerVisible(s.layerId)).map(strokeBBox);
+    return unionBBox(boxes);
+  }
+
+  function buildExportClone(padding = 24) {
+    const box = computeContentBBox();
+    if (!box || !svgRef.current) return null;
+    const w = box.w + padding * 2, h = box.h + padding * 2;
+
+    const clone = svgRef.current.cloneNode(true);
     clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-    clone.setAttribute('width', w);
-    clone.setAttribute('height', h);
+    clone.setAttribute('width', String(w));
+    clone.setAttribute('height', String(h));
+    clone.setAttribute('viewBox', `0 0 ${w} ${h}`);
+
+    const g = clone.querySelector('[data-world-group]');
+    if (g) g.setAttribute('transform', `translate(${padding - box.minX} ${padding - box.minY})`);
+    clone.querySelectorAll('[data-ui-only]').forEach((el) => el.remove());
+
     const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
     bg.setAttribute('width', String(w));
     bg.setAttribute('height', String(h));
-    bg.setAttribute('fill', '#F3EFE6');
+    bg.setAttribute('fill', colors.paperBg);
     clone.insertBefore(bg, clone.firstChild);
 
-    const svgString = new XMLSerializer().serializeToString(clone);
-    const svgUrl = URL.createObjectURL(new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' }));
+    return { clone, w, h };
+  }
 
+  function exportPNG() {
+    const built = buildExportClone();
+    if (!built) return;
+    const { clone, w, h } = built;
+    const svgUrl = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(clone)], { type: 'image/svg+xml;charset=utf-8' }));
     const img = new Image();
     img.onload = () => {
       const scale = 2;
@@ -674,104 +671,186 @@ export default function DrawingAssistant() {
     img.src = svgUrl;
   }
 
-  const popupLeft = pendingSuggestion ? Math.min(pendingSuggestion.anchor.x + 14, containerSize.w - 200) : 0;
-  const popupTop = pendingSuggestion ? Math.max(pendingSuggestion.anchor.y - 56, 8) : 0;
+  function exportSVGFile() {
+    const built = buildExportClone();
+    if (!built) return;
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(built.clone)], { type: 'image/svg+xml;charset=utf-8' }));
+    link.download = 'atelier.svg';
+    link.click();
+    URL.revokeObjectURL(link.href);
+  }
 
-  const selectedStroke = mode === 'select' ? strokes.find((s) => s.id === selectedId) || null : null;
-  const selBBox = selectedStroke ? strokeBBox(selectedStroke) : null;
-  const deleteLeft = selBBox ? Math.min(selBBox.maxX + 10, containerSize.w - 40) : 0;
-  const deleteTop = selBBox ? Math.max(selBBox.minY - 44, 8) : 0;
+  function saveProjectFile() {
+    const data = { version: 1, strokes, layers };
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+    link.download = 'atelier.json';
+    link.click();
+    URL.revokeObjectURL(link.href);
+  }
+
+  function openProjectFile(e) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(reader.result);
+        const nextLayers = Array.isArray(data.layers) && data.layers.length > 0 ? data.layers : DEFAULT_LAYERS;
+        const fallbackId = nextLayers[0].id;
+        const nextStrokes = Array.isArray(data.strokes) ? data.strokes.map((s) => ({ ...s, layerId: s.layerId || fallbackId })) : [];
+        setLayers(nextLayers);
+        setActiveLayerId(fallbackId);
+        setSelectedIds(new Set());
+        dispatch({ type: 'set', strokes: nextStrokes });
+      } catch {
+        window.alert("Impossible de lire ce fichier : ce n'est pas un projet Atelier valide.");
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  // -- Dérivés pour le rendu -----------------------------------------------------
+
+  const canUndo = history.past.length > 0;
+  const canRedo = history.future.length > 0;
+
+  const visibleWorldBounds = {
+    minX: (0 - view.x) / view.scale,
+    minY: (0 - view.y) / view.scale,
+    maxX: (containerSize.w - view.x) / view.scale,
+    maxY: (containerSize.h - view.y) / view.scale,
+  };
+
+  const strokesByLayer = layers.map((layer) => ({ layer, items: strokes.filter((s) => s.layerId === layer.id) }));
+
+  const selectedStrokes = strokes.filter((s) => selectedIds.has(s.id) && isLayerVisible(s.layerId));
+  const singleSelectedStroke = selectedStrokes.length === 1 ? selectedStrokes[0] : null;
+  const selUnionBBox = selectedStrokes.length > 0 ? unionBBox(selectedStrokes.map(strokeBBox)) : null;
+
+  const popupAnchorScreen = pendingSuggestion ? worldToScreen(pendingSuggestion.anchor) : null;
+  const popupLeft = popupAnchorScreen ? Math.min(popupAnchorScreen.x + 14, containerSize.w - 200) : 0;
+  const popupTop = popupAnchorScreen ? Math.max(popupAnchorScreen.y - 56, 8) : 0;
+
+  const deleteAnchorScreen = selUnionBBox ? worldToScreen({ x: selUnionBBox.maxX, y: selUnionBBox.minY }) : null;
+  const deleteLeft = deleteAnchorScreen ? Math.min(deleteAnchorScreen.x + 10, containerSize.w - 40) : 0;
+  const deleteTop = deleteAnchorScreen ? Math.max(deleteAnchorScreen.y - 44, 8) : 0;
+
+  const activeLayer = layers.find((l) => l.id === activeLayerId);
+  const cursor = tool === 'draw' || tool === 'line' || tool === 'arrow' || tool === 'rect' || tool === 'ellipse'
+    ? 'crosshair' : tool === 'pan' ? 'grab' : 'default';
 
   return (
-    <div className="w-full h-screen flex flex-col" style={{ background: '#F3EFE6', color: '#2A2620', fontFamily: 'ui-sans-serif, system-ui, sans-serif' }}>
+    <div
+      className="w-full h-screen flex flex-col"
+      style={{
+        background: colors.appBg, color: colors.text, fontFamily: 'ui-sans-serif, system-ui, sans-serif',
+        transition: 'background-color 0.15s ease, color 0.15s ease',
+        '--atelier-accent': colors.accent,
+      }}
+    >
       {/* Barre d'outils */}
-      <div className="flex flex-wrap items-center gap-4 px-4 py-3 border-b" style={{ borderColor: '#E3DCC9', background: '#FBF9F3' }}>
-        <div className="flex items-center gap-2 pr-3 mr-1 border-r" style={{ borderColor: '#E3DCC9' }}>
-          <PenLine size={18} style={{ color: '#A6432E' }} />
+      <div className="flex flex-wrap items-center gap-4 px-4 py-3 border-b" style={{ borderColor: colors.border, background: colors.toolbarBg }}>
+        <div className="flex items-center gap-2 pr-3 mr-1 border-r" style={{ borderColor: colors.border }}>
+          <PenLine size={18} style={{ color: colors.danger }} />
           <span className="text-sm font-semibold tracking-wide" style={{ fontFamily: 'ui-serif, Georgia, serif' }}>Atelier</span>
         </div>
 
-        <div className="flex items-center gap-1 pr-2 border-r" style={{ borderColor: '#E3DCC9' }}>
-          <button
-            onClick={() => switchMode('draw')}
-            title="Dessiner"
-            className="w-8 h-8 rounded-md flex items-center justify-center"
-            style={{ background: mode === 'draw' ? '#EAE3D1' : 'transparent' }}
-          >
-            <Pencil size={16} style={{ color: mode === 'draw' ? '#2A2620' : '#A19A85' }} />
-          </button>
-          <button
-            onClick={() => switchMode('select')}
-            title="Sélectionner et modifier une forme"
-            className="w-8 h-8 rounded-md flex items-center justify-center"
-            style={{ background: mode === 'select' ? '#EAE3D1' : 'transparent' }}
-          >
-            <MousePointer2 size={16} style={{ color: mode === 'select' ? '#2A2620' : '#A19A85' }} />
-          </button>
+        <div className="flex items-center gap-1 pr-2 border-r" style={{ borderColor: colors.border }}>
+          {TOOLS.map(({ id, label, icon: Icon }) => (
+            <ToolbarButton key={id} active={tool === id} onClick={() => switchTool(id)} title={label} colors={colors}>
+              <Icon size={16} />
+            </ToolbarButton>
+          ))}
         </div>
 
         <div className="flex items-center gap-1.5">
-          {COLORS.map((c) => (
+          {colors.penColors.map((c) => (
             <button
               key={c.hex}
               onClick={() => setColor(c.hex)}
               title={c.name}
-              className="w-6 h-6 rounded-full transition-transform"
+              className="w-6 h-6 rounded-full transition-transform shrink-0"
               style={{
                 background: c.hex,
                 transform: color === c.hex ? 'scale(1.15)' : 'scale(1)',
-                boxShadow: color === c.hex ? `0 0 0 2px #FBF9F3, 0 0 0 4px ${c.hex}` : 'none',
+                boxShadow: color === c.hex ? `0 0 0 2px ${colors.toolbarBg}, 0 0 0 4px ${c.hex}` : `inset 0 0 0 1px ${colors.border}`,
               }}
             />
           ))}
+          <label
+            className="w-6 h-6 rounded-full overflow-hidden relative cursor-pointer shrink-0"
+            style={{ background: color, boxShadow: `inset 0 0 0 1px ${colors.border}` }}
+            title="Couleur personnalisée"
+          >
+            <input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+          </label>
         </div>
 
-        <div className="flex items-center gap-1 pl-2 border-l" style={{ borderColor: '#E3DCC9' }}>
+        <div className="flex items-center gap-1 pl-2 border-l" style={{ borderColor: colors.border }}>
           {WIDTHS.map((wOpt) => (
-            <button
-              key={wOpt.value}
-              onClick={() => setWidth(wOpt.value)}
-              title={wOpt.label}
-              className="w-8 h-8 rounded-md flex items-center justify-center"
-              style={{ background: width === wOpt.value ? '#EAE3D1' : 'transparent' }}
-            >
-              <span className="rounded-full" style={{ width: wOpt.value + 3, height: wOpt.value + 3, background: '#2A2620' }} />
-            </button>
+            <ToolbarButton key={wOpt.value} active={width === wOpt.value} onClick={() => setWidth(wOpt.value)} title={wOpt.label} colors={colors}>
+              <span className="rounded-full" style={{ width: wOpt.value + 3, height: wOpt.value + 3, background: colors.text }} />
+            </ToolbarButton>
           ))}
         </div>
 
         <button
           onClick={() => setAutoCorrect((v) => !v)}
           className="flex items-center gap-2 pl-2 pr-1 border-l text-sm"
-          style={{ borderColor: '#E3DCC9' }}
+          style={{ borderColor: colors.border }}
         >
-          <Sparkles size={16} style={{ color: autoCorrect ? '#1F6F63' : '#A19A85' }} />
-          <span style={{ color: autoCorrect ? '#2A2620' : '#A19A85' }}>Correction</span>
-          <span
-            className="w-9 h-5 rounded-full relative transition-colors"
-            style={{ background: autoCorrect ? '#1F6F63' : '#D8D0BC' }}
-          >
-            <span
-              className="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all"
-              style={{ left: autoCorrect ? 18 : 2 }}
-            />
+          <Sparkles size={16} style={{ color: autoCorrect ? colors.accent : colors.textMuted }} />
+          <span style={{ color: autoCorrect ? colors.text : colors.textMuted }}>Correction</span>
+          <span className="w-9 h-5 rounded-full relative transition-colors" style={{ background: autoCorrect ? colors.accent : colors.border }}>
+            <span className="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all" style={{ left: autoCorrect ? 18 : 2 }} />
           </span>
         </button>
 
-        <div className="flex items-center gap-1 ml-auto pl-2 border-l" style={{ borderColor: '#E3DCC9' }}>
-          <button onClick={undo} disabled={strokes.length === 0} className="p-2 rounded-md disabled:opacity-30" style={{ background: '#FBF9F3' }}>
+        <div className="flex items-center gap-1 ml-auto pl-2 border-l flex-wrap justify-end" style={{ borderColor: colors.border }}>
+          <ToolbarButton active={layersPanelOpen} onClick={() => setLayersPanelOpen((v) => !v)} title="Calques" colors={colors}>
+            <Layers size={17} />
+          </ToolbarButton>
+          <ToolbarButton onClick={() => dispatch({ type: 'undo' })} disabled={!canUndo} title="Annuler (Ctrl+Z)" colors={colors}>
             <Undo2 size={17} />
-          </button>
-          <button onClick={redo} disabled={redoStack.length === 0} className="p-2 rounded-md disabled:opacity-30" style={{ background: '#FBF9F3' }}>
+          </ToolbarButton>
+          <ToolbarButton onClick={() => dispatch({ type: 'redo' })} disabled={!canRedo} title="Rétablir (Ctrl+Maj+Z)" colors={colors}>
             <Redo2 size={17} />
-          </button>
-          <button onClick={clearAll} disabled={strokes.length === 0} className="p-2 rounded-md disabled:opacity-30" style={{ background: '#FBF9F3' }}>
-            <Trash2 size={17} style={{ color: '#A6432E' }} />
-          </button>
-          <button onClick={exportPNG} disabled={strokes.length === 0} title="Télécharger en PNG" className="p-2 rounded-md disabled:opacity-30" style={{ background: '#FBF9F3' }}>
+          </ToolbarButton>
+          <ToolbarButton onClick={clearAll} disabled={strokes.length === 0} title="Tout effacer" colors={colors}>
+            <Trash2 size={17} style={{ color: colors.danger }} />
+          </ToolbarButton>
+          <ToolbarButton onClick={saveProjectFile} disabled={strokes.length === 0} title="Enregistrer le projet (.json)" colors={colors}>
+            <Save size={17} />
+          </ToolbarButton>
+          <ToolbarButton onClick={() => openFileRef.current?.click()} title="Ouvrir un projet (.json)" colors={colors}>
+            <FolderOpen size={17} />
+          </ToolbarButton>
+          <ToolbarButton onClick={exportPNG} disabled={strokes.length === 0} title="Exporter en PNG" colors={colors}>
             <Download size={17} />
-          </button>
+          </ToolbarButton>
+          <ToolbarButton onClick={exportSVGFile} disabled={strokes.length === 0} title="Exporter en SVG" colors={colors}>
+            <FileCode2 size={17} />
+          </ToolbarButton>
+          <ToolbarButton onClick={() => setThemePref(themeResolved === 'dark' ? 'light' : 'dark')} title={themeResolved === 'dark' ? 'Thème clair' : 'Thème sombre'} colors={colors}>
+            {themeResolved === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
+          </ToolbarButton>
+          <input ref={openFileRef} type="file" accept=".json,application/json" onChange={openProjectFile} className="hidden" />
         </div>
+      </div>
+
+      {/* Barre de statut */}
+      <div className="flex items-center gap-3 px-4 py-1 text-xs border-b" style={{ borderColor: colors.border, background: colors.toolbarBg, color: colors.textMuted }}>
+        <div className="flex items-center gap-0.5">
+          <button onClick={() => zoomBy(1 / 1.2)} title="Zoom arrière" className="w-5 h-5 rounded flex items-center justify-center"><Minus size={12} /></button>
+          <button onClick={resetView} className="px-1 tabular-nums rounded hover:underline" title="Réinitialiser la vue">{Math.round(view.scale * 100)}%</button>
+          <button onClick={() => zoomBy(1.2)} title="Zoom avant" className="w-5 h-5 rounded flex items-center justify-center"><Plus size={12} /></button>
+        </div>
+        <span>{strokes.length} forme{strokes.length === 1 ? '' : 's'}</span>
+        {selectedIds.size > 0 && <span>· {selectedIds.size} sélectionnée{selectedIds.size === 1 ? '' : 's'}</span>}
+        <span className="ml-auto truncate">{activeLayer?.name}</span>
       </div>
 
       {/* Zone de dessin */}
@@ -781,66 +860,100 @@ export default function DrawingAssistant() {
           width={containerSize.w}
           height={containerSize.h}
           className="absolute inset-0 touch-none"
-          style={{ cursor: mode === 'draw' ? 'crosshair' : 'default' }}
+          style={{ cursor }}
           onPointerDown={handleSvgPointerDown}
           onPointerMove={handleSvgPointerMove}
           onPointerUp={handleSvgPointerUp}
           onPointerLeave={handleSvgPointerUp}
+          onContextMenu={(e) => { if (tool !== 'select') e.preventDefault(); }}
         >
-          <Paper w={containerSize.w} h={containerSize.h} />
+          <g data-world-group="true" transform={`translate(${view.x} ${view.y}) scale(${view.scale})`}>
+            <Paper bounds={visibleWorldBounds} colors={colors} />
 
-          {strokes.map((s) => (
-            <StrokeView key={s.id} stroke={s} interactive={mode === 'select'} onGrab={handleStrokeGrab} />
-          ))}
+            {strokesByLayer.map(({ layer, items }) => layer.visible && items.map((s) => (
+              <StrokeView key={s.id} stroke={s} interactive={tool === 'select'} onGrab={handleStrokeGrab} />
+            )))}
 
-          <path ref={currentPathRef} fill="none" stroke={color} strokeWidth={width} strokeLinecap="round" strokeLinejoin="round" pointerEvents="none" />
+            <path ref={currentPathRef} data-ui-only="true" fill="none" stroke={color} strokeWidth={width} strokeLinecap="round" strokeLinejoin="round" pointerEvents="none" />
 
-          {selectedStroke && selBBox && (
-            <rect
-              x={selBBox.minX - 6} y={selBBox.minY - 6}
-              width={selBBox.w + 12} height={selBBox.h + 12}
-              fill="none" stroke="#1F6F63" strokeWidth={1.5} strokeDasharray="4 3"
-              pointerEvents="none"
-            />
-          )}
-          {selectedStroke && <EditHandles stroke={selectedStroke} onHandleGrab={handleHandleGrab} />}
+            {draft && (
+              <g data-ui-only="true"><DraftShape tool={draft.tool} start={draft.start} end={draft.end} color={color} width={width} /></g>
+            )}
+
+            {selectedStrokes.map((s) => (
+              <g data-ui-only="true" key={s.id}><SelectionOutline bbox={strokeBBox(s)} scale={view.scale} accent={colors.accent} /></g>
+            ))}
+            {singleSelectedStroke && (
+              <g data-ui-only="true"><EditHandles stroke={singleSelectedStroke} onHandleGrab={handleHandleGrab} scale={view.scale} accent={colors.accent} /></g>
+            )}
+
+            {marquee && <g data-ui-only="true"><Marquee start={marquee.start} end={marquee.end} colors={colors} /></g>}
+          </g>
         </svg>
 
         {pendingSuggestion && (
           <div
             className="absolute z-10 flex items-center gap-2 px-3 py-2 rounded-lg shadow-lg"
-            style={{ left: popupLeft, top: popupTop, background: '#FFFFFF', border: '1px solid #E3DCC9' }}
+            style={{ left: popupLeft, top: popupTop, background: colors.panelBg, border: `1px solid ${colors.border}`, color: colors.text }}
           >
             <span className="text-sm whitespace-nowrap">
               On dirait <b>{pendingSuggestion.shape.label}</b>
             </span>
-            <button onClick={acceptSuggestion} className="p-1.5 rounded-md" style={{ background: '#1F6F63' }} title="Remplacer par la forme nette">
-              <Check size={15} color="#FFFFFF" />
+            <button onClick={acceptSuggestion} className="p-1.5 rounded-md" style={{ background: colors.accent }} title="Remplacer par la forme nette">
+              <Check size={15} color={colors.accentText} />
             </button>
-            <button onClick={clearPendingSuggestion} className="p-1.5 rounded-md" style={{ background: '#EAE3D1' }} title="Garder le tracé original">
-              <X size={15} color="#2A2620" />
+            <button onClick={clearPendingSuggestion} className="p-1.5 rounded-md" style={{ background: colors.activeBg }} title="Garder le tracé original">
+              <X size={15} color={colors.text} />
             </button>
           </div>
         )}
 
-        {selectedStroke && (
+        {selectedStrokes.length > 0 && (
           <div
             className="absolute z-10 flex items-center gap-1 p-1 rounded-lg shadow-lg"
-            style={{ left: deleteLeft, top: deleteTop, background: '#FFFFFF', border: '1px solid #E3DCC9' }}
+            style={{ left: deleteLeft, top: deleteTop, background: colors.panelBg, border: `1px solid ${colors.border}` }}
           >
-            <button onClick={deleteSelected} className="p-1.5 rounded-md" style={{ background: '#F6EFE9' }} title="Supprimer (Suppr)">
-              <Trash2 size={14} color="#A6432E" />
+            <button onClick={deleteSelected} className="p-1.5 rounded-md" style={{ background: colors.hoverBg }} title="Supprimer (Suppr)">
+              <Trash2 size={14} color={colors.danger} />
             </button>
+          </div>
+        )}
+
+        {layersPanelOpen && (
+          <div
+            className="absolute top-3 right-3 z-20 w-56 rounded-lg shadow-lg overflow-hidden"
+            style={{ background: colors.panelBg, border: `1px solid ${colors.border}` }}
+          >
+            <div className="flex items-center justify-between px-3 py-2 border-b" style={{ borderColor: colors.border }}>
+              <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: colors.textMuted }}>Calques</span>
+              <button onClick={addLayer} className="p-1 rounded" title="Ajouter un calque"><Plus size={14} /></button>
+            </div>
+            <div className="max-h-64 overflow-y-auto">
+              {[...layers].reverse().map((l) => (
+                <LayerRow
+                  key={l.id}
+                  layer={l}
+                  active={l.id === activeLayerId}
+                  onActivate={() => setActiveLayerId(l.id)}
+                  onToggleVisible={() => toggleLayerVisible(l.id)}
+                  onRename={(name) => renameLayer(l.id, name)}
+                  onDelete={() => deleteLayer(l.id)}
+                  onMoveUp={() => moveLayer(l.id, 1)}
+                  onMoveDown={() => moveLayer(l.id, -1)}
+                  canDelete={layers.length > 1}
+                  colors={colors}
+                />
+              ))}
+            </div>
           </div>
         )}
 
         {strokes.length === 0 && !pendingSuggestion && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <p className="text-sm text-center max-w-xs" style={{ color: '#A19A85' }}>
-              Dessinez un trait droit ou une forme fermée (cercle, carré, rectangle,
-              losange, triangle, pentagone, hexagone, étoile…) — une version nette
-              sera proposée. Passez en mode sélection pour déplacer, redimensionner
-              ou supprimer une forme.
+            <p className="text-sm text-center max-w-sm" style={{ color: colors.textMuted }}>
+              Crayon : dessinez un trait droit ou une forme fermée — une version nette
+              sera proposée. Ou choisissez directement un outil de forme (ligne, flèche,
+              rectangle, ellipse). Molette pour zoomer, outil Main pour vous déplacer.
             </p>
           </div>
         )}
