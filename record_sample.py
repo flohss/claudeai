@@ -15,7 +15,7 @@ import sys
 import unicodedata
 from pathlib import Path
 
-from audio_utils import normalize_loudness, trim_silence
+from audio_utils import normalize_loudness, reduce_background_noise, trim_silence
 
 EMOTION_SENTENCES = {
     "joyeux": [
@@ -125,6 +125,8 @@ def parse_args():
     parser.add_argument("--prefix", type=str, default=None, help="Filename prefix for numbered clips.")
     parser.add_argument("--count", type=int, default=None, help="Number of clips to record (default: 5).")
     parser.add_argument("--duration", type=int, default=None, help="Duration per clip in seconds (default: 20).")
+    parser.add_argument("--no-denoise", action="store_true",
+                         help="Skip automatic background noise reduction (denoising is on by default).")
     parser.add_argument("--samplerate", type=int, default=24000, help="Sample rate in Hz.")
     return parser.parse_args()
 
@@ -170,6 +172,8 @@ def main():
         prefix = ask("Prefixe des fichiers", "my_voice")
         count = ask("Combien de clips veux-tu enregistrer", 5, int)
         duration = ask("Duree de chaque clip, en secondes", 20, int)
+        denoise_choice = ask("Reduire automatiquement le bruit de fond (recommande)", "oui")
+        denoise = denoise_choice.strip().lower() not in ("non", "n", "no")
         print()
     else:
         base_dir = args.output_dir or Path("samples")
@@ -177,6 +181,7 @@ def main():
         prefix = args.prefix or "my_voice"
         count = args.count or 5
         duration = args.duration or 20
+        denoise = not args.no_denoise
 
     output_dir = base_dir / normalize_label(emotion) if emotion else base_dir
     sentence_bank = EMOTION_SENTENCES.get(normalize_label(emotion), SUGGESTED_SENTENCES)
@@ -197,6 +202,9 @@ def main():
         input("Appuie sur Entree quand tu es pret(e)...")
 
         audio = record_clip(sd, duration, args.samplerate)
+        if denoise:
+            print("Reduction du bruit de fond...")
+            audio = reduce_background_noise(audio, args.samplerate)
         audio = trim_silence(audio, args.samplerate)
         speech_seconds = len(audio) / args.samplerate
         if speech_seconds < 3:
@@ -204,7 +212,8 @@ def main():
                   f"Tu peux refaire ce clip juste apres si besoin.")
         audio = normalize_loudness(audio)
         sf.write(str(target), audio, args.samplerate)
-        print(f"Enregistre dans {target} ({speech_seconds:.1f}s de parole, nettoye et normalise)")
+        status = "debruite, nettoye et normalise" if denoise else "nettoye et normalise"
+        print(f"Enregistre dans {target} ({speech_seconds:.1f}s de parole, {status})")
 
     print(f"\nTermine. {len(targets)} clip(s) enregistre(s) dans {output_dir}/")
     print("Tu peux relancer ce script plus tard pour ajouter d'autres clips sans ecraser ceux-ci.")

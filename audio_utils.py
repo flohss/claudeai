@@ -2,6 +2,15 @@
 import numpy as np
 
 
+def reduce_background_noise(audio: np.ndarray, samplerate: int, prop_decrease: float = 0.8) -> np.ndarray:
+    """Attenuate steady background noise (hum, hiss, fan...) via spectral gating."""
+    import noisereduce as nr
+
+    mono = audio.mean(axis=1) if audio.ndim > 1 else audio
+    cleaned = nr.reduce_noise(y=mono, sr=samplerate, stationary=True, prop_decrease=prop_decrease)
+    return cleaned.astype(np.float32)
+
+
 def trim_silence(audio: np.ndarray, samplerate: int, threshold_db: float = -40.0, pad_ms: int = 150) -> np.ndarray:
     """Trim leading/trailing silence based on an amplitude threshold, keeping a small padding."""
     mono = audio.mean(axis=1) if audio.ndim > 1 else audio

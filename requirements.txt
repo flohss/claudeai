@@ -9,3 +9,5 @@ sounddevice>=0.4.6
 soundfile>=0.12.1
 # Used to re-transcribe generated audio and verify it matches the input text.
 faster-whisper>=1.0
+# Used to reduce background noise (hiss, hum, fan...) in recorded samples.
+noisereduce>=3.0

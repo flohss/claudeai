@@ -74,10 +74,13 @@ relancer le script plus tard pour ajouter davantage de clips : la
 numerotation reprend automatiquement apres le dernier fichier existant
 (les clips precedents ne sont jamais ecrases).
 
-Chaque clip est automatiquement nettoye apres l'enregistrement (silence de
-debut/fin coupe, volume normalise) pour ameliorer la fidelite du clonage. Si
-un clip contient moins de 3 secondes de parole detectee (silence, micro trop
-bas...), le script te previent pour que tu puisses le refaire.
+Chaque clip est automatiquement nettoye apres l'enregistrement (reduction du
+bruit de fond, silence de debut/fin coupe, volume normalise) pour ameliorer
+la fidelite du clonage. Si un clip contient moins de 3 secondes de parole
+detectee (silence, micro trop bas...), le script te previent pour que tu
+puisses le refaire. La reduction de bruit peut etre desactivee avec
+`--no-denoise` (ou en repondant "non" a la question correspondante) si ton
+enregistrement est deja tres propre.
 
 Tu peux aussi utiliser directement des fichiers audio existants (wav/mp3/flac)
 de ta voix a la place.
