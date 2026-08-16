@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Émulateur BASIC</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header>
+  <h1>★ ÉMULATEUR BASIC ★</h1>
+  <p>Un interpréteur BASIC dans votre navigateur — avec des programmes preset prêts à exécuter.</p>
+</header>
+
+<details class="help">
+  <summary>Aide-mémoire du dialecte BASIC supporté</summary>
+  <div class="help-grid">
+    <div><code>PRINT</code> "texte"; var, var2</div>
+    <div><code>LET</code> X = expression (LET optionnel)</div>
+    <div><code>INPUT</code> "message"; VAR</div>
+    <div><code>IF</code> cond <code>THEN</code> ... <code>ELSE</code> ...</div>
+    <div><code>FOR</code> I = 1 <code>TO</code> 10 <code>STEP</code> 2 / <code>NEXT</code> I</div>
+    <div><code>GOTO</code> / <code>GOSUB</code> / <code>RETURN</code></div>
+    <div><code>DIM</code> A(10) — tableaux 1D/2D</div>
+    <div><code>DATA</code> 1,2,3 / <code>READ</code> A / <code>RESTORE</code></div>
+    <div><code>CLS</code> — efface l'écran</div>
+    <div><code>REM</code> ou <code>'</code> — commentaire</div>
+    <div>Opérateurs : + - * / ^ MOD AND OR NOT</div>
+    <div>Fonctions : ABS INT SGN SQR SIN COS TAN ATN LOG EXP RND</div>
+    <div>Chaînes : LEN LEFT$ RIGHT$ MID$ CHR$ ASC STR$ VAL INSTR SPACE$ STRING$ TAB()</div>
+    <div>Les variables texte se terminent par <code>$</code> (ex : NOM$)</div>
+  </div>
+</details>
+
+<main>
+  <section class="panel">
+    <div class="panel-header">
+      <h2>Programme</h2>
+      <div class="controls">
+        <select id="preset-select">
+          <option value="">— choisir un preset —</option>
+        </select>
+        <button id="new-btn" type="button">Nouveau</button>
+        <button id="run-btn" type="button">▶ Exécuter</button>
+        <button id="stop-btn" type="button" disabled>■ Stop</button>
+      </div>
+    </div>
+    <div id="preset-desc"></div>
+    <textarea id="code-editor" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
+  </section>
+
+  <section class="panel">
+    <div class="panel-header">
+      <h2>Terminal</h2>
+      <div class="controls">
+        <span id="status"></span>
+        <button id="clear-btn" type="button">Effacer</button>
+      </div>
+    </div>
+    <pre id="terminal-output"></pre>
+    <div id="input-row" hidden>
+      <span id="input-prompt">?</span>
+      <input id="input-field" type="text" autocomplete="off" spellcheck="false">
+    </div>
+  </section>
+</main>
+
+<footer>
+  Astuce : Ctrl+Entrée dans l'éditeur pour exécuter le programme.
+</footer>
+
+<script src="js/basic-interpreter.js"></script>
+<script src="js/presets.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
