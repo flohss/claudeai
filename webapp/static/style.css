@@ -715,7 +715,8 @@ canvas {
     background: var(--bordure);
     padding: 4px;
     border-radius: 8px;
-    width: min(420px, 90vw);
+    width: 100%;
+    max-width: 420px;
 }
 
 .case-carte {
