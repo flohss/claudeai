@@ -16,6 +16,7 @@ from modules import module1_xor_simple as module1
 from modules import module2_prix as module2
 from modules import module3_fruits as module3
 from modules import module4_sequence as module4
+from modules import module5_serpent as module5
 
 
 BANNIERE = r"""
@@ -47,7 +48,11 @@ def afficher_accueil():
     print("      Une IA qui regarde les derniers nombres d'une suite pour")
     print("      deviner le suivant. Introduction a ce qui se passe derriere")
     print("      les IA qui ecrivent du texte.\n")
-    print("  [5] Quitter\n")
+    print("  [5] Le serpent qui apprend tout seul")
+    print("      Une IA qui apprend a jouer par essai-erreur, sans jamais")
+    print("      recevoir de bonnes reponses a l'avance. Premier pas vers")
+    print("      l'apprentissage par renforcement.\n")
+    print("  [6] Quitter\n")
 
 
 def demander_details():
@@ -127,10 +132,19 @@ def lancer_module_4():
     pause_avant_retour()
 
 
+def lancer_module_5():
+    print("\n--- MODULE 5 : Le serpent qui apprend tout seul ---\n")
+    details, pas_a_pas_actif, nb_parties = demander_mode(400)
+    module5.entrainer(nb_parties=nb_parties, vitesse_apprentissage=0.1, patience=0.9,
+                       details=details, afficher_toutes_les=50,
+                       pas_a_pas_actif=pas_a_pas_actif)
+    pause_avant_retour()
+
+
 def boucle_principale():
     while True:
         afficher_accueil()
-        choix = input("Votre choix (1-5) : ").strip()
+        choix = input("Votre choix (1-6) : ").strip()
 
         if choix == "1":
             lancer_module_1()
@@ -141,10 +155,12 @@ def boucle_principale():
         elif choix == "4":
             lancer_module_4()
         elif choix == "5":
+            lancer_module_5()
+        elif choix == "6":
             print("\nA bientot !")
             sys.exit(0)
         else:
-            print("\nChoix non reconnu, merci de taper un chiffre entre 1 et 5.\n")
+            print("\nChoix non reconnu, merci de taper un chiffre entre 1 et 6.\n")
 
 
 if __name__ == "__main__":
