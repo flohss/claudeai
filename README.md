@@ -69,6 +69,10 @@ pip install -r requirements-web.txt
 python -m webapp.app
 ```
 
+Sous Windows, double-cliquez simplement sur `lancer_interface_web.bat` :
+il crée l'environnement virtuel si besoin, installe les dépendances, et
+ouvre votre navigateur tout seul.
+
 Puis ouvrez `http://localhost:5000` dans votre navigateur (ou l'adresse
 IP affichée au démarrage, pour y accéder depuis un autre appareil du
 même réseau, par exemple votre téléphone). Elle ne refait aucun calcul
@@ -131,6 +135,7 @@ webapp/                       -> interface graphique (Flask), optionnelle
     static/
 requirements.txt               -> dépendance pour la ligne de commande (numpy)
 requirements-web.txt           -> dépendance en plus pour l'interface graphique (flask)
+lancer_interface_web.bat       -> double-clic Windows pour lancer l'interface graphique
 ```
 
 Chaque module sauvegarde un checkpoint JSON (`checkpoints/moduleX_*.json`)
