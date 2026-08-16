@@ -55,31 +55,56 @@ def demander_details():
     return reponse == "o"
 
 
+def demander_mode(nb_essais_par_defaut):
+    """Demande si on veut avancer pas a pas (un essai a la fois, avec la
+    pensee de l'IA racontee a chaque fois) ou juste voir tous les calculs
+    defiler. Renvoie (details, pas_a_pas_actif, nb_essais)."""
+    reponse = input("Voulez-vous avancer PAS A PAS, un essai a la fois "
+                     "(Entree pour continuer) ? (o/n, defaut n) : ").strip().lower()
+    if reponse == "o":
+        print("\nMode pas-a-pas active : la pensee de l'IA sera racontee a chaque")
+        print("essai, et l'entrainement attendra que vous appuyiez sur Entree")
+        print("pour passer a l'essai suivant. (Ctrl+C pour interrompre a tout moment.)")
+        essais_texte = input("Sur combien d'essais voulez-vous avancer pas a pas ? "
+                              "(defaut 20) : ").strip()
+        try:
+            nb_essais = int(essais_texte) if essais_texte else 20
+        except ValueError:
+            nb_essais = 20
+        print()
+        return True, True, max(1, nb_essais)
+
+    return demander_details(), False, nb_essais_par_defaut
+
+
 def pause_avant_retour():
     input("\nAppuyez sur Entree pour revenir a l'ecran d'accueil...")
 
 
 def lancer_module_1():
     print("\n--- MODULE 1 : Le OU EXCLUSIF (XOR) ---\n")
-    details = demander_details()
-    module1.entrainer(nb_essais=10000, vitesse_apprentissage=0.5,
-                       details=details, afficher_tous_les=1000)
+    details, pas_a_pas_actif, nb_essais = demander_mode(10000)
+    module1.entrainer(nb_essais=nb_essais, vitesse_apprentissage=0.5,
+                       details=details, afficher_tous_les=1000,
+                       pas_a_pas_actif=pas_a_pas_actif)
     pause_avant_retour()
 
 
 def lancer_module_2():
     print("\n--- MODULE 2 : Deviner un prix ---\n")
-    details = demander_details()
-    module2.entrainer(nb_essais=5000, vitesse_apprentissage=0.01,
-                       details=details, afficher_tous_les=1000)
+    details, pas_a_pas_actif, nb_essais = demander_mode(5000)
+    module2.entrainer(nb_essais=nb_essais, vitesse_apprentissage=0.01,
+                       details=details, afficher_tous_les=1000,
+                       pas_a_pas_actif=pas_a_pas_actif)
     pause_avant_retour()
 
 
 def lancer_module_3():
     print("\n--- MODULE 3 : Reconnaitre un fruit ---\n")
-    details = demander_details()
-    module3.entrainer(nb_essais=3000, vitesse_apprentissage=0.1,
-                       details=details, afficher_tous_les=500)
+    details, pas_a_pas_actif, nb_essais = demander_mode(3000)
+    module3.entrainer(nb_essais=nb_essais, vitesse_apprentissage=0.1,
+                       details=details, afficher_tous_les=500,
+                       pas_a_pas_actif=pas_a_pas_actif)
     pause_avant_retour()
 
 
@@ -95,9 +120,10 @@ def demander_famille():
 def lancer_module_4():
     print("\n--- MODULE 4 : Deviner la suite ---\n")
     famille = demander_famille()
-    details = demander_details()
-    module4.entrainer(nb_essais=9000, vitesse_apprentissage=0.05,
-                       details=details, afficher_tous_les=1000, famille=famille)
+    details, pas_a_pas_actif, nb_essais = demander_mode(9000)
+    module4.entrainer(nb_essais=nb_essais, vitesse_apprentissage=0.05,
+                       details=details, afficher_tous_les=1000,
+                       famille=famille, pas_a_pas_actif=pas_a_pas_actif)
     pause_avant_retour()
 
 
