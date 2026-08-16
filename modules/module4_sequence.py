@@ -138,8 +138,8 @@ def expliquer_le_probleme(famille, suites):
     print("et une reponse finale libre, un nombre quelconque (comme le module 2).\n")
 
 
-def raconter_la_pensee(essai, entrees, cibles, reponses):
-    print(f"\n--- Essai {essai} : ce que l'IA pense de chaque suite ---")
+def construire_pensee(entrees, cibles, reponses):
+    lignes = []
     for fenetre, cible, reponse in zip(entrees, cibles, reponses):
         texte_fenetre = ", ".join(str(int(n)) for n in fenetre)
         vrai = float(cible[0])
@@ -151,8 +151,9 @@ def raconter_la_pensee(essai, entrees, cibles, reponses):
             commentaire = "Presque bon, elle va corriger un peu ses boutons."
         else:
             commentaire = "Loin du compte, elle va corriger ses boutons plus fort."
-        print(f"  Suite: {texte_fenetre} (vrai suivant: {vrai:.0f}) "
-              f"-> l'IA devine {devine:.1f} (arrondi: {round(devine)}). -> {commentaire}")
+        lignes.append(f"Suite: {texte_fenetre} (vrai suivant: {vrai:.0f}) "
+                       f"-> l'IA devine {devine:.1f} (arrondi: {round(devine)}). -> {commentaire}")
+    return lignes
 
 
 def predire(entrees, boutons_couche_1, boutons_couche_2, valeur_de_base, echelle):
@@ -190,7 +191,7 @@ def tester(famille, boutons_couche_1, boutons_couche_2, valeur_de_base, echelle)
 
 
 def entrainer(nb_essais=9000, vitesse_apprentissage=0.05, details=False,
-              afficher_tous_les=1000, pas_a_pas_actif=False, famille="addition"):
+              afficher_tous_les=1000, pas_a_pas_actif=False, famille="addition", sur_essai=None):
     suites = generer_suites_entrainement(famille)
     expliquer_le_probleme(famille, suites)
 
@@ -226,10 +227,22 @@ def entrainer(nb_essais=9000, vitesse_apprentissage=0.05, details=False,
         valeur_de_base += vitesse_apprentissage * float(np.mean(correction_reponse))
         boutons_couche_1 += vitesse_apprentissage * (entrees_normalisees.T @ correction_reflexion)
 
+        reponses = reponse_normalisee * echelle
+
         if details:
-            raconter_la_pensee(essai, entrees, cibles, reponse_normalisee * echelle)
+            print(f"\n--- Essai {essai} : ce que l'IA pense de chaque suite ---")
+            for ligne in construire_pensee(entrees, cibles, reponses):
+                print(f"  {ligne}")
         elif essai == 1 or essai % afficher_tous_les == 0:
             print(f"Essai {essai:>6} | erreur moyenne : {erreur_moyenne:.2f} {barre_erreur(erreur_moyenne, echelle / 10)}")
+
+        if sur_essai is not None:
+            sur_essai({
+                "essai": essai,
+                "nb_essais": nb_essais,
+                "erreur": erreur_moyenne,
+                "pensees": construire_pensee(entrees, cibles, reponses),
+            })
 
         pas_a_pas(pas_a_pas_actif)
 

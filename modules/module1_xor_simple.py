@@ -74,9 +74,14 @@ def expliquer_le_probleme():
     print("etage de reflexion intermediaire, indispensable pour ce probleme.\n")
 
 
-def raconter_la_pensee(essai, reflexion, reponse, correction_faite):
+def construire_pensee(reponse):
+    """Construit les phrases qui racontent ce que l'IA pense de chaque exemple.
+
+    Utilise a la fois par l'affichage CLI (--details) et par l'interface
+    graphique, pour ne pas repeter deux fois la meme mise en phrase.
+    """
     noms_entrees = ["0 et 0", "0 et 1", "1 et 0", "1 et 1"]
-    print(f"\n--- Essai {essai} : ce que l'IA pense de chaque exemple ---")
+    lignes = []
     for i in range(len(EXEMPLES_ENTREE)):
         vrai = int(EXEMPLES_VRAIE_REPONSE[i, 0])
         pense = float(reponse[i, 0])
@@ -84,7 +89,8 @@ def raconter_la_pensee(essai, reflexion, reponse, correction_faite):
         verdict = "vrai (1)" if pense >= 0.5 else "faux (0)"
         bon = (pense >= 0.5) == (vrai == 1)
         commentaire = "Bonne reponse" if bon else "Mauvaise reponse, elle va corriger ses boutons"
-        print(f"  {noms_entrees[i]} (vraie reponse : {vrai}) -> l'IA pense '{verdict}' a {pourcentage}%. -> {commentaire}.")
+        lignes.append(f"{noms_entrees[i]} (vraie reponse : {vrai}) -> l'IA pense '{verdict}' a {pourcentage}%. -> {commentaire}.")
+    return lignes
 
 
 def tester(boutons_couche_1, boutons_couche_2):
@@ -107,7 +113,10 @@ def tester(boutons_couche_1, boutons_couche_2):
 
 
 def entrainer(nb_essais=10000, vitesse_apprentissage=0.5, details=False,
-              afficher_tous_les=1000, pas_a_pas_actif=False):
+              afficher_tous_les=1000, pas_a_pas_actif=False, sur_essai=None):
+    """sur_essai(dict) est un rappel optionnel, appele a chaque essai avec
+    un resume structure (utilise par l'interface graphique pour suivre
+    l'entrainement en direct sans dupliquer les calculs)."""
     expliquer_le_probleme()
 
     np.random.seed(42)
@@ -137,9 +146,19 @@ def entrainer(nb_essais=10000, vitesse_apprentissage=0.5, details=False,
         boutons_couche_1 += vitesse_apprentissage * (EXEMPLES_ENTREE.T @ correction_reflexion)
 
         if details:
-            raconter_la_pensee(essai, reflexion, reponse, correction_reponse)
+            print(f"\n--- Essai {essai} : ce que l'IA pense de chaque exemple ---")
+            for ligne in construire_pensee(reponse):
+                print(f"  {ligne}")
         elif essai == 1 or essai % afficher_tous_les == 0:
             print(f"Essai {essai:>6} | erreur moyenne : {erreur_moyenne:.4f} {barre_erreur(erreur_moyenne, 0.5)}")
+
+        if sur_essai is not None:
+            sur_essai({
+                "essai": essai,
+                "nb_essais": nb_essais,
+                "erreur": erreur_moyenne,
+                "pensees": construire_pensee(reponse),
+            })
 
         pas_a_pas(pas_a_pas_actif)
 

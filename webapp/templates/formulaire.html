@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module {{ num }} — {{ m.titre }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<a class="retour" href="{{ url_for('accueil') }}">&larr; Retour aux modules</a>
+<header>
+  <h1>Module {{ num }} — {{ m.titre }}</h1>
+  <p>{{ m.description }}</p>
+</header>
+
+<form method="post" action="{{ url_for('lancer', num=num) }}" class="formulaire">
+  {% for champ in m.champs %}
+  <label>
+    <span>{{ champ.label }}</span>
+    {% if champ.type == "select" %}
+    <select name="{{ champ.nom }}">
+      {% for option in champ.options %}
+      <option value="{{ option }}" {% if option == champ.defaut %}selected{% endif %}>{{ option }}</option>
+      {% endfor %}
+    </select>
+    {% else %}
+    <input type="number" step="{{ champ.pas or '1' }}" name="{{ champ.nom }}" value="{{ champ.defaut }}" required>
+    {% endif %}
+  </label>
+  {% endfor %}
+  <button type="submit">Lancer l'entraînement</button>
+</form>
+
+<p class="astuce">La page suivante va suivre l'entraînement en direct : la courbe d'erreur, et ce que l'IA pense de chaque exemple, mises à jour au fil des essais.</p>
+</body>
+</html>

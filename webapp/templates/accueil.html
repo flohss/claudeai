@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mon IA — interface graphique</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<header>
+  <h1>Mon IA — interface graphique</h1>
+  <p>Choisissez un module pour voir l'IA apprendre en direct dans le navigateur : les mêmes calculs qu'en ligne de commande, avec une courbe d'erreur et le fil de pensée de l'IA.</p>
+</header>
+
+<div class="cartes">
+  {% for num, m in modules.items() %}
+  <a class="carte" href="{{ url_for('formulaire', num=num) }}">
+    <span class="carte-numero">Module {{ num }}</span>
+    <h2>{{ m.titre }}</h2>
+    <p>{{ m.description }}</p>
+  </a>
+  {% endfor %}
+  <div class="carte carte-desactivee">
+    <span class="carte-numero">Module 6</span>
+    <h2>SPECIAL : c'est vous le professeur</h2>
+    <p>Vous tapez vos exemples un par un, ce n'est pas encore disponible ici. Utilisez la ligne de commande :
+      <code>python -m modules.module6_special</code></p>
+  </div>
+</div>
+</body>
+</html>

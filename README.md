@@ -45,6 +45,30 @@ exemple avec le bouton "Run" de Pydroid3 sur Android) : il détecte
 automatiquement s'il est lancé comme un simple script ou comme partie
 du package `modules` et s'adapte, sans erreur d'import.
 
+## Interface graphique (navigateur)
+
+En plus de la ligne de commande, une petite interface web locale permet
+de choisir les paramètres, lancer l'entraînement, et le suivre EN DIRECT
+dans le navigateur : la courbe d'erreur qui descend, et le fil de pensée
+de l'IA qui défile — pour les modules 1 à 5 (le module 6 reste pour
+l'instant réservé à la ligne de commande, car il vous demande de taper
+vos exemples un par un).
+
+```bash
+pip install -r requirements-web.txt
+python -m webapp.app
+```
+
+Puis ouvrez `http://localhost:5000` dans votre navigateur (ou l'adresse
+IP affichée au démarrage, pour y accéder depuis un autre appareil du
+même réseau, par exemple votre téléphone). Elle ne refait aucun calcul
+elle-même : elle appelle exactement les mêmes fonctions `entrainer()`
+que la ligne de commande, avec juste un rappel qui pousse chaque essai
+vers la page au fur et à mesure.
+
+C'est un serveur de développement local, pas destiné à être exposé sur
+internet.
+
 ## Les modules
 
 | # | Module | Ce que l'IA apprend | Nouveauté pédagogique |
@@ -86,7 +110,12 @@ modules/
     module5_serpent.py
     module6_special.py
 checkpoints/                  -> checkpoints JSON sauvegardés après chaque entrainement
-requirements.txt
+webapp/                       -> interface graphique (Flask), optionnelle
+    app.py
+    templates/
+    static/
+requirements.txt               -> dépendance pour la ligne de commande (numpy)
+requirements-web.txt           -> dépendance en plus pour l'interface graphique (flask)
 ```
 
 Chaque module sauvegarde un checkpoint JSON (`checkpoints/moduleX_*.json`)
@@ -96,7 +125,8 @@ que vous lui avez enseigné pour le module 6) et l'historique de l'erreur
 
 ## Suite envisagée (à prioriser ensemble)
 
-- Une vraie courbe d'erreur ASCII dans le terminal (plotext / asciichart)
+- Amener le module 6 (SPECIAL) dans l'interface graphique, avec un
+  formulaire pour taper les exemples au lieu du terminal
 - Un mode "rejouer" pour recharger un checkpoint et reprendre l'entrainement,
   ou revoir le film d'un apprentissage passé
 - Un mode "comparer les vitesses" : lancer un module avec 2-3 vitesses
@@ -105,5 +135,6 @@ que vous lui avez enseigné pour le module 6) et l'historique de l'erreur
   apprend trop lentement
 
 Déjà fait : le mode "pas à pas" (branché dans le menu), le module 5
-(jeu appris par essai-erreur, sans exemples fournis à l'avance), et le
-module 6 (c'est vous qui enseignez l'IA à partir de zéro).
+(jeu appris par essai-erreur, sans exemples fournis à l'avance), le
+module 6 (c'est vous qui enseignez l'IA à partir de zéro), et
+l'interface graphique dans le navigateur pour les modules 1 à 5.

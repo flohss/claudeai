@@ -70,8 +70,8 @@ def expliquer_le_probleme():
     print("de confiance : pres de 0% = Pomme, pres de 100% = Orange.\n")
 
 
-def raconter_la_pensee(essai, fruits, categories, confiances):
-    print(f"\n--- Essai {essai} : ce que l'IA pense de chaque fruit ---")
+def construire_pensee(fruits, categories, confiances):
+    lignes = []
     for (poids, rougeur), vraie_categorie, confiance in zip(fruits, categories, confiances):
         vrai_nom = NOMS_CATEGORIES[int(vraie_categorie[0])]
         devine_index = 1 if confiance[0] >= 0.5 else 0
@@ -82,8 +82,9 @@ def raconter_la_pensee(essai, fruits, categories, confiances):
             commentaire = "Bonne reponse, elle va juste renforcer un peu sa confiance."
         else:
             commentaire = "Mauvaise reponse, elle va corriger ses boutons plus fort."
-        print(f"  Fruit {poids:.0f}g, rougeur {rougeur:.0f}/10 (vrai: {vrai_nom}) "
-              f"-> l'IA pense '{devine_nom}' a {pourcentage}%. -> {commentaire}")
+        lignes.append(f"Fruit {poids:.0f}g, rougeur {rougeur:.0f}/10 (vrai: {vrai_nom}) "
+                       f"-> l'IA pense '{devine_nom}' a {pourcentage}%. -> {commentaire}")
+    return lignes
 
 
 def tester(boutons, seuil_de_base):
@@ -105,7 +106,7 @@ def tester(boutons, seuil_de_base):
 
 
 def entrainer(nb_essais=3000, vitesse_apprentissage=0.1, details=False,
-              afficher_tous_les=500, pas_a_pas_actif=False):
+              afficher_tous_les=500, pas_a_pas_actif=False, sur_essai=None):
     expliquer_le_probleme()
 
     fruits_normalises = normaliser(FRUITS_ENTRAINEMENT)
@@ -130,9 +131,19 @@ def entrainer(nb_essais=3000, vitesse_apprentissage=0.1, details=False,
         seuil_de_base += vitesse_apprentissage * float(np.mean(correction))
 
         if details:
-            raconter_la_pensee(essai, FRUITS_ENTRAINEMENT, VRAIES_CATEGORIES, confiances)
+            print(f"\n--- Essai {essai} : ce que l'IA pense de chaque fruit ---")
+            for ligne in construire_pensee(FRUITS_ENTRAINEMENT, VRAIES_CATEGORIES, confiances):
+                print(f"  {ligne}")
         elif essai == 1 or essai % afficher_tous_les == 0:
             print(f"Essai {essai:>6} | erreur moyenne : {erreur_moyenne:.4f} {barre_erreur(erreur_moyenne, 0.5)}")
+
+        if sur_essai is not None:
+            sur_essai({
+                "essai": essai,
+                "nb_essais": nb_essais,
+                "erreur": erreur_moyenne,
+                "pensees": construire_pensee(FRUITS_ENTRAINEMENT, VRAIES_CATEGORIES, confiances),
+            })
 
         pas_a_pas(pas_a_pas_actif)
 

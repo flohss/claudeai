@@ -188,7 +188,8 @@ def raconter_la_pensee(numero_partie, partie, situation, indice_action, explorat
 
 def entrainer(nb_parties=400, vitesse_apprentissage=0.1, patience=0.9,
               curiosite_initiale=1.0, curiosite_minimale=0.05,
-              details=False, afficher_toutes_les=50, pas_a_pas_actif=False):
+              details=False, afficher_toutes_les=50, pas_a_pas_actif=False, sur_partie=None,
+              jouer_demo_finale=True):
     expliquer_le_probleme()
 
     rng = np.random.default_rng(42)
@@ -224,21 +225,31 @@ def entrainer(nb_parties=400, vitesse_apprentissage=0.1, patience=0.9,
 
         historique_scores.append(partie["score"])
         curiosite = max(curiosite_minimale, curiosite * facteur_decroissance_curiosite)
+        moyenne_recente = float(np.mean(historique_scores[-afficher_toutes_les:]))
 
         if not details and (numero_partie == 1 or numero_partie % afficher_toutes_les == 0):
-            moyenne_recente = np.mean(historique_scores[-afficher_toutes_les:])
             print(f"Partie {numero_partie:>5} | score : {partie['score']:>3} | "
                   f"moyenne des {min(afficher_toutes_les, numero_partie)} dernieres : {moyenne_recente:.1f} | "
                   f"curiosite : {curiosite:.2f}")
             pas_a_pas(pas_a_pas_actif)
+
+        if sur_partie is not None:
+            sur_partie({
+                "partie": numero_partie,
+                "nb_parties": nb_parties,
+                "score": partie["score"],
+                "moyenne_recente": moyenne_recente,
+                "curiosite": curiosite,
+            })
 
     meilleur_score = max(historique_scores)
     moyenne_finale = float(np.mean(historique_scores[-min(50, len(historique_scores)):]))
     print(f"\nEntrainement termine ! Meilleur score obtenu : {meilleur_score}. "
           f"Score moyen sur les dernieres parties : {moyenne_finale:.1f}.\n")
 
-    print("Regardons une partie jouee par l'IA, sans hasard, avec ce qu'elle a appris :\n")
-    jouer_une_partie_demo(table_des_choix, rng)
+    if jouer_demo_finale:
+        print("Regardons une partie jouee par l'IA, sans hasard, avec ce qu'elle a appris :\n")
+        jouer_une_partie_demo(table_des_choix, rng)
 
     sauvegarder_checkpoint("module5_serpent.json", {
         "table_des_choix": {",".join(map(str, situation)): valeurs.tolist()
@@ -267,12 +278,37 @@ def dessiner_grille(partie):
     return "\n".join(lignes)
 
 
-def jouer_une_partie_demo(table_des_choix, rng, vitesse_affichage=0.15):
+def construire_grille_structuree(partie):
+    """Meme grille que dessiner_grille, mais sous forme de tableau de
+    cases nommees ('tete', 'corps', 'nourriture', 'vide') pour que
+    l'interface graphique puisse la dessiner en couleur."""
+    grille = []
+    for y in range(TAILLE_GRILLE):
+        ligne = []
+        for x in range(TAILLE_GRILLE):
+            case = (x, y)
+            if case == partie["corps"][0]:
+                ligne.append("tete")
+            elif case in partie["corps"]:
+                ligne.append("corps")
+            elif case == partie["nourriture"]:
+                ligne.append("nourriture")
+            else:
+                ligne.append("vide")
+        grille.append(ligne)
+    return grille
+
+
+def jouer_une_partie_demo(table_des_choix, rng, vitesse_affichage=0.15, sur_mouvement=None):
     partie = nouvelle_partie(rng)
     termine = False
 
     print(dessiner_grille(partie))
     print(f"Score : {partie['score']}\n")
+
+    if sur_mouvement is not None:
+        sur_mouvement({"grille": construire_grille_structuree(partie), "score": partie["score"],
+                       "message": "debut de la partie.", "termine": False})
 
     while not termine:
         situation = decrire_situation(partie)
@@ -287,6 +323,10 @@ def jouer_une_partie_demo(table_des_choix, rng, vitesse_affichage=0.15):
 
         print(dessiner_grille(partie))
         print(f"Score : {partie['score']} | {message}\n")
+
+        if sur_mouvement is not None:
+            sur_mouvement({"grille": construire_grille_structuree(partie), "score": partie["score"],
+                           "message": message, "termine": termine})
 
     print(f"Partie de demonstration terminee. Score final : {partie['score']}.")
 

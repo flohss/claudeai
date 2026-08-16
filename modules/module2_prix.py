@@ -63,8 +63,8 @@ def expliquer_le_probleme():
     print("Formule : prix devine = taille x multiplicateur + valeur_de_base\n")
 
 
-def raconter_la_pensee(essai, tailles, prix_reels, prix_devines):
-    print(f"\n--- Essai {essai} : ce que l'IA pense de chaque maison ---")
+def construire_pensee(tailles, prix_reels, prix_devines):
+    lignes = []
     for taille, prix_reel, prix_devine in zip(tailles, prix_reels, prix_devines):
         ecart = prix_devine - prix_reel
         if abs(ecart) < 1000:
@@ -73,8 +73,9 @@ def raconter_la_pensee(essai, tailles, prix_reels, prix_devines):
             commentaire = "Elle a devine trop cher, elle va baisser un peu ses boutons."
         else:
             commentaire = "Elle a devine trop bas, elle va augmenter un peu ses boutons."
-        print(f"  Maison de {taille:.0f} m2 (vrai prix : {euros(prix_reel)}) "
-              f"-> l'IA devine {euros(prix_devine)}. -> {commentaire}")
+        lignes.append(f"Maison de {taille:.0f} m2 (vrai prix : {euros(prix_reel)}) "
+                       f"-> l'IA devine {euros(prix_devine)}. -> {commentaire}")
+    return lignes
 
 
 def tester(multiplicateur, valeur_de_base):
@@ -93,7 +94,7 @@ def tester(multiplicateur, valeur_de_base):
 
 
 def entrainer(nb_essais=5000, vitesse_apprentissage=0.01, details=False,
-              afficher_tous_les=1000, pas_a_pas_actif=False):
+              afficher_tous_les=1000, pas_a_pas_actif=False, sur_essai=None):
     expliquer_le_probleme()
 
     tailles_normalisees = TAILLES_ENTRAINEMENT / ECHELLE_TAILLE
@@ -122,12 +123,23 @@ def entrainer(nb_essais=5000, vitesse_apprentissage=0.01, details=False,
         multiplicateur += vitesse_apprentissage * correction_multiplicateur
         valeur_de_base += vitesse_apprentissage * correction_valeur_de_base
 
+        prix_devines = prix_devines_normalises * ECHELLE_PRIX
+
         if details:
-            prix_devines = prix_devines_normalises * ECHELLE_PRIX
-            raconter_la_pensee(essai, TAILLES_ENTRAINEMENT, PRIX_ENTRAINEMENT, prix_devines)
+            print(f"\n--- Essai {essai} : ce que l'IA pense de chaque maison ---")
+            for ligne in construire_pensee(TAILLES_ENTRAINEMENT, PRIX_ENTRAINEMENT, prix_devines):
+                print(f"  {ligne}")
         elif essai == 1 or essai % afficher_tous_les == 0:
             print(f"Essai {essai:>6} | ecart moyen : {euros(erreur_moyenne_euros)} "
                   f"{barre_erreur(erreur_moyenne_euros, 50000)}")
+
+        if sur_essai is not None:
+            sur_essai({
+                "essai": essai,
+                "nb_essais": nb_essais,
+                "erreur": erreur_moyenne_euros,
+                "pensees": construire_pensee(TAILLES_ENTRAINEMENT, PRIX_ENTRAINEMENT, prix_devines),
+            })
 
         pas_a_pas(pas_a_pas_actif)
 
