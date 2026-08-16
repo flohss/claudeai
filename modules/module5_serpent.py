@@ -38,7 +38,12 @@ from collections import defaultdict
 
 import numpy as np
 
-from .utils import pas_a_pas, sauvegarder_checkpoint
+try:
+    from .utils import pas_a_pas, sauvegarder_checkpoint
+except ImportError:
+    # Permet aussi de lancer ce fichier tout seul (ex: bouton "Run" de
+    # Pydroid3 sur Android), qui l'execute hors du package "modules".
+    from utils import pas_a_pas, sauvegarder_checkpoint
 
 TAILLE_GRILLE = 10
 MOUVEMENTS_MAX_PAR_PARTIE = 300

@@ -32,12 +32,18 @@ python -m modules.module2_prix --essais 8000 --vitesse 0.02
 python -m modules.module3_fruits --details --afficher-tous-les 200
 python -m modules.module4_sequence --details
 python -m modules.module5_serpent --details --parties 5
+python -m modules.module6_special --details
 ```
 
 Le mode `--details` fait "raconter sa pensée" à l'IA en vraies phrases
 françaises, pour chaque exemple, à chaque essai — utile pour vraiment
 suivre son raisonnement (pensez à réduire `--essais` dans ce mode, sinon
 ça défile très vite).
+
+Chaque fichier de module peut aussi être ouvert et lancé tout seul (par
+exemple avec le bouton "Run" de Pydroid3 sur Android) : il détecte
+automatiquement s'il est lancé comme un simple script ou comme partie
+du package `modules` et s'adapte, sans erreur d'import.
 
 ## Les modules
 
@@ -48,6 +54,7 @@ suivre son raisonnement (pensez à réduire `--essais` dans ce mode, sinon
 | 3 | `module3_fruits` | Distinguer une pomme d'une orange (poids + couleur) | Choisir entre plusieurs catégories |
 | 4 | `module4_sequence` | Deviner le nombre (ou la lettre) suivant d'une suite | La "fenêtre" de contexte, comme dans les IA de texte |
 | 5 | `module5_serpent` | Jouer au serpent sans jamais recevoir de bonnes réponses à l'avance | L'apprentissage par renforcement (essai-erreur + récompenses) |
+| 6 | `module6_special` | Ce que VOUS lui enseignez, en direct (deux catégories, ou un nombre) | C'est vous le professeur, pas un jeu d'exemples préparé à l'avance |
 
 ## Vocabulaire (aucun jargon technique)
 
@@ -77,13 +84,15 @@ modules/
     module3_fruits.py
     module4_sequence.py
     module5_serpent.py
+    module6_special.py
 checkpoints/                  -> checkpoints JSON sauvegardés après chaque entrainement
 requirements.txt
 ```
 
 Chaque module sauvegarde un checkpoint JSON (`checkpoints/moduleX_*.json`)
-avec ses boutons finaux (ou sa mémoire des choix pour le module 5) et
-l'historique de l'erreur (ou des scores) au fil des essais.
+avec ses boutons finaux (ou sa mémoire des choix pour le module 5, ou ce
+que vous lui avez enseigné pour le module 6) et l'historique de l'erreur
+(ou des scores) au fil des essais.
 
 ## Suite envisagée (à prioriser ensemble)
 
@@ -95,5 +104,6 @@ l'historique de l'erreur (ou des scores) au fil des essais.
   pourquoi une vitesse trop grande fait diverger et une trop petite
   apprend trop lentement
 
-Déjà fait : le mode "pas à pas" (branché dans le menu) et le module 5
-(jeu appris par essai-erreur, sans exemples fournis à l'avance).
+Déjà fait : le mode "pas à pas" (branché dans le menu), le module 5
+(jeu appris par essai-erreur, sans exemples fournis à l'avance), et le
+module 6 (c'est vous qui enseignez l'IA à partir de zéro).

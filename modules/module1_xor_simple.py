@@ -23,7 +23,12 @@ import argparse
 
 import numpy as np
 
-from .utils import barre_erreur, pas_a_pas, sauvegarder_checkpoint
+try:
+    from .utils import barre_erreur, pas_a_pas, sauvegarder_checkpoint
+except ImportError:
+    # Permet aussi de lancer ce fichier tout seul (ex: bouton "Run" de
+    # Pydroid3 sur Android), qui l'execute hors du package "modules".
+    from utils import barre_erreur, pas_a_pas, sauvegarder_checkpoint
 
 EXEMPLES_ENTREE = np.array([
     [0, 0],
