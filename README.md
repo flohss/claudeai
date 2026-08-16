@@ -49,10 +49,17 @@ du package `modules` et s'adapte, sans erreur d'import.
 
 En plus de la ligne de commande, une petite interface web locale permet
 de choisir les paramètres, lancer l'entraînement, et le suivre EN DIRECT
-dans le navigateur : la courbe d'erreur qui descend, et le fil de pensée
-de l'IA qui défile — pour les modules 1 à 5 (le module 6 reste pour
-l'instant réservé à la ligne de commande, car il vous demande de taper
-vos exemples un par un).
+dans le navigateur : la courbe d'erreur qui descend, un schéma des
+boutons qui s'anime (entrées → couche cachée → sortie, coloré selon la
+valeur de chaque bouton), et le fil de pensée de l'IA qui défile — pour
+les modules 1 à 5 (le module 6 reste pour l'instant réservé à la ligne
+de commande, car il vous demande de taper vos exemples un par un).
+
+Un bouton "Arrêter" permet d'interrompre un entraînement en cours. Et
+un mode comparaison (lien "Comparer deux vitesses d'apprentissage" sur
+chaque page de module) lance deux entraînements identiques sauf sur la
+vitesse d'apprentissage, affichés côte à côte, pour voir concrètement
+pourquoi une vitesse trop grande fait diverger l'IA.
 
 ```bash
 pip install -r requirements-web.txt
@@ -129,12 +136,10 @@ que vous lui avez enseigné pour le module 6) et l'historique de l'erreur
   formulaire pour taper les exemples au lieu du terminal
 - Un mode "rejouer" pour recharger un checkpoint et reprendre l'entrainement,
   ou revoir le film d'un apprentissage passé
-- Un mode "comparer les vitesses" : lancer un module avec 2-3 vitesses
-  d'apprentissage différentes côte à côte, pour voir concrètement
-  pourquoi une vitesse trop grande fait diverger et une trop petite
-  apprend trop lentement
+- Comparer plus de deux vitesses à la fois (3-4 côte à côte)
 
 Déjà fait : le mode "pas à pas" (branché dans le menu), le module 5
 (jeu appris par essai-erreur, sans exemples fournis à l'avance), le
-module 6 (c'est vous qui enseignez l'IA à partir de zéro), et
-l'interface graphique dans le navigateur pour les modules 1 à 5.
+module 6 (c'est vous qui enseignez l'IA à partir de zéro), l'interface
+graphique dans le navigateur pour les modules 1 à 5, le schéma des
+boutons en direct, le bouton "Arrêter", et le mode comparaison.
