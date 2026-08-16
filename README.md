@@ -40,8 +40,8 @@ Pas a l'aise avec la ligne de commande ? Une fois l'installation ci-dessus
 faite une premiere fois, tu peux double-cliquer directement sur :
 
 - **`1_enregistrer_voix.bat`** pour enregistrer ta voix : le programme te
-  pose les questions une par une (dossier, nombre de clips, duree...) dans
-  la fenetre qui s'ouvre.
+  pose les questions une par une (dossier, mode simple ou avance, nombre de
+  clips, duree...) dans la fenetre qui s'ouvre.
 - **`2_generer_audio.bat`** pour generer un audio avec ta voix clonee : il
   te demande le dossier des echantillons, le texte a lire, la langue et le
   nom du fichier de sortie.
@@ -84,6 +84,30 @@ enregistrement est deja tres propre.
 
 Tu peux aussi utiliser directement des fichiers audio existants (wav/mp3/flac)
 de ta voix a la place.
+
+### Mode avance (~1h, corpus phonetique exhaustif)
+
+Pour la meilleure fidelite possible, le mode avance te fait lire un corpus
+complet de 145 phrases et mots, organise par categories : voyelles et sons,
+consonnes et articulation, alphabet, nombres/dates/heures, intonations
+(questions, exclamations, styles rapide/lent/fort/doux), virelangues,
+toutes les emotions, dix paragraphes longs (recit, actualites, dialogue,
+poesie, technique, humour...) et du vocabulaire courant. La duree
+d'enregistrement de chaque clip s'adapte automatiquement a la longueur du
+texte. Compte environ 50 a 70 minutes selon ton rythme.
+
+```bash
+python record_sample.py --output-dir samples --avance
+```
+
+(ou choisis "avance" a la question de mode en lancant `python record_sample.py`
+sans argument, ou en double-cliquant sur `1_enregistrer_voix.bat`)
+
+Le script affiche la categorie en cours et le temps restant estime. Tape
+`q` puis Entree a tout moment pour arreter la session : ta progression est
+sauvegardee, et relancer la meme commande reprend exactement ou tu t'es
+arrete(e) (aucune phrase n'est repetee ni ecrasee). Les clips sont
+enregistres dans `samples/avance/`.
 
 ### Ameliorer le rendu des emotions
 
