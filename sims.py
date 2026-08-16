@@ -66,12 +66,14 @@ def slow_print(text, delay=0.03):
 LIFE_STAGES = [
     (0, "Enfant", "🧒", {"energie": +2, "fun": -2},
      ["travailler", "postuler", "flirter", "rendezvous", "intimite", "proposer", "marier", "rupture",
-      "inscrire", "etudier"],
+      "inscrire", "etudier", "freelance", "boire_cafe", "boire_alcool", "fumer",
+      "investir", "retirer_invest", "voyage"],
      ["sortir", "gastronomie", "sport", "jardiner"],
      "Tu découvres le monde !"),
     (5, "Adolescent", "🧑", {"social": -2, "fun": -1},
      ["travailler", "postuler", "intimite", "proposer", "marier",
-      "inscrire", "etudier"],
+      "inscrire", "etudier", "freelance", "boire_cafe", "boire_alcool", "fumer",
+      "investir", "retirer_invest", "voyage"],
      ["sortir", "rendezvous"],
      "Tu cherches ta voie dans la vie."),
     (10, "Jeune adulte", "💪", {}, [], [], "Tu es dans la fleur de l'âge !"),
@@ -555,7 +557,7 @@ GOAL_DEFS = {
     "sportif":     ("💪", "Rester en forme",       "HP ≥80 à la fin"),
     "gourmand":    ("👨‍🍳", "Devenir chef",         "cuisine niveau 8"),
     "artistique":  ("🎨", "Vivre pour l'art",      "mental ≥75 & fun ≥60"),
-    "econome":     ("💰", "Bâtir un patrimoine",   "$2000+ en caisse"),
+    "econome":     ("💰", "Bâtir un patrimoine",   "$5000+ en caisse"),
     "malchanceux": ("🌟", "Surmonter les épreuves","survivre 40 jours"),
 }
 UNIVERSAL_GOAL_DEFS = {
@@ -577,7 +579,7 @@ def check_goal(key, sim):
     if key == "sportif":        return sim.health.hp >= 80
     if key == "gourmand":       return sim.skills.levels.get("cuisine", 0) >= 8
     if key == "artistique":     return sim.health.mental >= 75 and sim.needs.get("fun", 0) >= 60
-    if key == "econome":        return sim.money >= 2000
+    if key == "econome":        return sim.money >= 5000
     if key == "malchanceux":    return sim.age >= 40
     if key == "fonder_famille": return sim.relationship.level >= 6 and len(sim.children) >= 1
     if key == "proprietaire":   return sim.housing is not None
@@ -1681,9 +1683,9 @@ ACTION_DURATIONS = {
 # --- Investissements ---
 # id → (nom, emoji, rendement_moy/j, volatilité/j, mise_min, risque)
 MARKET_ASSETS = {
-    "livret_a": ("Livret A",  "🏦", 0.00020, 0.004, 100, "faible"),
-    "actions":  ("Bourse",    "📈", 0.00055, 0.035, 500, "moyen"),
-    "crypto":   ("Crypto",    "₿",  0.00100, 0.120, 200, "élevé"),
+    "livret_a": ("Livret A",  "🏦", 0.00025, 0.004, 100, "faible"),
+    "actions":  ("Bourse",    "📈", 0.00090, 0.035, 500, "moyen"),
+    "crypto":   ("Crypto",    "₿",  0.00160, 0.120, 200, "élevé"),
 }
 
 # --- Événements de marché ---
@@ -2811,6 +2813,7 @@ def action_sauvegarder(sim):
         "portfolio": sim.portfolio,
         "portfolio_cost": sim.portfolio_cost,
         "portfolio_peak": sim.portfolio_peak,
+        "last_market_event": sim.last_market_event,
         "freelance_earned": getattr(sim, 'freelance_earned', 0),
         "addictions": {sub: dict(st) for sub, st in sim.addictions.items()},
         "recovered_addictions": list(getattr(sim, 'recovered_addictions', set())),
@@ -3880,7 +3883,29 @@ def ai_choose_action(sim):
     if h.mental < 45 and sim.money >= 60:                                 return "psy"
 
     # ═══════════════════════════════════════════════════════════════
+    # PRIORITÉ 4c : freelance — le week-end si compétence utile
+    # Seuil d'énergie aligné sur _can_work (travailler) : même effort, même garde.
+    # money < 800 garantit le déclenchement en urgence ; sinon chance modérée
+    # tant que le sim n'est pas déjà aisé (> 3000), pour que l'objectif
+    # "auto-entrepreneur" (500$ cumulés) reste atteignable après embauche.
+    # ═══════════════════════════════════════════════════════════════
+    if ("freelance" not in blocked
+            and is_weekend
+            and sim.days_burned_out == 0
+            and n["energie"] > 45
+            and n["faim"] > 20):
+        _best_fl_level = max(sim.skills.levels.values(), default=0)
+        if _best_fl_level > 0:
+            if sim.money < 800:
+                return "freelance"
+            if sim.money < 3000 and random.random() < 0.5:
+                return "freelance"
+
+    # ═══════════════════════════════════════════════════════════════
     # PRIORITÉ 4d : substances — compulsion si addict, usage rare si conditions OK
+    # Compulsion bloquée si hp < 65 (seuil "urgence santé" de PRIORITÉ 2) :
+    # un sim malade et sans le sou pour un médecin ne doit pas boire/fumer
+    # au lieu de se soigner — ça aggraverait sa santé au pire moment.
     # ═══════════════════════════════════════════════════════════════
     _adst = getattr(sim, 'addictions', {})
 
@@ -3889,37 +3914,24 @@ def ai_choose_action(sim):
     if "boire_cafe" not in blocked and sim.money >= 3:
         if _cafe_st.get("addicted") and _cafe_st.get("days_since_used", 999) > 0:
             return "boire_cafe"
-        if not _cafe_st.get("addicted") and n["energie"] < 30 and sim.hour < 14 and random.random() < 0.12:
+        if not _cafe_st.get("addicted") and n["energie"] < 50 and sim.hour < 14 and random.random() < 0.12:
             return "boire_cafe"
 
-    # Alcool : compulsion si addict + hp OK, usage rare le soir si stress élevé
+    # Alcool : compulsion si addict + hp au-dessus du seuil d'urgence santé
     _alc_st = _adst.get("alcool", {})
     if "boire_alcool" not in blocked and sim.money >= 15:
-        if _alc_st.get("addicted") and _alc_st.get("days_since_used", 999) > 0 and sim.health.hp > 50:
+        if _alc_st.get("addicted") and _alc_st.get("days_since_used", 999) > 0 and sim.health.hp > 65:
             return "boire_alcool"
         if not _alc_st.get("addicted") and sim.stress > 65 and sim.hour >= 18 and random.random() < 0.08:
             return "boire_alcool"
 
-    # Tabac : compulsion si addict + hp OK, usage rare si stress élevé
+    # Tabac : compulsion si addict + hp au-dessus du seuil d'urgence santé
     _tab_st = _adst.get("tabac", {})
     if "fumer" not in blocked and sim.money >= 8:
-        if _tab_st.get("addicted") and _tab_st.get("days_since_used", 999) > 0 and sim.health.hp > 40:
+        if _tab_st.get("addicted") and _tab_st.get("days_since_used", 999) > 0 and sim.health.hp > 65:
             return "fumer"
         if not _tab_st.get("addicted") and sim.stress > 55 and random.random() < 0.10:
             return "fumer"
-
-    # ═══════════════════════════════════════════════════════════════
-    # PRIORITÉ 4c : freelance — le week-end si compétence utile + besoin d'argent
-    # ═══════════════════════════════════════════════════════════════
-    if ("freelance" not in blocked
-            and is_weekend
-            and sim.days_burned_out == 0
-            and n["energie"] > 25
-            and n["faim"] > 20
-            and sim.money < 800):
-        _best_fl_level = max(sim.skills.levels.values(), default=0)
-        if _best_fl_level > 0:
-            return "freelance"
 
     # ═══════════════════════════════════════════════════════════════
     # PRIORITÉ 5 : récupération préventive (loisirs / social / sieste)
@@ -3948,7 +3960,8 @@ def ai_choose_action(sim):
     # PRIORITÉ 5c : immobilier — acheter dès que les finances le permettent
     # ═══════════════════════════════════════════════════════════════
     if not getattr(sim, 'housing', None) and "acheter_maison" not in blocked:
-        salary = next((sal for lbl, sal, *_ in JOBS if lbl == sim.job), 0)
+        _base_sal = next((sal for lbl, sal, *_ in JOBS if lbl == sim.job), 0)
+        salary = int(_base_sal * (1 + sim.skills.bonus('travail')) * sim.salary_multiplier * sim.traits.salary_mult())
         if getattr(sim, 'retired', False):
             salary = sim.pension
         if salary > 0:
@@ -4121,7 +4134,8 @@ def ai_auto_acheter_maison(sim):
     """Choisit automatiquement la propriété et le crédit optimaux pour l'IA."""
     if sim.housing:
         return
-    salary = next((sal for lbl, sal, *_ in JOBS if lbl == sim.job), 0)
+    _base_sal = next((sal for lbl, sal, *_ in JOBS if lbl == sim.job), 0)
+    salary = int(_base_sal * (1 + sim.skills.bonus('travail')) * sim.salary_multiplier * sim.traits.salary_mult())
     if getattr(sim, 'retired', False):
         salary = sim.pension
     if salary == 0:
@@ -5153,6 +5167,7 @@ def load_game():
     sim.portfolio       = d.get("portfolio", {})
     sim.portfolio_cost  = d.get("portfolio_cost", {})
     sim.portfolio_peak  = d.get("portfolio_peak", 0.0)
+    sim.last_market_event = d.get("last_market_event")
     sim.freelance_earned = d.get("freelance_earned", 0)
     _addict_saved = d.get("addictions", {})
     for sub in ADDICTIONS:
