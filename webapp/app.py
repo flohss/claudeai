@@ -212,7 +212,12 @@ def lancer_entrainement(num, parametres):
     def sur_essai(info):
         if arret_event.is_set():
             raise EntrainementInterrompu()
-        if info["essai"] % intervalle == 0 or info["essai"] == info["nb_essais"]:
+        # Le module 6 (regroupement) s'arrete souvent bien avant nb_essais
+        # (des que les groupes ne bougent plus) : l'intervalle calcule sur
+        # le nb_essais demande le sauterait alors completement. On envoie
+        # donc toujours les tout premiers essais, quoi qu'il arrive.
+        if (info["essai"] <= NB_POINTS_CIBLE or info["essai"] % intervalle == 0
+                or info["essai"] == info["nb_essais"]):
             file_evenements.put({"type": "essai", **info})
             time.sleep(0.03)
 
