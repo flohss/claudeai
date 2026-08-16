@@ -214,13 +214,13 @@ class Sim:
         if self.pet:
             self.pet.tick(hours)
         if self.needs["hygiene"] < 20 or self.needs["energie"] < 15:
-            self.health.hp = max(0, self.health.hp - hours)
+            self.health.hp = max(0, int(self.health.hp - hours))
         mental_delta = 0
         if self.needs["fun"] < 25: mental_delta -= 2 * hours
         if self.needs["social"] < 25: mental_delta -= 2 * hours
         if self.needs["fun"] > 70: mental_delta += 1 * hours
         if self.needs["social"] > 70: mental_delta += 1 * hours
-        self.health.mental = max(0, min(100, self.health.mental + mental_delta))
+        self.health.mental = max(0, min(100, int(self.health.mental + mental_delta)))
 
     def modify(self, **kwargs):
         for need, delta in kwargs.items():
@@ -283,8 +283,8 @@ class Pet:
 
     def tick(self, hours=1):
         info = PET_SPECIES[self.species]
-        self.hunger = max(0, self.hunger - info["hunger_per_h"] * hours)
-        self.happiness = max(0, self.happiness - info["happy_per_h"] * hours)
+        self.hunger = max(0, int(self.hunger - info["hunger_per_h"] * hours))
+        self.happiness = max(0, int(self.happiness - info["happy_per_h"] * hours))
 
     def feed(self):
         self.hunger = min(100, self.hunger + 45)
