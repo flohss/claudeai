@@ -130,10 +130,48 @@ export function DraftShape({ tool, start, end, color, width }) {
   return <ShapeGeometry shape={{ type: tool, points: [start, end] }} stroke={stroke} hitWidth={0} pointerEvents="none" grabProps={{}} />;
 }
 
-export function Paper({ bounds, colors }) {
+const PAPER_STEP = 32;
+
+export function Paper({ bounds, colors, style = 'ruled' }) {
+  if (style === 'blank') return null;
+
+  if (style === 'grid') {
+    const hLines = [];
+    const vStart = Math.floor(bounds.minY / PAPER_STEP) * PAPER_STEP;
+    for (let y = vStart; y < bounds.maxY; y += PAPER_STEP) hLines.push(y);
+    const vLines = [];
+    const hStart = Math.floor(bounds.minX / PAPER_STEP) * PAPER_STEP;
+    for (let x = hStart; x < bounds.maxX; x += PAPER_STEP) vLines.push(x);
+    return (
+      <g pointerEvents="none">
+        {hLines.map((y) => (
+          <line key={`h${y}`} x1={bounds.minX} y1={y} x2={bounds.maxX} y2={y} stroke={colors.paperLine} strokeWidth={1} vectorEffect="non-scaling-stroke" />
+        ))}
+        {vLines.map((x) => (
+          <line key={`v${x}`} x1={x} y1={bounds.minY} x2={x} y2={bounds.maxY} stroke={colors.paperLine} strokeWidth={1} vectorEffect="non-scaling-stroke" />
+        ))}
+      </g>
+    );
+  }
+
+  if (style === 'dot') {
+    const startY = Math.floor(bounds.minY / PAPER_STEP) * PAPER_STEP;
+    const startX = Math.floor(bounds.minX / PAPER_STEP) * PAPER_STEP;
+    const dots = [];
+    for (let y = startY; y < bounds.maxY; y += PAPER_STEP) {
+      for (let x = startX; x < bounds.maxX; x += PAPER_STEP) dots.push({ x, y });
+    }
+    return (
+      <g pointerEvents="none">
+        {dots.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r={1.4} fill={colors.paperLine} />)}
+      </g>
+    );
+  }
+
+  // 'ruled' (par défaut) : lignes horizontales + marge, façon cahier.
   const lines = [];
-  const start = Math.floor((bounds.minY - 34) / 32) * 32 + 34;
-  for (let y = start; y < bounds.maxY; y += 32) lines.push(y);
+  const start = Math.floor((bounds.minY - 34) / PAPER_STEP) * PAPER_STEP + 34;
+  for (let y = start; y < bounds.maxY; y += PAPER_STEP) lines.push(y);
   return (
     <g pointerEvents="none">
       {lines.map((y) => (

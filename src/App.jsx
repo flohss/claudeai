@@ -3,6 +3,7 @@ import {
   Undo2, Redo2, Trash2, Check, X, Sparkles, PenLine, Pencil, MousePointer2,
   Download, Save, FolderOpen, Layers, Sun, Moon, FileCode2, Minus, Plus,
   Hand, Square, Circle, Slash, ArrowRight, ChevronUp, ChevronDown, Eye, EyeOff,
+  FilePlus2,
 } from 'lucide-react';
 import {
   dist, classifyShape, getBBox, smoothPathD, strokeBBox, shapeHandlePoints,
@@ -53,6 +54,14 @@ const TOOLS = [
 ];
 const TOOL_SHORTCUTS = { p: 'draw', v: 'select', l: 'line', a: 'arrow', r: 'rect', o: 'ellipse', h: 'pan' };
 
+const BACKGROUNDS = [
+  { id: 'ruled', label: 'Ligné' },
+  { id: 'grid', label: 'Quadrillé' },
+  { id: 'dot', label: 'Pointillé' },
+  { id: 'blank', label: 'Blanc' },
+];
+const DEFAULT_BACKGROUND = 'ruled';
+
 const STORAGE_KEY = 'atelier-drawing-v1';
 const DEFAULT_LAYERS = [{ id: 'layer-1', name: 'Calque 1', visible: true }];
 const MAX_HISTORY = 100;
@@ -64,15 +73,16 @@ function newId() {
 function loadProject() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { strokes: [], layers: DEFAULT_LAYERS };
+    if (!raw) return { strokes: [], layers: DEFAULT_LAYERS, background: DEFAULT_BACKGROUND };
     const data = JSON.parse(raw);
     const layers = Array.isArray(data?.layers) && data.layers.length > 0 ? data.layers : DEFAULT_LAYERS;
     const fallbackLayerId = layers[0].id;
     const rawStrokes = Array.isArray(data) ? data : Array.isArray(data?.strokes) ? data.strokes : [];
     const strokes = rawStrokes.map((s) => ({ ...s, layerId: s.layerId || fallbackLayerId }));
-    return { strokes, layers };
+    const background = BACKGROUNDS.some((b) => b.id === data?.background) ? data.background : DEFAULT_BACKGROUND;
+    return { strokes, layers, background };
   } catch {
-    return { strokes: [], layers: DEFAULT_LAYERS };
+    return { strokes: [], layers: DEFAULT_LAYERS, background: DEFAULT_BACKGROUND };
   }
 }
 
@@ -126,6 +136,48 @@ function ToolbarButton({ active, disabled, onClick, title, colors, children }) {
     >
       {children}
     </button>
+  );
+}
+
+function BackgroundThumb({ id, colors }) {
+  const size = 40;
+  if (id === 'grid') {
+    return (
+      <svg width={size} height={size} viewBox="0 0 40 40">
+        <rect width="40" height="40" fill={colors.paperBg} />
+        {[8, 16, 24, 32].map((v) => (
+          <React.Fragment key={v}>
+            <line x1={v} y1="0" x2={v} y2="40" stroke={colors.paperLine} strokeWidth="1" />
+            <line x1="0" y1={v} x2="40" y2={v} stroke={colors.paperLine} strokeWidth="1" />
+          </React.Fragment>
+        ))}
+      </svg>
+    );
+  }
+  if (id === 'dot') {
+    const pts = [];
+    for (let y = 8; y <= 32; y += 8) for (let x = 8; x <= 32; x += 8) pts.push([x, y]);
+    return (
+      <svg width={size} height={size} viewBox="0 0 40 40">
+        <rect width="40" height="40" fill={colors.paperBg} />
+        {pts.map(([x, y], i) => <circle key={i} cx={x} cy={y} r="1.3" fill={colors.paperLine} />)}
+      </svg>
+    );
+  }
+  if (id === 'blank') {
+    return (
+      <svg width={size} height={size} viewBox="0 0 40 40">
+        <rect width="40" height="40" fill={colors.paperBg} />
+      </svg>
+    );
+  }
+  // 'ruled'
+  return (
+    <svg width={size} height={size} viewBox="0 0 40 40">
+      <rect width="40" height="40" fill={colors.paperBg} />
+      {[10, 20, 30].map((y) => <line key={y} x1="4" y1={y} x2="36" y2={y} stroke={colors.paperLine} strokeWidth="1" />)}
+      <line x1="10" y1="0" x2="10" y2="40" stroke={colors.paperMargin} strokeWidth="1" />
+    </svg>
   );
 }
 
@@ -217,6 +269,8 @@ export default function DrawingAssistant() {
   const [layers, setLayers] = useState(() => loadProject().layers);
   const [activeLayerId, setActiveLayerId] = useState(() => loadProject().layers[0]?.id ?? DEFAULT_LAYERS[0].id);
   const [layersPanelOpen, setLayersPanelOpen] = useState(false);
+  const [background, setBackground] = useState(() => loadProject().background);
+  const [newProjectOpen, setNewProjectOpen] = useState(false);
 
   const [color, setColor] = useState(colors.penColors[0].hex);
   const [width, setWidth] = useState(WIDTHS[1].value);
@@ -274,18 +328,18 @@ export default function DrawingAssistant() {
   useEffect(() => {
     const timer = setTimeout(() => {
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({ strokes, layers }));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ strokes, layers, background }));
       } catch {
         // stockage indisponible (navigation privée, quota…) — on ignore.
       }
     }, 400);
     return () => clearTimeout(timer);
-  }, [strokes, layers]);
+  }, [strokes, layers, background]);
 
   useEffect(() => {
     function flush() {
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({ strokes, layers }));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ strokes, layers, background }));
       } catch {
         // stockage indisponible — on ignore.
       }
@@ -296,7 +350,7 @@ export default function DrawingAssistant() {
       window.removeEventListener('beforeunload', flush);
       window.removeEventListener('pagehide', flush);
     };
-  }, [strokes, layers]);
+  }, [strokes, layers, background]);
 
   useEffect(() => {
     if (!pendingSuggestion) return;
@@ -582,6 +636,20 @@ export default function DrawingAssistant() {
     dispatch({ type: 'commit', updater: () => [] });
   }
 
+  function startNewProject(bgId) {
+    if (strokes.length > 0 && !window.confirm('Commencer un nouveau projet ? Le dessin actuel sera perdu (pensez à l’exporter si besoin).')) {
+      return;
+    }
+    clearPendingSuggestion();
+    setSelectedIds(new Set());
+    setLayers(DEFAULT_LAYERS);
+    setActiveLayerId(DEFAULT_LAYERS[0].id);
+    setView({ x: 0, y: 0, scale: 1 });
+    setBackground(bgId);
+    dispatch({ type: 'set', strokes: [] });
+    setNewProjectOpen(false);
+  }
+
   // -- Calques -----------------------------------------------------------------
 
   function addLayer() {
@@ -682,7 +750,7 @@ export default function DrawingAssistant() {
   }
 
   function saveProjectFile() {
-    const data = { version: 1, strokes, layers };
+    const data = { version: 1, strokes, layers, background };
     const link = document.createElement('a');
     link.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
     link.download = 'atelier.json';
@@ -701,9 +769,11 @@ export default function DrawingAssistant() {
         const nextLayers = Array.isArray(data.layers) && data.layers.length > 0 ? data.layers : DEFAULT_LAYERS;
         const fallbackId = nextLayers[0].id;
         const nextStrokes = Array.isArray(data.strokes) ? data.strokes.map((s) => ({ ...s, layerId: s.layerId || fallbackId })) : [];
+        const nextBackground = BACKGROUNDS.some((b) => b.id === data.background) ? data.background : DEFAULT_BACKGROUND;
         setLayers(nextLayers);
         setActiveLayerId(fallbackId);
         setSelectedIds(new Set());
+        setBackground(nextBackground);
         dispatch({ type: 'set', strokes: nextStrokes });
       } catch {
         window.alert("Impossible de lire ce fichier : ce n'est pas un projet Atelier valide.");
@@ -810,6 +880,9 @@ export default function DrawingAssistant() {
         </button>
 
         <div className="flex items-center gap-1 ml-auto pl-2 border-l flex-wrap justify-end" style={{ borderColor: colors.border }}>
+          <ToolbarButton active={newProjectOpen} onClick={() => setNewProjectOpen((v) => !v)} title="Nouveau projet" colors={colors}>
+            <FilePlus2 size={17} />
+          </ToolbarButton>
           <ToolbarButton active={layersPanelOpen} onClick={() => setLayersPanelOpen((v) => !v)} title="Calques" colors={colors}>
             <Layers size={17} />
           </ToolbarButton>
@@ -868,7 +941,7 @@ export default function DrawingAssistant() {
           onContextMenu={(e) => { if (tool !== 'select') e.preventDefault(); }}
         >
           <g data-world-group="true" transform={`translate(${view.x} ${view.y}) scale(${view.scale})`}>
-            <Paper bounds={visibleWorldBounds} colors={colors} />
+            <Paper bounds={visibleWorldBounds} colors={colors} style={background} />
 
             {strokesByLayer.map(({ layer, items }) => layer.visible && items.map((s) => (
               <StrokeView key={s.id} stroke={s} interactive={tool === 'select'} onGrab={handleStrokeGrab} />
@@ -916,6 +989,33 @@ export default function DrawingAssistant() {
             <button onClick={deleteSelected} className="p-1.5 rounded-md" style={{ background: colors.hoverBg }} title="Supprimer (Suppr)">
               <Trash2 size={14} color={colors.danger} />
             </button>
+          </div>
+        )}
+
+        {newProjectOpen && (
+          <div
+            className="absolute top-3 left-3 z-20 w-72 rounded-lg shadow-lg overflow-hidden"
+            style={{ background: colors.panelBg, border: `1px solid ${colors.border}` }}
+          >
+            <div className="flex items-center justify-between px-3 py-2 border-b" style={{ borderColor: colors.border }}>
+              <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: colors.textMuted }}>Nouveau projet — arrière-plan</span>
+              <button onClick={() => setNewProjectOpen(false)} className="p-1 rounded" title="Fermer"><X size={14} /></button>
+            </div>
+            <div className="grid grid-cols-2 gap-2 p-3">
+              {BACKGROUNDS.map((b) => (
+                <button
+                  key={b.id}
+                  onClick={() => startNewProject(b.id)}
+                  className="flex flex-col items-center gap-1 p-2 rounded-md"
+                  style={{ background: background === b.id ? colors.activeBg : 'transparent' }}
+                >
+                  <div className="rounded overflow-hidden" style={{ border: `1px solid ${colors.border}` }}>
+                    <BackgroundThumb id={b.id} colors={colors} />
+                  </div>
+                  <span className="text-xs" style={{ color: colors.text }}>{b.label}</span>
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
