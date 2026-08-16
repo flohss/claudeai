@@ -20,7 +20,8 @@ from modules import module5_serpent as module5
 from modules import module6_regroupement as module6
 from modules import module7_labyrinthe as module7
 from modules import module8_fruits_multiples as module8
-from modules import module9_special as module9
+from modules import module9_genetique as module9
+from modules import module10_special as module10
 
 
 BANNIERE = r"""
@@ -68,10 +69,14 @@ def afficher_accueil():
     print("      L'extension du module 3 : choisir entre Pomme, Orange ou")
     print("      Banane (au lieu de 2 categories seulement), en partageant")
     print("      100% de confiance entre les trois.\n")
-    print("  [9] SPECIAL : c'est vous le professeur")
+    print("  [9] Algorithme genetique")
+    print("      Completement different : pas de correction du tout. Une")
+    print("      POPULATION de solutions evolue par selection, croisement et")
+    print("      mutation, generation apres generation, pour deviner un mot.\n")
+    print("  [10] SPECIAL : c'est vous le professeur")
     print("      Vous donnez vous-meme les exemples a l'IA, en direct,")
     print("      et elle apprend uniquement de ce que VOUS lui montrez.\n")
-    print("  [10] Quitter\n")
+    print("  [11] Quitter\n")
 
 
 def demander_details():
@@ -196,19 +201,37 @@ def lancer_module_8():
     pause_avant_retour()
 
 
+def demander_mot_cible():
+    reponse = input("Quel mot secret voulez-vous lui faire deviner ? "
+                     "(lettres A-Z uniquement, defaut ALGORITHME) : ").strip().upper()
+    if reponse and reponse.isalpha():
+        return reponse
+    return "ALGORITHME"
+
+
 def lancer_module_9():
-    print("\n--- MODULE 9 : SPECIAL, c'est vous le professeur ---\n")
-    details, pas_a_pas_actif, nb_essais = demander_mode(4000)
-    module9.entrainer(nb_essais=nb_essais, vitesse_apprentissage=0.1,
-                       details=details, afficher_tous_les=400,
+    print("\n--- MODULE 9 : Algorithme genetique ---\n")
+    mot_cible = demander_mot_cible()
+    details, pas_a_pas_actif, nb_generations = demander_mode(150)
+    module9.entrainer(nb_generations=nb_generations, mot_cible=mot_cible,
+                       details=details, afficher_toutes_les=10,
                        pas_a_pas_actif=pas_a_pas_actif)
+    pause_avant_retour()
+
+
+def lancer_module_10():
+    print("\n--- MODULE 10 : SPECIAL, c'est vous le professeur ---\n")
+    details, pas_a_pas_actif, nb_essais = demander_mode(4000)
+    module10.entrainer(nb_essais=nb_essais, vitesse_apprentissage=0.1,
+                        details=details, afficher_tous_les=400,
+                        pas_a_pas_actif=pas_a_pas_actif)
     pause_avant_retour()
 
 
 def boucle_principale():
     while True:
         afficher_accueil()
-        choix = input("Votre choix (1-10) : ").strip()
+        choix = input("Votre choix (1-11) : ").strip()
 
         if choix == "1":
             lancer_module_1()
@@ -229,10 +252,12 @@ def boucle_principale():
         elif choix == "9":
             lancer_module_9()
         elif choix == "10":
+            lancer_module_10()
+        elif choix == "11":
             print("\nA bientot !")
             sys.exit(0)
         else:
-            print("\nChoix non reconnu, merci de taper un chiffre entre 1 et 10.\n")
+            print("\nChoix non reconnu, merci de taper un chiffre entre 1 et 11.\n")
 
 
 if __name__ == "__main__":

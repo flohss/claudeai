@@ -36,18 +36,25 @@
       <canvas class="nuage" width="380" height="280"></canvas>
     </div>
     {% endif %}
+    {% if evolution %}
+    <div class="colonne">
+      <h2>Le mot qui évolue</h2>
+      <div class="mot-evolution"></div>
+    </div>
+    {% endif %}
     <div class="colonne">
       <h2 class="titre-graphique">
         {%- if num == 5 %}Score par partie
         {%- elif num == 6 %}Distance moyenne aux centres
         {%- elif num == 7 %}Récompense par partie
+        {%- elif num == 9 %}Meilleur score par génération
         {%- else %}Courbe d'erreur{% endif -%}
       </h2>
       <canvas class="graphique" width="480" height="220"></canvas>
       <p class="progression"></p>
     </div>
     <div class="colonne">
-      {% if num not in (5, 6, 7) %}
+      {% if num not in (5, 6, 7, 9) %}
       <h2>Ce qu'elle pense maintenant</h2>
       <div class="pensees"></div>
       {% endif %}

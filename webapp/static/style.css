@@ -367,3 +367,35 @@ canvas {
 .demo-info {
     font-weight: 600;
 }
+
+.mot-evolution {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    background: var(--carte);
+    border: 1px solid var(--bordure);
+    border-radius: 12px;
+    padding: 16px;
+    min-height: 56px;
+}
+
+.lettre {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    background: var(--fond);
+    border: 1px solid var(--bordure);
+    font-family: ui-monospace, monospace;
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: var(--texte-attenue);
+}
+
+.lettre-correcte {
+    background: #dcfce7;
+    border-color: var(--bon);
+    color: var(--bon);
+}

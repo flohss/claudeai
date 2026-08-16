@@ -15,9 +15,9 @@ memes fonctions entrainer() que la ligne de commande, avec juste des
 rappels (callbacks) qui poussent chaque essai vers le navigateur au
 fur et a mesure, via un flux "Server-Sent Events".
 
-Le module 9 (SPECIAL) n'est pas encore disponible ici, car il vous
+Le module 10 (SPECIAL) n'est pas encore disponible ici, car il vous
 demande de taper vos exemples un par un : pour l'instant, utilisez-le
-en ligne de commande (python -m modules.module9_special).
+en ligne de commande (python -m modules.module10_special).
 
 Usage :
     pip install -r requirements-web.txt
@@ -49,6 +49,7 @@ from modules import module5_serpent as module5  # noqa: E402
 from modules import module6_regroupement as module6  # noqa: E402
 from modules import module7_labyrinthe as module7  # noqa: E402
 from modules import module8_fruits_multiples as module8  # noqa: E402
+from modules import module9_genetique as module9  # noqa: E402
 
 app = Flask(__name__)
 
@@ -144,6 +145,20 @@ MODULES = {
         ],
         "reseau": {"entrees": ["poids", "forme"], "sortie": ["Pomme", "Orange", "Banane"]},
     },
+    9: {
+        "titre": "Algorithme génétique",
+        "description": "Pas de correction : une population de mots evolue par selection, croisement et mutation pour deviner un mot secret.",
+        "champs": [
+            {"nom": "mot_cible", "label": "Mot secret a deviner (lettres A-Z)", "type": "texte", "defaut": "ALGORITHME"},
+            {"nom": "nb_generations", "label": "Nombre de generations maximum", "defaut": 150, "pas": "1"},
+            {"nom": "taille_population", "label": "Taille de la population", "defaut": 40, "pas": "1"},
+            {"nom": "nb_survivants", "label": "Nombre de survivants par generation", "defaut": 10, "pas": "1"},
+            {"nom": "taux_mutation", "label": "Taux de mutation (0 a 1)", "defaut": 0.05, "pas": "0.01"},
+        ],
+        # Pas de "reseau" (aucun bouton, aucune vitesse d'apprentissage) :
+        # affichage du mot qui evolue, lettre par lettre, a la place.
+        "evolution": True,
+    },
 }
 
 # Au dela de ce nombre d'essais/parties, on n'envoie pas un evenement a
@@ -169,7 +184,11 @@ def nettoyer_pour_json(valeur):
 def convertir_valeur(champ, valeur_brute):
     if champ.get("type") == "select":
         return valeur_brute
-    if champ["nom"] in ("nb_essais", "nb_parties", "nb_groupes"):
+    if champ.get("type") == "texte":
+        valeur = str(valeur_brute).strip().upper()
+        return valeur if valeur.isalpha() else champ["defaut"]
+    if champ["nom"] in ("nb_essais", "nb_parties", "nb_groupes",
+                         "nb_generations", "taille_population", "nb_survivants"):
         return int(float(valeur_brute))
     return float(valeur_brute)
 
@@ -242,6 +261,12 @@ def lancer_entrainement(num, parametres):
             raise EntrainementInterrompu()
         file_evenements.put({"type": "mouvement", **info})
 
+    def sur_generation(info):
+        if arret_event.is_set():
+            raise EntrainementInterrompu()
+        file_evenements.put({"type": "generation", **info})
+        time.sleep(0.03)
+
     def travail():
         try:
             if num == 1:
@@ -288,6 +313,13 @@ def lancer_entrainement(num, parametres):
                 module8.entrainer(nb_essais=parametres["nb_essais"],
                                    vitesse_apprentissage=parametres["vitesse_apprentissage"],
                                    sur_essai=sur_essai)
+            elif num == 9:
+                module9.entrainer(nb_generations=parametres["nb_generations"],
+                                   taille_population=parametres["taille_population"],
+                                   nb_survivants=parametres["nb_survivants"],
+                                   taux_mutation=parametres["taux_mutation"],
+                                   mot_cible=parametres["mot_cible"],
+                                   sur_generation=sur_generation)
             file_evenements.put({"type": "fin"})
         except EntrainementInterrompu:
             file_evenements.put({"type": "arrete"})
@@ -327,7 +359,8 @@ def suivi(session_id):
     config_module = MODULES[session["num"]]
     return render_template("suivi.html", session_id=session_id, num=session["num"],
                             titre=session["titre"], parametres=session["parametres"],
-                            reseau=config_module.get("reseau"), nuage=config_module.get("nuage"))
+                            reseau=config_module.get("reseau"), nuage=config_module.get("nuage"),
+                            evolution=config_module.get("evolution"))
 
 
 @app.route("/arreter/<session_id>", methods=["POST"])

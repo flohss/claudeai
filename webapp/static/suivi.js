@@ -234,6 +234,7 @@ function initialiserSuivi(conteneur, reseauConfig) {
     const boutonArreter = conteneur.querySelector(".bouton-arreter");
     const svgReseau = conteneur.querySelector(".reseau");
     const zoneNuage = conteneur.querySelector(".nuage");
+    const zoneMotEvolution = conteneur.querySelector(".mot-evolution");
     const sectionEntrainement = conteneur.querySelector(".section-entrainement");
     const sectionDemo = conteneur.querySelector(".section-demo");
     const zoneGrille = conteneur.querySelector(".grille");
@@ -260,6 +261,16 @@ function initialiserSuivi(conteneur, reseauConfig) {
             const p = document.createElement("p");
             p.textContent = ligne;
             zonePensees.appendChild(p);
+        });
+    }
+
+    function afficherMotEvolution(mot, lettresCorrectes) {
+        zoneMotEvolution.innerHTML = "";
+        [...mot].forEach((lettre, i) => {
+            const span = document.createElement("span");
+            span.className = "lettre" + (lettresCorrectes[i] ? " lettre-correcte" : "");
+            span.textContent = lettre;
+            zoneMotEvolution.appendChild(span);
         });
     }
 
@@ -317,6 +328,11 @@ function initialiserSuivi(conteneur, reseauConfig) {
                 zoneProgression.textContent = `Partie ${donnees.partie} / ${donnees.nb_parties} — score : ${valeur} — curiosité : ${donnees.curiosite.toFixed(2)}`;
                 ajouterHistorique(`Partie ${donnees.partie} — score : ${valeur} — moyenne récente : ${donnees.moyenne_recente.toFixed(1)}`);
             }
+        } else if (donnees.type === "generation") {
+            ajouterPoint(donnees.generation, donnees.meilleur_score);
+            if (zoneMotEvolution) afficherMotEvolution(donnees.meilleur_mot, donnees.lettres_correctes);
+            zoneProgression.textContent = `Génération ${donnees.generation} / ${donnees.nb_generations} — meilleur : '${donnees.meilleur_mot}' (${donnees.meilleur_score}/${donnees.n_lettres}) — moyenne : ${donnees.moyenne_score.toFixed(1)}/${donnees.n_lettres}`;
+            ajouterHistorique(`Génération ${donnees.generation} — meilleur : '${donnees.meilleur_mot}' (${donnees.meilleur_score}/${donnees.n_lettres})`);
         } else if (donnees.type === "fin_entrainement") {
             zoneStatut.textContent = "Entraînement terminé, on regarde une partie jouée par l'IA...";
             if (sectionEntrainement) sectionEntrainement.hidden = true;

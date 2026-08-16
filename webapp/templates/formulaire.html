@@ -23,6 +23,8 @@
       <option value="{{ option }}" {% if option == champ.defaut %}selected{% endif %}>{{ option }}</option>
       {% endfor %}
     </select>
+    {% elif champ.type == "texte" %}
+    <input type="text" pattern="[A-Za-z]+" name="{{ champ.nom }}" value="{{ champ.defaut }}" required>
     {% else %}
     <input type="number" step="{{ champ.pas or '1' }}" name="{{ champ.nom }}" value="{{ champ.defaut }}" required>
     {% endif %}
