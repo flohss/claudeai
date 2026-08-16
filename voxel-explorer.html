@@ -319,11 +319,17 @@ const BLOCK_TILE_INDEX = {};
 BLOCK_TILES.forEach((b, i) => BLOCK_TILE_INDEX[b] = i);
 const ATLAS_TILE = 16;
 
-function buildBlockAtlas() {
-  const canvas = document.createElement('canvas');
-  canvas.width = ATLAS_TILE * BLOCK_TILES.length;
-  canvas.height = ATLAS_TILE;
-  const ctx = canvas.getContext('2d');
+// Construit l'atlas couleur ET une normal map dérivée du même bruit (le
+// grain qui teinte un pixel plus sombre/clair le fait aussi "creuser" ou
+// "bomber" dans la normal map) : les fissures, joints et grains de bois
+// captent vraiment la lumière au lieu d'être peints à plat.
+function buildBlockAtlasAndNormals() {
+  const width = ATLAS_TILE * BLOCK_TILES.length, height = ATLAS_TILE;
+  const colorCanvas = document.createElement('canvas');
+  colorCanvas.width = width; colorCanvas.height = height;
+  const colorCtx = colorCanvas.getContext('2d');
+  const heightMap = new Float32Array(width * height);
+
   let s = 987654321;
   const rand = () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; };
 
@@ -343,19 +349,63 @@ function buildBlockAtlas() {
         const rr = Math.max(0, Math.min(255, r + jitter));
         const gg = Math.max(0, Math.min(255, g + jitter));
         const bb = Math.max(0, Math.min(255, bl + jitter));
-        ctx.fillStyle = `rgb(${rr | 0},${gg | 0},${bb | 0})`;
-        ctx.fillRect(ox + px, py, 1, 1);
+        colorCtx.fillStyle = `rgb(${rr | 0},${gg | 0},${bb | 0})`;
+        colorCtx.fillRect(ox + px, py, 1, 1);
+        heightMap[py * width + (ox + px)] = jitter; // sert de relief pour la normal map
       }
     }
   });
 
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.magFilter = THREE.LinearFilter;
-  tex.minFilter = THREE.LinearFilter;
-  tex.generateMipmaps = false; // évite le "bleed" entre tuiles voisines de l'atlas
-  return tex;
+  // Lisse le relief AVANT de calculer les normales : un bruit indépendant
+  // pixel à pixel donne des pentes locales énormes (à l'opposé d'un vrai
+  // relief de brique/bois), donc des normales bien trop agressives.
+  const blurred = new Float32Array(width * height);
+  for (let ti = 0; ti < BLOCK_TILES.length; ti++) {
+    const ox = ti * ATLAS_TILE;
+    for (let py = 0; py < ATLAS_TILE; py++) {
+      for (let px = 0; px < ATLAS_TILE; px++) {
+        let sum = 0, count = 0;
+        for (let oy = -1; oy <= 1; oy++) {
+          for (let oxx = -1; oxx <= 1; oxx++) {
+            const sx = px + oxx, sy = py + oy;
+            if (sx < 0 || sx >= ATLAS_TILE || sy < 0 || sy >= ATLAS_TILE) continue;
+            sum += heightMap[sy * width + (ox + sx)]; count++;
+          }
+        }
+        blurred[py * width + (ox + px)] = sum / count;
+      }
+    }
+  }
+
+  const normalCanvas = document.createElement('canvas');
+  normalCanvas.width = width; normalCanvas.height = height;
+  const normalCtx = normalCanvas.getContext('2d');
+  const strength = 0.028;
+  for (let ti = 0; ti < BLOCK_TILES.length; ti++) {
+    const ox = ti * ATLAS_TILE;
+    for (let py = 0; py < ATLAS_TILE; py++) {
+      for (let px = 0; px < ATLAS_TILE; px++) {
+        // Pas de dérivée au-delà des bords de LA TUILE (pas de fuite avec la voisine).
+        const xm = Math.max(px - 1, 0), xp = Math.min(px + 1, ATLAS_TILE - 1);
+        const ym = Math.max(py - 1, 0), yp = Math.min(py + 1, ATLAS_TILE - 1);
+        const hL = blurred[py * width + (ox + xm)], hR = blurred[py * width + (ox + xp)];
+        const hU = blurred[ym * width + (ox + px)], hD = blurred[yp * width + (ox + px)];
+        let nx = (hL - hR) * strength, ny = (hU - hD) * strength, nz = 1.0;
+        const len = Math.hypot(nx, ny, nz);
+        nx /= len; ny /= len; nz /= len;
+        normalCtx.fillStyle = `rgb(${Math.round((nx*0.5+0.5)*255)},${Math.round((ny*0.5+0.5)*255)},${Math.round((nz*0.5+0.5)*255)})`;
+        normalCtx.fillRect(ox + px, py, 1, 1);
+      }
+    }
+  }
+
+  const colorTex = new THREE.CanvasTexture(colorCanvas);
+  colorTex.magFilter = THREE.LinearFilter; colorTex.minFilter = THREE.LinearFilter; colorTex.generateMipmaps = false;
+  const normalTex = new THREE.CanvasTexture(normalCanvas);
+  normalTex.magFilter = THREE.LinearFilter; normalTex.minFilter = THREE.LinearFilter; normalTex.generateMipmaps = false;
+  return { colorTex, normalTex };
 }
-const blockAtlas = buildBlockAtlas();
+const { colorTex: blockAtlas, normalTex: blockNormalMap } = buildBlockAtlasAndNormals();
 // Rentre l'UV d'un demi-texel à l'intérieur de la tuile pour la même raison.
 const ATLAS_TEXEL_U = 1 / (ATLAS_TILE * BLOCK_TILES.length);
 const ATLAS_TEXEL_V = 1 / ATLAS_TILE;
@@ -787,8 +837,19 @@ function buildChunkMesh(cx, cz, data) {
   return { positions, normals, colors, uvs, indices };
 }
 
-const material = new THREE.MeshLambertMaterial({ map: blockAtlas, vertexColors: true });
-const waterMaterial = new THREE.MeshLambertMaterial({ color: 0x2f6fb0, transparent: true, opacity: 0.55 });
+// Phong plutôt que Lambert : seul Phong (ou Standard) sait exploiter une
+// normal map en Three.js, indispensable pour que le relief de l'atlas
+// réagisse vraiment à la position du soleil plutôt que d'être peint à plat.
+const material = new THREE.MeshPhongMaterial({
+  map: blockAtlas, normalMap: blockNormalMap, vertexColors: true, shininess: 6, specular: 0x151515,
+});
+const waterMaterial = new THREE.MeshPhongMaterial({
+  // DoubleSide corrige un vrai bug préexistant : le quad d'eau était rendu
+  // invisible depuis au-dessus (face avant tournée vers le bas par
+  // construction) — seul un angle de vue par en dessous le montrait. En bonus,
+  // ça affiche aussi la surface vue d'en dessous quand on nage sous l'eau.
+  color: 0x2f6fb0, transparent: true, opacity: 0.55, shininess: 90, specular: 0xffffff, side: THREE.DoubleSide,
+});
 
 function chunkToMesh(cx, cz, data) {
   const { positions, normals, colors, uvs, indices } = buildChunkMesh(cx, cz, data);
@@ -801,6 +862,8 @@ function chunkToMesh(cx, cz, data) {
   geo.setIndex(indices);
   const mesh = new THREE.Mesh(geo, material);
   mesh.position.set(cx * CHUNK_SIZE, 0, cz * CHUNK_SIZE);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
   return mesh;
 }
 
@@ -826,6 +889,7 @@ function chunkWaterMesh(cx, cz, data) {
   geo.setIndex(indices);
   const mesh = new THREE.Mesh(geo, waterMaterial);
   mesh.position.set(cx * CHUNK_SIZE, 0, cz * CHUNK_SIZE);
+  mesh.receiveShadow = true; // pas castShadow : surface fine et transparente
   return mesh;
 }
 
@@ -901,23 +965,52 @@ const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerH
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+// Ombres portées désactivées sur mobile : un rendu depuis la lumière à
+// chaque frame est trop coûteux pour ce matériel, déjà bridé (RENDER_DIST).
+renderer.shadowMap.enabled = !IS_MOBILE;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.body.appendChild(renderer.domElement);
 
 const ambient = new THREE.AmbientLight(0xffffff, 0.55);
 scene.add(ambient);
 const sun = new THREE.DirectionalLight(0xfff4d6, 0.85);
 sun.position.set(80, 120, 40);
+sun.castShadow = !IS_MOBILE;
+sun.shadow.mapSize.set(1024, 1024);
+sun.shadow.bias = -0.0015;
+const SHADOW_HALF = CHUNK_SIZE * 3; // frustum recentré sur le joueur chaque frame
+sun.shadow.camera.left = -SHADOW_HALF;
+sun.shadow.camera.right = SHADOW_HALF;
+sun.shadow.camera.top = SHADOW_HALF;
+sun.shadow.camera.bottom = -SHADOW_HALF;
+sun.shadow.camera.near = 1;
+sun.shadow.camera.far = 220;
+sun.shadow.camera.updateProjectionMatrix();
 scene.add(sun);
+scene.add(sun.target);
 
 // ---------- Cycle jour/nuit ----------
 const DAY_CYCLE_SECONDS = 240; // durée d'un cycle complet (4 minutes)
 let dayTime = 0.27; // départ en matinée
 
+// Direction unitaire courante du soleil, réutilisée par la lumière (donc
+// les ombres), le sprite visuel et la lune — pour que l'ombre portée d'un
+// bloc pointe bien à l'opposé du soleil qu'on voit réellement dans le ciel.
+let sunDirX = 0, sunDirY = 1, sunDirZ = 0.35;
+const SUN_DIST = 90; // distance lumière-joueur : borne aussi sun.shadow.camera.far
+
 function updateDayNight(dt) {
   dayTime = (dayTime + dt / DAY_CYCLE_SECONDS) % 1;
   const angle = dayTime * Math.PI * 2;
   const sunHeight = Math.sin(angle); // -1 (minuit) .. 1 (midi)
-  sun.position.set(Math.cos(angle) * 150, Math.max(sunHeight, -0.1) * 140 + 40, 70);
+  const dx = Math.cos(angle), dz = 0.35;
+  const len = Math.hypot(dx, sunHeight, dz);
+  sunDirX = dx / len; sunDirY = sunHeight / len; sunDirZ = dz / len;
+
+  // La lumière (et sa caméra d'ombre) suit le joueur : une ombre directionnelle
+  // n'a de sens que sur une zone bornée autour de la caméra, pas fixée à l'origine.
+  sun.position.set(player.pos.x + sunDirX * SUN_DIST, player.pos.y + sunDirY * SUN_DIST + 20, player.pos.z + sunDirZ * SUN_DIST);
+  sun.target.position.copy(player.pos);
 
   // Transition douce autour du lever/coucher plutôt qu'un clamp brutal de sunHeight
   const dayFactor = Math.max(0, Math.min(1, sunHeight * 1.8 + 0.5));
@@ -975,19 +1068,16 @@ scene.add(stars);
 
 const SKY_RADIUS = 380;
 function updateSky() {
-  const angle = dayTime * Math.PI * 2;
-  const sunHeight = Math.sin(angle);
-  const dx = Math.cos(angle), dy = sunHeight, dz = 0.35;
-  const len = Math.hypot(dx, dy, dz);
-  const ux = dx / len, uy = dy / len, uz = dz / len;
-
-  sunSprite.position.set(camera.position.x + ux*SKY_RADIUS, camera.position.y + uy*SKY_RADIUS, camera.position.z + uz*SKY_RADIUS);
-  moonSprite.position.set(camera.position.x - ux*SKY_RADIUS, camera.position.y - uy*SKY_RADIUS, camera.position.z - uz*SKY_RADIUS);
+  // Réutilise sunDirX/Y/Z (calculée par updateDayNight) plutôt que de
+  // refaire le calcul d'angle : le sprite visible doit rester rigoureusement
+  // dans la même direction que la lumière qui projette les ombres.
+  sunSprite.position.set(camera.position.x + sunDirX*SKY_RADIUS, camera.position.y + sunDirY*SKY_RADIUS, camera.position.z + sunDirZ*SKY_RADIUS);
+  moonSprite.position.set(camera.position.x - sunDirX*SKY_RADIUS, camera.position.y - sunDirY*SKY_RADIUS, camera.position.z - sunDirZ*SKY_RADIUS);
   stars.position.copy(camera.position);
 
-  sunSprite.material.opacity = Math.max(0, Math.min(1, sunHeight + 0.35));
-  moonSprite.material.opacity = Math.max(0, Math.min(1, -sunHeight + 0.35));
-  stars.material.opacity = Math.max(0, Math.min(0.9, -sunHeight * 1.5));
+  sunSprite.material.opacity = Math.max(0, Math.min(1, sunDirY + 0.35));
+  moonSprite.material.opacity = Math.max(0, Math.min(1, -sunDirY + 0.35));
+  stars.material.opacity = Math.max(0, Math.min(0.9, -sunDirY * 1.5));
 }
 
 // ---------- Joueur ----------
