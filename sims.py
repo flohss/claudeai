@@ -2156,6 +2156,21 @@ def action_dormir(sim):
         else:
             sim.pet.neglect_days = 0
 
+    # ── Fluctuation du marché financier (quotidienne) ────────────
+    for _aid, _val in list(sim.portfolio.items()):
+        if _val > 0.5 and _aid in MARKET_ASSETS:
+            _mean, _vol = MARKET_ASSETS[_aid][2], MARKET_ASSETS[_aid][3]
+            _change = random.gauss(_mean, _vol)
+            sim.portfolio[_aid] = round(max(0.0, _val * (1 + _change)), 2)
+    _ptotal = sum(sim.portfolio.values())
+    if _ptotal > sim.portfolio_peak:
+        sim.portfolio_peak = _ptotal
+
+    # ── Événement de marché (choc ponctuel ~20% de chance/nuit) ──
+    _mkt_event = _trigger_market_event(sim)
+    if _mkt_event:
+        sim.last_market_event = _mkt_event
+
     # ── Événements nocturnes : trait > partenaire > aléatoire (40%) ──
     trait_msg = trigger_trait_event(sim)
     if trait_msg:
@@ -2257,21 +2272,6 @@ def action_dormir(sim):
             sim.modify(fun=-15, social=-10)
 
     maybe_contract_disease(sim)
-
-    # ── Fluctuation du marché financier (quotidienne) ────────────
-    for _aid, _val in list(sim.portfolio.items()):
-        if _val > 0.5 and _aid in MARKET_ASSETS:
-            _mean, _vol = MARKET_ASSETS[_aid][2], MARKET_ASSETS[_aid][3]
-            _change = random.gauss(_mean, _vol)
-            sim.portfolio[_aid] = round(max(0.0, _val * (1 + _change)), 2)
-    _ptotal = sum(sim.portfolio.values())
-    if _ptotal > sim.portfolio_peak:
-        sim.portfolio_peak = _ptotal
-
-    # ── Événement de marché (choc ponctuel ~20% de chance/nuit) ──
-    _mkt_event = _trigger_market_event(sim)
-    if _mkt_event:
-        sim.last_market_event = _mkt_event
 
     # ── Addictions : traitement quotidien ────────────────────────
     _process_addictions(sim)
