@@ -429,8 +429,8 @@
         if(!pp || !cp) return;
         const startX = pp.x + pp.w/2, startY = pp.y + pp.h;
         const endX = cp.x + cp.w/2, endY = cp.y;
-        const midY = (startY + endY) / 2;
-        const d = `M ${startX} ${startY} L ${startX} ${midY} L ${endX} ${midY} L ${endX} ${endY - 6}`;
+        const bend = Math.max(20, (endY - startY) / 2);
+        const d = `M ${startX} ${startY} C ${startX} ${startY+bend}, ${endX} ${endY-bend}, ${endX} ${endY - 6}`;
         el("path", {d, fill:"none", stroke: state.edgeColor, "stroke-width":"2", "marker-end":"url(#arrowhead)"}, edgeLayer);
       });
     });
