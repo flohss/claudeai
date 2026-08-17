@@ -775,3 +775,107 @@ canvas {
 .pixel-allume {
     background: var(--texte);
 }
+
+/* Module 0 : le cours */
+
+.carte-cours {
+    background: linear-gradient(135deg, var(--accent), #8b5cf6);
+    color: white;
+    border: none;
+}
+
+.carte-cours .carte-numero {
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.carte-cours p {
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.sommaire {
+    background: var(--carte);
+    border: 1px solid var(--bordure);
+    border-radius: 12px;
+    padding: 16px 24px;
+    max-width: 640px;
+    margin-bottom: 24px;
+}
+
+.sommaire h2 {
+    font-size: 1rem;
+    margin-top: 0;
+}
+
+.sommaire ol {
+    margin: 0;
+    padding-left: 20px;
+    columns: 2;
+    column-gap: 24px;
+}
+
+.sommaire li {
+    margin-bottom: 6px;
+    break-inside: avoid;
+}
+
+.sommaire a {
+    color: var(--texte);
+    text-decoration: none;
+    font-size: 0.9rem;
+}
+
+.sommaire a:hover {
+    color: var(--accent);
+    text-decoration: underline;
+}
+
+.chapitres {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    max-width: 720px;
+}
+
+.chapitre {
+    background: var(--carte);
+    border: 1px solid var(--bordure);
+    border-radius: 12px;
+    padding: 20px 28px;
+    scroll-margin-top: 16px;
+}
+
+.chapitre-numero {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.chapitre h2 {
+    margin: 6px 0 12px;
+    font-size: 1.2rem;
+}
+
+.chapitre p {
+    line-height: 1.6;
+    margin: 0 0 12px;
+}
+
+.chapitre-lien {
+    margin-top: 16px !important;
+}
+
+.chapitre-lien a {
+    display: inline-block;
+    padding: 8px 16px;
+    background: var(--accent);
+    color: white;
+    text-decoration: none;
+    border-radius: 8px;
+    font-size: 0.9rem;
+}
+
+.chapitre-lien a:hover {
+    background: #2563eb;
+}

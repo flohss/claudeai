@@ -12,6 +12,7 @@ Usage :
 
 import sys
 
+from modules import module0_cours as module0
 from modules import module1_xor_simple as module1
 from modules import module2_prix as module2
 from modules import module3_fruits as module3
@@ -40,6 +41,10 @@ def afficher_accueil():
     print("Voici les modules disponibles. Chacun est une petite IA")
     print("differente, entrainee sous vos yeux, avec tous ses calculs")
     print("expliques en francais simple.\n")
+    print("  [0] LE COURS : comprendre les bases avant de commencer")
+    print("      Vous n'y connaissez rien ? Commencez ici : un cours pas a pas")
+    print("      qui explique tout le vocabulaire (bouton, essai, vitesse")
+    print("      d'apprentissage...) avec des mots simples et des exemples.\n")
     print("  [1] Le OU EXCLUSIF (XOR)")
     print("      Une IA qui apprend une regle logique a partir de 4 exemples.")
     print("      Premiere IA, la plus simple pour comprendre le principe.\n")
@@ -242,12 +247,20 @@ def lancer_module_11():
     pause_avant_retour()
 
 
+def lancer_module_0():
+    print("\n--- MODULE 0 : LE COURS ---\n")
+    module0.donner_cours(pas_a_pas_actif=True)
+    pause_avant_retour()
+
+
 def boucle_principale():
     while True:
         afficher_accueil()
-        choix = input("Votre choix (1-12) : ").strip()
+        choix = input("Votre choix (0-12) : ").strip()
 
-        if choix == "1":
+        if choix == "0":
+            lancer_module_0()
+        elif choix == "1":
             lancer_module_1()
         elif choix == "2":
             lancer_module_2()
@@ -273,7 +286,7 @@ def boucle_principale():
             print("\nA bientot !")
             sys.exit(0)
         else:
-            print("\nChoix non reconnu, merci de taper un chiffre entre 1 et 12.\n")
+            print("\nChoix non reconnu, merci de taper un chiffre entre 0 et 12.\n")
 
 
 if __name__ == "__main__":

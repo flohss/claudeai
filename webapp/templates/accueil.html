@@ -20,6 +20,11 @@
 </header>
 
 <div class="cartes">
+  <a class="carte carte-cours" href="{{ url_for('cours') }}">
+    <span class="carte-numero">Module 0</span>
+    <h2>LE COURS : comprendre les bases</h2>
+    <p>Vous n'y connaissez rien ? Commencez ici : tout le vocabulaire expliqué simplement, avant de vous lancer.</p>
+  </a>
   {% for num, m in modules.items() %}
   <a class="carte" href="{{ url_for('formulaire', num=num) }}">
     <span class="carte-numero">Module {{ num }}</span>

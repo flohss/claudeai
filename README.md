@@ -24,6 +24,16 @@ Lancer le menu interactif :
 python menu.py
 ```
 
+Vous n'y connaissez rien ? Commencez par le Module 0, un cours pas à pas
+qui explique tout le vocabulaire (bouton, essai, vitesse d'apprentissage,
+apprentissage supervisé/non supervisé/par renforcement...) avec des mots
+simples et des comparaisons de tous les jours, avant de vous lancer dans
+les modules 1 à 11 :
+
+```bash
+python -m modules.module0_cours
+```
+
 Ou lancer un module directement en ligne de commande :
 
 ```bash
@@ -52,6 +62,12 @@ automatiquement s'il est lancé comme un simple script ou comme partie
 du package `modules` et s'adapte, sans erreur d'import.
 
 ## Interface graphique (navigateur)
+
+Le Module 0 (le cours) y est aussi accessible, en carte mise en avant sur
+la page d'accueil : les mêmes 15 chapitres qu'en ligne de commande, mais
+lisibles d'une traite ou via un sommaire cliquable, avec un bouton
+"Voir en pratique" à la fin de chaque chapitre qui vous amène directement
+au module concerné.
 
 En plus de la ligne de commande, une petite interface web locale permet
 de choisir les paramètres, lancer l'entraînement, et le suivre EN DIRECT
@@ -130,6 +146,7 @@ internet.
 
 | # | Module | Ce que l'IA apprend | Nouveauté pédagogique |
 |---|--------|----------------------|------------------------|
+| 0 | `module0_cours` | Rien ne s'entraîne ici : c'est un cours | Tout le vocabulaire expliqué simplement, avant de commencer |
 | 1 | `module1_xor_simple` | Le OU EXCLUSIF (XOR), à partir de 4 exemples | Une couche cachée (étage de réflexion intermédiaire) |
 | 2 | `module2_prix` | Estimer le prix d'une maison à partir de sa taille | Deviner un nombre libre, pas juste 0 ou 1 |
 | 3 | `module3_fruits` | Distinguer une pomme d'une orange (poids + couleur) | Choisir entre plusieurs catégories |
@@ -172,6 +189,7 @@ internet.
 menu.py                       -> écran d'accueil, menu interactif
 modules/
     utils.py                  -> outils partagés (formatage, checkpoints, pas-à-pas)
+    module0_cours.py          -> le cours (aucune IA entraînée ici)
     module1_xor_simple.py
     module2_prix.py
     module3_fruits.py
@@ -216,7 +234,8 @@ sur une grille fixe), le module 8 (plusieurs catégories à la fois,
 extension du module 3), le module 9 (algorithme génétique : une
 population qui évolue au lieu d'une IA qui se corrige), le module 10
 (c'est vous qui enseignez l'IA à partir de zéro), le module 11
-(reconnaissance d'image simplifiée, une petite grille de pixels),
+(reconnaissance d'image simplifiée, une petite grille de pixels), le
+module 0 (le cours qui explique tout le vocabulaire avant de commencer),
 l'interface graphique dans le navigateur pour tous les modules y compris
 le 10 (avec un formulaire dédié pour taper ses propres exemples et une
 zone pour tester l'IA une fois entraînée, un schéma à plusieurs sorties

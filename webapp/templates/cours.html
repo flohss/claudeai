@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>
+(function(){
+  var t = localStorage.getItem('theme');
+  if (!t) t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'clair';
+  if (t === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+})();
+</script>
+<title>Module 0 — Le cours</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<a class="retour" href="{{ url_for('accueil') }}">&larr; Retour aux modules</a>
+<header>
+  <h1>Module 0 — Le cours</h1>
+  <p>Vous n'y connaissez rien ? Vous êtes au bon endroit. Ce cours explique, avec des mots simples et des comparaisons de tous les jours, tout le vocabulaire utilisé par les modules 1 à 11 — avant que vous vous y lanciez.</p>
+</header>
+
+<nav class="sommaire">
+  <h2>Sommaire</h2>
+  <ol>
+    {% for chapitre in chapitres %}
+    <li><a href="#chapitre-{{ loop.index }}">{{ chapitre.titre }}</a></li>
+    {% endfor %}
+  </ol>
+</nav>
+
+<div class="chapitres">
+  {% for chapitre in chapitres %}
+  <section class="chapitre" id="chapitre-{{ loop.index }}">
+    <span class="chapitre-numero">Chapitre {{ loop.index }} / {{ chapitres|length }}</span>
+    <h2>{{ chapitre.titre }}</h2>
+    {% for paragraphe in chapitre.paragraphes %}
+    <p>{{ paragraphe }}</p>
+    {% endfor %}
+    {% if chapitre.module_lie is not none %}
+    <p class="chapitre-lien">
+      {% if chapitre.module_lie == 10 %}
+      <a href="{{ url_for('special_formulaire') }}">Voir en pratique : Module 10 &rarr;</a>
+      {% else %}
+      <a href="{{ url_for('formulaire', num=chapitre.module_lie) }}">Voir en pratique : Module {{ chapitre.module_lie }} &rarr;</a>
+      {% endif %}
+    </p>
+    {% endif %}
+  </section>
+  {% endfor %}
+</div>
+
+<p class="astuce"><a href="{{ url_for('accueil') }}">&larr; Retour aux modules, vous êtes prêt !</a></p>
+
+<script src="{{ url_for('static', filename='theme.js') }}"></script>
+</body>
+</html>

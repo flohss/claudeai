@@ -41,6 +41,7 @@ from flask import Flask, Response, abort, jsonify, redirect, render_template, re
 # la racine du projet.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from modules import module0_cours as module0  # noqa: E402
 from modules import module1_xor_simple as module1  # noqa: E402
 from modules import module2_prix as module2  # noqa: E402
 from modules import module3_fruits as module3  # noqa: E402
@@ -364,6 +365,11 @@ def lancer_entrainement(num, parametres):
 @app.route("/")
 def accueil():
     return render_template("accueil.html", modules=MODULES)
+
+
+@app.route("/cours")
+def cours():
+    return render_template("cours.html", chapitres=module0.CHAPITRES)
 
 
 @app.route("/module/<int:num>")
