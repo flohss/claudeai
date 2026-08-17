@@ -20,7 +20,7 @@ aucune connexion internet requise.
 
 ## Contenu généré
 
-Le dashboard présente 10 onglets :
+Le dashboard présente 11 onglets :
 
 1. **Démographie** — effectifs, répartition par sexe/génération, pyramide
    des âges, âge au décès (moyenne/médiane/distribution par siècle),
@@ -50,7 +50,12 @@ Le dashboard présente 10 onglets :
 9. **Calendrier perpétuel** — naissances, mariages et décès classés par
    jour de l'année (toutes années confondues), filtrables par mois/type/nom,
    avec un rappel « dans l'histoire familiale » pour la date du jour.
-10. **Édition** — charger un autre fichier `.ged` (remplace les données
+10. **Questions** — pose des questions en français sur l'arbre (parents,
+    naissance/décès d'une personne, lien de parenté exact entre deux
+    personnes — cousin germain, grand-oncle, etc. —, records, listes par
+    année…) via un moteur de reconnaissance de motifs entièrement local
+    (aucune IA, aucune connexion réseau).
+11. **Édition** — charger un autre fichier `.ged` (remplace les données
     affichées), exporter l'état actuel en GEDCOM, ajouter une nouvelle
     personne (avec lien vers père/mère existants), créer une union entre
     deux personnes.

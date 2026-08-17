@@ -321,6 +321,14 @@ table.data-table tr:hover td{ background: rgba(168,121,31,0.06); }
 .tree-side h4{ font-size:12px; text-transform:uppercase; letter-spacing:0.06em; color: var(--gold); margin:0 0 6px; }
 
 /* ---------------------------------------------------------------- */
+/* Questions (moteur local)                                           */
+/* ---------------------------------------------------------------- */
+.qa-example{ cursor:pointer; user-select:none; }
+.qa-example:hover{ background:#fff8e8; border-color: var(--gold-light); }
+.qa-answer{ font-size:14px; line-height:1.6; }
+.qa-answer ul{ font-size:13.5px; }
+
+/* ---------------------------------------------------------------- */
 /* Calendrier perpétuel                                               */
 /* ---------------------------------------------------------------- */
 .cal-controls{ display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
@@ -420,6 +428,7 @@ footer.pagefoot{
   <button data-tab="individus">Fiches individuelles</button>
   <button data-tab="arbre">Arbre</button>
   <button data-tab="calendrier">Calendrier perpétuel</button>
+  <button data-tab="questions">Questions</button>
   <button data-tab="edition">Édition</button>
 </nav>
 
@@ -433,6 +442,7 @@ footer.pagefoot{
   <section class="panel" id="panel-individus"></section>
   <section class="panel" id="panel-arbre"></section>
   <section class="panel" id="panel-calendrier"></section>
+  <section class="panel" id="panel-questions"></section>
   <section class="panel" id="panel-edition"></section>
 </main>
 

@@ -822,6 +822,323 @@ function renderCalendrier(){
 }
 
 /* ------------------------------------------------------------------ */
+/* Questions (moteur local par reconnaissance de motifs, sans IA)       */
+/* ------------------------------------------------------------------ */
+
+/** Termes de parenté français, genrés, avec article inclus (évite les
+ * problèmes d'élision "le/la/l'" en les figeant par expression). */
+const KIN_TERMS_M = {
+  pere: 'le père', gp: 'le grand-père', agp: "l'arrière-grand-père",
+  fils: 'le fils', pf: 'le petit-fils', apf: "l'arrière-petit-fils",
+  frere: 'le frère', demifrere: 'le demi-frère',
+  oncle: "l'oncle", grandoncle: 'le grand-oncle', agoncle: "l'arrière-grand-oncle",
+  neveu: 'le neveu', petitneveu: 'le petit-neveu', apneveu: "l'arrière-petit-neveu",
+  cousin: 'cousin',
+};
+const KIN_TERMS_F = {
+  pere: 'la mère', gp: 'la grand-mère', agp: "l'arrière-grand-mère",
+  fils: 'la fille', pf: 'la petite-fille', apf: "l'arrière-petite-fille",
+  frere: 'la sœur', demifrere: 'la demi-sœur',
+  oncle: 'la tante', grandoncle: 'la grand-tante', agoncle: "l'arrière-grand-tante",
+  neveu: 'la nièce', petitneveu: 'la petite-nièce', apneveu: "l'arrière-petite-nièce",
+  cousin: 'cousine',
+};
+function kinTerm(key, sex){ return (sex === 'F' ? KIN_TERMS_F : KIN_TERMS_M)[key] || null; }
+
+function cousinPhrase(sex, degree, removed){
+  const noun = sex === 'F' ? 'cousine' : 'cousin';
+  const article = sex === 'F' ? 'la' : 'le';
+  const fem = sex === 'F' ? 'e' : '';
+  let qualifier = degree === 1 ? (removed === 0 ? `germain${fem}` : `issu${fem} de germain${fem}`) : `au ${degree}ᵉ degré`;
+  const removedTxt = (removed > 0 && degree > 1) ? `, éloigné${fem} de ${removed} génération${removed > 1 ? 's' : ''}` : '';
+  return `${article} ${noun} ${qualifier}${removedTxt}`;
+}
+
+function describeDirectRelationHTML(ancestorId, descendantId, dist){
+  const anc = INDEX[ancestorId], desc = INDEX[descendantId];
+  const ascKeys = { 1: 'pere', 2: 'gp', 3: 'agp' };
+  const descKeys = { 1: 'fils', 2: 'pf', 3: 'apf' };
+  const ascTerm = ascKeys[dist] ? kinTerm(ascKeys[dist], anc.sex) : `un ancêtre direct (${dist}ᵉ génération)`;
+  const descTerm = descKeys[dist] ? kinTerm(descKeys[dist], desc.sex) : `un descendant direct (${dist}ᵉ génération)`;
+  return `${personLink(ancestorId, anc.name)} est ${ascTerm} de ${personLink(descendantId, desc.name)}, et ${personLink(descendantId, desc.name)} est ${descTerm} de ${personLink(ancestorId, anc.name)}.`;
+}
+
+function describeCollateralRelationHTML(idA, idB, dA, dB, sharedCount){
+  const a = INDEX[idA], b = INDEX[idB];
+  const min = Math.min(dA, dB), max = Math.max(dA, dB);
+  if (min === 1 && max === 1) {
+    const key = sharedCount >= 2 ? 'frere' : 'demifrere';
+    return `${personLink(idA, a.name)} et ${personLink(idB, b.name)} sont ${sharedCount >= 2 ? '' : 'demi-'}frère(s)/sœur(s) : ${kinTerm(key, a.sex)} et ${kinTerm(key, b.sex)} l'un(e) de l'autre.`;
+  }
+  if (min === 1 && max <= 4) {
+    const nearKey = max === 2 ? 'oncle' : max === 3 ? 'grandoncle' : 'agoncle';
+    const farKey = max === 2 ? 'neveu' : max === 3 ? 'petitneveu' : 'apneveu';
+    const nearId = dA === 1 ? idA : idB, farId = dA === 1 ? idB : idA;
+    const nearP = INDEX[nearId], farP = INDEX[farId];
+    return `${personLink(nearId, nearP.name)} est ${kinTerm(nearKey, nearP.sex)} de ${personLink(farId, farP.name)}, qui est ${kinTerm(farKey, farP.sex)} de ${personLink(nearId, nearP.name)}.`;
+  }
+  const degree = min - 1, removed = max - min;
+  return `${personLink(idA, a.name)} et ${personLink(idB, b.name)} sont ${cousinPhrase(a.sex, degree, removed)} et ${cousinPhrase(b.sex, degree, removed)} l'un(e) de l'autre.`;
+}
+
+/** Détermine et décrit le lien de parenté entre deux personnes, en cherchant
+ * leur(s) ancêtre(s) commun(s) le(s) plus proche(s) (ne suit que les liens
+ * parent-enfant, jamais les conjoints — un beau-parent n'est pas "trouvé"
+ * par cette recherche, seulement les liens de sang). */
+function describeRelationship(idA, idB){
+  if (idA === idB) return { html: "Il s'agit de la même personne." };
+  const a = INDEX[idA], b = INDEX[idB];
+  if (!a || !b) return null;
+  if (a.spouses.includes(idB)) return { html: `${personLink(idA, a.name)} et ${personLink(idB, b.name)} sont conjoint·e·s.` };
+
+  const depthsA = ancestorDepths(STATE, idA);
+  const depthsB = ancestorDepths(STATE, idB);
+  let best = null;
+  for (const [id, dA] of depthsA) {
+    if (!depthsB.has(id)) continue;
+    const dB = depthsB.get(id);
+    const sum = dA + dB;
+    if (!best || sum < best.sum) best = { sum, dA, dB, ids: [id] };
+    else if (sum === best.sum && dA === best.dA && dB === best.dB) best.ids.push(id);
+  }
+  if (!best) return { html: `Aucun ancêtre commun connu n'a été trouvé entre ${personLink(idA, a.name)} et ${personLink(idB, b.name)} dans les données disponibles (ils peuvent tout de même être liés par alliance).` };
+
+  const { dA, dB, ids } = best;
+  if (dA === 0) return { html: describeDirectRelationHTML(idA, idB, dB) };
+  if (dB === 0) return { html: describeDirectRelationHTML(idB, idA, dA) };
+  return { html: describeCollateralRelationHTML(idA, idB, dA, dB, ids.length) };
+}
+
+/** Index des individus trié par longueur de nom décroissante, pour repérer
+ * les mentions de noms complets en priorité (évite qu'un prénom court soit
+ * détecté à l'intérieur d'un nom plus long). */
+function buildPersonSearchIndex(){
+  return DATA.individuals
+    .map(r => ({ id: r.id, name: r.name, norm: normalize(r.name) }))
+    .filter(p => p.norm.length >= 2)
+    .sort((a, b) => b.norm.length - a.norm.length);
+}
+
+function findPersonMentions(rawQuery){
+  const nq = normalize(rawQuery);
+  const idx = buildPersonSearchIndex();
+  const found = [];
+  const used = [];
+  const overlaps = (s, e) => used.some(([us, ue]) => s < ue && e > us);
+  for (const p of idx) {
+    let pos = nq.indexOf(p.norm);
+    while (pos !== -1) {
+      const end = pos + p.norm.length;
+      if (!overlaps(pos, end)) { found.push(p); used.push([pos, end]); }
+      pos = nq.indexOf(p.norm, pos + 1);
+    }
+  }
+  if (found.length) return { matches: found.sort((x, y) => used[found.indexOf(x)][0] - used[found.indexOf(y)][0]), ambiguous: [] };
+
+  // Repli : mots isolés (prénom et/ou nom de famille) quand aucun nom complet n'apparaît.
+  const words = nq.split(/[^a-z0-9]+/).filter(w => w.length >= 3);
+  if (!words.length) return { matches: [], ambiguous: [] };
+  const tokensById = new Map();
+  for (const r of DATA.individuals) {
+    const tokens = new Set([...normalize(r.given).split(/\s+/), ...normalize(r.surname).split(/\s+/)].filter(w => w.length >= 3));
+    tokensById.set(r.id, tokens);
+  }
+  // Priorité au match "ET" (tous les mots de la requête chez la même personne) : bien plus précis
+  // pour une requête à deux mots comme "Florian HESS" que l'union brute de tous les porteurs de HESS.
+  const andMatches = DATA.individuals.filter(r => words.every(w => tokensById.get(r.id).has(w)));
+  if (andMatches.length === 1) return { matches: [{ id: andMatches[0].id, name: andMatches[0].name }], ambiguous: [] };
+  if (andMatches.length > 1) return { matches: [], ambiguous: andMatches.slice(0, 8) };
+
+  const candidates = new Map();
+  for (const r of DATA.individuals) if (words.some(w => tokensById.get(r.id).has(w))) candidates.set(r.id, r);
+  const list = Array.from(candidates.values());
+  if (list.length === 1) return { matches: [{ id: list[0].id, name: list[0].name }], ambiguous: [] };
+  if (list.length > 1) return { matches: [], ambiguous: list.slice(0, 8) };
+  return { matches: [], ambiguous: [] };
+}
+
+function disambiguationAnswerHTML(list){
+  return `Plusieurs personnes correspondent : ${list.map(r => personLink(r.id, r.name)).join(', ')}. Merci de préciser le nom complet (tel qu'il apparaît sur une fiche).`;
+}
+
+function personSummaryHTML(r){
+  return `<p>Voici ce que je sais sur ${personLink(r.id, r.name)} :</p>
+    <ul style="margin:6px 0 0 18px; padding:0;">
+      <li>Naissance : ${r.birth.known ? (escapeHtml(r.birth.display || 'date inconnue') + (r.birth.place ? ' à ' + escapeHtml(r.birth.place) : '')) : 'inconnue'}</li>
+      <li>Décès : ${r.death.known ? (escapeHtml(r.death.display || 'date inconnue') + (r.death.place ? ' à ' + escapeHtml(r.death.place) : '')) : (r.alive ? '— probablement vivant(e)' : 'inconnu')}</li>
+      <li>Parents : ${r.parents.length ? r.parents.map(id => personLink(id, INDEX[id] ? INDEX[id].name : null)).join(', ') : 'inconnus'}</li>
+      <li>Enfants : ${r.children.length ? r.children.map(id => personLink(id, INDEX[id] ? INDEX[id].name : null)).join(', ') : 'aucun connu'}</li>
+    </ul>`;
+}
+
+function listEventsAnswerHTML(label, list, dateField){
+  if (!list.length) return `Aucune personne ${label}.`;
+  return `${fmtInt(list.length)} personne(s) ${label} :<br>` +
+    list.map(r => `${personLink(r.id, r.name)} (${escapeHtml((r[dateField].display) || '?')})`).join('<br>');
+}
+
+/** Répond à une question en langage naturel restreint (motifs français
+ * courants), en s'appuyant uniquement sur les données déjà chargées — aucun
+ * appel réseau, aucune IA : c'est un moteur de reconnaissance de motifs. */
+function answerQuestion(raw){
+  const q = (raw || '').trim();
+  if (!q) return `<p class="card-note">Posez une question ci-dessus, ou cliquez sur un exemple.</p>`;
+  const nq = normalize(q);
+  let m;
+
+  // --- Lien de parenté entre deux personnes --------------------------
+  if (/\b(lien|relation|parente)\b.*\bentre\b/.test(nq) || /\bcomment\b.*\b(lie|liee|apparente|apparentee)\b/.test(nq)) {
+    const { matches, ambiguous } = findPersonMentions(q);
+    if (matches.length >= 2) {
+      const res = describeRelationship(matches[0].id, matches[1].id);
+      return res ? res.html : "Je n'ai pas pu déterminer ce lien.";
+    }
+    if (ambiguous.length) return disambiguationAnswerHTML(ambiguous);
+    return "Merci de mentionner deux personnes avec leur nom complet, par exemple : « quel est le lien entre Florian Patrick HESS et Isabelle Jacqueline SCHAEFFER ? »";
+  }
+
+  // --- Agrégats et records globaux ------------------------------------
+  if (/combien.*(personnes|individus)/.test(nq)) {
+    return `Il y a <b>${fmtInt(DATA.meta.total_individuals)}</b> individus dans cet arbre (${fmtInt(DATA.stats.demographics.blood_count)} par le sang, ${fmtInt(DATA.stats.demographics.marriage_count)} par alliance).`;
+  }
+  if (/combien.*famille/.test(nq)) return `Il y a <b>${fmtInt(DATA.meta.total_families)}</b> familles (unions) enregistrées.`;
+  if (/(doyen|la plus vieille personne (vivante|actuelle))/.test(nq)) {
+    const o = DATA.stats.demographics.oldest_living;
+    return o ? `Le/la doyen(ne) actuel(le) est ${personLink(o.id, o.name)}, ${o.age} ans.` : 'Aucune personne vivante clairement identifiée dans les données.';
+  }
+  if (/(record de longevite|plus (agee?|vieille) au deces)/.test(nq)) {
+    const o = DATA.stats.demographics.oldest_at_death;
+    return o ? `${personLink(o.id, o.name)} détient le record de longévité connu : ${o.age} ans (décès le ${o.date}).` : 'Donnée non disponible.';
+  }
+  if (/deces le plus (precoce|jeune)|plus jeune.*(mort|decedee?)/.test(nq)) {
+    const o = DATA.stats.demographics.youngest_at_death;
+    return o ? `Le décès le plus précoce connu est celui de ${personLink(o.id, o.name)}, à ${o.age} an(s) (${o.date}).` : 'Donnée non disponible.';
+  }
+  if (/(patronyme|nom de famille).*(frequent|courant|repandu)/.test(nq)) {
+    const s = DATA.stats.surnames.top_surnames[0];
+    return s ? `Le patronyme le plus fréquent est <b>${escapeHtml(s[0])}</b>, porté par ${fmtInt(s[1])} personnes.` : 'Donnée non disponible.';
+  }
+  if (/age moyen au deces/.test(nq)) {
+    const a = DATA.stats.demographics.age_at_death;
+    return `L'âge moyen au décès est de <b>${a.mean ?? '—'} ans</b> (médiane : ${a.median ?? '—'} ans, sur ${fmtInt(a.count)} décès datés).`;
+  }
+  if (/age moyen au mariage/.test(nq)) {
+    const s = DATA.stats.family_structure;
+    return `L'âge moyen au mariage est de <b>${s.avg_age_at_marriage ?? '—'} ans</b> (${s.avg_age_at_marriage_husb ?? '—'} ans pour les hommes, ${s.avg_age_at_marriage_wife ?? '—'} pour les femmes).`;
+  }
+  if (/(profondeur de l.arbre|combien de generations)/.test(nq)) {
+    return `L'arbre couvre <b>${DATA.stats.chronology.tree_depth_generations}</b> générations connues (de ${DATA.stats.chronology.earliest_birth_year ?? '?'} à ${DATA.stats.chronology.latest_birth_year ?? '?'}).`;
+  }
+  if (/famille (la )?plus nombreuse/.test(nq)) {
+    const f = DATA.stats.family_structure.large_families_sample[0];
+    return f ? `La famille la plus nombreuse est celle de ${personLink(f.husb_id, f.husb)} et ${personLink(f.wife_id, f.wife)}, avec ${f.n_children} enfants.` : 'Aucune famille nombreuse (5 enfants ou plus) détectée.';
+  }
+
+  // --- Listes par année ------------------------------------------------
+  if ((m = nq.match(/n[ée]s? en (\d{4})/))) {
+    const year = parseInt(m[1], 10);
+    return listEventsAnswerHTML(`née(s) en ${year}`, DATA.individuals.filter(r => r.birth.year === year), 'birth');
+  }
+  if ((m = nq.match(/(morts?|decedes?|deces) en (\d{4})/))) {
+    const year = parseInt(m[2], 10);
+    return listEventsAnswerHTML(`décédée(s) en ${year}`, DATA.individuals.filter(r => r.death.year === year), 'death');
+  }
+  if ((m = nq.match(/maries?.{0,4}en (\d{4})/))) {
+    const year = parseInt(m[1], 10);
+    const list = DATA.families.filter(f => f.marriage.year === year);
+    return list.length
+      ? `${fmtInt(list.length)} union(s) en ${year} :<br>` + list.map(f => `${personLink(f.husb, f.husb_name)} &times; ${personLink(f.wife, f.wife_name)}`).join('<br>')
+      : `Aucun mariage connu en ${year}.`;
+  }
+
+  // --- Questions sur une personne nommée --------------------------------
+  const { matches, ambiguous } = findPersonMentions(q);
+  if (matches.length) {
+    const r = INDEX[matches[0].id];
+    if (/(parents?|pere|mere) de|qui (sont|est) le.?s? (parents?|pere|mere)/.test(nq)) {
+      return r.parents.length ? `Les parents de ${personLink(r.id, r.name)} sont : ${r.parents.map(id => personLink(id, INDEX[id] ? INDEX[id].name : null)).join(' et ')}.` : `Aucun parent connu pour ${personLink(r.id, r.name)}.`;
+    }
+    if (/enfants? de|combien d.enfants/.test(nq)) {
+      return r.children.length ? `${personLink(r.id, r.name)} a ${fmtInt(r.children.length)} enfant(s) connu(s) : ${r.children.map(id => personLink(id, INDEX[id] ? INDEX[id].name : null)).join(', ')}.` : `Aucun enfant connu pour ${personLink(r.id, r.name)}.`;
+    }
+    if (/(conjoint|epoux|epouse|femme) de|\bmari\b.*\bde\b/.test(nq)) {
+      return r.spouses.length ? `Conjoint(s) de ${personLink(r.id, r.name)} : ${r.spouses.map(id => personLink(id, INDEX[id] ? INDEX[id].name : null)).join(', ')}.` : `Aucun conjoint connu pour ${personLink(r.id, r.name)}.`;
+    }
+    if (/(freres? et soeurs?|fratrie)/.test(nq)) {
+      return r.siblings.length ? `Frères et sœurs de ${personLink(r.id, r.name)} : ${r.siblings.map(id => personLink(id, INDEX[id] ? INDEX[id].name : null)).join(', ')}.` : `Aucun frère/sœur connu pour ${personLink(r.id, r.name)}.`;
+    }
+    if (/naissance de|(quand|a quelle date).*n[ée]e?\b|n[ée]e? quand/.test(nq)) {
+      return r.birth.known ? `${personLink(r.id, r.name)} est né(e) ${r.birth.display ? ('le ' + escapeHtml(r.birth.display)) : '(date inconnue)'}${r.birth.place ? (' à ' + escapeHtml(r.birth.place)) : ''}.` : `Date de naissance inconnue pour ${personLink(r.id, r.name)}.`;
+    }
+    if (/deces de|cause du deces|(quand|comment).*(mort|decede)/.test(nq)) {
+      if (!r.death.known) return r.alive ? `${personLink(r.id, r.name)} semble encore en vie${r.current_age != null ? (' (' + r.current_age + ' ans)') : ''}.` : `Statut inconnu pour ${personLink(r.id, r.name)}.`;
+      return `${personLink(r.id, r.name)} est décédé(e) ${r.death.display ? ('le ' + escapeHtml(r.death.display)) : '(date inconnue)'}${r.death.place ? (' à ' + escapeHtml(r.death.place)) : ''}${r.death.cause ? (' — cause : ' + escapeHtml(r.death.cause)) : ''}${r.age_at_death != null ? (' à l\'âge de ' + r.age_at_death + ' ans') : ''}.`;
+    }
+    if (/quel age|age de/.test(nq)) {
+      if (r.age_at_death != null) return `${personLink(r.id, r.name)} avait ${r.age_at_death} ans à son décès.`;
+      if (r.current_age != null) return `${personLink(r.id, r.name)} a ${r.current_age} ans.`;
+      return `Âge inconnu pour ${personLink(r.id, r.name)}.`;
+    }
+    if (/generation de/.test(nq)) {
+      return `${personLink(r.id, r.name)} est en ${genLabel(r.generation)} — ${escapeHtml(genTitle(r.generation))}.`;
+    }
+    if (/par le sang|par alliance|sang ou alliance/.test(nq)) {
+      return `${personLink(r.id, r.name)} fait partie de la famille : ${escapeHtml(relTitle(r.relation))}`;
+    }
+    if (/profession de|metier de/.test(nq)) {
+      return r.occupation ? `Profession de ${personLink(r.id, r.name)} : ${escapeHtml(r.occupation)}.` : `Profession inconnue pour ${personLink(r.id, r.name)}.`;
+    }
+    return personSummaryHTML(r);
+  }
+  if (ambiguous.length) return disambiguationAnswerHTML(ambiguous);
+
+  return `<p class="card-note">Je n'ai pas compris cette question. Essayez de mentionner un nom complet (tel qu'il apparaît sur une fiche), ou cliquez sur un exemple ci-dessous.</p>`;
+}
+
+function renderQuestions(){
+  const panel = document.getElementById('panel-questions');
+  const rootName = DATA.meta.root_name || 'la personne racine';
+  const cousinLike = DATA.individuals.find(r => r.relation === 'blood' && r.id !== DATA.meta.root_individual && r.generation === 0)
+    || DATA.individuals.find(r => r.relation === 'blood' && r.id !== DATA.meta.root_individual);
+
+  const examples = [
+    `Qui sont les parents de ${rootName} ?`,
+    `Quand est né(e) ${rootName} ?`,
+    `Quel est le patronyme le plus fréquent ?`,
+    `Qui est le doyen actuel ?`,
+    `Combien de personnes dans cet arbre ?`,
+  ];
+  if (cousinLike) examples.push(`Quel est le lien entre ${rootName} et ${cousinLike.name} ?`);
+
+  panel.innerHTML = `
+    ${sectionTitle('10', 'Questions')}
+    <div class="note-box">Moteur local de reconnaissance de motifs (aucune IA, aucune connexion requise) : il comprend un ensemble de tournures courantes en français, pas n'importe quelle question. Mentionnez si possible le nom complet d'une personne, tel qu'il apparaît sur sa fiche.</div>
+    <div class="search-bar">
+      <input type="text" id="qaInput" placeholder="Posez une question sur cet arbre…">
+      <button type="button" class="btn" id="qaAsk">Demander</button>
+    </div>
+    <div class="chip-cloud" id="qaExamples" style="margin-top:10px;">
+      ${examples.map(e => `<span class="chip qa-example" style="cursor:pointer;">${escapeHtml(e)}</span>`).join('')}
+    </div>
+    <div class="card wide qa-answer" id="qaAnswer" style="margin-top:16px;"><p class="card-note">La réponse s'affichera ici.</p></div>
+  `;
+
+  const input = document.getElementById('qaInput');
+  const answerBox = document.getElementById('qaAnswer');
+  function ask(){
+    answerBox.innerHTML = answerQuestion(input.value);
+  }
+  document.getElementById('qaAsk').addEventListener('mousedown', ask);
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') ask(); });
+  document.getElementById('qaExamples').addEventListener('mousedown', e => {
+    const chip = e.target.closest('.qa-example');
+    if (!chip) return;
+    input.value = chip.textContent;
+    ask();
+  });
+}
+
+/* ------------------------------------------------------------------ */
 /* Fiche individuelle (modale)                                          */
 /* ------------------------------------------------------------------ */
 
@@ -1105,7 +1422,7 @@ function openFamilyEditModal(famId){
 function renderEdition(){
   const panel = document.getElementById('panel-edition');
   panel.innerHTML = `
-    ${sectionTitle('10', 'Édition')}
+    ${sectionTitle('11', 'Édition')}
     <div class="note-box">Les modifications ne sont conservées que dans cette page (mémoire du navigateur). Pensez à <b>exporter en GEDCOM</b> pour sauvegarder votre travail, ou à le committer/pousser vous-même si ce fichier fait partie d'un dépôt.</div>
 
     <div class="card wide">
@@ -1222,6 +1539,7 @@ function refresh(){
   renderIndividusPanel();
   renderArbre();
   renderCalendrier();
+  renderQuestions();
   renderEdition();
 
   if (document.getElementById('modalOverlay').classList.contains('open') && currentFicheId) {

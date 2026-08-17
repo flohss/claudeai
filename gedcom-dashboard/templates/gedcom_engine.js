@@ -442,6 +442,29 @@ function computeGenerations(gs, root){
   return generation;
 }
 
+/** Ascendants de `id` avec leur distance générationnelle (0 = id lui-même,
+ * 1 = parent, 2 = grand-parent…). Utilisé par le calculateur de lien de
+ * parenté (recherche du plus proche ancêtre commun entre deux personnes). */
+function ancestorDepths(gs, id){
+  const depths = new Map([[id, 0]]);
+  const queue = [id];
+  let head = 0;
+  while (head < queue.length) {
+    const cur = queue[head++];
+    const d = depths.get(cur);
+    const ind = gs.individuals.get(cur);
+    if (!ind) continue;
+    for (const famcId of ind.famc) {
+      const fam = gs.families.get(famcId);
+      if (!fam) continue;
+      for (const parent of [fam.husb, fam.wife]) {
+        if (parent && !depths.has(parent)) { depths.set(parent, d + 1); queue.push(parent); }
+      }
+    }
+  }
+  return depths;
+}
+
 /** Tous les ascendants de `startId` (y compris lui-même), en remontant les FAMC. */
 function collectAncestors(gs, startId){
   const acc = new Set([startId]);
