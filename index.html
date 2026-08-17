@@ -441,8 +441,21 @@
       const n = state.nodes[id];
       const p = layout.pos[id];
       if(!p) return;
-      const g = el("g", {transform:`translate(${p.x},${p.y})`}, nodeLayer);
-      el("rect", {width:p.w, height:p.h, rx:10, ry:10, fill:n.bg, stroke:"rgba(0,0,0,0.08)"}, g);
+      const g = el("g", {transform:`translate(${p.x},${p.y})`, "class":"schema-node"}, nodeLayer);
+      g.style.cursor = "pointer";
+      g.addEventListener("click", () => loadNodeIntoForm(id));
+      const isSelected = editingId === id;
+      el("rect", {
+        width:p.w, height:p.h, rx:10, ry:10, fill:n.bg,
+        stroke: isSelected ? "#2f4bd6" : "rgba(0,0,0,0.08)",
+        "stroke-width": isSelected ? "3" : "1"
+      }, g);
+      if(isSelected){
+        el("rect", {
+          x:-4, y:-4, width:p.w+8, height:p.h+8, rx:14, ry:14, fill:"none",
+          stroke:"#2f4bd6", "stroke-width":"1.5", "stroke-dasharray":"4 3", opacity:"0.6"
+        }, g);
+      }
 
       const iconAllow = n.icon ? ICON_W : 0;
       const textX = PAD_X + iconAllow;
@@ -632,6 +645,8 @@
     $("#saveNodeBtn").textContent = "Ajouter le bloc";
     $("#cancelEditBtn").style.display = "none";
     refreshParentList();
+    render();
+    refreshNodeList();
   }
 
   function loadNodeIntoForm(id){
@@ -656,6 +671,10 @@
     $("#saveNodeBtn").textContent = "Enregistrer les modifications";
     $("#cancelEditBtn").style.display = "inline-block";
     refreshParentList();
+    render();
+    refreshNodeList();
+    $("#formTitle").scrollIntoView({behavior:"smooth", block:"start"});
+    $("#nodeLabel").focus();
   }
 
   function currentIconValue(){
