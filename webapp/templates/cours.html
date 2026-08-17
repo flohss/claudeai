@@ -37,6 +37,227 @@
     {% for paragraphe in chapitre.paragraphes %}
     <p>{{ paragraphe }}</p>
     {% endfor %}
+
+    {% if loop.index == 3 %}
+    <div class="schema-cours">
+      <svg viewBox="0 0 300 150" xmlns="http://www.w3.org/2000/svg">
+        <line x1="30" y1="35" x2="255" y2="68" style="stroke:var(--accent);stroke-width:5"/>
+        <line x1="30" y1="115" x2="255" y2="72" style="stroke:var(--mauvais);stroke-width:2"/>
+        <line x1="255" y1="90" x2="255" y2="72" style="stroke:var(--texte-attenue);stroke-width:2;stroke-dasharray:3,3"/>
+        <circle cx="30" cy="35" r="6" style="fill:var(--texte)"/>
+        <circle cx="30" cy="115" r="6" style="fill:var(--texte)"/>
+        <circle cx="255" cy="70" r="7" style="fill:var(--texte)"/>
+        <text x="30" y="20" text-anchor="middle" style="font-size:11px;fill:var(--texte-attenue)">entrée A</text>
+        <text x="30" y="135" text-anchor="middle" style="font-size:11px;fill:var(--texte-attenue)">entrée B</text>
+        <text x="270" y="60" text-anchor="start" style="font-size:11px;fill:var(--texte)">sortie</text>
+        <text x="255" y="103" text-anchor="middle" style="font-size:10px;fill:var(--texte-attenue)">+ seuil de base</text>
+        <text x="140" y="42" text-anchor="middle" style="font-size:10px;fill:var(--accent)">× bouton fort (+)</text>
+        <text x="140" y="128" text-anchor="middle" style="font-size:10px;fill:var(--mauvais)">× bouton faible (−)</text>
+      </svg>
+      <p class="schema-cours-legende">Chaque entrée est multipliée par son bouton, additionnée aux autres, puis on ajoute le seuil de base.</p>
+    </div>
+    {% endif %}
+
+    {% if loop.index == 4 %}
+    <div class="schema-cours">
+      <svg viewBox="0 0 300 150" xmlns="http://www.w3.org/2000/svg">
+        <line x1="30" y1="15" x2="30" y2="130" style="stroke:var(--bordure);stroke-width:1"/>
+        <line x1="25" y1="130" x2="290" y2="130" style="stroke:var(--bordure);stroke-width:1"/>
+        <line x1="30" y1="75" x2="285" y2="75" style="stroke:var(--texte-attenue);stroke-width:1;stroke-dasharray:3,3"/>
+        <path d="M40,120 C160,120 160,25 280,25" style="fill:none;stroke:var(--accent);stroke-width:3"/>
+        <text x="16" y="128" text-anchor="end" style="font-size:10px;fill:var(--texte-attenue)">0</text>
+        <text x="16" y="30" text-anchor="end" style="font-size:10px;fill:var(--texte-attenue)">1</text>
+        <text x="16" y="79" text-anchor="end" style="font-size:9px;fill:var(--texte-attenue)">0.5</text>
+        <text x="160" y="146" text-anchor="middle" style="font-size:10px;fill:var(--texte-attenue)">nombre libre en entrée</text>
+      </svg>
+      <p class="schema-cours-legende">Peu importe le nombre de départ (très négatif ou très positif), la sortie reste toujours entre 0 et 1.</p>
+    </div>
+    {% endif %}
+
+    {% if loop.index == 5 %}
+    <div class="schema-cours">
+      <svg viewBox="0 0 320 170" xmlns="http://www.w3.org/2000/svg">
+        <text x="160" y="12" text-anchor="middle" style="font-size:10px;fill:var(--texte-attenue)">couche cachée ("réflexion")</text>
+        <line x1="30" y1="40" x2="160" y2="20" style="stroke:var(--accent);stroke-width:2;opacity:0.6"/>
+        <line x1="30" y1="40" x2="160" y2="60" style="stroke:var(--mauvais);stroke-width:2;opacity:0.6"/>
+        <line x1="30" y1="40" x2="160" y2="100" style="stroke:var(--accent);stroke-width:1.5;opacity:0.5"/>
+        <line x1="30" y1="40" x2="160" y2="140" style="stroke:var(--mauvais);stroke-width:1.5;opacity:0.5"/>
+        <line x1="30" y1="130" x2="160" y2="20" style="stroke:var(--mauvais);stroke-width:1.5;opacity:0.5"/>
+        <line x1="30" y1="130" x2="160" y2="60" style="stroke:var(--accent);stroke-width:2;opacity:0.6"/>
+        <line x1="30" y1="130" x2="160" y2="100" style="stroke:var(--mauvais);stroke-width:2;opacity:0.6"/>
+        <line x1="30" y1="130" x2="160" y2="140" style="stroke:var(--accent);stroke-width:1.5;opacity:0.5"/>
+        <line x1="160" y1="20" x2="290" y2="85" style="stroke:var(--accent);stroke-width:2;opacity:0.6"/>
+        <line x1="160" y1="60" x2="290" y2="85" style="stroke:var(--mauvais);stroke-width:1.5;opacity:0.5"/>
+        <line x1="160" y1="100" x2="290" y2="85" style="stroke:var(--accent);stroke-width:2;opacity:0.6"/>
+        <line x1="160" y1="140" x2="290" y2="85" style="stroke:var(--mauvais);stroke-width:1.5;opacity:0.5"/>
+        <circle cx="30" cy="40" r="6" style="fill:var(--texte)"/>
+        <circle cx="30" cy="130" r="6" style="fill:var(--texte)"/>
+        <circle cx="160" cy="20" r="5" style="fill:var(--texte)"/>
+        <circle cx="160" cy="60" r="5" style="fill:var(--texte)"/>
+        <circle cx="160" cy="100" r="5" style="fill:var(--texte)"/>
+        <circle cx="160" cy="140" r="5" style="fill:var(--texte)"/>
+        <circle cx="290" cy="85" r="7" style="fill:var(--texte)"/>
+        <text x="30" y="25" text-anchor="middle" style="font-size:10px;fill:var(--texte-attenue)">entrée A</text>
+        <text x="30" y="150" text-anchor="middle" style="font-size:10px;fill:var(--texte-attenue)">entrée B</text>
+        <text x="290" y="105" text-anchor="middle" style="font-size:10px;fill:var(--texte)">sortie</text>
+      </svg>
+      <p class="schema-cours-legende">Chaque neurone caché regarde toutes les entrées à sa manière, avant que la sortie ne regarde tous ces résultats intermédiaires.</p>
+    </div>
+    {% endif %}
+
+    {% if loop.index == 6 %}
+    <div class="schema-cours">
+      <div class="schema-duo">
+        <div>
+          <svg viewBox="0 0 150 130" xmlns="http://www.w3.org/2000/svg">
+            <line x1="10" y1="60" x2="140" y2="60" style="stroke:var(--bon);stroke-width:1;stroke-dasharray:3,3"/>
+            <polyline points="15,20 35,55 55,45 75,58 95,55 115,60 135,58" style="fill:none;stroke:var(--accent);stroke-width:2"/>
+            <text x="75" y="120" text-anchor="middle" style="font-size:10px;fill:var(--texte-attenue)">vitesse bien réglée</text>
+          </svg>
+        </div>
+        <div>
+          <svg viewBox="0 0 150 130" xmlns="http://www.w3.org/2000/svg">
+            <line x1="10" y1="60" x2="140" y2="60" style="stroke:var(--bon);stroke-width:1;stroke-dasharray:3,3"/>
+            <polyline points="15,15 35,105 55,20 75,110 95,15 115,110 135,25" style="fill:none;stroke:var(--mauvais);stroke-width:2"/>
+            <text x="75" y="120" text-anchor="middle" style="font-size:10px;fill:var(--texte-attenue)">vitesse trop grande</text>
+          </svg>
+        </div>
+      </div>
+      <p class="schema-cours-legende">La ligne pointillée est la valeur à atteindre. À gauche : petits pas, elle converge. À droite : pas trop grands, elle saute sans arrêt par-dessus la cible.</p>
+    </div>
+    {% endif %}
+
+    {% if loop.index == 7 %}
+    <div class="schema-cours">
+      <svg viewBox="0 0 300 150" xmlns="http://www.w3.org/2000/svg">
+        <line x1="30" y1="15" x2="30" y2="130" style="stroke:var(--bordure);stroke-width:1"/>
+        <line x1="25" y1="130" x2="290" y2="130" style="stroke:var(--bordure);stroke-width:1"/>
+        <path d="M35,25 C90,25 70,110 140,120 C210,128 250,130 285,130" style="fill:none;stroke:var(--accent);stroke-width:3"/>
+        <text x="16" y="128" text-anchor="end" style="font-size:10px;fill:var(--texte-attenue)">0</text>
+        <text x="30" y="10" text-anchor="middle" style="font-size:9px;fill:var(--texte-attenue)">erreur</text>
+        <text x="160" y="146" text-anchor="middle" style="font-size:10px;fill:var(--texte-attenue)">essais, au fil du temps</text>
+      </svg>
+      <p class="schema-cours-legende">Une IA qui apprend bien : la courbe descend, puis se stabilise près de zéro.</p>
+    </div>
+    {% endif %}
+
+    {% if loop.index == 8 %}
+    <div class="schema-cours">
+      <div class="schema-duo">
+        <div>
+          <svg viewBox="0 0 150 100" xmlns="http://www.w3.org/2000/svg">
+            <line x1="15" y1="60" x2="135" y2="60" style="stroke:var(--bordure);stroke-width:2"/>
+            <circle cx="95" cy="60" r="6" style="fill:var(--accent)"/>
+            <text x="95" y="42" text-anchor="middle" style="font-size:10px;fill:var(--texte)">215 000 €</text>
+            <text x="75" y="85" text-anchor="middle" style="font-size:9px;fill:var(--texte-attenue)">n'importe quelle valeur</text>
+          </svg>
+        </div>
+        <div>
+          <svg viewBox="0 0 150 100" xmlns="http://www.w3.org/2000/svg">
+            <g transform="translate(75,45)">
+              <circle r="35" style="fill:none;stroke:var(--bordure);stroke-width:14"/>
+              <circle r="35" style="fill:none;stroke:var(--accent);stroke-width:14;stroke-dasharray:153.9 219.9;stroke-dashoffset:0" transform="rotate(-90)"/>
+              <circle r="35" style="fill:none;stroke:var(--bon);stroke-width:14;stroke-dasharray:44 219.9;stroke-dashoffset:-153.9" transform="rotate(-90)"/>
+              <circle r="35" style="fill:none;stroke:var(--mauvais);stroke-width:14;stroke-dasharray:22 219.9;stroke-dashoffset:-197.9" transform="rotate(-90)"/>
+            </g>
+            <text x="75" y="95" text-anchor="middle" style="font-size:9px;fill:var(--texte-attenue)">3 catégories se partagent 100%</text>
+          </svg>
+        </div>
+      </div>
+      <p class="schema-cours-legende">À gauche : deviner un nombre libre (module 2). À droite : partager 100% de confiance entre plusieurs catégories (modules 3 et 8).</p>
+    </div>
+    {% endif %}
+
+    {% if loop.index == 9 %}
+    <div class="schema-cours">
+      <div style="display:flex; justify-content:center;">
+        <div class="legende-forme">
+          <div class="mini-grille-pixels">
+            <div class="pixel pixel-allume"></div><div class="pixel"></div><div class="pixel"></div><div class="pixel pixel-allume"></div>
+            <div class="pixel"></div><div class="pixel pixel-allume"></div><div class="pixel pixel-allume"></div><div class="pixel"></div>
+            <div class="pixel"></div><div class="pixel pixel-allume"></div><div class="pixel pixel-allume"></div><div class="pixel"></div>
+            <div class="pixel pixel-allume"></div><div class="pixel"></div><div class="pixel"></div><div class="pixel pixel-allume"></div>
+          </div>
+          <span>16 pixels, chacun 0 (éteint) ou 1 (allumé)</span>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if loop.index == 11 %}
+    <div class="schema-cours">
+      <svg viewBox="0 0 280 220" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="fleche11" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" style="fill:var(--texte-attenue)"/>
+          </marker>
+        </defs>
+        <rect x="20" y="20" width="110" height="40" rx="8" style="fill:var(--carte);stroke:var(--accent);stroke-width:2"/>
+        <text x="75" y="44" text-anchor="middle" style="font-size:11px;fill:var(--texte)">Situation</text>
+        <rect x="150" y="90" width="110" height="40" rx="8" style="fill:var(--carte);stroke:var(--accent);stroke-width:2"/>
+        <text x="205" y="114" text-anchor="middle" style="font-size:11px;fill:var(--texte)">Action choisie</text>
+        <rect x="20" y="160" width="110" height="40" rx="8" style="fill:var(--carte);stroke:var(--accent);stroke-width:2"/>
+        <text x="75" y="184" text-anchor="middle" style="font-size:11px;fill:var(--texte)">Récompense</text>
+        <path d="M125,45 C160,55 165,75 195,88" style="fill:none;stroke:var(--texte-attenue);stroke-width:2" marker-end="url(#fleche11)"/>
+        <path d="M195,132 C165,150 130,155 105,163" style="fill:none;stroke:var(--texte-attenue);stroke-width:2" marker-end="url(#fleche11)"/>
+        <path d="M60,158 C35,120 35,80 55,62" style="fill:none;stroke:var(--texte-attenue);stroke-width:2" marker-end="url(#fleche11)"/>
+        <text x="140" y="210" text-anchor="middle" style="font-size:9px;fill:var(--texte-attenue)">... et ça recommence, situation après situation.</text>
+      </svg>
+      <p class="schema-cours-legende">La mémoire des choix retient, pour chaque situation, la note de chaque action — mise à jour à chaque récompense reçue.</p>
+    </div>
+    {% endif %}
+
+    {% if loop.index == 12 %}
+    <div class="schema-cours">
+      <svg viewBox="0 0 280 160" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="45" cy="35" r="4" style="fill:var(--accent)"/>
+        <circle cx="55" cy="45" r="4" style="fill:var(--accent)"/>
+        <circle cx="40" cy="50" r="4" style="fill:var(--accent)"/>
+        <circle cx="60" cy="38" r="4" style="fill:var(--accent)"/>
+        <circle cx="200" cy="35" r="4" style="fill:var(--bon)"/>
+        <circle cx="220" cy="45" r="4" style="fill:var(--bon)"/>
+        <circle cx="205" cy="55" r="4" style="fill:var(--bon)"/>
+        <circle cx="225" cy="38" r="4" style="fill:var(--bon)"/>
+        <circle cx="120" cy="115" r="4" style="fill:var(--mauvais)"/>
+        <circle cx="140" cy="125" r="4" style="fill:var(--mauvais)"/>
+        <circle cx="125" cy="130" r="4" style="fill:var(--mauvais)"/>
+        <circle cx="145" cy="110" r="4" style="fill:var(--mauvais)"/>
+        <circle cx="50" cy="42" r="8" style="fill:var(--accent);stroke:var(--texte);stroke-width:2"/>
+        <circle cx="212" cy="43" r="8" style="fill:var(--bon);stroke:var(--texte);stroke-width:2"/>
+        <circle cx="132" cy="120" r="8" style="fill:var(--mauvais);stroke:var(--texte);stroke-width:2"/>
+      </svg>
+      <p class="schema-cours-legende">Chaque petit point rejoint le centre (gros cercle) le plus proche ; chaque centre se déplace ensuite au milieu de son groupe.</p>
+    </div>
+    {% endif %}
+
+    {% if loop.index == 13 %}
+    <div class="schema-cours">
+      <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap; justify-content:center;">
+        <div>
+          <p style="text-align:center; font-size:0.8rem; color:var(--texte-attenue); margin:0 0 6px;">Génération 1</p>
+          <div class="mot-evolution" style="min-height:auto;">
+            <span class="lettre">R</span><span class="lettre">K</span><span class="lettre-correcte">O</span><span class="lettre">Z</span><span class="lettre">T</span>
+          </div>
+        </div>
+        <span style="font-size:1.4rem; color:var(--texte-attenue);">&rarr;</span>
+        <div>
+          <p style="text-align:center; font-size:0.8rem; color:var(--texte-attenue); margin:0 0 6px;">Génération 40</p>
+          <div class="mot-evolution" style="min-height:auto;">
+            <span class="lettre-correcte">R</span><span class="lettre-correcte">O</span><span class="lettre-correcte">B</span><span class="lettre">Z</span><span class="lettre-correcte">T</span>
+          </div>
+        </div>
+        <span style="font-size:1.4rem; color:var(--texte-attenue);">&rarr;</span>
+        <div>
+          <p style="text-align:center; font-size:0.8rem; color:var(--texte-attenue); margin:0 0 6px;">Génération 80</p>
+          <div class="mot-evolution" style="min-height:auto;">
+            <span class="lettre-correcte">R</span><span class="lettre-correcte">O</span><span class="lettre-correcte">B</span><span class="lettre-correcte">O</span><span class="lettre-correcte">T</span>
+          </div>
+        </div>
+      </div>
+      <p class="schema-cours-legende">Génération après génération, les lettres correctes (vertes) se fixent et se transmettent, jusqu'à trouver le mot secret "ROBOT".</p>
+    </div>
+    {% endif %}
+
     {% if chapitre.module_lie is not none %}
     <p class="chapitre-lien">
       {% if chapitre.module_lie == 10 %}

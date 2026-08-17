@@ -886,3 +886,35 @@ canvas {
 .chapitre-lien a:hover {
     background: #2563eb;
 }
+
+.schema-cours {
+    margin: 16px 0;
+    padding: 12px;
+    background: var(--fond);
+    border: 1px solid var(--bordure);
+    border-radius: 10px;
+}
+
+.schema-cours svg {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+
+.schema-cours-legende {
+    text-align: center;
+    font-size: 0.8rem;
+    color: var(--texte-attenue);
+    margin-top: 8px;
+}
+
+.schema-duo {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.schema-duo > div {
+    flex: 1 1 200px;
+    min-width: 0;
+}
