@@ -594,7 +594,12 @@ function analyzeGedcom(gs){
       id: xref, husb: fam.husb, wife: fam.wife,
       husb_name: husb ? husb.name : null, wife_name: wife ? wife.name : null,
       children: fam.chil, n_children: fam.chil.length,
-      marriage: { year: mYear, display: fam.marriage.date ? gedDateDisplay(fam.marriage.date) : null, place: fam.marriage.place, known: fam.marriage.known },
+      marriage: {
+        year: mYear,
+        month: fam.marriage.date ? fam.marriage.date.month : null,
+        day: fam.marriage.date ? fam.marriage.date.day : null,
+        display: fam.marriage.date ? gedDateDisplay(fam.marriage.date) : null, place: fam.marriage.place, known: fam.marriage.known,
+      },
       divorced: fam.divorced,
       age_husb_at_marriage: ageHusb, age_wife_at_marriage: ageWife, spouse_age_gap: ageGap,
     });

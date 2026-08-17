@@ -321,6 +321,32 @@ table.data-table tr:hover td{ background: rgba(168,121,31,0.06); }
 .tree-side h4{ font-size:12px; text-transform:uppercase; letter-spacing:0.06em; color: var(--gold); margin:0 0 6px; }
 
 /* ---------------------------------------------------------------- */
+/* Calendrier perpétuel                                               */
+/* ---------------------------------------------------------------- */
+.cal-controls{ display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+.cal-controls select{
+  padding:8px 10px; font-family: var(--font-serif); font-size:13px; border:1px solid var(--line); border-radius:3px; background:#fffdf7;
+}
+.cal-today{
+  background: linear-gradient(135deg, rgba(168,121,31,0.12), rgba(122,39,51,0.06));
+  border:1px solid var(--gold-light); border-radius:3px; padding:14px 18px; margin-top:16px;
+}
+.cal-today h3{ margin:0 0 8px; font-family: var(--font-display); color: var(--maroon-dark); font-size:15px; }
+.cal-month{ margin-top:20px; }
+.cal-month h3{
+  font-family: var(--font-display); color: var(--maroon-dark); font-size:17px;
+  border-bottom:1px solid var(--line); padding-bottom:6px; margin:0 0 10px;
+}
+.cal-day{ display:grid; grid-template-columns:52px 1fr; gap:12px; padding:7px 0; border-bottom:1px solid var(--line-soft); }
+.cal-day:last-child{ border-bottom:none; }
+.cal-day .cd-num{ font-family: var(--font-display); font-size:19px; color: var(--gold); text-align:right; line-height:1.3; }
+.cal-day .cd-events{ display:flex; flex-direction:column; gap:4px; }
+.cal-event{ font-size:12.5px; color: var(--ink); }
+.cal-event .ce-icon{ display:inline-block; width:16px; text-align:center; }
+.cal-event .ce-year{ color: var(--ink-faint); }
+.cal-empty-note{ color: var(--ink-faint); font-size:12.5px; font-style:italic; padding:10px 0; }
+
+/* ---------------------------------------------------------------- */
 /* Formulaires d'édition                                              */
 /* ---------------------------------------------------------------- */
 .edit-form{ display:grid; grid-template-columns: repeat(4, 1fr); gap:12px 14px; min-width:0; }
@@ -393,6 +419,7 @@ footer.pagefoot{
   <button data-tab="qualite">Qualité des données</button>
   <button data-tab="individus">Fiches individuelles</button>
   <button data-tab="arbre">Arbre</button>
+  <button data-tab="calendrier">Calendrier perpétuel</button>
   <button data-tab="edition">Édition</button>
 </nav>
 
@@ -405,6 +432,7 @@ footer.pagefoot{
   <section class="panel" id="panel-qualite"></section>
   <section class="panel" id="panel-individus"></section>
   <section class="panel" id="panel-arbre"></section>
+  <section class="panel" id="panel-calendrier"></section>
   <section class="panel" id="panel-edition"></section>
 </main>
 

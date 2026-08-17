@@ -723,6 +723,105 @@ function renderArbre(){
 }
 
 /* ------------------------------------------------------------------ */
+/* Calendrier perpétuel (naissances / mariages / décès par jour de l'année) */
+/* ------------------------------------------------------------------ */
+
+const CAL_TYPE_LABEL = { naissance: 'Naissance', deces: 'Décès', mariage: 'Mariage' };
+const CAL_TYPE_PILL = { naissance: 'ok', deces: 'bad', mariage: 'warn' };
+
+function collectCalendarEvents(){
+  const events = [];
+  for (const r of DATA.individuals) {
+    if (r.birth.month && r.birth.day) events.push({ month: r.birth.month, day: r.birth.day, year: r.birth.year, type: 'naissance', ids: [r.id], label: r.name });
+    if (r.death.month && r.death.day) events.push({ month: r.death.month, day: r.death.day, year: r.death.year, type: 'deces', ids: [r.id], label: r.name });
+  }
+  for (const f of DATA.families) {
+    if (f.marriage.month && f.marriage.day) {
+      events.push({ month: f.marriage.month, day: f.marriage.day, year: f.marriage.year, type: 'mariage', ids: [f.husb, f.wife].filter(Boolean), label: `${f.husb_name || '?'} × ${f.wife_name || '?'}` });
+    }
+  }
+  return events;
+}
+
+function calEventHTML(ev){
+  const names = ev.ids.length
+    ? ev.ids.map(id => personLink(id, INDEX[id] ? INDEX[id].name : null)).join(ev.type === 'mariage' ? ' &times; ' : '')
+    : escapeHtml(ev.label);
+  return `<div class="cal-event"><span class="pill ${CAL_TYPE_PILL[ev.type]}">${CAL_TYPE_LABEL[ev.type]}</span> ${names} <span class="ce-year">${ev.year ? '(' + ev.year + ')' : '(année inconnue)'}</span></div>`;
+}
+
+function renderCalendrier(){
+  const panel = document.getElementById('panel-calendrier');
+  const events = collectCalendarEvents();
+  const byMonth = Array.from({ length: 12 }, () => new Map());
+  for (const ev of events) {
+    const m = byMonth[ev.month - 1];
+    if (!m.has(ev.day)) m.set(ev.day, []);
+    m.get(ev.day).push(ev);
+  }
+  for (const m of byMonth) for (const list of m.values()) list.sort((a, b) => (a.year || 9999) - (b.year || 9999));
+
+  const now = new Date();
+  const todayMonth = now.getMonth() + 1, todayDay = now.getDate();
+  const todayEvents = byMonth[todayMonth - 1].get(todayDay) || [];
+  const monthOptions = MONTH_LABELS_FR.map((label, i) =>
+    `<option value="${i + 1}" ${i + 1 === todayMonth ? 'selected' : ''}>${label}</option>`).join('');
+
+  panel.innerHTML = `
+    ${sectionTitle('09', 'Calendrier perpétuel')}
+    <div class="note-box">Naissances, mariages et décès classés par jour de l'année, toutes années confondues — pour repérer les anniversaires familiaux, jour après jour.</div>
+    <div class="cal-controls">
+      <label style="font-size:12.5px; color:var(--ink-soft);">Mois : <select id="calMonth"><option value="">Toute l'année</option>${monthOptions}</select></label>
+      <label style="font-size:12.5px; color:var(--ink-soft);">Type :
+        <select id="calType">
+          <option value="">Tous</option>
+          <option value="naissance">Naissances</option>
+          <option value="deces">Décès</option>
+          <option value="mariage">Mariages</option>
+        </select>
+      </label>
+      <input type="text" id="calSearch" placeholder="Rechercher un nom…" style="flex:1; min-width:200px; padding:8px 10px; font-family:var(--font-serif); font-size:13px; border:1px solid var(--line); border-radius:3px; background:#fffdf7;">
+      <span class="count" id="calCount"></span>
+    </div>
+    ${todayEvents.length ? `
+    <div class="cal-today">
+      <h3>Le ${todayDay} ${MONTH_LABELS_FR[todayMonth - 1]}, dans l'histoire familiale</h3>
+      <div class="cd-events">${todayEvents.map(calEventHTML).join('')}</div>
+    </div>` : ''}
+    <div id="calMount" style="max-height:75vh; overflow-y:auto; margin-top:6px;"></div>
+  `;
+
+  function renderList(){
+    const monthFilter = document.getElementById('calMonth').value;
+    const typeFilter = document.getElementById('calType').value;
+    const text = normalize(document.getElementById('calSearch').value);
+    let totalShown = 0;
+    let html = '';
+    const monthsToShow = monthFilter ? [parseInt(monthFilter, 10) - 1] : Array.from({ length: 12 }, (_, i) => i);
+    for (const mi of monthsToShow) {
+      const days = Array.from(byMonth[mi].keys()).sort((a, b) => a - b);
+      let monthHTML = '';
+      for (const day of days) {
+        let list = byMonth[mi].get(day);
+        if (typeFilter) list = list.filter(e => e.type === typeFilter);
+        if (text) list = list.filter(e => normalize(e.label).includes(text));
+        if (!list.length) continue;
+        totalShown += list.length;
+        monthHTML += `<div class="cal-day"><div class="cd-num">${day}</div><div class="cd-events">${list.map(calEventHTML).join('')}</div></div>`;
+      }
+      if (monthHTML) html += `<div class="cal-month"><h3>${MONTH_LABELS_FR[mi]}</h3>${monthHTML}</div>`;
+    }
+    document.getElementById('calMount').innerHTML = html || `<p class="cal-empty-note">Aucun événement daté (jour + mois connus) ne correspond à ces filtres.</p>`;
+    document.getElementById('calCount').textContent = `${fmtInt(totalShown)} événements`;
+  }
+  ['calMonth', 'calType', 'calSearch'].forEach(id => {
+    document.getElementById(id).addEventListener('input', renderList);
+    document.getElementById(id).addEventListener('change', renderList);
+  });
+  renderList();
+}
+
+/* ------------------------------------------------------------------ */
 /* Fiche individuelle (modale)                                          */
 /* ------------------------------------------------------------------ */
 
@@ -1006,7 +1105,7 @@ function openFamilyEditModal(famId){
 function renderEdition(){
   const panel = document.getElementById('panel-edition');
   panel.innerHTML = `
-    ${sectionTitle('09', 'Édition')}
+    ${sectionTitle('10', 'Édition')}
     <div class="note-box">Les modifications ne sont conservées que dans cette page (mémoire du navigateur). Pensez à <b>exporter en GEDCOM</b> pour sauvegarder votre travail, ou à le committer/pousser vous-même si ce fichier fait partie d'un dépôt.</div>
 
     <div class="card wide">
@@ -1122,6 +1221,7 @@ function refresh(){
   renderQualite();
   renderIndividusPanel();
   renderArbre();
+  renderCalendrier();
   renderEdition();
 
   if (document.getElementById('modalOverlay').classList.contains('open') && currentFicheId) {

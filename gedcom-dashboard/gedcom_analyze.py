@@ -296,6 +296,8 @@ def analyze(data: GedcomData) -> dict:
             "n_children": len(fam.chil),
             "marriage": {
                 "year": m_year,
+                "month": fam.marriage.date.month if fam.marriage.date else None,
+                "day": fam.marriage.date.day if fam.marriage.date else None,
                 "display": fam.marriage.date.to_display() if fam.marriage.date else None,
                 "place": fam.marriage.place,
                 "known": fam.marriage.known,
