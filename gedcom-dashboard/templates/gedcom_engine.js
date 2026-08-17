@@ -113,7 +113,7 @@ function tokenizeGedcom(text){
     if (!line.trim()) continue;
     const m = line.match(re);
     if (!m) continue;
-    lines.push([parseInt(m[1], 10), m[2] || null, m[3], m[4] || '']);
+    lines.push([parseInt(m[1], 10), m[2] || null, m[3], m[4] || '', line]);
   }
   return lines;
 }
@@ -122,63 +122,91 @@ function newBlankIndividual(xref){
   return {
     xref,
     given: '', surname: '', full_name: '', sex: 'U',
-    birth: { date: null, place: null, known: false },
-    death: { date: null, place: null, cause: null, known: false },
+    birth: { date: null, place: null, known: false, extra_lines: [] },
+    death: { date: null, place: null, cause: null, known: false, extra_lines: [] },
     occupation: null,
     fams: [], famc: [],
+    extra_lines: [],
   };
 }
 function newBlankFamily(xref){
   return {
     xref, husb: null, wife: null, chil: [],
-    marriage: { date: null, place: null, known: false },
+    marriage: { date: null, place: null, known: false, extra_lines: [] },
     divorced: false,
+    extra_lines: [],
   };
 }
 
+/**
+ * Parse un fichier GEDCOM en préservant, pour chaque individu/famille, les
+ * blocs non interprétés (NOTE, SOUR, RIN, _UID, tags personnalisés…) sous
+ * forme de lignes brutes (extra_lines), et les enregistrements de niveau 0
+ * non gérés (SOUR, OBJE, REPO…) verbatim (otherRecords), afin qu'un cycle
+ * charger → éditer → exporter ne perde aucune donnée non modifiée.
+ */
 function parseGedcomText(text){
   const lines = tokenizeGedcom(text);
   const individuals = new Map();
   const families = new Map();
+  const otherRecords = [];
   let headerSource = null;
   let headerAuthor = null;
   const n = lines.length;
   let i = 0;
 
   while (i < n) {
-    const [level, xref, tag, value] = lines[i];
+    const [level, xref, tag] = lines[i];
 
     if (level === 0 && tag === 'INDI' && xref) {
       const ind = newBlankIndividual(xref);
       i++;
-      let ctxTag = null, ctxObj = null;
+      let topMode = null, eventObj = null, eventSubUnhandled = false;
       while (i < n && lines[i][0] > 0) {
-        const [lv, , ltag, lval] = lines[i];
+        const [lv, , ltag, lval, lraw] = lines[i];
         if (lv === 1) {
-          ctxTag = null; ctxObj = null;
+          eventSubUnhandled = false;
           if (ltag === 'NAME') {
             ind.full_name = lval.replace(/\//g, '').trim();
             const m = lval.match(/^(.*?)\/(.*)\//);
             if (m) { ind.given = m[1].trim(); ind.surname = m[2].trim(); }
             else { ind.given = lval.trim(); }
-            ctxTag = 'NAME';
+            topMode = 'NAME';
           } else if (ltag === 'SEX') {
             ind.sex = (lval.trim()[0]) || 'U';
+            topMode = 'SEX';
           } else if (ltag === 'BIRT') {
-            ind.birth.known = true; ctxTag = 'BIRT'; ctxObj = ind.birth;
+            ind.birth.known = true; topMode = 'BIRT'; eventObj = ind.birth;
           } else if (ltag === 'DEAT') {
-            ind.death.known = true; ctxTag = 'DEAT'; ctxObj = ind.death;
+            ind.death.known = true; topMode = 'DEAT'; eventObj = ind.death;
           } else if (ltag === 'OCCU') {
             ind.occupation = lval.trim() || null;
+            topMode = 'OCCU';
           } else if (ltag === 'FAMS') {
             ind.fams.push(lval.trim());
+            topMode = 'FAMS';
           } else if (ltag === 'FAMC') {
             ind.famc.push(lval.trim());
+            topMode = 'FAMC';
+          } else {
+            topMode = 'UNHANDLED';
+            ind.extra_lines.push(lraw);
           }
-        } else if (lv === 2 && ctxObj && (ctxTag === 'BIRT' || ctxTag === 'DEAT')) {
-          if (ltag === 'DATE') ctxObj.date = parseGedcomDate(lval);
-          else if (ltag === 'PLAC') ctxObj.place = lval.trim() || null;
-          else if (ltag === 'CAUS') ctxObj.cause = lval.trim() || null;
+        } else if (lv === 2) {
+          if ((topMode === 'BIRT' || topMode === 'DEAT') && eventObj) {
+            if (ltag === 'DATE') eventObj.date = parseGedcomDate(lval);
+            else if (ltag === 'PLAC') eventObj.place = lval.trim() || null;
+            else if (ltag === 'CAUS') eventObj.cause = lval.trim() || null;
+            else { eventObj.extra_lines.push(lraw); eventSubUnhandled = true; }
+          } else if (topMode === 'UNHANDLED') {
+            ind.extra_lines.push(lraw);
+          }
+        } else { // lv >= 3
+          if ((topMode === 'BIRT' || topMode === 'DEAT') && eventSubUnhandled && eventObj) {
+            eventObj.extra_lines.push(lraw);
+          } else if (topMode === 'UNHANDLED') {
+            ind.extra_lines.push(lraw);
+          }
         }
         i++;
       }
@@ -189,19 +217,28 @@ function parseGedcomText(text){
     if (level === 0 && tag === 'FAM' && xref) {
       const fam = newBlankFamily(xref);
       i++;
-      let inMarr = false;
+      let topMode = null, eventSubUnhandled = false;
       while (i < n && lines[i][0] > 0) {
-        const [lv, , ltag, lval] = lines[i];
+        const [lv, , ltag, lval, lraw] = lines[i];
         if (lv === 1) {
-          inMarr = false;
-          if (ltag === 'HUSB') fam.husb = lval.trim();
-          else if (ltag === 'WIFE') fam.wife = lval.trim();
-          else if (ltag === 'CHIL') fam.chil.push(lval.trim());
-          else if (ltag === 'MARR') { fam.marriage.known = true; inMarr = true; }
-          else if (ltag === 'DIV') fam.divorced = true;
-        } else if (lv === 2 && inMarr) {
-          if (ltag === 'DATE') fam.marriage.date = parseGedcomDate(lval);
-          else if (ltag === 'PLAC') fam.marriage.place = lval.trim() || null;
+          eventSubUnhandled = false;
+          if (ltag === 'HUSB') { fam.husb = lval.trim(); topMode = 'HUSB'; }
+          else if (ltag === 'WIFE') { fam.wife = lval.trim(); topMode = 'WIFE'; }
+          else if (ltag === 'CHIL') { fam.chil.push(lval.trim()); topMode = 'CHIL'; }
+          else if (ltag === 'MARR') { fam.marriage.known = true; topMode = 'MARR'; }
+          else if (ltag === 'DIV') { fam.divorced = true; topMode = 'DIV'; }
+          else { topMode = 'UNHANDLED'; fam.extra_lines.push(lraw); }
+        } else if (lv === 2) {
+          if (topMode === 'MARR') {
+            if (ltag === 'DATE') fam.marriage.date = parseGedcomDate(lval);
+            else if (ltag === 'PLAC') fam.marriage.place = lval.trim() || null;
+            else { fam.marriage.extra_lines.push(lraw); eventSubUnhandled = true; }
+          } else if (topMode === 'UNHANDLED') {
+            fam.extra_lines.push(lraw);
+          }
+        } else { // lv >= 3
+          if (topMode === 'MARR' && eventSubUnhandled) fam.marriage.extra_lines.push(lraw);
+          else if (topMode === 'UNHANDLED') fam.extra_lines.push(lraw);
         }
         i++;
       }
@@ -209,21 +246,25 @@ function parseGedcomText(text){
       continue;
     }
 
-    if (level === 0 && tag === 'SOUR' && xref) {
+    if (level === 0 && tag !== 'HEAD' && tag !== 'TRLR') {
+      const start = i;
       i++;
       while (i < n && lines[i][0] > 0) {
         const [lv, , ltag, lval] = lines[i];
-        if (lv === 2 && ltag === 'NAME' && headerSource == null) headerSource = lval.trim();
-        if (lv === 1 && ltag === 'AUTH' && headerAuthor == null) headerAuthor = lval.trim();
+        if (tag === 'SOUR') {
+          if (lv === 2 && ltag === 'NAME' && headerSource == null) headerSource = lval.trim();
+          if (lv === 1 && ltag === 'AUTH' && headerAuthor == null) headerAuthor = lval.trim();
+        }
         i++;
       }
+      otherRecords.push(lines.slice(start, i).map(l => l[4]).join('\n'));
       continue;
     }
 
     i++;
   }
 
-  return { individuals, families, headerSource, headerAuthor };
+  return { individuals, families, headerSource, headerAuthor, otherRecords };
 }
 
 /* ---------------------------------------------------------------- */
@@ -257,16 +298,19 @@ function serializeGedcom(gs){
       out.push('1 BIRT');
       if (ind.birth.date) out.push(`2 DATE ${ind.birth.date.raw}`);
       if (ind.birth.place) out.push(`2 PLAC ${ind.birth.place}`);
+      for (const l of (ind.birth.extra_lines || [])) out.push(l);
     }
     if (ind.death.known || ind.death.date || ind.death.place) {
       out.push('1 DEAT Y');
       if (ind.death.date) out.push(`2 DATE ${ind.death.date.raw}`);
       if (ind.death.place) out.push(`2 PLAC ${ind.death.place}`);
       if (ind.death.cause) out.push(`2 CAUS ${ind.death.cause}`);
+      for (const l of (ind.death.extra_lines || [])) out.push(l);
     }
     if (ind.occupation) out.push(`1 OCCU ${ind.occupation}`);
     for (const f of ind.fams) out.push(`1 FAMS ${f}`);
     for (const f of ind.famc) out.push(`1 FAMC ${f}`);
+    for (const l of (ind.extra_lines || [])) out.push(l);
   }
 
   for (const fam of gs.families.values()) {
@@ -278,15 +322,16 @@ function serializeGedcom(gs){
       out.push('1 MARR');
       if (fam.marriage.date) out.push(`2 DATE ${fam.marriage.date.raw}`);
       if (fam.marriage.place) out.push(`2 PLAC ${fam.marriage.place}`);
+      for (const l of (fam.marriage.extra_lines || [])) out.push(l);
     }
     if (fam.divorced) out.push('1 DIV Y');
+    for (const l of (fam.extra_lines || [])) out.push(l);
   }
 
-  if (gs.headerAuthor || gs.headerSource) {
-    out.push('0 @SRC1@ SOUR');
-    if (gs.headerAuthor) out.push(`1 AUTH ${gs.headerAuthor}`);
-    if (gs.headerSource) { out.push('1 DATA'); out.push(`2 NAME ${gs.headerSource}`); }
-  }
+  // Enregistrements de niveau 0 non gérés (SOUR, OBJE, REPO…), préservés
+  // verbatim depuis le fichier chargé : c'est là que vivent déjà AUTH/NAME
+  // d'origine, donc aucun bloc SOUR synthétique n'est nécessaire.
+  for (const rec of (gs.otherRecords || [])) out.push(rec);
 
   out.push('0 TRLR');
   return out.join('\n') + '\n';
@@ -1009,9 +1054,10 @@ function reviveGedcomState(raw){
     const r = raw.individuals[xref];
     individuals.set(xref, {
       xref, given: r.given, surname: r.surname, full_name: r.full_name, sex: r.sex,
-      birth: { date: r.birth.date, place: r.birth.place, known: r.birth.known },
-      death: { date: r.death.date, place: r.death.place, cause: r.death.cause, known: r.death.known },
+      birth: { date: r.birth.date, place: r.birth.place, known: r.birth.known, extra_lines: r.birth.extra_lines || [] },
+      death: { date: r.death.date, place: r.death.place, cause: r.death.cause, known: r.death.known, extra_lines: r.death.extra_lines || [] },
       occupation: r.occupation, fams: r.fams, famc: r.famc,
+      extra_lines: r.extra_lines || [],
     });
   }
   const families = new Map();
@@ -1019,9 +1065,13 @@ function reviveGedcomState(raw){
     const r = raw.families[xref];
     families.set(xref, {
       xref, husb: r.husb, wife: r.wife, chil: r.chil,
-      marriage: { date: r.marriage.date, place: r.marriage.place, known: r.marriage.known },
+      marriage: { date: r.marriage.date, place: r.marriage.place, known: r.marriage.known, extra_lines: r.marriage.extra_lines || [] },
       divorced: r.divorced,
+      extra_lines: r.extra_lines || [],
     });
   }
-  return { individuals, families, headerSource: raw.header_source, headerAuthor: raw.header_author };
+  return {
+    individuals, families, headerSource: raw.header_source, headerAuthor: raw.header_author,
+    otherRecords: raw.other_records || [],
+  };
 }

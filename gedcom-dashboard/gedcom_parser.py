@@ -132,6 +132,9 @@ class Event:
     place: Optional[str] = None
     cause: Optional[str] = None
     known: bool = False  # événement mentionné même sans date/lieu (ex: DEAT Y)
+    # Lignes GEDCOM brutes non interprétées (SOUR, NOTE, TYPE…) rattachées à
+    # cet événement, conservées telles quelles pour ne rien perdre à l'export.
+    extra_lines: list = field(default_factory=list)
 
 
 @dataclass
@@ -146,6 +149,9 @@ class Individual:
     occupation: Optional[str] = None
     fams: list = field(default_factory=list)   # familles où il/elle est conjoint
     famc: list = field(default_factory=list)   # familles où il/elle est enfant
+    # Blocs GEDCOM bruts non interprétés (NOTE, SOUR, RIN, _UID…) rattachés à
+    # cette fiche, conservés tels quels pour ne rien perdre à l'export.
+    extra_lines: list = field(default_factory=list)
 
     @property
     def display_name(self) -> str:
@@ -164,6 +170,7 @@ class Family:
     chil: list = field(default_factory=list)
     marriage: Event = field(default_factory=Event)
     divorced: bool = False
+    extra_lines: list = field(default_factory=list)
 
 
 @dataclass
@@ -172,9 +179,19 @@ class GedcomData:
     families: dict
     header_source: Optional[str] = None
     header_author: Optional[str] = None
+    # Enregistrements de niveau 0 non gérés (SOUR, OBJE, REPO, SUBM…),
+    # conservés verbatim (chaque élément est le bloc multi-lignes complet)
+    # afin que les références (ex. "1 SOUR @S1@" sur un individu) restent
+    # valides après un export.
+    other_records: list = field(default_factory=list)
 
 
 def _tokenize(text: str):
+    """Retourne une liste de tuples (niveau, pointeur, tag, valeur, ligne_brute).
+
+    La ligne brute est conservée telle quelle (hors retour à la ligne) pour
+    permettre de repasser en revue les blocs non interprétés sans perte de
+    fidélité (accents, ponctuation, espacement interne...)."""
     lines = []
     for raw_line in text.splitlines():
         line = raw_line.rstrip("\r\n")
@@ -187,7 +204,7 @@ def _tokenize(text: str):
         xref = m.group(2)
         tag = m.group(3)
         value = m.group(4)
-        lines.append((level, xref, tag, value))
+        lines.append((level, xref, tag, value, line))
     return lines
 
 
@@ -196,22 +213,28 @@ def parse_gedcom(text: str) -> GedcomData:
 
     individuals: dict[str, Individual] = {}
     families: dict[str, Family] = {}
+    other_records: list = []
     header_source = None
     header_author = None
 
     i = 0
     n = len(lines)
     while i < n:
-        level, xref, tag, value = lines[i]
+        level, xref, tag, value, _raw = lines[i]
 
         if level == 0 and tag == "INDI" and xref:
             ind = Individual(xref=xref)
             i += 1
-            # pile de contexte: (level, tag) courant pour gérer BIRT/DEAT/NAME sous-niveaux
-            ctx_stack = []
+            # Mode courant du bloc de niveau 1 en cours (BIRT/DEAT ont un
+            # objet Event associé ; UNHANDLED capture tout bloc non géré
+            # verbatim, y compris ses descendants, pour ne rien perdre.
+            top_mode = None
+            event_obj = None
+            event_sub_unhandled = False
             while i < n and lines[i][0] > 0:
-                lv, lxref, ltag, lval = lines[i]
+                lv, lxref, ltag, lval, lraw = lines[i]
                 if lv == 1:
+                    event_sub_unhandled = False
                     if ltag == "NAME":
                         ind.full_name = lval.replace("/", "").strip()
                         m = re.match(r"^(.*?)/(.*)/", lval)
@@ -220,36 +243,46 @@ def parse_gedcom(text: str) -> GedcomData:
                             ind.surname = m.group(2).strip()
                         else:
                             ind.given = lval.strip()
-                        ctx_stack = [("NAME", None)]
+                        top_mode = "NAME"
                     elif ltag == "SEX":
                         ind.sex = lval.strip()[:1] or "U"
-                        ctx_stack = []
+                        top_mode = "SEX"
                     elif ltag == "BIRT":
                         ind.birth.known = True
-                        ctx_stack = [("BIRT", ind.birth)]
+                        top_mode, event_obj = "BIRT", ind.birth
                     elif ltag == "DEAT":
                         ind.death.known = True
-                        ctx_stack = [("DEAT", ind.death)]
+                        top_mode, event_obj = "DEAT", ind.death
                     elif ltag == "OCCU":
                         ind.occupation = lval.strip()
-                        ctx_stack = []
+                        top_mode = "OCCU"
                     elif ltag == "FAMS":
                         ind.fams.append(lval.strip())
-                        ctx_stack = []
+                        top_mode = "FAMS"
                     elif ltag == "FAMC":
                         ind.famc.append(lval.strip())
-                        ctx_stack = []
+                        top_mode = "FAMC"
                     else:
-                        ctx_stack = []
-                elif lv == 2 and ctx_stack:
-                    ctx_tag, ctx_obj = ctx_stack[-1]
-                    if ctx_tag in ("BIRT", "DEAT") and ctx_obj is not None:
+                        top_mode = "UNHANDLED"
+                        ind.extra_lines.append(lraw)
+                elif lv == 2:
+                    if top_mode in ("BIRT", "DEAT") and event_obj is not None:
                         if ltag == "DATE":
-                            ctx_obj.date = parse_gedcom_date(lval)
+                            event_obj.date = parse_gedcom_date(lval)
                         elif ltag == "PLAC":
-                            ctx_obj.place = lval.strip() or None
+                            event_obj.place = lval.strip() or None
                         elif ltag == "CAUS":
-                            ctx_obj.cause = lval.strip() or None
+                            event_obj.cause = lval.strip() or None
+                        else:
+                            event_obj.extra_lines.append(lraw)
+                            event_sub_unhandled = True
+                    elif top_mode == "UNHANDLED":
+                        ind.extra_lines.append(lraw)
+                else:  # lv >= 3
+                    if top_mode in ("BIRT", "DEAT") and event_sub_unhandled and event_obj is not None:
+                        event_obj.extra_lines.append(lraw)
+                    elif top_mode == "UNHANDLED":
+                        ind.extra_lines.append(lraw)
                 i += 1
             individuals[xref] = ind
             continue
@@ -257,45 +290,74 @@ def parse_gedcom(text: str) -> GedcomData:
         if level == 0 and tag == "FAM" and xref:
             fam = Family(xref=xref)
             i += 1
-            in_marr = False
+            top_mode = None
+            event_sub_unhandled = False
             while i < n and lines[i][0] > 0:
-                lv, lxref, ltag, lval = lines[i]
+                lv, lxref, ltag, lval, lraw = lines[i]
                 if lv == 1:
-                    in_marr = False
+                    event_sub_unhandled = False
                     if ltag == "HUSB":
                         fam.husb = lval.strip()
+                        top_mode = "HUSB"
                     elif ltag == "WIFE":
                         fam.wife = lval.strip()
+                        top_mode = "WIFE"
                     elif ltag == "CHIL":
                         fam.chil.append(lval.strip())
+                        top_mode = "CHIL"
                     elif ltag == "MARR":
                         fam.marriage.known = True
-                        in_marr = True
+                        top_mode = "MARR"
                     elif ltag == "DIV":
                         fam.divorced = True
-                elif lv == 2 and in_marr:
-                    if ltag == "DATE":
-                        fam.marriage.date = parse_gedcom_date(lval)
-                    elif ltag == "PLAC":
-                        fam.marriage.place = lval.strip() or None
+                        top_mode = "DIV"
+                    else:
+                        top_mode = "UNHANDLED"
+                        fam.extra_lines.append(lraw)
+                elif lv == 2:
+                    if top_mode == "MARR":
+                        if ltag == "DATE":
+                            fam.marriage.date = parse_gedcom_date(lval)
+                        elif ltag == "PLAC":
+                            fam.marriage.place = lval.strip() or None
+                        else:
+                            fam.marriage.extra_lines.append(lraw)
+                            event_sub_unhandled = True
+                    elif top_mode == "UNHANDLED":
+                        fam.extra_lines.append(lraw)
+                else:  # lv >= 3
+                    if top_mode == "MARR" and event_sub_unhandled:
+                        fam.marriage.extra_lines.append(lraw)
+                    elif top_mode == "UNHANDLED":
+                        fam.extra_lines.append(lraw)
                 i += 1
             families[xref] = fam
             continue
 
-        if level == 0 and tag == "SOUR" and xref:
+        if level == 0 and tag not in ("HEAD", "TRLR"):
+            # Enregistrement de niveau 0 non géré (SOUR, OBJE, REPO, SUBM…) :
+            # conservé verbatim pour que les références depuis les fiches
+            # (ex. "1 SOUR @S1@") restent valides après un export.
+            start = i
             i += 1
             while i < n and lines[i][0] > 0:
-                lv, lxref, ltag, lval = lines[i]
-                if lv == 2 and ltag == "NAME" and header_source is None:
-                    header_source = lval.strip()
-                if lv == 1 and ltag == "AUTH" and header_author is None:
-                    header_author = lval.strip()
+                lv, lxref, ltag, lval, lraw = lines[i]
+                if tag == "SOUR":
+                    if lv == 2 and ltag == "NAME" and header_source is None:
+                        header_source = lval.strip()
+                    if lv == 1 and ltag == "AUTH" and header_author is None:
+                        header_author = lval.strip()
                 i += 1
+            other_records.append("\n".join(l[4] for l in lines[start:i]))
             continue
 
         i += 1
 
-    return GedcomData(individuals=individuals, families=families, header_source=header_source, header_author=header_author)
+    return GedcomData(
+        individuals=individuals, families=families,
+        header_source=header_source, header_author=header_author,
+        other_records=other_records,
+    )
 
 
 def load_gedcom_file(path: str) -> GedcomData:
@@ -318,20 +380,24 @@ def to_raw_json(data: GedcomData) -> dict:
     for xref, ind in data.individuals.items():
         individuals[xref] = {
             "given": ind.given, "surname": ind.surname, "full_name": ind.full_name, "sex": ind.sex,
-            "birth": {"date": _date_to_dict(ind.birth.date), "place": ind.birth.place, "known": ind.birth.known},
+            "birth": {"date": _date_to_dict(ind.birth.date), "place": ind.birth.place, "known": ind.birth.known,
+                      "extra_lines": ind.birth.extra_lines},
             "death": {"date": _date_to_dict(ind.death.date), "place": ind.death.place,
-                      "cause": ind.death.cause, "known": ind.death.known},
+                      "cause": ind.death.cause, "known": ind.death.known, "extra_lines": ind.death.extra_lines},
             "occupation": ind.occupation, "fams": ind.fams, "famc": ind.famc,
+            "extra_lines": ind.extra_lines,
         }
     families = {}
     for xref, fam in data.families.items():
         families[xref] = {
             "husb": fam.husb, "wife": fam.wife, "chil": fam.chil,
             "marriage": {"date": _date_to_dict(fam.marriage.date), "place": fam.marriage.place,
-                         "known": fam.marriage.known},
+                         "known": fam.marriage.known, "extra_lines": fam.marriage.extra_lines},
             "divorced": fam.divorced,
+            "extra_lines": fam.extra_lines,
         }
     return {
         "individuals": individuals, "families": families,
         "header_source": data.header_source, "header_author": data.header_author,
+        "other_records": data.other_records,
     }

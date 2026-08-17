@@ -549,6 +549,161 @@ function renderIndividusPanel(){
 }
 
 /* ------------------------------------------------------------------ */
+/* Arbre généalogique (pedigree ascendant, en éventail binaire)         */
+/* ------------------------------------------------------------------ */
+
+let treeRootId = null;
+let treeDepth = 5;
+let treeZoom = 1;
+
+/** Père et mère d'un individu d'après STATE (source de vérité HUSB/WIFE). */
+function getParentsFromState(id){
+  const ind = STATE.individuals.get(id);
+  if (!ind || !ind.famc.length) return [null, null];
+  const fam = STATE.families.get(ind.famc[0]);
+  if (!fam) return [null, null];
+  return [fam.husb || null, fam.wife || null];
+}
+
+/** Calcule les positions (x, y) de chaque case d'un pedigree ascendant
+ * binaire à profondeur fixe, en partant de la génération la plus profonde
+ * (positions régulièrement espacées) puis en remontant : chaque ancêtre est
+ * centré verticalement entre ses deux propres branches — c'est l'agencement
+ * classique des chartes de pedigree généalogiques. */
+function computeAncestorLayout(rootId, depth){
+  const NODE_W = 190, NODE_H = 52, COL_W = 230, ROW_H = 62;
+  const idsByGen = [[rootId]];
+  for (let g = 0; g < depth - 1; g++) {
+    const prev = idsByGen[g];
+    const next = new Array(prev.length * 2).fill(null);
+    prev.forEach((id, k) => {
+      const [father, mother] = id ? getParentsFromState(id) : [null, null];
+      next[2 * k] = father;
+      next[2 * k + 1] = mother;
+    });
+    idsByGen.push(next);
+  }
+
+  const yByGen = new Array(depth);
+  const deepest = depth - 1;
+  yByGen[deepest] = idsByGen[deepest].map((_, k) => k * ROW_H);
+  for (let g = deepest - 1; g >= 0; g--) {
+    yByGen[g] = idsByGen[g].map((_, k) => (yByGen[g + 1][2 * k] + yByGen[g + 1][2 * k + 1]) / 2);
+  }
+
+  const nodes = [];
+  const links = [];
+  for (let g = 0; g < depth; g++) {
+    idsByGen[g].forEach((id, k) => {
+      const x = g * COL_W;
+      const y = yByGen[g][k];
+      nodes.push({ id, gen: g, x, y, w: NODE_W, h: NODE_H });
+      if (g < depth - 1) {
+        const fatherId = idsByGen[g + 1][2 * k];
+        const motherId = idsByGen[g + 1][2 * k + 1];
+        const fy = yByGen[g + 1][2 * k], my = yByGen[g + 1][2 * k + 1];
+        if (id != null || fatherId != null) {
+          links.push({ x1: x + NODE_W, y1: y + NODE_H / 2, x2: (g + 1) * COL_W, y2: fy + NODE_H / 2, show: !!(id && fatherId) });
+        }
+        if (id != null || motherId != null) {
+          links.push({ x1: x + NODE_W, y1: y + NODE_H / 2, x2: (g + 1) * COL_W, y2: my + NODE_H / 2, show: !!(id && motherId) });
+        }
+      }
+    });
+  }
+  const width = depth * COL_W;
+  const height = Math.pow(2, deepest) * ROW_H;
+  return { nodes, links, width, height, NODE_W, NODE_H };
+}
+
+function treeNodeHTML(node){
+  if (!node.id) {
+    return `<div class="tree-node empty" style="left:${node.x}px; top:${node.y}px; width:${node.w}px; min-height:${node.h}px;">?</div>`;
+  }
+  const r = INDEX[node.id];
+  if (!r) return '';
+  const isRoot = node.id === treeRootId;
+  return `<div class="tree-node sex-${r.sex}${isRoot ? ' is-root' : ''}" data-open-id="${r.id}" style="left:${node.x}px; top:${node.y}px; width:${node.w}px; min-height:${node.h}px;" title="${escapeHtml(genTitle(r.generation))}">
+    <div class="tn-name">${escapeHtml(r.name)}</div>
+    <div class="tn-dates">${lifeSpanShort(r)}</div>
+  </div>`;
+}
+
+function renderTreeCanvas(){
+  const mount = document.getElementById('treeCanvasMount');
+  if (!mount) return;
+  if (!treeRootId || !INDEX[treeRootId]) {
+    mount.innerHTML = `<p class="card-note" style="padding:20px;">Choisissez une personne pour afficher son arbre ascendant.</p>`;
+    return;
+  }
+  const layout = computeAncestorLayout(treeRootId, treeDepth);
+  const linksSVG = layout.links.filter(l => l.show).map(l =>
+    `<line x1="${l.x1}" y1="${l.y1}" x2="${l.x2}" y2="${l.y2}"/>`
+  ).join('');
+  const nodesHTML = layout.nodes.map(treeNodeHTML).join('');
+  mount.innerHTML = `
+    <div class="tree-canvas" style="width:${layout.width}px; height:${layout.height}px; transform:scale(${treeZoom});">
+      <svg class="tree-links" width="${layout.width}" height="${layout.height}">${linksSVG}</svg>
+      ${nodesHTML}
+    </div>`;
+}
+
+function renderArbre(){
+  const panel = document.getElementById('panel-arbre');
+  if (!treeRootId || !INDEX[treeRootId]) {
+    treeRootId = (DATA.meta && DATA.meta.root_individual && INDEX[DATA.meta.root_individual])
+      ? DATA.meta.root_individual
+      : (DATA.individuals[0] ? DATA.individuals[0].id : null);
+  }
+  const root = treeRootId ? INDEX[treeRootId] : null;
+
+  panel.innerHTML = `
+    ${sectionTitle('08', 'Arbre généalogique')}
+    <div class="note-box">Arbre ascendant (pedigree) centré sur la personne choisie. Cliquez sur une case pour ouvrir sa fiche ; utilisez « Voir dans l'arbre » depuis une fiche pour recentrer l'arbre sur cette personne.</div>
+    <div class="tree-controls">
+      <label style="font-size:12.5px; color:var(--ink-soft);">Personne au centre :
+        <select id="treeRootSelect" style="margin-left:6px;">${personSelectOptions(treeRootId, null).replace('— Aucun —', '— Choisir —')}</select>
+      </label>
+      <label style="font-size:12.5px; color:var(--ink-soft);">Générations :
+        <select id="treeDepthSelect" style="margin-left:6px;">
+          ${[2, 3, 4, 5, 6, 7, 8].map(d => `<option value="${d}" ${d === treeDepth ? 'selected' : ''}>${d}</option>`).join('')}
+        </select>
+      </label>
+      <div class="zoom-row">
+        <button type="button" class="btn secondary small" id="treeZoomOut">&minus;</button>
+        <span id="treeZoomLabel" style="font-size:12.5px; color:var(--ink-soft); min-width:38px; text-align:center;">${Math.round(treeZoom * 100)}%</span>
+        <button type="button" class="btn secondary small" id="treeZoomIn">+</button>
+      </div>
+    </div>
+    <div class="tree-scroll"><div id="treeCanvasMount"></div></div>
+    ${root ? `
+    <div class="tree-side">
+      <h4>Conjoint(s) de ${escapeHtml(root.name)}</h4>
+      <div class="rel-people">${root.spouses.length ? root.spouses.map(id => INDEX[id] ? `<span data-open-id="${id}">${escapeHtml(INDEX[id].name)}</span>` : '').join('') : '<span style="opacity:.55;">Aucun connu</span>'}</div>
+      <h4 style="margin-top:14px;">Enfants de ${escapeHtml(root.name)}</h4>
+      <div class="rel-people">${root.children.length ? root.children.map(id => INDEX[id] ? `<span data-open-id="${id}">${escapeHtml(INDEX[id].name)}</span>` : '').join('') : '<span style="opacity:.55;">Aucun connu</span>'}</div>
+    </div>` : ''}
+  `;
+
+  renderTreeCanvas();
+
+  document.getElementById('treeRootSelect').addEventListener('change', e => {
+    if (e.target.value) { treeRootId = e.target.value; renderArbre(); }
+  });
+  document.getElementById('treeDepthSelect').addEventListener('change', e => {
+    treeDepth = parseInt(e.target.value, 10); renderTreeCanvas();
+  });
+  function applyZoom(delta){
+    treeZoom = Math.max(0.4, Math.min(1.5, Math.round((treeZoom + delta) * 10) / 10));
+    document.getElementById('treeZoomLabel').textContent = `${Math.round(treeZoom * 100)}%`;
+    const canvas = document.querySelector('#treeCanvasMount .tree-canvas');
+    if (canvas) canvas.style.transform = `scale(${treeZoom})`;
+  }
+  document.getElementById('treeZoomIn').addEventListener('mousedown', () => applyZoom(0.1));
+  document.getElementById('treeZoomOut').addEventListener('mousedown', () => applyZoom(-0.1));
+}
+
+/* ------------------------------------------------------------------ */
 /* Fiche individuelle (modale)                                          */
 /* ------------------------------------------------------------------ */
 
@@ -581,6 +736,7 @@ function openIndividual(id){
     <div class="rel-block"><h4>Enfants</h4><div class="rel-people">${relChips(r.children, 'Aucun connu')}</div></div>
     <div class="rel-block"><h4>Frères et sœurs</h4><div class="rel-people">${relChips(r.siblings, 'Aucun connu')}</div></div>
     <div class="fiche-actions">
+      <button type="button" class="btn secondary" id="ficheTreeBtn">Voir dans l'arbre</button>
       <button type="button" class="btn secondary" id="ficheEditBtn">Modifier cette fiche</button>
       <button type="button" class="btn danger" id="ficheDeleteBtn">Supprimer</button>
     </div>
@@ -589,6 +745,12 @@ function openIndividual(id){
   document.getElementById('modalOverlay').classList.add('open');
   currentFicheId = id;
 
+  document.getElementById('ficheTreeBtn').addEventListener('mousedown', () => {
+    closeFiche();
+    treeRootId = id;
+    goToTab('arbre');
+    renderArbre();
+  });
   document.getElementById('ficheEditBtn').addEventListener('mousedown', () => {
     closeFiche();
     goToTab('edition');
@@ -825,7 +987,7 @@ function openFamilyEditModal(famId){
 function renderEdition(){
   const panel = document.getElementById('panel-edition');
   panel.innerHTML = `
-    ${sectionTitle('08', 'Édition')}
+    ${sectionTitle('09', 'Édition')}
     <div class="note-box">Les modifications ne sont conservées que dans cette page (mémoire du navigateur). Pensez à <b>exporter en GEDCOM</b> pour sauvegarder votre travail, ou à le committer/pousser vous-même si ce fichier fait partie d'un dépôt.</div>
 
     <div class="card wide">
@@ -940,6 +1102,7 @@ function refresh(){
   renderPatronymes();
   renderQualite();
   renderIndividusPanel();
+  renderArbre();
   renderEdition();
 
   if (document.getElementById('modalOverlay').classList.contains('open') && currentFicheId) {

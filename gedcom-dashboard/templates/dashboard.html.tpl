@@ -281,6 +281,42 @@ table.data-table tr:hover td{ background: rgba(168,121,31,0.06); }
   padding:10px 14px; font-size:12.5px; color: var(--ink-soft); margin-bottom:16px;
 }
 /* ---------------------------------------------------------------- */
+/* Arbre généalogique (pedigree)                                      */
+/* ---------------------------------------------------------------- */
+.tree-controls{ display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+.tree-controls select{
+  padding:8px 10px; font-family: var(--font-serif); font-size:13px; border:1px solid var(--line); border-radius:3px; background:#fffdf7;
+}
+.tree-controls .zoom-row{ display:flex; align-items:center; gap:8px; margin-left:auto; }
+.tree-scroll{
+  overflow:auto; border:1px solid var(--line-soft); border-radius:3px; background:
+    repeating-linear-gradient(0deg, rgba(160,130,80,0.03) 0px, rgba(160,130,80,0.03) 1px, transparent 1px, transparent 3px), var(--paper);
+  max-height:72vh; margin-top:14px;
+}
+.tree-canvas{ position:relative; transform-origin: top left; }
+.tree-links{ position:absolute; top:0; left:0; pointer-events:none; }
+.tree-links line{ stroke: var(--line); stroke-width:1.6; }
+.tree-node{
+  position:absolute; width:190px; min-height:52px; background:#fffdf7; border:1px solid var(--line);
+  border-left:4px solid var(--ink-faint); border-radius:3px; padding:6px 10px; cursor:pointer; user-select:none;
+  box-shadow:0 1px 3px rgba(58,44,28,0.15); font-size:12.5px; display:flex; flex-direction:column; justify-content:center;
+  transition: background .15s;
+}
+.tree-node:hover{ background:#fff8e8; border-color: var(--gold-light); }
+.tree-node.sex-M{ border-left-color: var(--male); }
+.tree-node.sex-F{ border-left-color: var(--female); }
+.tree-node.is-root{ border-width:2px; border-color: var(--gold); box-shadow:0 2px 10px rgba(168,121,31,0.35); }
+.tree-node .tn-name{ font-weight:bold; color: var(--maroon-dark); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.tree-node .tn-dates{ color: var(--ink-soft); font-size:11px; margin-top:2px; }
+.tree-node.empty{
+  border-style:dashed; border-left-style:dashed; opacity:0.45; cursor:default; align-items:center; justify-content:center;
+  color: var(--ink-faint); font-style:italic;
+}
+.tree-node.empty:hover{ background:#fffdf7; }
+.tree-side{ margin-top:16px; }
+.tree-side h4{ font-size:12px; text-transform:uppercase; letter-spacing:0.06em; color: var(--gold); margin:0 0 6px; }
+
+/* ---------------------------------------------------------------- */
 /* Formulaires d'édition                                              */
 /* ---------------------------------------------------------------- */
 .edit-form{ display:grid; grid-template-columns: repeat(4, 1fr); gap:12px 14px; min-width:0; }
@@ -352,6 +388,7 @@ footer.pagefoot{
   <button data-tab="patronymes">Patronymes</button>
   <button data-tab="qualite">Qualité des données</button>
   <button data-tab="individus">Fiches individuelles</button>
+  <button data-tab="arbre">Arbre</button>
   <button data-tab="edition">Édition</button>
 </nav>
 
@@ -363,6 +400,7 @@ footer.pagefoot{
   <section class="panel" id="panel-patronymes"></section>
   <section class="panel" id="panel-qualite"></section>
   <section class="panel" id="panel-individus"></section>
+  <section class="panel" id="panel-arbre"></section>
   <section class="panel" id="panel-edition"></section>
 </main>
 

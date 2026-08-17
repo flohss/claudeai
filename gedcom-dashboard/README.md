@@ -20,7 +20,7 @@ aucune connexion internet requise.
 
 ## Contenu généré
 
-Le dashboard présente 8 onglets :
+Le dashboard présente 9 onglets :
 
 1. **Démographie** — effectifs, répartition par sexe/génération, pyramide
    des âges, âge au décès (moyenne/médiane/distribution par siècle),
@@ -42,14 +42,21 @@ Le dashboard présente 8 onglets :
    génération ; fiche détaillée par personne (dates, lieux, parents,
    conjoint(s), enfants, fratrie) avec navigation cliquable entre fiches, et
    boutons Modifier/Supprimer.
-8. **Édition** — charger un autre fichier `.ged` (remplace les données
+8. **Arbre** — arbre ascendant (pedigree) en éventail binaire centré sur une
+   personne choisie, 2 à 8 générations, zoom, cases cliquables ouvrant la
+   fiche ; navigation directe depuis n'importe quelle fiche (« Voir dans
+   l'arbre »).
+9. **Édition** — charger un autre fichier `.ged` (remplace les données
    affichées), exporter l'état actuel en GEDCOM, ajouter une nouvelle
    personne (avec lien vers père/mère existants), créer une union entre
    deux personnes.
 
 Les modifications ne vivent qu'en mémoire dans la page (aucun serveur,
 aucune sauvegarde automatique) : pensez à **exporter en GEDCOM** pour
-conserver votre travail.
+conserver votre travail. L'export préserve aussi tout ce que l'outil ne
+modélise pas explicitement (notes, citations de sources, `RIN`, `_UID`,
+tags personnalisés…) : ces données sont conservées verbatim tant que la
+fiche ou l'événement auquel elles sont rattachées n'est pas édité.
 
 ## Architecture
 
@@ -65,7 +72,11 @@ conserver votre travail.
   comparaison directe des sorties) et de la sérialisation GEDCOM, plus la
   gestion d'état (ajout/modification/suppression d'individus et de
   familles). C'est ce moteur qui tourne dans le navigateur pour permettre le
-  chargement de fichiers et l'édition en direct.
+  chargement de fichiers et l'édition en direct. Le parsing capture aussi,
+  pour chaque fiche/événement, les blocs GEDCOM non modélisés (NOTE, SOUR,
+  RIN, tags personnalisés…) sous forme de lignes brutes rattachées
+  (`extra_lines`), et les enregistrements de niveau 0 non gérés (SOUR,
+  OBJE, REPO…) verbatim (`otherRecords`), réémis tels quels à l'export.
 - `templates/dashboard.html.tpl` + `templates/app.js` — gabarit HTML/CSS et
   logique de rendu (graphiques SVG faits main, formulaires d'édition, sans
   bibliothèque externe).
