@@ -706,6 +706,12 @@ function computeFanLayout(rootId, depth){
 
 function fanChartSVG(rootId, depth){
   const ROOT_R = 52, RING_W = 60, MIN_LABEL_ARC = 34;
+  // À partir de cette génération les cases sont trop étroites angulairement pour du texte
+  // courbé le long de l'arc (quelques degrés à peine) alors qu'elles gardent toute la largeur
+  // de l'anneau en longueur : on écrit alors le nom "dans la longueur" (radialement, centre →
+  // bord) plutôt que dans la largeur.
+  const RADIAL_FROM_GEN = 6;
+  const MIN_RADIAL_ARC = 8;
   const { idsByGen, angleByGen } = computeFanLayout(rootId, depth);
   const maxRadius = ROOT_R + (depth - 1) * RING_W;
   const width = maxRadius * 2 + 40;
@@ -739,7 +745,23 @@ function fanChartSVG(rootId, depth){
         const natural = measureFanTextWidth(text, fontSize, bold);
         return natural > maxLen ? ` textLength="${maxLen.toFixed(0)}" lengthAdjust="spacingAndGlyphs"` : '';
       };
-      if (arcLen >= MIN_LABEL_ARC) {
+      if (g >= RADIAL_FROM_GEN) {
+        // Mode radial : une seule ligne (nom de famille), écrite droite le long du rayon plutôt
+        // que courbée — la case n'a plus la largeur d'arc nécessaire pour une courbe lisible.
+        if (arcLen >= MIN_RADIAL_ARC) {
+          const label = r.surname || r.given || r.name;
+          const radialMax = Math.max(14, RING_W * 0.8);
+          const natural = measureFanTextWidth(label, 9.5, true);
+          const fitR = natural > radialMax ? ` textLength="${radialMax.toFixed(0)}" lengthAdjust="spacingAndGlyphs"` : '';
+          const [lx, ly] = polarPoint(cx, cy, rMid, mid);
+          // rotate(mid±90) aligne l'axe du texte sur la direction radiale (centre → bord) au
+          // lieu de la direction tangentielle utilisée pour les générations moins profondes.
+          // Le signe change selon la moitié (gauche/droite) du demi-cercle pour garder le
+          // texte lisible à l'endroit des deux côtés (sinon il apparaît tête en bas à gauche).
+          const radialRot = (mid < 0 ? mid + 90 : mid - 90).toFixed(1);
+          labels = `<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" transform="rotate(${radialRot} ${lx.toFixed(1)} ${ly.toFixed(1)})" text-anchor="middle" dominant-baseline="middle" class="fan-label" font-size="9.5"${fitR}>${escapeHtml(label)}</text>`;
+        }
+      } else if (arcLen >= MIN_LABEL_ARC) {
         const dateStr = lifeSpanShort(r);
         const hasDate = r.birth.year || r.death.year;
         const surname = r.surname || r.name;
