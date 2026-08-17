@@ -38,10 +38,11 @@ Le dashboard présente 9 onglets :
 6. **Qualité des données** — taux de complétude des fiches, anomalies de
    dates (incohérences parent/enfant, âges invraisemblables, décès non
    renseignés probables), doublons potentiels.
-7. **Fiches individuelles** — recherche/filtre par nom, sexe, statut et
-   génération ; fiche détaillée par personne (dates, lieux, parents,
-   conjoint(s), enfants, fratrie) avec navigation cliquable entre fiches, et
-   boutons Modifier/Supprimer.
+7. **Fiches individuelles** — recherche/filtre par nom, sexe, statut,
+   génération et lien de parenté (famille par le sang vs par alliance) ;
+   fiche détaillée par personne (dates, lieux, parents, conjoint(s),
+   enfants, fratrie) avec navigation cliquable entre fiches, et boutons
+   Modifier/Supprimer.
 8. **Arbre** — arbre ascendant (pedigree) en éventail binaire centré sur une
    personne choisie, 2 à 8 générations, zoom, cases cliquables ouvrant la
    fiche ; navigation directe depuis n'importe quelle fiche (« Voir dans
@@ -66,7 +67,10 @@ fiche ou l'événement auquel elles sont rattachées n'est pas édité.
   le dashboard (`to_raw_json`).
 - `gedcom_analyze.py` — CLI/bibliothèque Python autonome pour calculer les
   statistiques (démographie, chronologie, géographie, structure familiale,
-  patronymes, qualité des données) hors du dashboard, si besoin.
+  patronymes, qualité des données) hors du dashboard, si besoin. Calcule
+  aussi, pour chaque personne, le lien avec la racine de l'arbre : famille
+  par le sang (ascendant·e, descendant·e, collatéral·e) ou par alliance
+  (conjoint·e ou lié·e uniquement via un mariage).
 - `templates/gedcom_engine.js` — portage JavaScript complet du parsing, du
   calcul de statistiques (fidèle à `gedcom_analyze.py`, vérifié par
   comparaison directe des sorties) et de la sérialisation GEDCOM, plus la

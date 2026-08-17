@@ -122,12 +122,66 @@ def compute_generations(data: GedcomData, root: str):
     return generation, components
 
 
+def collect_ancestors(data: GedcomData, start: str):
+    """Tous les ascendants de `start` (lui-même inclus), en remontant les FAMC."""
+    acc = {start}
+    stack = [start]
+    while stack:
+        cur = stack.pop()
+        ind = data.individuals.get(cur)
+        if not ind:
+            continue
+        for famc_id in ind.famc:
+            fam = data.families.get(famc_id)
+            if not fam:
+                continue
+            for parent in (fam.husb, fam.wife):
+                if parent and parent not in acc:
+                    acc.add(parent)
+                    stack.append(parent)
+    return acc
+
+
+def collect_descendants_into(data: GedcomData, start: str, acc: set):
+    """Tous les descendants de `start` (lui-même inclus), ajoutés dans `acc`."""
+    if start in acc:
+        return  # sous-arbre déjà entièrement couvert par un appel précédent
+    stack = [start]
+    while stack:
+        cur = stack.pop()
+        acc.add(cur)
+        ind = data.individuals.get(cur)
+        if not ind:
+            continue
+        for fams_id in ind.fams:
+            fam = data.families.get(fams_id)
+            if not fam:
+                continue
+            for child_id in fam.chil:
+                if child_id not in acc:
+                    stack.append(child_id)
+
+
+def compute_blood_relatives(data: GedcomData, root: Optional[str]):
+    """Famille par le sang de `root` : lui-même, ses ascendants, et tous les
+    descendants de chacun de ces ascendants (fratrie, oncles/tantes,
+    cousins…). Un conjoint entré par mariage n'est jamais du sang, même si
+    les enfants qu'il/elle a avec un membre du sang le sont."""
+    blood = set()
+    if root is None:
+        return blood
+    for ancestor in collect_ancestors(data, root):
+        collect_descendants_into(data, ancestor, blood)
+    return blood
+
+
 def analyze(data: GedcomData) -> dict:
     individuals = data.individuals
     families = data.families
 
     root = find_proband(data)
     generation, components = compute_generations(data, root)
+    blood_set = compute_blood_relatives(data, root)
 
     # --- enrich individuals with computed relationships -------------------
     children_of = defaultdict(list)   # xref -> list of child xrefs (via any FAMS)
@@ -201,6 +255,7 @@ def analyze(data: GedcomData) -> dict:
             "alive": is_alive,
             "occupation": ind.occupation,
             "generation": generation.get(xref),
+            "relation": "blood" if root is None else ("root" if xref == root else ("blood" if xref in blood_set else "marriage")),
             "parents": sorted(set(parents_of.get(xref, []))),
             "children": sorted(set(children_of.get(xref, []))),
             "siblings": sorted(siblings_of.get(xref, [])),
@@ -308,6 +363,8 @@ def analyze(data: GedcomData) -> dict:
 
     demographics = {
         "total_individuals": total,
+        "blood_count": sum(1 for r in ind_records if r["relation"] in ("blood", "root")),
+        "marriage_count": sum(1 for r in ind_records if r["relation"] == "marriage"),
         "sex_counts": {"M": sex_counts.get("M", 0), "F": sex_counts.get("F", 0), "U": sex_counts.get("U", 0)},
         "generation_counts": {str(k): v for k, v in sorted(gen_counts.items())},
         "age_at_death": {

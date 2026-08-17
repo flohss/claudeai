@@ -442,6 +442,60 @@ function computeGenerations(gs, root){
   return generation;
 }
 
+/** Tous les ascendants de `startId` (y compris lui-même), en remontant les FAMC. */
+function collectAncestors(gs, startId){
+  const acc = new Set([startId]);
+  const stack = [startId];
+  while (stack.length) {
+    const cur = stack.pop();
+    const ind = gs.individuals.get(cur);
+    if (!ind) continue;
+    for (const famcId of ind.famc) {
+      const fam = gs.families.get(famcId);
+      if (!fam) continue;
+      for (const parent of [fam.husb, fam.wife]) {
+        if (parent && !acc.has(parent)) { acc.add(parent); stack.push(parent); }
+      }
+    }
+  }
+  return acc;
+}
+
+/** Tous les descendants de `startId` (y compris lui-même), ajoutés dans `acc`. */
+function collectDescendantsInto(gs, startId, acc){
+  if (acc.has(startId)) return; // sous-arbre déjà entièrement couvert par un appel précédent
+  const stack = [startId];
+  while (stack.length) {
+    const cur = stack.pop();
+    acc.add(cur);
+    const ind = gs.individuals.get(cur);
+    if (!ind) continue;
+    for (const famsId of ind.fams) {
+      const fam = gs.families.get(famsId);
+      if (!fam) continue;
+      for (const childId of fam.chil) {
+        if (!acc.has(childId)) stack.push(childId);
+      }
+    }
+  }
+}
+
+/**
+ * Famille par le sang de la racine : root, tous ses ascendants, et tous les
+ * descendants de chacun de ces ascendants (donc aussi fratrie, oncles/
+ * tantes, cousins…). Un conjoint entré dans la famille par mariage n'est
+ * jamais du sang, même si les enfants qu'il/elle a avec un membre du sang
+ * le sont — la traversée ne remonte donc jamais "conjoint -> son propre
+ * parent" à travers un enfant commun.
+ */
+function computeBloodRelatives(gs, root){
+  const blood = new Set();
+  if (root == null) return blood;
+  const ancestors = collectAncestors(gs, root);
+  for (const a of ancestors) collectDescendantsInto(gs, a, blood);
+  return blood;
+}
+
 function histogram(values, binSize, maxVal){
   const nBins = Math.floor(maxVal / binSize);
   const counts = new Array(nBins).fill(0);
@@ -460,6 +514,7 @@ function analyzeGedcom(gs){
 
   const root = findProband(gs);
   const generation = computeGenerations(gs, root);
+  const bloodSet = computeBloodRelatives(gs, root);
 
   const childrenOf = new Map(), parentsOf = new Map(), spousesOf = new Map();
   const push = (map, key, val) => { if (!map.has(key)) map.set(key, []); map.get(key).push(val); };
@@ -512,6 +567,7 @@ function analyzeGedcom(gs){
       death: { year: dy, month: dm, day: dd, display: ind.death.date ? gedDateDisplay(ind.death.date) : null, place: ind.death.place, cause: ind.death.cause, known: ind.death.known },
       age_at_death: ageAtDeath, current_age: currentAge, alive: isAlive,
       occupation: ind.occupation, generation: generation.has(xref) ? generation.get(xref) : null,
+      relation: root == null ? 'blood' : (xref === root ? 'root' : (bloodSet.has(xref) ? 'blood' : 'marriage')),
       parents: Array.from(new Set(parentsOf.get(xref) || [])).sort(),
       children: Array.from(new Set(childrenOf.get(xref) || [])).sort(),
       siblings: Array.from(siblingsOf.get(xref) || []).sort(),
@@ -589,6 +645,8 @@ function analyzeGedcom(gs){
 
   const demographics = {
     total_individuals: total,
+    blood_count: indRecords.filter(r => r.relation === 'blood' || r.relation === 'root').length,
+    marriage_count: indRecords.filter(r => r.relation === 'marriage').length,
     sex_counts: { M: sexCounts.get('M') || 0, F: sexCounts.get('F') || 0, U: sexCounts.get('U') || 0 },
     generation_counts: Object.fromEntries(Array.from(genCounts.entries()).sort((a, b) => a[0] - b[0]).map(([k, v]) => [String(k), v])),
     age_at_death: {

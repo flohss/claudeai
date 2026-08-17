@@ -26,6 +26,20 @@ function genTitle(g){
   if (g < 0) return `Génération ${g} — ${-g}ᵉ génération d'ascendants de ${rootName}`;
   return `Génération +${g} — ${g}ᵉ génération de descendants de ${rootName}`;
 }
+function relLabel(rel){
+  if (rel === 'root') return 'Racine';
+  if (rel === 'blood') return 'Sang';
+  return 'Alliance';
+}
+function relTitle(rel){
+  const rootName = (DATA.meta.root_name) || 'la référence';
+  if (rel === 'root') return `Personne de référence de l'arbre`;
+  if (rel === 'blood') return `Famille par le sang de ${rootName} (ascendant·e, descendant·e ou collatéral·e)`;
+  return `Par alliance : lié·e à ${rootName} uniquement par un ou plusieurs mariages`;
+}
+function relBadgeHTML(rel){
+  return `<span class="irel ${rel}" title="${escapeHtml(relTitle(rel))}">${relLabel(rel)}</span>`;
+}
 function lifeSpanShort(r){
   const by = r.birth.year ? r.birth.year : '?';
   if (r.death.known) {
@@ -195,7 +209,7 @@ function renderDemographie(){
 
   const kpis = `
     <div class="grid cols-4">
-      <div class="card kpi"><div class="value">${fmtInt(total)}</div><div class="label">Individus recensés</div></div>
+      <div class="card kpi"><div class="value">${fmtInt(total)}</div><div class="label">Individus recensés</div><div class="sub">${fmtInt(s.blood_count)} par le sang &middot; ${fmtInt(s.marriage_count)} par alliance</div></div>
       <div class="card kpi"><div class="value">${pctM}% / ${pctF}%</div><div class="label">Hommes / Femmes</div><div class="sub">${fmtInt(s.sex_counts.M)} H &middot; ${fmtInt(s.sex_counts.F)} F</div></div>
       <div class="card kpi"><div class="value">${fmtInt(s.deceased_count)}</div><div class="label">Décédé(e)s</div><div class="sub">${fmtInt(s.alive_count)} vivant(e)s probables</div></div>
       <div class="card kpi"><div class="value">${s.age_at_death.mean ?? '—'} ans</div><div class="label">Âge moyen au décès</div><div class="sub">médiane : ${s.age_at_death.median ?? '—'} ans (n=${s.age_at_death.count})</div></div>
@@ -496,12 +510,13 @@ function renderIndividusPanel(){
   const genOptions = gens.map(g => `<option value="${g}">${genLabel(g)}</option>`).join('');
 
   document.getElementById('panel-individus').innerHTML = sectionTitle('07', 'Fiches individuelles') + `
-    <div class="note-box">Cliquez sur une fiche pour consulter le détail : dates, lieux, ascendants, descendants et fratrie.</div>
+    <div class="note-box">Cliquez sur une fiche pour consulter le détail : dates, lieux, ascendants, descendants et fratrie. « Sang » = famille par le sang (ascendant·e, descendant·e ou collatéral·e) ; « Alliance » = lié·e uniquement par un mariage.</div>
     <div class="search-bar">
       <input type="text" id="indSearch" placeholder="Rechercher par nom, prénom…">
       <select id="indSex"><option value="">Tous sexes</option><option value="M">Hommes</option><option value="F">Femmes</option></select>
       <select id="indStatus"><option value="">Tous statuts</option><option value="alive">Vivant(e)s</option><option value="deceased">Décédé(e)s</option></select>
       <select id="indGen"><option value="">Toutes générations</option>${genOptions}</select>
+      <select id="indRelation"><option value="">Tous liens</option><option value="blood">Famille par le sang</option><option value="marriage">Par alliance</option></select>
       <span class="count" id="indCount"></span>
     </div>
     <div class="ind-list" id="indList"></div>
@@ -521,12 +536,15 @@ function renderIndividusPanel(){
     const sex = document.getElementById('indSex').value;
     const status = document.getElementById('indStatus').value;
     const gen = document.getElementById('indGen').value;
+    const relation = document.getElementById('indRelation').value;
     let items = DATA.individuals.filter(r => {
       if (text && !normalize(r.name).includes(text)) return false;
       if (sex && r.sex !== sex) return false;
       if (status === 'alive' && !r.alive) return false;
       if (status === 'deceased' && !r.death.known) return false;
       if (gen !== '' && String(r.generation) !== gen) return false;
+      if (relation === 'blood' && r.relation === 'marriage') return false;
+      if (relation === 'marriage' && r.relation !== 'marriage') return false;
       return true;
     });
     items.sort((a, b) => (a.surname || '').localeCompare(b.surname || '') || (a.given || '').localeCompare(b.given || ''));
@@ -538,10 +556,11 @@ function renderIndividusPanel(){
         <span class="sexdot ${r.sex}"></span>
         <span class="iname">${escapeHtml(r.name)}<small>${escapeHtml(r.birth.place || '')}</small></span>
         <span class="idates">${lifeSpanShort(r)}</span>
+        ${relBadgeHTML(r.relation)}
         <span class="igen" title="${escapeHtml(genTitle(r.generation))}">${genLabel(r.generation)}</span>
       </div>`).join('') + (items.length > MAXR ? `<p class="card-note">Affinez la recherche pour afficher les ${fmtInt(items.length - MAXR)} fiches supplémentaires.</p>` : '');
   }
-  ['indSearch', 'indSex', 'indStatus', 'indGen'].forEach(id => {
+  ['indSearch', 'indSex', 'indStatus', 'indGen', 'indRelation'].forEach(id => {
     document.getElementById(id).addEventListener('input', apply);
     document.getElementById(id).addEventListener('change', apply);
   });
@@ -724,7 +743,7 @@ function openIndividual(id){
   document.getElementById('ficheContent').innerHTML = `
     <button class="close-btn" id="ficheClose" aria-label="Fermer">&times;</button>
     <h2>${escapeHtml(r.name)}</h2>
-    <div class="fiche-sub">${escapeHtml(genTitle(r.generation))} &middot; ${r.sex === 'M' ? 'Homme' : r.sex === 'F' ? 'Femme' : 'Sexe inconnu'} &middot; ${statusPill}</div>
+    <div class="fiche-sub">${escapeHtml(genTitle(r.generation))} &middot; ${r.sex === 'M' ? 'Homme' : r.sex === 'F' ? 'Femme' : 'Sexe inconnu'} &middot; ${statusPill} ${relBadgeHTML(r.relation)}</div>
     <dl class="fiche-facts">
       <dt>Naissance</dt><dd>${r.birth.known ? (escapeHtml(r.birth.display || 'date inconnue') + (r.birth.place ? ' — ' + escapeHtml(r.birth.place) : '')) : 'Inconnue'}</dd>
       <dt>Décès</dt><dd>${r.death.known ? (escapeHtml(r.death.display || 'date inconnue') + (r.death.place ? ' — ' + escapeHtml(r.death.place) : '') + (r.death.cause ? ' · Cause : ' + escapeHtml(r.death.cause) : '')) : (r.alive ? '—' : 'Inconnu')}</dd>

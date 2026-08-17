@@ -232,7 +232,7 @@ table.data-table tr:hover td{ background: rgba(168,121,31,0.06); }
 
 .ind-list{ display:flex; flex-direction:column; gap:6px; max-height: 640px; overflow-y:auto; padding-right:6px; }
 .ind-card{
-  display:grid; grid-template-columns: 20px 1fr auto auto; gap:10px; align-items:center;
+  display:grid; grid-template-columns: 20px 1fr auto auto auto; gap:10px; align-items:center;
   background: var(--card-bg); border:1px solid var(--line-soft); border-radius:3px;
   padding:9px 12px; cursor:pointer; transition: background .15s; user-select:none;
 }
@@ -245,6 +245,10 @@ table.data-table tr:hover td{ background: rgba(168,121,31,0.06); }
 .ind-card .iname small{ display:block; color: var(--ink-faint); font-size:11.5px; font-weight:normal; }
 .ind-card .idates{ font-size:12px; color: var(--ink-soft); text-align:right; white-space:nowrap; }
 .ind-card .igen{ font-size:11px; color:#fff; background: var(--slate); border-radius:10px; padding:2px 8px; }
+.irel{ font-size:11px; border-radius:10px; padding:2px 8px; white-space:nowrap; }
+.irel.blood{ color:#fff; background: var(--gold); }
+.irel.marriage{ color: var(--ink-soft); background: var(--paper-darker); border:1px solid var(--line); }
+.irel.root{ color:#fff; background: var(--maroon); }
 
 /* ---------- modal fiche ---------- */
 .modal-overlay{
