@@ -713,6 +713,8 @@ function fanChartSVG(rootId, depth){
   const cx = width / 2, cy = height - 34;
 
   let wedges = '';
+  let arcDefs = '';
+  let arcId = 0;
   for (let g = 1; g < depth; g++) {
     const rInner = ROOT_R + (g - 1) * RING_W;
     const rOuter = ROOT_R + g * RING_W;
@@ -725,14 +727,13 @@ function fanChartSVG(rootId, depth){
       const r = INDEX[id];
       if (!r) return;
       const arcLen = ((end - start) * Math.PI / 180) * rMid;
-      const rot = mid.toFixed(1);
       let labels = '';
-      // Le texte, tourné pour suivre la courbe, occupe la largeur de l'arc de sa propre
-      // case : s'il fait (une fois rendu) plus large que cet arc, il empiète sur les cases
-      // voisines. On mesure donc la largeur réelle (police/graisse exactes, via canvas —
-      // une estimation par nombre de caractères s'était montrée trop optimiste pour ce
-      // rendu gras/serif) et on ne compresse (textLength) que si elle dépasse la marge
-      // disponible, en laissant une vraie marge de chaque côté de la case.
+      // Le texte suit la courbure de sa case (SVG textPath) au lieu d'une ligne droite tournée :
+      // il épouse ainsi exactement l'arrondi de l'arc, comme la case elle-même. S'il est plus
+      // long que l'arc disponible, il empiète sur les cases voisines : on mesure donc la largeur
+      // réelle (police/graisse exactes, via canvas — une estimation par nombre de caractères
+      // s'était montrée trop optimiste pour ce rendu gras/serif) et on ne compresse (textLength)
+      // que si elle dépasse la marge disponible, en laissant une vraie marge de chaque case.
       const maxLen = Math.max(16, arcLen * 0.84);
       const fitAttr = (text, fontSize, bold) => {
         const natural = measureFanTextWidth(text, fontSize, bold);
@@ -757,8 +758,11 @@ function fanChartSVG(rootId, depth){
         const startOffset = -((lines.length - 1) / 2) * spacing;
         lines.forEach((ln, i) => {
           const rOff = rMid + startOffset + i * spacing;
-          const [lx, ly] = polarPoint(cx, cy, rOff, mid);
-          labels += `<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" transform="rotate(${rot} ${lx.toFixed(1)} ${ly.toFixed(1)})" text-anchor="middle" dominant-baseline="middle" class="${ln.cls}"${fitAttr(ln.text, ln.size, ln.bold)}>${escapeHtml(ln.text)}</text>`;
+          const [x1, y1] = polarPoint(cx, cy, rOff, start);
+          const [x2, y2] = polarPoint(cx, cy, rOff, end);
+          const arcPathId = `fanArc${arcId++}`;
+          arcDefs += `<path id="${arcPathId}" d="M ${x1.toFixed(1)} ${y1.toFixed(1)} A ${rOff.toFixed(1)} ${rOff.toFixed(1)} 0 0 1 ${x2.toFixed(1)} ${y2.toFixed(1)}" fill="none"/>`;
+          labels += `<text class="${ln.cls}"${fitAttr(ln.text, ln.size, ln.bold)}><textPath href="#${arcPathId}" xlink:href="#${arcPathId}" startOffset="50%" text-anchor="middle" dy="0.32em">${escapeHtml(ln.text)}</textPath></text>`;
         });
       }
       wedges += `<g class="fan-node-g" data-open-id="${id}">` +
@@ -776,7 +780,7 @@ function fanChartSVG(rootId, depth){
     `<text x="${cx.toFixed(1)}" y="${(cy + 11).toFixed(1)}" text-anchor="middle" class="fan-root-sub">${escapeHtml(rootSub)}</text>` +
     `</g>`;
 
-  return `<svg class="fan-chart" viewBox="0 0 ${width.toFixed(0)} ${height.toFixed(0)}" width="${width.toFixed(0)}" height="${height.toFixed(0)}">${wedges}${rootHub}</svg>`;
+  return `<svg class="fan-chart" viewBox="0 0 ${width.toFixed(0)} ${height.toFixed(0)}" width="${width.toFixed(0)}" height="${height.toFixed(0)}"><defs>${arcDefs}</defs>${wedges}${rootHub}</svg>`;
 }
 
 function treeNodeHTML(node){
