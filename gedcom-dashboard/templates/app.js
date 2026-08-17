@@ -706,11 +706,10 @@ function computeFanLayout(rootId, depth){
 
 function fanChartSVG(rootId, depth){
   const ROOT_R = 52, RING_W = 60, MIN_LABEL_ARC = 34;
-  // À partir de cette génération les cases sont trop étroites angulairement pour du texte
-  // courbé le long de l'arc (quelques degrés à peine) alors qu'elles gardent toute la largeur
-  // de l'anneau en longueur : on écrit alors le nom "dans la longueur" (radialement, centre →
-  // bord) plutôt que dans la largeur.
-  const RADIAL_FROM_GEN = 6;
+  // Sous ce seuil (arc trop étroit pour du texte courbé lisible, quelques degrés à peine dans
+  // les générations profondes) mais au-dessus de celui-ci, la case garde quand même toute la
+  // largeur de l'anneau en longueur : on écrit alors le nom "dans la longueur" (radialement,
+  // centre → bord) plutôt que courbé — sans quoi ces générations resteraient sans aucun texte.
   const MIN_RADIAL_ARC = 8;
   const { idsByGen, angleByGen } = computeFanLayout(rootId, depth);
   const maxRadius = ROOT_R + (depth - 1) * RING_W;
@@ -745,7 +744,7 @@ function fanChartSVG(rootId, depth){
         const natural = measureFanTextWidth(text, fontSize, bold);
         return natural > maxLen ? ` textLength="${maxLen.toFixed(0)}" lengthAdjust="spacingAndGlyphs"` : '';
       };
-      if (g >= RADIAL_FROM_GEN) {
+      if (arcLen < MIN_LABEL_ARC) {
         // Mode radial : une seule ligne (nom de famille), écrite droite le long du rayon plutôt
         // que courbée — la case n'a plus la largeur d'arc nécessaire pour une courbe lisible.
         if (arcLen >= MIN_RADIAL_ARC) {
@@ -761,7 +760,7 @@ function fanChartSVG(rootId, depth){
           const radialRot = (mid < 0 ? mid + 90 : mid - 90).toFixed(1);
           labels = `<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" transform="rotate(${radialRot} ${lx.toFixed(1)} ${ly.toFixed(1)})" text-anchor="middle" dominant-baseline="middle" class="fan-label" font-size="9.5"${fitR}>${escapeHtml(label)}</text>`;
         }
-      } else if (arcLen >= MIN_LABEL_ARC) {
+      } else {
         const dateStr = lifeSpanShort(r);
         const hasDate = r.birth.year || r.death.year;
         const surname = r.surname || r.name;
