@@ -43,10 +43,12 @@ Le dashboard présente 11 onglets :
    fiche détaillée par personne (dates, lieux, parents, conjoint(s),
    enfants, fratrie) avec navigation cliquable entre fiches, et boutons
    Modifier/Supprimer.
-8. **Arbre** — arbre ascendant (pedigree) en éventail binaire centré sur une
-   personne choisie, 2 à 8 générations, zoom, cases cliquables ouvrant la
-   fiche ; navigation directe depuis n'importe quelle fiche (« Voir dans
-   l'arbre »).
+8. **Arbre** — arbre ascendant (pedigree) centré sur une personne choisie,
+   2 à 8 générations, zoom, cases cliquables ouvrant la fiche ; navigation
+   directe depuis n'importe quelle fiche (« Voir dans l'arbre »). Deux vues
+   au choix : rectangulaire (éventail binaire classique) ou demi-cercle
+   (éventail circulaire, avec la personne racine au centre en bas et les
+   générations d'ascendants en anneaux concentriques au-dessus).
 9. **Calendrier perpétuel** — naissances, mariages et décès classés par
    jour de l'année (toutes années confondues), filtrables par mois/type/nom,
    avec un rappel « dans l'histoire familiale » pour la date du jour.

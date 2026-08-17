@@ -584,13 +584,13 @@ function getParentsFromState(id){
   return [fam.husb || null, fam.wife || null];
 }
 
-/** Calcule les positions (x, y) de chaque case d'un pedigree ascendant
- * binaire à profondeur fixe, en partant de la génération la plus profonde
- * (positions régulièrement espacées) puis en remontant : chaque ancêtre est
- * centré verticalement entre ses deux propres branches — c'est l'agencement
- * classique des chartes de pedigree généalogiques. */
-function computeAncestorLayout(rootId, depth){
-  const NODE_W = 190, NODE_H = 52, COL_W = 230, ROW_H = 62;
+/** Résout, pour chaque génération 0..depth-1, l'identifiant (ou null si
+ * inconnu) de chaque case d'un pedigree ascendant binaire : génération g
+ * contient 2^g cases, la case k ayant pour père la case 2k et pour mère la
+ * case 2k+1 de la génération g+1 (numérotation à la Sosa-Stradonitz). Partagé
+ * par les deux vues (rectangulaire et demi-cercle), qui n'en diffèrent que
+ * par la façon de positionner géométriquement ces cases. */
+function resolveAncestorIds(rootId, depth){
   const idsByGen = [[rootId]];
   for (let g = 0; g < depth - 1; g++) {
     const prev = idsByGen[g];
@@ -602,6 +602,17 @@ function computeAncestorLayout(rootId, depth){
     });
     idsByGen.push(next);
   }
+  return idsByGen;
+}
+
+/** Calcule les positions (x, y) de chaque case d'un pedigree ascendant
+ * binaire à profondeur fixe, en partant de la génération la plus profonde
+ * (positions régulièrement espacées) puis en remontant : chaque ancêtre est
+ * centré verticalement entre ses deux propres branches — c'est l'agencement
+ * classique des chartes de pedigree généalogiques. */
+function computeAncestorLayout(rootId, depth){
+  const NODE_W = 190, NODE_H = 52, COL_W = 230, ROW_H = 62;
+  const idsByGen = resolveAncestorIds(rootId, depth);
 
   const yByGen = new Array(depth);
   const deepest = depth - 1;
@@ -635,6 +646,104 @@ function computeAncestorLayout(rootId, depth){
   return { nodes, links, width, height, NODE_W, NODE_H };
 }
 
+/* -------------------- Vue en éventail (demi-cercle) -------------------- */
+
+function polarPoint(cx, cy, r, angleDeg){
+  const a = (angleDeg * Math.PI) / 180;
+  return [cx + r * Math.sin(a), cy - r * Math.cos(a)];
+}
+
+/** Chemin SVG d'un secteur annulaire (ou d'un secteur plein si rInner≈0),
+ * de rInner à rOuter, entre les angles a1 et a2 (degrés, 0 = vers le haut,
+ * mesurés dans le sens horaire — nos éventails restent dans [-90°, 90°],
+ * donc jamais besoin du "large-arc-flag"). */
+function wedgePathD(cx, cy, rInner, rOuter, a1, a2){
+  const [x1o, y1o] = polarPoint(cx, cy, rOuter, a1);
+  const [x2o, y2o] = polarPoint(cx, cy, rOuter, a2);
+  if (rInner <= 0.5) {
+    return `M ${cx.toFixed(1)} ${cy.toFixed(1)} L ${x1o.toFixed(1)} ${y1o.toFixed(1)} A ${rOuter.toFixed(1)} ${rOuter.toFixed(1)} 0 0 1 ${x2o.toFixed(1)} ${y2o.toFixed(1)} Z`;
+  }
+  const [x1i, y1i] = polarPoint(cx, cy, rInner, a1);
+  const [x2i, y2i] = polarPoint(cx, cy, rInner, a2);
+  return `M ${x1i.toFixed(1)} ${y1i.toFixed(1)} L ${x1o.toFixed(1)} ${y1o.toFixed(1)} ` +
+    `A ${rOuter.toFixed(1)} ${rOuter.toFixed(1)} 0 0 1 ${x2o.toFixed(1)} ${y2o.toFixed(1)} ` +
+    `L ${x2i.toFixed(1)} ${y2i.toFixed(1)} A ${rInner.toFixed(1)} ${rInner.toFixed(1)} 0 0 0 ${x1i.toFixed(1)} ${y1i.toFixed(1)} Z`;
+}
+
+/** Répartit angulairement (sur un demi-cercle, -90° à +90°) chaque case du
+ * même pedigree binaire que la vue rectangulaire : chaque case occupe la
+ * moitié de l'angle de son enfant (côté père = moitié gauche, côté mère =
+ * moitié droite), récursivement — c'est l'agencement classique de
+ * l'« éventail généalogique ». */
+function computeFanLayout(rootId, depth){
+  const idsByGen = resolveAncestorIds(rootId, depth);
+  const angleByGen = [[{ start: -90, end: 90 }]];
+  for (let g = 0; g < depth - 1; g++) {
+    const next = [];
+    angleByGen[g].forEach(slice => {
+      const mid = (slice.start + slice.end) / 2;
+      next.push({ start: slice.start, end: mid });
+      next.push({ start: mid, end: slice.end });
+    });
+    angleByGen.push(next);
+  }
+  return { idsByGen, angleByGen };
+}
+
+function fanChartSVG(rootId, depth){
+  const ROOT_R = 52, RING_W = 60, MIN_LABEL_ARC = 34;
+  const { idsByGen, angleByGen } = computeFanLayout(rootId, depth);
+  const maxRadius = ROOT_R + (depth - 1) * RING_W;
+  const width = maxRadius * 2 + 40;
+  const height = maxRadius + 76;
+  const cx = width / 2, cy = height - 34;
+
+  let wedges = '';
+  for (let g = 1; g < depth; g++) {
+    const rInner = ROOT_R + (g - 1) * RING_W;
+    const rOuter = ROOT_R + g * RING_W;
+    const rMid = (rInner + rOuter) / 2;
+    idsByGen[g].forEach((id, k) => {
+      const { start, end } = angleByGen[g][k];
+      const mid = (start + end) / 2;
+      const d = wedgePathD(cx, cy, rInner, rOuter, start, end);
+      if (!id) { wedges += `<path d="${d}" class="fan-wedge empty"/>`; return; }
+      const r = INDEX[id];
+      if (!r) return;
+      const arcLen = ((end - start) * Math.PI / 180) * rMid;
+      const [tx, ty] = polarPoint(cx, cy, rMid, mid);
+      const rot = mid.toFixed(1);
+      let labels = '';
+      // La rotation tangentielle place le texte "de travers" près des bords (±90°) : sa longueur
+      // pointe alors radialement et peut déborder sur l'anneau voisin. On borne donc la largeur
+      // rendue (textLength) à la fois par l'arc disponible et par la largeur de l'anneau.
+      const maxLen = Math.max(18, Math.min(arcLen * 0.92, RING_W * 1.5));
+      const fitAttr = (text, fontSize) => (text.length * fontSize * 0.55 > maxLen)
+        ? ` textLength="${maxLen.toFixed(0)}" lengthAdjust="spacingAndGlyphs"` : '';
+      if (arcLen >= MIN_LABEL_ARC) {
+        const shortName = arcLen < 60 ? (r.surname || r.given || r.name) : r.name;
+        const dateStr = lifeSpanShort(r);
+        labels = `<text x="${tx.toFixed(1)}" y="${(ty - 5).toFixed(1)}" transform="rotate(${rot} ${tx.toFixed(1)} ${(ty - 5).toFixed(1)})" text-anchor="middle" class="fan-label"${fitAttr(shortName, 11)}>${escapeHtml(shortName)}</text>` +
+          (r.birth.year || r.death.year ? `<text x="${tx.toFixed(1)}" y="${(ty + 9).toFixed(1)}" transform="rotate(${rot} ${tx.toFixed(1)} ${(ty + 9).toFixed(1)})" text-anchor="middle" class="fan-sublabel"${fitAttr(dateStr, 9.5)}>${dateStr}</text>` : '');
+      }
+      wedges += `<g class="fan-node-g" data-open-id="${id}">` +
+        `<path d="${d}" class="fan-wedge sex-${r.sex}"><title>${escapeHtml(r.name)} — ${escapeHtml(lifeSpanShort(r))}</title></path>` +
+        labels + `</g>`;
+    });
+  }
+
+  const root = INDEX[rootId];
+  const rootLabel = root ? root.name : '?';
+  const rootSub = root ? lifeSpanShort(root) : '';
+  const rootHub = `<g class="fan-node-g" data-open-id="${rootId}">` +
+    `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${ROOT_R}" class="fan-root-circle sex-${root ? root.sex : 'U'}"><title>${escapeHtml(rootLabel)}</title></circle>` +
+    `<text x="${cx.toFixed(1)}" y="${(cy - 6).toFixed(1)}" text-anchor="middle" class="fan-root-label">${escapeHtml(rootLabel.split(' ').slice(0, 2).join(' '))}</text>` +
+    `<text x="${cx.toFixed(1)}" y="${(cy + 11).toFixed(1)}" text-anchor="middle" class="fan-root-sub">${escapeHtml(rootSub)}</text>` +
+    `</g>`;
+
+  return `<svg class="fan-chart" viewBox="0 0 ${width.toFixed(0)} ${height.toFixed(0)}" width="${width.toFixed(0)}" height="${height.toFixed(0)}">${wedges}${rootHub}</svg>`;
+}
+
 function treeNodeHTML(node){
   if (!node.id) {
     return `<div class="tree-node empty" style="left:${node.x}px; top:${node.y}px; width:${node.w}px; min-height:${node.h}px;">?</div>`;
@@ -648,11 +757,17 @@ function treeNodeHTML(node){
   </div>`;
 }
 
+let treeViewMode = 'rect'; // 'rect' | 'fan'
+
 function renderTreeCanvas(){
   const mount = document.getElementById('treeCanvasMount');
   if (!mount) return;
   if (!treeRootId || !INDEX[treeRootId]) {
     mount.innerHTML = `<p class="card-note" style="padding:20px;">Choisissez une personne pour afficher son arbre ascendant.</p>`;
+    return;
+  }
+  if (treeViewMode === 'fan') {
+    mount.innerHTML = `<div class="tree-canvas fan-canvas" style="display:inline-block; transform:scale(${treeZoom}); transform-origin:top center;">${fanChartSVG(treeRootId, treeDepth)}</div>`;
     return;
   }
   const layout = computeAncestorLayout(treeRootId, treeDepth);
@@ -661,7 +776,7 @@ function renderTreeCanvas(){
   ).join('');
   const nodesHTML = layout.nodes.map(treeNodeHTML).join('');
   mount.innerHTML = `
-    <div class="tree-canvas" style="width:${layout.width}px; height:${layout.height}px; transform:scale(${treeZoom});">
+    <div class="tree-canvas" style="width:${layout.width}px; height:${layout.height}px; transform:scale(${treeZoom}); transform-origin:top left;">
       <svg class="tree-links" width="${layout.width}" height="${layout.height}">${linksSVG}</svg>
       ${nodesHTML}
     </div>`;
@@ -688,6 +803,12 @@ function renderArbre(){
           ${[2, 3, 4, 5, 6, 7, 8].map(d => `<option value="${d}" ${d === treeDepth ? 'selected' : ''}>${d}</option>`).join('')}
         </select>
       </label>
+      <label style="font-size:12.5px; color:var(--ink-soft);">Vue :
+        <select id="treeViewSelect" style="margin-left:6px;">
+          <option value="rect" ${treeViewMode === 'rect' ? 'selected' : ''}>Rectangulaire</option>
+          <option value="fan" ${treeViewMode === 'fan' ? 'selected' : ''}>Demi-cercle</option>
+        </select>
+      </label>
       <div class="zoom-row">
         <button type="button" class="btn secondary small" id="treeZoomOut">&minus;</button>
         <span id="treeZoomLabel" style="font-size:12.5px; color:var(--ink-soft); min-width:38px; text-align:center;">${Math.round(treeZoom * 100)}%</span>
@@ -711,6 +832,10 @@ function renderArbre(){
   });
   document.getElementById('treeDepthSelect').addEventListener('change', e => {
     treeDepth = parseInt(e.target.value, 10); renderTreeCanvas();
+  });
+  document.getElementById('treeViewSelect').addEventListener('change', e => {
+    treeViewMode = e.target.value; treeZoom = 1; renderTreeCanvas();
+    document.getElementById('treeZoomLabel').textContent = '100%';
   });
   function applyZoom(delta){
     treeZoom = Math.max(0.4, Math.min(1.5, Math.round((treeZoom + delta) * 10) / 10));

@@ -320,6 +320,23 @@ table.data-table tr:hover td{ background: rgba(168,121,31,0.06); }
 .tree-side{ margin-top:16px; }
 .tree-side h4{ font-size:12px; text-transform:uppercase; letter-spacing:0.06em; color: var(--gold); margin:0 0 6px; }
 
+.fan-chart{ display:block; }
+.fan-wedge{
+  fill: var(--card-bg); stroke: var(--paper); stroke-width:1.5; cursor:pointer; transition: fill .15s;
+}
+.fan-wedge.sex-M{ fill: #dfe7ee; }
+.fan-wedge.sex-F{ fill: #f3e3e8; }
+.fan-wedge.empty{ fill: var(--paper-darker); stroke-dasharray:3 3; cursor:default; }
+.fan-node-g:hover .fan-wedge:not(.empty){ fill: var(--gold-light); }
+.fan-label{ font-family: var(--font-serif); font-size:11px; fill: var(--maroon-dark); font-weight:bold; pointer-events:none; }
+.fan-sublabel{ font-family: var(--font-serif); font-size:9.5px; fill: var(--ink-soft); pointer-events:none; }
+.fan-root-circle{ fill: var(--gold); stroke: var(--maroon-dark); stroke-width:2; cursor:pointer; }
+.fan-root-circle.sex-M{ fill: #b9cbdc; }
+.fan-root-circle.sex-F{ fill: #e6c3cd; }
+.fan-node-g:hover .fan-root-circle{ fill: var(--gold-light); }
+.fan-root-label{ font-family: var(--font-display); font-size:12.5px; fill: var(--maroon-dark); font-weight:bold; pointer-events:none; }
+.fan-root-sub{ font-family: var(--font-serif); font-size:10px; fill: var(--ink-soft); pointer-events:none; }
+
 /* ---------------------------------------------------------------- */
 /* Questions (moteur local)                                           */
 /* ---------------------------------------------------------------- */
