@@ -739,19 +739,27 @@ function fanChartSVG(rootId, depth){
         return natural > maxLen ? ` textLength="${maxLen.toFixed(0)}" lengthAdjust="spacingAndGlyphs"` : '';
       };
       if (arcLen >= MIN_LABEL_ARC) {
-        const shortName = arcLen < 60 ? (r.surname || r.given || r.name) : r.name;
         const dateStr = lifeSpanShort(r);
-        // Les deux lignes (nom / dates) doivent s'écarter radialement l'une de l'autre, pas
-        // verticalement à l'écran : un décalage vertical fixe ne coïncide avec le rayon que
-        // près du sommet de l'éventail (mid≈0°) et devient tangentiel près des bords (±90°),
-        // ce qui pousse alors chaque ligne vers la case voisine au lieu de l'écarter de l'autre.
         const hasDate = r.birth.year || r.death.year;
-        const [nx, ny] = polarPoint(cx, cy, rMid - (hasDate ? 7 : 0), mid);
-        labels = `<text x="${nx.toFixed(1)}" y="${ny.toFixed(1)}" transform="rotate(${rot} ${nx.toFixed(1)} ${ny.toFixed(1)})" text-anchor="middle" dominant-baseline="middle" class="fan-label"${fitAttr(shortName, 11, true)}>${escapeHtml(shortName)}</text>`;
-        if (hasDate) {
-          const [dx, dy] = polarPoint(cx, cy, rMid + 7, mid);
-          labels += `<text x="${dx.toFixed(1)}" y="${dy.toFixed(1)}" transform="rotate(${rot} ${dx.toFixed(1)} ${dy.toFixed(1)})" text-anchor="middle" dominant-baseline="middle" class="fan-sublabel"${fitAttr(dateStr, 9.5, false)}>${dateStr}</text>`;
-        }
+        const surname = r.surname || r.name;
+        // Prénom sur sa propre ligne seulement s'il y a assez de place ; sinon on ne garde
+        // que le nom de famille (repère principal) et, si présentes, les dates.
+        const showGiven = arcLen >= 60 && r.given && r.surname;
+        const lines = [];
+        if (showGiven) lines.push({ text: r.given, cls: 'fan-given', size: 9.5, bold: false });
+        lines.push({ text: surname, cls: 'fan-label', size: 11, bold: true });
+        if (hasDate) lines.push({ text: dateStr, cls: 'fan-sublabel', size: 9.5, bold: false });
+        // Chaque ligne doit s'écarter radialement des autres, pas verticalement à l'écran :
+        // un décalage vertical fixe ne coïncide avec le rayon que près du sommet de l'éventail
+        // (mid≈0°) et devient tangentiel près des bords (±90°), ce qui pousse alors chaque
+        // ligne vers la case voisine au lieu de l'écarter des autres lignes.
+        const spacing = 12.5;
+        const startOffset = -((lines.length - 1) / 2) * spacing;
+        lines.forEach((ln, i) => {
+          const rOff = rMid + startOffset + i * spacing;
+          const [lx, ly] = polarPoint(cx, cy, rOff, mid);
+          labels += `<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" transform="rotate(${rot} ${lx.toFixed(1)} ${ly.toFixed(1)})" text-anchor="middle" dominant-baseline="middle" class="${ln.cls}"${fitAttr(ln.text, ln.size, ln.bold)}>${escapeHtml(ln.text)}</text>`;
+        });
       }
       wedges += `<g class="fan-node-g" data-open-id="${id}">` +
         `<path d="${d}" class="fan-wedge sex-${r.sex}"><title>${escapeHtml(r.name)} — ${escapeHtml(lifeSpanShort(r))}</title></path>` +

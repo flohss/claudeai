@@ -329,6 +329,7 @@ table.data-table tr:hover td{ background: rgba(168,121,31,0.06); }
 .fan-wedge.empty{ fill: var(--paper-darker); stroke-dasharray:3 3; cursor:default; }
 .fan-node-g:hover .fan-wedge:not(.empty){ fill: var(--gold-light); }
 .fan-label{ font-family: var(--font-serif); font-size:11px; fill: var(--maroon-dark); font-weight:bold; pointer-events:none; }
+.fan-given{ font-family: var(--font-serif); font-size:9.5px; fill: var(--maroon-dark); font-style:italic; pointer-events:none; }
 .fan-sublabel{ font-family: var(--font-serif); font-size:9.5px; fill: var(--ink-soft); pointer-events:none; }
 .fan-root-circle{ fill: var(--gold); stroke: var(--maroon-dark); stroke-width:2; cursor:pointer; }
 .fan-root-circle.sex-M{ fill: #b9cbdc; }
