@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+
+# Données personnelles générées/importées localement : ne pas committer.
+*.ged
+dashboard.html
