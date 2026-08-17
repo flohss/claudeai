@@ -653,6 +653,20 @@ function polarPoint(cx, cy, r, angleDeg){
   return [cx + r * Math.sin(a), cy - r * Math.cos(a)];
 }
 
+/** Mesure la largeur réelle (en px) d'un texte avec la police effectivement
+ * utilisée par les libellés de l'éventail, via un canvas hors-DOM. Une
+ * estimation à base de "nb caractères × facteur" s'était révélée trop
+ * optimiste pour ce rendu (gras, serif) : des libellés non compressés
+ * débordaient malgré tout sur les cases voisines. La mesure canvas est
+ * exacte, donc fiable quel que soit le poids/la police. */
+const __fanMeasureCtx = (typeof document !== 'undefined')
+  ? document.createElement('canvas').getContext('2d') : null;
+function measureFanTextWidth(text, fontSize, bold){
+  if (!__fanMeasureCtx) return text.length * fontSize * 0.6;
+  __fanMeasureCtx.font = `${bold ? 'bold ' : ''}${fontSize}px Georgia, 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', serif`;
+  return __fanMeasureCtx.measureText(text).width;
+}
+
 /** Chemin SVG d'un secteur annulaire (ou d'un secteur plein si rInner≈0),
  * de rInner à rOuter, entre les angles a1 et a2 (degrés, 0 = vers le haut,
  * mesurés dans le sens horaire — nos éventails restent dans [-90°, 90°],
@@ -711,20 +725,33 @@ function fanChartSVG(rootId, depth){
       const r = INDEX[id];
       if (!r) return;
       const arcLen = ((end - start) * Math.PI / 180) * rMid;
-      const [tx, ty] = polarPoint(cx, cy, rMid, mid);
       const rot = mid.toFixed(1);
       let labels = '';
-      // La rotation tangentielle place le texte "de travers" près des bords (±90°) : sa longueur
-      // pointe alors radialement et peut déborder sur l'anneau voisin. On borne donc la largeur
-      // rendue (textLength) à la fois par l'arc disponible et par la largeur de l'anneau.
-      const maxLen = Math.max(18, Math.min(arcLen * 0.92, RING_W * 1.5));
-      const fitAttr = (text, fontSize) => (text.length * fontSize * 0.55 > maxLen)
-        ? ` textLength="${maxLen.toFixed(0)}" lengthAdjust="spacingAndGlyphs"` : '';
+      // Le texte, tourné pour suivre la courbe, occupe la largeur de l'arc de sa propre
+      // case : s'il fait (une fois rendu) plus large que cet arc, il empiète sur les cases
+      // voisines. On mesure donc la largeur réelle (police/graisse exactes, via canvas —
+      // une estimation par nombre de caractères s'était montrée trop optimiste pour ce
+      // rendu gras/serif) et on ne compresse (textLength) que si elle dépasse la marge
+      // disponible, en laissant une vraie marge de chaque côté de la case.
+      const maxLen = Math.max(16, arcLen * 0.84);
+      const fitAttr = (text, fontSize, bold) => {
+        const natural = measureFanTextWidth(text, fontSize, bold);
+        return natural > maxLen ? ` textLength="${maxLen.toFixed(0)}" lengthAdjust="spacingAndGlyphs"` : '';
+      };
       if (arcLen >= MIN_LABEL_ARC) {
         const shortName = arcLen < 60 ? (r.surname || r.given || r.name) : r.name;
         const dateStr = lifeSpanShort(r);
-        labels = `<text x="${tx.toFixed(1)}" y="${(ty - 5).toFixed(1)}" transform="rotate(${rot} ${tx.toFixed(1)} ${(ty - 5).toFixed(1)})" text-anchor="middle" class="fan-label"${fitAttr(shortName, 11)}>${escapeHtml(shortName)}</text>` +
-          (r.birth.year || r.death.year ? `<text x="${tx.toFixed(1)}" y="${(ty + 9).toFixed(1)}" transform="rotate(${rot} ${tx.toFixed(1)} ${(ty + 9).toFixed(1)})" text-anchor="middle" class="fan-sublabel"${fitAttr(dateStr, 9.5)}>${dateStr}</text>` : '');
+        // Les deux lignes (nom / dates) doivent s'écarter radialement l'une de l'autre, pas
+        // verticalement à l'écran : un décalage vertical fixe ne coïncide avec le rayon que
+        // près du sommet de l'éventail (mid≈0°) et devient tangentiel près des bords (±90°),
+        // ce qui pousse alors chaque ligne vers la case voisine au lieu de l'écarter de l'autre.
+        const hasDate = r.birth.year || r.death.year;
+        const [nx, ny] = polarPoint(cx, cy, rMid - (hasDate ? 7 : 0), mid);
+        labels = `<text x="${nx.toFixed(1)}" y="${ny.toFixed(1)}" transform="rotate(${rot} ${nx.toFixed(1)} ${ny.toFixed(1)})" text-anchor="middle" dominant-baseline="middle" class="fan-label"${fitAttr(shortName, 11, true)}>${escapeHtml(shortName)}</text>`;
+        if (hasDate) {
+          const [dx, dy] = polarPoint(cx, cy, rMid + 7, mid);
+          labels += `<text x="${dx.toFixed(1)}" y="${dy.toFixed(1)}" transform="rotate(${rot} ${dx.toFixed(1)} ${dy.toFixed(1)})" text-anchor="middle" dominant-baseline="middle" class="fan-sublabel"${fitAttr(dateStr, 9.5, false)}>${dateStr}</text>`;
+        }
       }
       wedges += `<g class="fan-node-g" data-open-id="${id}">` +
         `<path d="${d}" class="fan-wedge sex-${r.sex}"><title>${escapeHtml(r.name)} — ${escapeHtml(lifeSpanShort(r))}</title></path>` +
