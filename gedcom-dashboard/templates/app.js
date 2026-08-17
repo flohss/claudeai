@@ -842,6 +842,63 @@ function renderTreeCanvas(){
     </div>`;
 }
 
+/** Exporte l'arbre affiché (vue rectangulaire ou demi-cercle, selon le mode courant) au format
+ * papier A4 ou A3, via l'impression native du navigateur (« Enregistrer au format PDF » dans la
+ * boîte de dialogue d'impression) — aucune bibliothèque externe requise. On construit une copie
+ * du contenu, mise à l'échelle et centrée pour remplir une seule page, dans un conteneur dédié
+ * que la feuille de style @media print isole du reste du tableau de bord ; l'orientation
+ * (portrait/paysage) est choisie automatiquement, celle des deux qui permet le plus grand
+ * agrandissement du contenu sur la page.
+ */
+function exportTreeToPrint(sizeKey){
+  if (!treeRootId || !INDEX[treeRootId]) return;
+  const PAGE_MM = { A4: [210, 297], A3: [297, 420] };
+  const PX_PER_MM = 96 / 25.4; // référence CSS : 96px = 1in = 25.4mm, exacte pour l'impression.
+  const marginMM = 12;
+  const [a, b] = PAGE_MM[sizeKey] || PAGE_MM.A4;
+
+  let contentW, contentH, bodyHTML;
+  if (treeViewMode === 'fan') {
+    const svg = fanChartSVG(treeRootId, treeDepth);
+    const m = svg.match(/width="(\d+)" height="(\d+)"/);
+    contentW = m ? +m[1] : 800;
+    contentH = m ? +m[2] : 500;
+    bodyHTML = svg;
+  } else {
+    const layout = computeAncestorLayout(treeRootId, treeDepth);
+    contentW = layout.width;
+    contentH = layout.height;
+    const linksSVG = layout.links.filter(l => l.show).map(l =>
+      `<line x1="${l.x1}" y1="${l.y1}" x2="${l.x2}" y2="${l.y2}"/>`
+    ).join('');
+    const nodesHTML = layout.nodes.map(treeNodeHTML).join('');
+    bodyHTML = `<svg class="tree-links" width="${contentW}" height="${contentH}">${linksSVG}</svg>${nodesHTML}`;
+  }
+
+  const fitScore = (orient) => {
+    const pageWmm = orient === 'landscape' ? Math.max(a, b) : Math.min(a, b);
+    const pageHmm = orient === 'landscape' ? Math.min(a, b) : Math.max(a, b);
+    const availWpx = (pageWmm - marginMM * 2) * PX_PER_MM;
+    const availHpx = (pageHmm - marginMM * 2) * PX_PER_MM;
+    return { orient, pageWmm, pageHmm, availWpx, availHpx, scale: Math.min(availWpx / contentW, availHpx / contentH) };
+  };
+  const landscape = fitScore('landscape'), portrait = fitScore('portrait');
+  const best = landscape.scale >= portrait.scale ? landscape : portrait;
+
+  let styleEl = document.getElementById('printPageStyle');
+  if (!styleEl) { styleEl = document.createElement('style'); styleEl.id = 'printPageStyle'; document.head.appendChild(styleEl); }
+  styleEl.textContent = `@page{ size:${best.pageWmm}mm ${best.pageHmm}mm; margin:${marginMM}mm; }`;
+
+  const scaledW = contentW * best.scale, scaledH = contentH * best.scale;
+  const offsetX = Math.max(0, (best.availWpx - scaledW) / 2), offsetY = Math.max(0, (best.availHpx - scaledH) / 2);
+  const mount = document.getElementById('printExportMount');
+  mount.innerHTML = `<div style="width:${best.availWpx.toFixed(0)}px; height:${best.availHpx.toFixed(0)}px; overflow:hidden; position:relative;">
+    <div style="position:absolute; left:${offsetX.toFixed(0)}px; top:${offsetY.toFixed(0)}px; width:${contentW}px; height:${contentH}px; transform:scale(${best.scale}); transform-origin:top left;">${bodyHTML}</div>
+  </div>`;
+
+  setTimeout(() => window.print(), 60);
+}
+
 function renderArbre(){
   const panel = document.getElementById('panel-arbre');
   if (!treeRootId || !INDEX[treeRootId]) {
@@ -874,7 +931,13 @@ function renderArbre(){
         <span id="treeZoomLabel" style="font-size:12.5px; color:var(--ink-soft); min-width:38px; text-align:center;">${Math.round(treeZoom * 100)}%</span>
         <button type="button" class="btn secondary small" id="treeZoomIn">+</button>
       </div>
+      <div class="zoom-row">
+        <span style="font-size:12.5px; color:var(--ink-soft);">Export papier :</span>
+        <button type="button" class="btn secondary small" id="treeExportA4">A4</button>
+        <button type="button" class="btn secondary small" id="treeExportA3">A3</button>
+      </div>
     </div>
+    <p class="card-note" style="margin:2px 0 10px;">L'export ouvre la boîte de dialogue d'impression du navigateur, orientation choisie automatiquement ; utilisez « Enregistrer au format PDF » comme destination pour obtenir un fichier.</p>
     <div class="tree-scroll"><div id="treeCanvasMount"></div></div>
     ${root ? `
     <div class="tree-side">
@@ -905,6 +968,8 @@ function renderArbre(){
   }
   document.getElementById('treeZoomIn').addEventListener('mousedown', () => applyZoom(0.1));
   document.getElementById('treeZoomOut').addEventListener('mousedown', () => applyZoom(-0.1));
+  document.getElementById('treeExportA4').addEventListener('mousedown', () => exportTreeToPrint('A4'));
+  document.getElementById('treeExportA3').addEventListener('mousedown', () => exportTreeToPrint('A3'));
 }
 
 /* ------------------------------------------------------------------ */

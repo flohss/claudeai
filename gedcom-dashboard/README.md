@@ -48,7 +48,12 @@ Le dashboard présente 11 onglets :
    directe depuis n'importe quelle fiche (« Voir dans l'arbre »). Deux vues
    au choix : rectangulaire (éventail binaire classique) ou demi-cercle
    (éventail circulaire, avec la personne racine au centre en bas et les
-   générations d'ascendants en anneaux concentriques au-dessus).
+   générations d'ascendants en anneaux concentriques au-dessus ; le texte
+   suit la courbure de chaque case et, dans les générations profondes où
+   les cases deviennent trop étroites pour du texte courbé, passe
+   automatiquement à l'écriture radiale). Export papier en A4 ou A3 via
+   l'impression native du navigateur (« Enregistrer au format PDF »),
+   orientation choisie automatiquement pour remplir au mieux la page.
 9. **Calendrier perpétuel** — naissances, mariages et décès classés par
    jour de l'année (toutes années confondues), filtrables par mois/type/nom,
    avec un rappel « dans l'histoire familiale » pour la date du jour.

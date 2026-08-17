@@ -424,6 +424,12 @@ footer.pagefoot{
   border-top:1px solid var(--line-soft);
 }
 .flourish{ text-align:center; color: var(--gold); letter-spacing:0.3em; font-size:12px; margin: 30px 0 6px; }
+
+#printExportMount{ display:none; }
+@media print{
+  header.masthead, .wrap, .modal-overlay{ display:none !important; }
+  #printExportMount{ display:block !important; }
+}
 </style>
 </head>
 <body>
@@ -474,6 +480,8 @@ footer.pagefoot{
 <div class="modal-overlay" id="modalOverlay">
   <div class="fiche" id="ficheContent"></div>
 </div>
+
+<div id="printExportMount"></div>
 
 <script>
 const RAW_GEDCOM_JSON = __RAW_GEDCOM_JSON__;
