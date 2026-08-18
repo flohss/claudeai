@@ -95,6 +95,72 @@
     line-height:1.6;
   }
 
+  .tabs{
+    display:flex;
+    justify-content:center;
+    gap:10px;
+    flex-wrap:wrap;
+    margin-bottom:32px;
+  }
+
+  .tab-btn{
+    font-family:var(--mono);
+    font-size:14px;
+    letter-spacing:0.03em;
+    color:var(--text-dim);
+    background:rgba(0,20,12,0.5);
+    border:1px solid var(--panel-border);
+    border-radius:999px;
+    padding:10px 20px;
+    cursor:pointer;
+    transition:background .15s, color .15s, border-color .15s, transform .15s;
+  }
+
+  .tab-btn:hover{
+    color:var(--text);
+    border-color:var(--accent-dim);
+    transform:translateY(-1px);
+  }
+
+  .tab-btn.active{
+    color:#04140c;
+    background:var(--accent);
+    border-color:var(--accent);
+    font-weight:600;
+    box-shadow:0 0 18px rgba(0,255,140,0.35);
+  }
+
+  .dict-search{
+    width:100%;
+    background:#03110a;
+    border:1px solid var(--panel-border);
+    border-radius:10px;
+    color:var(--text);
+    font-family:var(--mono);
+    font-size:14px;
+    padding:12px 14px;
+    outline:none;
+    margin:18px 0 22px;
+    transition:border-color .15s, box-shadow .15s;
+  }
+  .dict-search::placeholder{ color:#3a5a4c; }
+  .dict-search:focus{
+    border-color:var(--accent);
+    box-shadow:0 0 0 3px rgba(0,255,140,0.12);
+  }
+
+  .dict-group-title{
+    font-family:var(--mono);
+    font-size:13px;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    color:var(--accent-dim);
+    margin:26px 0 4px;
+  }
+  .dict-group-title:first-of-type{ margin-top:0; }
+
+  table.bin-table tr.dict-row-hidden{ display:none; }
+
   section{
     background:var(--panel);
     border:1px solid var(--panel-border);
@@ -325,6 +391,14 @@
     </p>
   </header>
 
+  <nav class="tabs" role="tablist" aria-label="Sections du site">
+    <button class="tab-btn active" role="tab" aria-selected="true" data-tab="theorie">📖 Théorie</button>
+    <button class="tab-btn" role="tab" aria-selected="false" data-tab="traducteur">🔤 Traducteur</button>
+    <button class="tab-btn" role="tab" aria-selected="false" data-tab="dictionnaire">📚 Dictionnaire</button>
+  </nav>
+
+  <div class="tab-panel" data-tab-panel="theorie">
+
   <section>
     <h2><span class="num">01</span> Qu'est-ce que le binaire ?</h2>
     <p>
@@ -378,6 +452,22 @@
     </div>
   </section>
 
+  <section>
+    <h2><span class="num">05</span> Le saviez-vous ?</h2>
+    <p>
+      • Le mot <em>bit</em> vient de <em>binary digit</em>, inventé par le statisticien John Tukey en 1947.<br>
+      • 8 bits forment un <strong>octet</strong> (byte), l'unité de base du stockage informatique.<br>
+      • Le code binaire moderne dérive des travaux de Gottfried Leibniz au XVIIe siècle, inspirés notamment
+      du Yi Jing chinois.<br>
+      • Tous les fichiers — photos, musique, vidéos — ne sont, au fond, que des suites de 0 et de 1
+      interprétées différemment selon leur format.
+    </p>
+  </section>
+
+  </div>
+
+  <div class="tab-panel" data-tab-panel="traducteur" hidden>
+
   <section class="translator">
     <h2><span class="num">04</span> Traducteur instantané français ⇄ binaire</h2>
     <p>Tapez du texte dans un champ : la traduction apparaît instantanément dans l'autre.</p>
@@ -425,17 +515,41 @@
     </div>
   </section>
 
-  <section>
-    <h2><span class="num">05</span> Le saviez-vous ?</h2>
+  </div>
+
+  <div class="tab-panel" data-tab-panel="dictionnaire" hidden>
+
+  <section class="dictionary">
+    <h2><span class="num">📚</span> Dictionnaire caractère ⇄ binaire</h2>
     <p>
-      • Le mot <em>bit</em> vient de <em>binary digit</em>, inventé par le statisticien John Tukey en 1947.<br>
-      • 8 bits forment un <strong>octet</strong> (byte), l'unité de base du stockage informatique.<br>
-      • Le code binaire moderne dérive des travaux de Gottfried Leibniz au XVIIe siècle, inspirés notamment
-      du Yi Jing chinois.<br>
-      • Tous les fichiers — photos, musique, vidéos — ne sont, au fond, que des suites de 0 et de 1
-      interprétées différemment selon leur format.
+      La table de référence complète : chaque caractère, son code décimal (norme Unicode/UTF-8), sa
+      décomposition en puissances de 2, et son équivalent binaire. C'est cette table qu'il faut
+      « consulter » — comme un dictionnaire — pour connaître le code décimal d'un caractère ;
+      la conversion en binaire, elle, est ensuite un simple calcul.
     </p>
+
+    <input type="search" id="dictSearch" class="dict-search"
+           placeholder="Rechercher un caractère, un code décimal ou une suite binaire…"
+           autocomplete="off">
+
+    <p class="dict-group-title">Lettres, chiffres et ponctuation (ASCII, 1 octet)</p>
+    <div class="table-scroll">
+      <table class="bin-table" id="dictTableAscii"></table>
+    </div>
+
+    <p class="dict-group-title">Caractères accentués français (UTF-8, 2 octets)</p>
+    <p class="breakdown-hint" style="margin-top:-4px;">
+      Ces caractères sortent de la table ASCII (limitée à 128 valeurs) : ils sont encodés sur
+      <strong>2 octets</strong> en UTF-8, chacun décomposé séparément en puissances de 2.
+    </p>
+    <div class="table-scroll">
+      <table class="bin-table" id="dictTableFr"></table>
+    </div>
+
+    <p class="breakdown-note" id="dictNote"></p>
   </section>
+
+  </div>
 
   <footer>
     Fait avec Claude — page dédiée au langage binaire
@@ -653,6 +767,70 @@
   // exemple par défaut
   frInput.value = 'Bonjour le monde';
   updateFromFr();
+
+  /* ---------- Onglets ---------- */
+  var tabButtons = Array.prototype.slice.call(document.querySelectorAll('.tab-btn'));
+  var tabPanels = Array.prototype.slice.call(document.querySelectorAll('.tab-panel'));
+
+  function activateTab(name){
+    tabButtons.forEach(function(btn){
+      var active = btn.getAttribute('data-tab') === name;
+      btn.classList.toggle('active', active);
+      btn.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+    tabPanels.forEach(function(panel){
+      panel.hidden = panel.getAttribute('data-tab-panel') !== name;
+    });
+  }
+
+  tabButtons.forEach(function(btn){
+    btn.addEventListener('click', function(){ activateTab(btn.getAttribute('data-tab')); });
+  });
+
+  /* ---------- Dictionnaire caractère <-> binaire ---------- */
+  function buildDictRows(chars){
+    return chars.map(function(ch){
+      var bytes = Array.from(new TextEncoder().encode(ch));
+      var decParts = bytes.map(String).join(' + ');
+      var decompParts = bytes.map(decompose).join(' / ');
+      var binParts = bytes.map(function(b){ return b.toString(2).padStart(8, '0'); }).join(' ');
+      var searchKey = (ch + ' ' + decParts + ' ' + binParts).toLowerCase();
+      return '<tr data-key="' + escapeHtml(searchKey) + '">' +
+        '<td>' + displayChar(ch) + '</td>' +
+        '<td>' + decParts + '</td>' +
+        '<td>' + decompParts + '</td>' +
+        '<td>' + binParts + '</td>' +
+        '</tr>';
+    }).join('');
+  }
+
+  var ASCII_CHARS = [' '];
+  for (var code = 33; code <= 126; code++){ ASCII_CHARS.push(String.fromCharCode(code)); }
+
+  var FR_CHARS = Array.from('àâäéèêëîïôöùûüçÀÂÄÉÈÊËÎÏÔÖÙÛÜÇœŒæÆ');
+
+  var dictTableAscii = document.getElementById('dictTableAscii');
+  var dictTableFr = document.getElementById('dictTableFr');
+  var dictNote = document.getElementById('dictNote');
+  var dictSearch = document.getElementById('dictSearch');
+  var DICT_HEAD = '<tr><th>Caractère</th><th>Code décimal</th><th>Décomposition (puissances de 2)</th><th>Binaire</th></tr>';
+
+  dictTableAscii.innerHTML = DICT_HEAD + buildDictRows(ASCII_CHARS);
+  dictTableFr.innerHTML = DICT_HEAD + buildDictRows(FR_CHARS);
+
+  function filterDict(){
+    var q = dictSearch.value.trim().toLowerCase();
+    var rows = document.querySelectorAll('#dictTableAscii tr[data-key], #dictTableFr tr[data-key]');
+    var visible = 0;
+    rows.forEach(function(row){
+      var match = q === '' || row.getAttribute('data-key').indexOf(q) !== -1;
+      row.classList.toggle('dict-row-hidden', !match);
+      if (match) visible++;
+    });
+    dictNote.textContent = q === '' ? '' : (visible + ' résultat(s) pour "' + q + '"');
+  }
+
+  dictSearch.addEventListener('input', filterDict);
 })();
 </script>
 
