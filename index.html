@@ -411,7 +411,13 @@
 
     <div class="breakdown" id="breakdownWrap" hidden>
       <h3>Détail caractère par caractère</h3>
-      <p class="breakdown-hint">Chaque caractère est converti en un ou plusieurs octets (UTF-8), eux-mêmes affichés en binaire sur 8 bits.</p>
+      <p class="breakdown-hint">
+        Deux étapes bien distinctes : <strong>1)</strong> chaque caractère a un <strong>code décimal fixe</strong>,
+        défini par la norme Unicode/UTF-8 (une simple table à consulter, pas un calcul — ex. "S" = 83).
+        <strong>2)</strong> ce nombre décimal est ensuite <strong>décomposé en puissances de 2</strong>
+        (128, 64, 32, 16, 8, 4, 2, 1) : chaque puissance utilisée donne un bit à 1, les autres restent à 0.
+        C'est cette décomposition, purement mécanique, qui produit le binaire.
+      </p>
       <div class="table-scroll">
         <table class="bin-table" id="breakdownTable"></table>
       </div>
@@ -512,6 +518,14 @@
     return escapeHtml(ch);
   }
 
+  var POWERS_OF_TWO = [128, 64, 32, 16, 8, 4, 2, 1];
+
+  // Montre COMMENT le décimal devient binaire : décomposition en puissances de 2.
+  function decompose(byte){
+    var terms = POWERS_OF_TWO.filter(function(p){ return (byte & p) === p; });
+    return terms.length ? terms.join('+') : '0';
+  }
+
   function renderBreakdown(str){
     if (!str || str.length === 0){
       breakdownWrap.hidden = true;
@@ -527,13 +541,14 @@
     var rows = shown.map(function(ch){
       var bytes = Array.from(new TextEncoder().encode(ch));
       var decParts = bytes.map(String).join(' + ');
+      var decompParts = bytes.map(decompose).join(' / ');
       var binParts = bytes.map(function(b){ return b.toString(2).padStart(8, '0'); }).join(' ');
       var octetLabel = bytes.length > 1 ? (bytes.length + ' octets') : '1 octet';
-      return '<tr><td>' + displayChar(ch) + '</td><td>' + decParts + '</td><td>' + binParts + '</td><td>' + octetLabel + '</td></tr>';
+      return '<tr><td>' + displayChar(ch) + '</td><td>' + decParts + '</td><td>' + decompParts + '</td><td>' + binParts + '</td><td>' + octetLabel + '</td></tr>';
     });
 
     breakdownTable.innerHTML =
-      '<tr><th>Caractère</th><th>Décimal (UTF-8)</th><th>Binaire (8 bits/octet)</th><th>Taille</th></tr>' +
+      '<tr><th>Caractère</th><th>Code décimal<br>(table Unicode/UTF-8)</th><th>Décomposition<br>en puissances de 2</th><th>Binaire (8 bits)</th><th>Taille</th></tr>' +
       rows.join('');
 
     breakdownNote.textContent = truncated
