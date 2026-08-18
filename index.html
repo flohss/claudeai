@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Le Langage Binaire — Tout savoir + Traducteur instantané</title>
+<meta name="description" content="Une page dédiée au langage binaire : histoire, fonctionnement, tables de conversion et traducteur instantané français ↔ binaire.">
+<style>
+  :root{
+    --bg:#050a08;
+    --panel:rgba(8,20,15,0.72);
+    --panel-border:rgba(0,255,140,0.25);
+    --accent:#00ff8c;
+    --accent-dim:#00b368;
+    --text:#d7ffe9;
+    --text-dim:#8fb3a1;
+    --mono: "JetBrains Mono","Fira Code","Consolas",monospace;
+    --sans: "Segoe UI", system-ui, -apple-system, sans-serif;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0;
+    padding:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--sans);
+    min-height:100%;
+    overflow-x:hidden;
+  }
+
+  canvas#rain{
+    position:fixed;
+    inset:0;
+    width:100vw;
+    height:100vh;
+    z-index:0;
+    display:block;
+  }
+
+  .vignette{
+    position:fixed;
+    inset:0;
+    z-index:1;
+    pointer-events:none;
+    background:
+      radial-gradient(ellipse at center, rgba(0,0,0,0) 0%, rgba(0,0,0,0.55) 75%, rgba(0,0,0,0.85) 100%);
+  }
+
+  .wrap{
+    position:relative;
+    z-index:2;
+    max-width:920px;
+    margin:0 auto;
+    padding:64px 20px 100px;
+  }
+
+  header.hero{
+    text-align:center;
+    margin-bottom:56px;
+  }
+
+  .hero .tag{
+    display:inline-block;
+    font-family:var(--mono);
+    letter-spacing:0.3em;
+    font-size:12px;
+    color:var(--accent);
+    border:1px solid var(--panel-border);
+    padding:6px 14px;
+    border-radius:999px;
+    background:rgba(0,255,140,0.06);
+    margin-bottom:22px;
+    text-transform:uppercase;
+  }
+
+  h1{
+    font-family:var(--mono);
+    font-size:clamp(32px, 6vw, 58px);
+    line-height:1.1;
+    margin:0 0 16px;
+    color:#fff;
+    text-shadow:0 0 18px rgba(0,255,140,0.45), 0 0 46px rgba(0,255,140,0.15);
+  }
+
+  h1 span{
+    color:var(--accent);
+  }
+
+  .hero p.lead{
+    font-size:17px;
+    color:var(--text-dim);
+    max-width:620px;
+    margin:0 auto;
+    line-height:1.6;
+  }
+
+  section{
+    background:var(--panel);
+    border:1px solid var(--panel-border);
+    border-radius:16px;
+    padding:32px clamp(18px, 4vw, 40px);
+    margin-bottom:28px;
+    backdrop-filter:blur(10px);
+    box-shadow:0 8px 40px rgba(0,0,0,0.35);
+  }
+
+  section h2{
+    font-family:var(--mono);
+    font-size:22px;
+    color:var(--accent);
+    margin:0 0 6px;
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+
+  section h2 .num{
+    font-size:13px;
+    color:var(--accent-dim);
+    border:1px solid var(--panel-border);
+    border-radius:6px;
+    padding:2px 7px;
+  }
+
+  section p{
+    color:var(--text-dim);
+    line-height:1.75;
+    font-size:15.5px;
+  }
+
+  section p strong{ color:var(--text); }
+
+  code.inline{
+    font-family:var(--mono);
+    background:rgba(0,255,140,0.1);
+    color:var(--accent);
+    padding:1px 7px;
+    border-radius:5px;
+    font-size:0.92em;
+  }
+
+  /* Translator */
+  .translator .fields{
+    display:grid;
+    grid-template-columns:1fr auto 1fr;
+    gap:18px;
+    align-items:stretch;
+    margin-top:22px;
+  }
+
+  @media (max-width:720px){
+    .translator .fields{ grid-template-columns:1fr; }
+    .swap{ justify-self:center; transform:rotate(90deg); }
+  }
+
+  .field{
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+  }
+
+  .field label{
+    font-family:var(--mono);
+    font-size:12px;
+    letter-spacing:0.12em;
+    text-transform:uppercase;
+    color:var(--text-dim);
+  }
+
+  textarea{
+    width:100%;
+    min-height:170px;
+    resize:vertical;
+    background:#03110a;
+    border:1px solid var(--panel-border);
+    border-radius:10px;
+    color:var(--accent);
+    font-family:var(--mono);
+    font-size:15px;
+    line-height:1.55;
+    padding:14px;
+    outline:none;
+    transition:border-color .15s, box-shadow .15s;
+  }
+  textarea::placeholder{ color:#3a5a4c; }
+
+  #frInput{ color:var(--text); }
+
+  textarea:focus{
+    border-color:var(--accent);
+    box-shadow:0 0 0 3px rgba(0,255,140,0.12);
+  }
+
+  .swap{
+    align-self:center;
+    background:transparent;
+    border:1px solid var(--panel-border);
+    color:var(--accent);
+    width:42px;
+    height:42px;
+    border-radius:50%;
+    cursor:pointer;
+    font-size:18px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    transition:background .15s, transform .2s;
+  }
+  .swap:hover{ background:rgba(0,255,140,0.12); transform:scale(1.08); }
+
+  .controls{
+    display:flex;
+    flex-wrap:wrap;
+    gap:14px;
+    align-items:center;
+    margin-top:18px;
+    font-family:var(--mono);
+    font-size:13px;
+    color:var(--text-dim);
+  }
+
+  .controls label{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    cursor:pointer;
+    user-select:none;
+  }
+
+  .controls select{
+    background:#03110a;
+    color:var(--accent);
+    border:1px solid var(--panel-border);
+    border-radius:6px;
+    padding:4px 8px;
+    font-family:var(--mono);
+  }
+
+  .status{
+    margin-top:10px;
+    font-family:var(--mono);
+    font-size:12.5px;
+    color:var(--accent-dim);
+    min-height:16px;
+  }
+
+  /* table */
+  table.bin-table{
+    width:100%;
+    border-collapse:collapse;
+    margin-top:18px;
+    font-family:var(--mono);
+    font-size:14px;
+  }
+  table.bin-table th, table.bin-table td{
+    border:1px solid var(--panel-border);
+    padding:8px 10px;
+    text-align:center;
+  }
+  table.bin-table th{
+    color:var(--accent);
+    background:rgba(0,255,140,0.06);
+  }
+  table.bin-table td{ color:var(--text-dim); }
+
+  .table-scroll{ overflow-x:auto; }
+
+  footer{
+    text-align:center;
+    color:var(--text-dim);
+    font-family:var(--mono);
+    font-size:12.5px;
+    padding-top:20px;
+    opacity:0.75;
+  }
+
+  a{ color:var(--accent); }
+</style>
+</head>
+<body>
+
+<canvas id="rain"></canvas>
+<div class="vignette"></div>
+
+<div class="wrap">
+
+  <header class="hero">
+    <span class="tag">01000010 01001001 01001110 01000001 01001001 01010010 01000101</span>
+    <h1>Le langage <span>binaire</span></h1>
+    <p class="lead">
+      Le binaire est le langage fondamental de tous les ordinateurs : une suite de
+      <strong>0</strong> et de <strong>1</strong> capable d'encoder n'importe quel texte, nombre, image ou son.
+      Explorez son fonctionnement ci-dessous, puis testez le traducteur instantané français ⇄ binaire.
+    </p>
+  </header>
+
+  <section>
+    <h2><span class="num">01</span> Qu'est-ce que le binaire ?</h2>
+    <p>
+      Le système binaire est un système de numération en <strong>base 2</strong>, qui n'utilise que deux
+      chiffres : <code class="inline">0</code> et <code class="inline">1</code>, appelés <em>bits</em> (binary digits).
+      Contrairement au système décimal que nous utilisons au quotidien (base 10, chiffres de 0 à 9),
+      chaque position dans un nombre binaire représente une puissance de 2.
+    </p>
+    <p>
+      C'est le langage natif des circuits électroniques : un bit à <code class="inline">1</code> correspond à un
+      état "courant présent" (ou tension haute), et un bit à <code class="inline">0</code> à un état "courant absent"
+      (tension basse). Tout ce qu'un ordinateur traite — texte, images, vidéos, calculs — est en réalité
+      une immense suite de 0 et de 1.
+    </p>
+  </section>
+
+  <section>
+    <h2><span class="num">02</span> Comment lire un nombre binaire ?</h2>
+    <p>
+      Chaque chiffre binaire (bit), en partant de la droite, représente une puissance de 2 croissante :
+      1, 2, 4, 8, 16, 32, 64, 128... On additionne les puissances correspondant aux bits à 1.
+    </p>
+    <div class="table-scroll">
+    <table class="bin-table">
+      <tr><th>128</th><th>64</th><th>32</th><th>16</th><th>8</th><th>4</th><th>2</th><th>1</th></tr>
+      <tr><td>0</td><td>1</td><td>0</td><td>0</td><td>1</td><td>0</td><td>1</td><td>1</td></tr>
+    </table>
+    </div>
+    <p style="margin-top:14px;">
+      Exemple : <code class="inline">01001011</code> = 64 + 8 + 2 + 1 = <strong>75</strong> en décimal,
+      qui correspond au caractère <strong>K</strong> dans la table ASCII.
+    </p>
+  </section>
+
+  <section>
+    <h2><span class="num">03</span> Du texte au binaire : la table ASCII</h2>
+    <p>
+      Pour encoder du texte, chaque caractère est associé à un nombre (son <em>code</em>), lui-même converti
+      en binaire sur 8 bits (un octet). La norme historique s'appelle <strong>ASCII</strong> ; les caractères
+      accentués français (é, è, à, ç...) sont eux encodés en <strong>UTF-8</strong>, souvent sur plusieurs octets.
+      Le traducteur ci-dessous utilise l'encodage UTF-8, standard du web.
+    </p>
+    <div class="table-scroll">
+    <table class="bin-table">
+      <tr><th>Caractère</th><th>Décimal</th><th>Binaire (8 bits)</th></tr>
+      <tr><td>A</td><td>65</td><td>01000001</td></tr>
+      <tr><td>a</td><td>97</td><td>01100001</td></tr>
+      <tr><td>espace</td><td>32</td><td>00100000</td></tr>
+      <tr><td>!</td><td>33</td><td>00100001</td></tr>
+    </table>
+    </div>
+  </section>
+
+  <section class="translator">
+    <h2><span class="num">04</span> Traducteur instantané français ⇄ binaire</h2>
+    <p>Tapez du texte dans un champ : la traduction apparaît instantanément dans l'autre.</p>
+
+    <div class="fields">
+      <div class="field">
+        <label for="frInput">Français</label>
+        <textarea id="frInput" placeholder="Écrivez votre texte ici… ex : Bonjour le monde"></textarea>
+      </div>
+
+      <button class="swap" id="swapBtn" title="Inverser le sens de lecture" aria-label="Inverser">⇄</button>
+
+      <div class="field">
+        <label for="binInput">Binaire</label>
+        <textarea id="binInput" placeholder="…ou collez du binaire ici, ex : 01001000 01101001"></textarea>
+      </div>
+    </div>
+
+    <div class="controls">
+      <label>Séparateur :
+        <select id="sepSelect">
+          <option value="space" selected>espace</option>
+          <option value="none">aucun</option>
+          <option value="newline">retour à la ligne</option>
+        </select>
+      </label>
+      <label><input type="checkbox" id="padCheck" checked> compléter sur 8 bits</label>
+    </div>
+
+    <div class="status" id="statusMsg"></div>
+  </section>
+
+  <section>
+    <h2><span class="num">05</span> Le saviez-vous ?</h2>
+    <p>
+      • Le mot <em>bit</em> vient de <em>binary digit</em>, inventé par le statisticien John Tukey en 1947.<br>
+      • 8 bits forment un <strong>octet</strong> (byte), l'unité de base du stockage informatique.<br>
+      • Le code binaire moderne dérive des travaux de Gottfried Leibniz au XVIIe siècle, inspirés notamment
+      du Yi Jing chinois.<br>
+      • Tous les fichiers — photos, musique, vidéos — ne sont, au fond, que des suites de 0 et de 1
+      interprétées différemment selon leur format.
+    </p>
+  </section>
+
+  <footer>
+    Fait avec Claude — page dédiée au langage binaire
+  </footer>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ---------- Fond animé : pluie binaire (canvas) ---------- */
+  var canvas = document.getElementById('rain');
+  var ctx = canvas.getContext('2d');
+  var columns, drops, fontSize = 16;
+
+  function resize(){
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    columns = Math.floor(canvas.width / fontSize);
+    drops = new Array(columns).fill(0).map(function(){
+      return Math.floor(Math.random() * -50);
+    });
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  function draw(){
+    ctx.fillStyle = 'rgba(5,10,8,0.10)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.font = fontSize + 'px monospace';
+
+    for (var i = 0; i < columns; i++){
+      var char = Math.random() > 0.5 ? '1' : '0';
+      var x = i * fontSize;
+      var y = drops[i] * fontSize;
+
+      var isHead = Math.random() > 0.975;
+      ctx.fillStyle = isHead ? 'rgba(220,255,235,0.95)' : 'rgba(0,255,140,0.55)';
+      ctx.fillText(char, x, y);
+
+      if (y > canvas.height && Math.random() > 0.975){
+        drops[i] = 0;
+      }
+      drops[i]++;
+    }
+  }
+
+  var interval = setInterval(draw, 45);
+  document.addEventListener('visibilitychange', function(){
+    if (document.hidden){
+      clearInterval(interval);
+    } else {
+      interval = setInterval(draw, 45);
+    }
+  });
+
+  /* ---------- Traducteur français <-> binaire ---------- */
+  var frInput = document.getElementById('frInput');
+  var binInput = document.getElementById('binInput');
+  var sepSelect = document.getElementById('sepSelect');
+  var padCheck = document.getElementById('padCheck');
+  var statusMsg = document.getElementById('statusMsg');
+
+  var lastEdited = 'fr';
+
+  function getSeparator(){
+    var v = sepSelect.value;
+    if (v === 'none') return '';
+    if (v === 'newline') return '\n';
+    return ' ';
+  }
+
+  function textToBinary(str){
+    var bytes = new TextEncoder().encode(str);
+    var sep = getSeparator();
+    var parts = [];
+    for (var i = 0; i < bytes.length; i++){
+      var bin = bytes[i].toString(2);
+      if (padCheck.checked){
+        while (bin.length < 8) bin = '0' + bin;
+      }
+      parts.push(bin);
+    }
+    return parts.join(sep);
+  }
+
+  function binaryToText(str){
+    var cleaned = str.trim();
+    if (cleaned.length === 0) return { text: '', error: null };
+
+    var tokens = cleaned.split(/[\s]+/).filter(Boolean);
+
+    // fallback: if no whitespace at all, and it's a pure long 0/1 string, chunk by 8
+    if (tokens.length === 1 && /^[01]{9,}$/.test(tokens[0])){
+      var raw = tokens[0];
+      tokens = [];
+      for (var k = 0; k < raw.length; k += 8){
+        tokens.push(raw.slice(k, k + 8));
+      }
+    }
+
+    var bytes = [];
+    for (var i = 0; i < tokens.length; i++){
+      var t = tokens[i];
+      if (!/^[01]+$/.test(t)){
+        return { text: null, error: 'Caractère invalide détecté : "' + t + '" (seuls 0 et 1 sont autorisés).' };
+      }
+      var val = parseInt(t, 2);
+      if (val > 255) {
+        return { text: null, error: 'Un groupe dépasse 8 bits / 255 : "' + t + '".' };
+      }
+      bytes.push(val);
+    }
+
+    try {
+      var arr = new Uint8Array(bytes);
+      var text = new TextDecoder('utf-8', { fatal: false }).decode(arr);
+      return { text: text, error: null };
+    } catch (e){
+      return { text: null, error: 'Impossible de décoder ce binaire en UTF-8.' };
+    }
+  }
+
+  function updateFromFr(){
+    lastEdited = 'fr';
+    var val = frInput.value;
+    binInput.value = textToBinary(val);
+    statusMsg.textContent = val.length ? (val.length + ' caractère(s) → ' + new TextEncoder().encode(val).length + ' octet(s)') : '';
+  }
+
+  function updateFromBin(){
+    lastEdited = 'bin';
+    var val = binInput.value;
+    var result = binaryToText(val);
+    if (result.error){
+      statusMsg.textContent = '⚠ ' + result.error;
+    } else {
+      frInput.value = result.text;
+      statusMsg.textContent = val.trim().length ? 'Binaire décodé avec succès' : '';
+    }
+  }
+
+  frInput.addEventListener('input', updateFromFr);
+  binInput.addEventListener('input', updateFromBin);
+  sepSelect.addEventListener('change', function(){ if (lastEdited === 'fr') updateFromFr(); });
+  padCheck.addEventListener('change', function(){ if (lastEdited === 'fr') updateFromFr(); });
+
+  document.getElementById('swapBtn').addEventListener('click', function(){
+    var tmp = frInput.value;
+    frInput.value = binInput.value;
+    binInput.value = tmp;
+    if (lastEdited === 'fr'){ updateFromBin(); } else { updateFromFr(); }
+  });
+
+  // exemple par défaut
+  frInput.value = 'Bonjour le monde';
+  updateFromFr();
+})();
+</script>
+
+</body>
+</html>
