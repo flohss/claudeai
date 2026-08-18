@@ -266,6 +266,36 @@
 
   .table-scroll{ overflow-x:auto; }
 
+  .breakdown{
+    margin-top:26px;
+    padding-top:22px;
+    border-top:1px dashed var(--panel-border);
+  }
+  .breakdown h3{
+    font-family:var(--mono);
+    font-size:15px;
+    color:var(--accent);
+    margin:0 0 6px;
+    text-transform:uppercase;
+    letter-spacing:0.06em;
+  }
+  .breakdown-hint{
+    color:var(--text-dim);
+    font-size:13.5px;
+    margin:0 0 12px;
+    line-height:1.5;
+  }
+  table.bin-table.breakdown-row-head td:first-child{
+    color:var(--text);
+    font-weight:600;
+  }
+  .breakdown-note{
+    color:var(--text-dim);
+    font-size:12.5px;
+    margin:10px 0 0;
+    font-family:var(--mono);
+  }
+
   footer{
     text-align:center;
     color:var(--text-dim);
@@ -378,6 +408,15 @@
     </div>
 
     <div class="status" id="statusMsg"></div>
+
+    <div class="breakdown" id="breakdownWrap" hidden>
+      <h3>Détail caractère par caractère</h3>
+      <p class="breakdown-hint">Chaque caractère est converti en un ou plusieurs octets (UTF-8), eux-mêmes affichés en binaire sur 8 bits.</p>
+      <div class="table-scroll">
+        <table class="bin-table" id="breakdownTable"></table>
+      </div>
+      <p class="breakdown-note" id="breakdownNote"></p>
+    </div>
   </section>
 
   <section>
@@ -457,6 +496,52 @@
   var statusMsg = document.getElementById('statusMsg');
 
   var lastEdited = 'fr';
+  var breakdownWrap = document.getElementById('breakdownWrap');
+  var breakdownTable = document.getElementById('breakdownTable');
+  var breakdownNote = document.getElementById('breakdownNote');
+  var BREAKDOWN_LIMIT = 200;
+
+  function escapeHtml(s){
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function displayChar(ch){
+    if (ch === ' ') return '⎵ <em>(espace)</em>';
+    if (ch === '\n') return '↵ <em>(saut de ligne)</em>';
+    if (ch === '\t') return '⇥ <em>(tabulation)</em>';
+    return escapeHtml(ch);
+  }
+
+  function renderBreakdown(str){
+    if (!str || str.length === 0){
+      breakdownWrap.hidden = true;
+      breakdownTable.innerHTML = '';
+      breakdownNote.textContent = '';
+      return;
+    }
+
+    var chars = Array.from(str);
+    var truncated = chars.length > BREAKDOWN_LIMIT;
+    var shown = truncated ? chars.slice(0, BREAKDOWN_LIMIT) : chars;
+
+    var rows = shown.map(function(ch){
+      var bytes = Array.from(new TextEncoder().encode(ch));
+      var decParts = bytes.map(String).join(' + ');
+      var binParts = bytes.map(function(b){ return b.toString(2).padStart(8, '0'); }).join(' ');
+      var octetLabel = bytes.length > 1 ? (bytes.length + ' octets') : '1 octet';
+      return '<tr><td>' + displayChar(ch) + '</td><td>' + decParts + '</td><td>' + binParts + '</td><td>' + octetLabel + '</td></tr>';
+    });
+
+    breakdownTable.innerHTML =
+      '<tr><th>Caractère</th><th>Décimal (UTF-8)</th><th>Binaire (8 bits/octet)</th><th>Taille</th></tr>' +
+      rows.join('');
+
+    breakdownNote.textContent = truncated
+      ? 'Détail limité aux ' + BREAKDOWN_LIMIT + ' premiers caractères (' + chars.length + ' au total).'
+      : '';
+
+    breakdownWrap.hidden = false;
+  }
 
   function getSeparator(){
     var v = sepSelect.value;
@@ -521,6 +606,7 @@
     var val = frInput.value;
     binInput.value = textToBinary(val);
     statusMsg.textContent = val.length ? (val.length + ' caractère(s) → ' + new TextEncoder().encode(val).length + ' octet(s)') : '';
+    renderBreakdown(val);
   }
 
   function updateFromBin(){
@@ -529,9 +615,11 @@
     var result = binaryToText(val);
     if (result.error){
       statusMsg.textContent = '⚠ ' + result.error;
+      renderBreakdown('');
     } else {
       frInput.value = result.text;
       statusMsg.textContent = val.trim().length ? 'Binaire décodé avec succès' : '';
+      renderBreakdown(result.text);
     }
   }
 
