@@ -11,6 +11,7 @@ function fmtInt(n){
 function normalize(s){
   return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 }
+const MONTH_LABELS = ['Janv', 'Févr', 'Mars', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sept', 'Oct', 'Nov', 'Déc'];
 function sectionTitle(num, title){
   return `<h2 class="section-title"><span class="num">${num}</span>${escapeHtml(title)}</h2>`;
 }
@@ -282,6 +283,29 @@ function renderChronologie(){
       <div class="legend">${series.map(sr => `<span><span class="swatch" style="background:${sr.color}"></span>${sr.name}</span>`).join('')}</div>
     </div>`;
 
+  const monthSeries = [
+    { name: 'Naissances', color: '#3f5b41', values: s.births_by_month },
+    { name: 'Mariages', color: '#a8791f', values: s.marriages_by_month },
+    { name: 'Décès', color: '#7a2733', values: s.deaths_by_month },
+  ];
+  const peakMonth = (values) => {
+    const max = Math.max(...values);
+    if (max <= 0) return null;
+    return { label: MONTH_LABELS[values.indexOf(max)], count: max };
+  };
+  const peakBirth = peakMonth(s.births_by_month), peakMarriage = peakMonth(s.marriages_by_month), peakDeath = peakMonth(s.deaths_by_month);
+  const seasonality = `
+    <div class="card wide" style="margin-top:16px;">
+      <h3 class="card-title">Saisonnalité — naissances, mariages et décès par mois (toutes années confondues)</h3>
+      <div class="chart-wrap">${lineChartSVG(MONTH_LABELS, monthSeries)}</div>
+      <div class="legend">${monthSeries.map(sr => `<span><span class="swatch" style="background:${sr.color}"></span>${sr.name}</span>`).join('')}</div>
+      <p class="card-note">
+        Mois le plus fréquent — naissances : ${peakBirth ? `${peakBirth.label} (${fmtInt(peakBirth.count)})` : '—'}
+        &middot; mariages : ${peakMarriage ? `${peakMarriage.label} (${fmtInt(peakMarriage.count)})` : '—'}
+        &middot; décès : ${peakDeath ? `${peakDeath.label} (${fmtInt(peakDeath.count)})` : '—'}
+      </p>
+    </div>`;
+
   const timelineRows = s.generation_timeline.map(g => ({
     label: `${genLabel(g.generation)} (${g.count})`, min: g.min_year, max: g.max_year, count: g.count,
   }));
@@ -292,7 +316,7 @@ function renderChronologie(){
       <p class="card-note">Étendue des années de naissance connues pour chaque génération relative à ${escapeHtml(DATA.meta.root_name || 'la référence')}.</p>
     </div>`;
 
-  document.getElementById('panel-chronologie').innerHTML = sectionTitle('02', 'Chronologie') + kpis + linechart + frise;
+  document.getElementById('panel-chronologie').innerHTML = sectionTitle('02', 'Chronologie') + kpis + linechart + seasonality + frise;
 }
 
 function renderGeographie(){
@@ -351,6 +375,23 @@ function renderFamilles(){
       <div class="card kpi"><div class="value">${fmtInt(s.divorced_families)}</div><div class="label">Divorces enregistrés</div></div>
     </div>`;
 
+  const childrenHistData = s.children_histogram.map(h => ({ label: h.n, value: h.count }));
+  const childrenDecadeCats = s.children_per_marriage_decade.map(d => String(d.decade));
+  const childrenDecadeSeries = [{ name: 'Enfants / famille (moyenne)', color: '#a8791f', values: s.children_per_marriage_decade.map(d => d.avg_children) }];
+  const fecondite = `
+    <div class="grid cols-2" style="margin-top:16px;">
+      <div class="card">
+        <h3 class="card-title">Fécondité — nombre d'enfants par famille</h3>
+        <div class="chart-wrap">${barChartSVG(childrenHistData)}</div>
+        <p class="card-note">Toutes unions confondues (y compris sans enfant connu).</p>
+      </div>
+      <div class="card">
+        <h3 class="card-title">Évolution du nombre moyen d'enfants par décennie de mariage</h3>
+        ${childrenDecadeCats.length ? `<div class="chart-wrap">${lineChartSVG(childrenDecadeCats, childrenDecadeSeries)}</div>` : '<p class="card-note">Données insuffisantes.</p>'}
+        <p class="card-note">Intervalle moyen entre naissances au sein d'une fratrie : ${s.birth_spacing.mean ?? '—'} ans (médiane : ${s.birth_spacing.median ?? '—'} ans, n=${fmtInt(s.birth_spacing.count)}).</p>
+      </div>
+    </div>`;
+
   const largeRows = s.large_families_sample.map(f => `
     <tr><td>${personLink(f.husb_id, f.husb)} &times; ${personLink(f.wife_id, f.wife)}</td><td>${f.n_children}</td></tr>`).join('');
   const largeTable = `
@@ -382,7 +423,7 @@ function renderFamilles(){
     </div>`;
 
   document.getElementById('panel-familles').innerHTML =
-    sectionTitle('04', 'Structure familiale') + kpis + `<div class="two-col" style="margin-top:16px;">${largeTable}${remTable}</div>` +
+    sectionTitle('04', 'Structure familiale') + kpis + fecondite + `<div class="two-col" style="margin-top:16px;">${largeTable}${remTable}</div>` +
     famSearch + createUnionFormHTML();
 
   const fambody = document.getElementById('famTableBody');

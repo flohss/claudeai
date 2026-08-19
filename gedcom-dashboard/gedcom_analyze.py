@@ -427,10 +427,24 @@ def analyze(data: GedcomData) -> dict:
         for g, v in sorted(gen_year_range.items())
     ]
 
+    def month_counter(months):
+        c = [0] * 12
+        for m in months:
+            if m is not None and 1 <= m <= 12:
+                c[m - 1] += 1
+        return c
+
+    birth_months = [r["birth"]["month"] for r in ind_records if r["birth"]["month"]]
+    marriage_months = [f["marriage"]["month"] for f in fam_records if f["marriage"]["month"]]
+    death_months = [r["death"]["month"] for r in ind_records if r["death"]["month"]]
+
     chronology = {
         "births_by_decade": decade_counter(birth_years),
         "marriages_by_decade": decade_counter(marriage_years),
         "deaths_by_decade": decade_counter(death_years),
+        "births_by_month": month_counter(birth_months),
+        "marriages_by_month": month_counter(marriage_months),
+        "deaths_by_month": month_counter(death_months),
         "earliest_birth_year": min(birth_years) if birth_years else None,
         "latest_birth_year": max(birth_years) if birth_years else None,
         "tree_depth_generations": (max(known_gens) - min(known_gens) + 1) if known_gens else 0,
@@ -491,6 +505,37 @@ def analyze(data: GedcomData) -> dict:
     remarried_details = [{"id": pid, "name": ind_by_id[pid]["name"], "n_unions": cnt}
                           for pid, cnt in remarried if pid in ind_by_id]
 
+    # Répartition du nombre d'enfants par famille (fécondité), toutes familles confondues
+    # (y compris sans enfant), regroupé au-delà de 8 enfants.
+    child_hist_counter = Counter(min(f["n_children"], 8) for f in fam_records)
+    children_histogram = [
+        {"n": ("8+" if n == 8 else str(n)), "count": child_hist_counter.get(n, 0)}
+        for n in range(9)
+    ]
+
+    # Évolution du nombre moyen d'enfants par famille, par décennie de mariage.
+    children_by_decade = defaultdict(list)
+    for f in fam_records:
+        if f["marriage"]["year"] is None:
+            continue
+        decade = (f["marriage"]["year"] // 10) * 10
+        children_by_decade[decade].append(f["n_children"])
+    children_per_decade = [
+        {"decade": decade, "avg_children": round(statistics.mean(counts), 2), "count": len(counts)}
+        for decade, counts in sorted(children_by_decade.items())
+    ]
+
+    # Intervalle (en années) entre naissances consécutives au sein d'une même fratrie.
+    birth_spacings = []
+    for fam in families.values():
+        years = sorted(
+            y for y in (ind_by_id[c]["birth"]["year"] for c in fam.chil if c in ind_by_id) if y is not None
+        )
+        for i in range(1, len(years)):
+            gap = years[i] - years[i - 1]
+            if 0 < gap <= 15:
+                birth_spacings.append(gap)
+
     family_structure = {
         "total_families": len(fam_records),
         "avg_children_per_family": round(statistics.mean(sibling_sizes), 2) if sibling_sizes else None,
@@ -506,6 +551,13 @@ def analyze(data: GedcomData) -> dict:
         "remarriages_count": len(remarried_details),
         "remarriages_sample": sorted(remarried_details, key=lambda x: -x["n_unions"])[:20],
         "divorced_families": sum(1 for f in fam_records if f["divorced"]),
+        "children_histogram": children_histogram,
+        "children_per_marriage_decade": children_per_decade,
+        "birth_spacing": {
+            "mean": round(statistics.mean(birth_spacings), 1) if birth_spacings else None,
+            "median": statistics.median(birth_spacings) if birth_spacings else None,
+            "count": len(birth_spacings),
+        },
     }
 
     # ------------------------------------------------------------------ #

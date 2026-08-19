@@ -729,10 +729,22 @@ function analyzeGedcom(gs){
   const generationTimeline = Array.from(genYearRange.entries()).sort((a, b) => a[0] - b[0])
     .map(([g, v]) => ({ generation: g, min_year: Math.min(...v), max_year: Math.max(...v), count: v.length }));
 
+  const monthCounter = (months) => {
+    const c = new Array(12).fill(0);
+    for (const m of months) if (m >= 1 && m <= 12) c[m - 1]++;
+    return c;
+  };
+  const birthMonths = indRecords.map(r => r.birth.month).filter(Boolean);
+  const marriageMonths = famRecords.map(f => f.marriage.month).filter(Boolean);
+  const deathMonths = indRecords.map(r => r.death.month).filter(Boolean);
+
   const chronology = {
     births_by_decade: decadeCounter(birthYears),
     marriages_by_decade: decadeCounter(marriageYears),
     deaths_by_decade: decadeCounter(deathYears),
+    births_by_month: monthCounter(birthMonths),
+    marriages_by_month: monthCounter(marriageMonths),
+    deaths_by_month: monthCounter(deathMonths),
     earliest_birth_year: birthYears.length ? Math.min(...birthYears) : null,
     latest_birth_year: birthYears.length ? Math.max(...birthYears) : null,
     tree_depth_generations: knownGens.length ? (Math.max(...knownGens) - Math.min(...knownGens) + 1) : 0,
@@ -790,6 +802,35 @@ function analyzeGedcom(gs){
   const remarried = Array.from(remarriagePeople.entries()).filter(([, cnt]) => cnt > 1);
   const remarriedDetails = remarried.filter(([pid]) => indById.has(pid)).map(([pid, cnt]) => ({ id: pid, name: indById.get(pid).name, n_unions: cnt }));
 
+  // Répartition du nombre d'enfants par famille (fécondité), toutes familles confondues
+  // (y compris sans enfant), regroupé au-delà de 8 enfants.
+  const childHistMap = new Map();
+  for (const f of famRecords) counterAdd(childHistMap, Math.min(f.n_children, 8));
+  const childrenHistogram = [];
+  for (let n = 0; n <= 8; n++) childrenHistogram.push({ n: n === 8 ? '8+' : String(n), count: childHistMap.get(n) || 0 });
+
+  // Évolution du nombre moyen d'enfants par famille, par décennie de mariage.
+  const childrenByDecade = new Map();
+  for (const f of famRecords) {
+    if (f.marriage.year == null) continue;
+    const decade = Math.floor(f.marriage.year / 10) * 10;
+    if (!childrenByDecade.has(decade)) childrenByDecade.set(decade, []);
+    childrenByDecade.get(decade).push(f.n_children);
+  }
+  const childrenPerDecade = Array.from(childrenByDecade.entries()).sort((a, b) => a[0] - b[0])
+    .map(([decade, counts]) => ({ decade, avg_children: round2(mean(counts)), count: counts.length }));
+
+  // Intervalle (en années) entre naissances consécutives au sein d'une même fratrie.
+  const birthSpacings = [];
+  for (const fam of families.values()) {
+    const years = fam.chil.map(c => indById.get(c)).filter(Boolean).map(r => r.birth.year)
+      .filter(y => y != null).sort((a, b) => a - b);
+    for (let i = 1; i < years.length; i++) {
+      const gap = years[i] - years[i - 1];
+      if (gap > 0 && gap <= 15) birthSpacings.push(gap);
+    }
+  }
+
   const familyStructure = {
     total_families: famRecords.length,
     avg_children_per_family: siblingSizes.length ? round2(mean(siblingSizes)) : null,
@@ -804,6 +845,13 @@ function analyzeGedcom(gs){
     remarriages_count: remarriedDetails.length,
     remarriages_sample: [...remarriedDetails].sort((a, b) => b.n_unions - a.n_unions).slice(0, 20),
     divorced_families: famRecords.filter(f => f.divorced).length,
+    children_histogram: childrenHistogram,
+    children_per_marriage_decade: childrenPerDecade,
+    birth_spacing: {
+      mean: birthSpacings.length ? round1(mean(birthSpacings)) : null,
+      median: birthSpacings.length ? median(birthSpacings) : null,
+      count: birthSpacings.length,
+    },
   };
 
   /* ---- Patronymes ---- */

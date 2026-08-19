@@ -26,13 +26,18 @@ Le dashboard présente 11 onglets :
    des âges, âge au décès (moyenne/médiane/distribution par siècle),
    doyen(ne) actuel(le), records de longévité.
 2. **Chronologie** — naissances/mariages/décès par décennie, profondeur de
-   l'arbre, frise des générations, écart générationnel moyen.
+   l'arbre, frise des générations, écart générationnel moyen, saisonnalité
+   (naissances/mariages/décès par mois, toutes années confondues, avec le
+   mois le plus fréquent pour chacun).
 3. **Géographie** — lieux de naissance/mariage/décès les plus fréquents,
    détection de migrations (naissance/décès dans des régions différentes),
    zones de concentration familiale.
 4. **Familles** — taille des fratries, familles nombreuses, âge moyen au
-   mariage, écart d'âge entre conjoints, remariages, table de toutes les
-   familles avec recherche, et actions Modifier/Supprimer par union.
+   mariage, écart d'âge entre conjoints, remariages, fécondité (répartition
+   du nombre d'enfants par famille, évolution du nombre moyen d'enfants par
+   décennie de mariage, intervalle moyen entre naissances au sein d'une
+   fratrie), table de toutes les familles avec recherche, et actions
+   Modifier/Supprimer par union.
 5. **Patronymes** — fréquence des noms de famille, évolution par période de
    50 ans.
 6. **Qualité des données** — taux de complétude des fiches, anomalies de
