@@ -70,7 +70,13 @@ Le dashboard présente 11 onglets :
 11. **Édition** — charger un autre fichier `.ged` (remplace les données
     affichées), exporter l'état actuel en GEDCOM, ajouter une nouvelle
     personne (avec lien vers père/mère existants), créer une union entre
-    deux personnes.
+    deux personnes, et créer une arborescence de dossiers (« Généalogie NOM
+    Prénom » → un sous-dossier par génération → un sous-dossier vide par
+    personne — famille par le sang uniquement — nommé « Prénom NOM
+    (naissance-décès) », prête à recevoir vos scans/documents). Sur
+    Chrome/Edge (PC ou Mac), les dossiers sont créés directement sur le
+    disque via la File System Access API ; sur les autres navigateurs, une
+    archive `.zip` (même arborescence, UTF-8) est téléchargée à extraire.
 
 Les modifications ne vivent qu'en mémoire dans la page (aucun serveur,
 aucune sauvegarde automatique) : pensez à **exporter en GEDCOM** pour

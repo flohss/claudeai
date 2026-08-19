@@ -1710,6 +1710,175 @@ function openFamilyEditModal(famId){
   });
 }
 
+/* ------------------------------------------------------------------ */
+/* Arborescence de dossiers (Généalogie → Génération → Personne)        */
+/* ------------------------------------------------------------------ */
+
+function sanitizeFileName(name){
+  let s = String(name || '').replace(/[\/\\:*?"<>|\x00-\x1F]/g, '-').trim();
+  s = s.replace(/[. ]+$/, '');
+  if (!s) s = '-';
+  if (s.length > 150) s = s.slice(0, 150).trim();
+  return s;
+}
+function personFolderYears(r){
+  // "s.d." (sans date) plutôt que "?" : le "?" est un caractère interdit dans les noms de
+  // fichiers Windows et serait de toute façon supprimé par sanitizeFileName.
+  const by = r.birth.year != null ? String(r.birth.year) : 's.d.';
+  let dy;
+  if (r.death.known) dy = r.death.year != null ? String(r.death.year) : 's.d.';
+  else if (r.alive) dy = 'présent';
+  else dy = 's.d.';
+  return `${by}-${dy}`;
+}
+function personFolderName(r){
+  const label = `${r.given || ''} ${r.surname || ''}`.replace(/\s+/g, ' ').trim() || r.name || 'Inconnu';
+  return sanitizeFileName(`${label} (${personFolderYears(r)})`);
+}
+
+/** Regroupe la famille par le sang (ascendants, descendants, collatéraux — hors alliance) par
+ * génération relative à la racine, et construit les noms de dossiers correspondants :
+ * « Généalogie NOM Prénom » → « NN - Génération ... » → « Prénom NOM (naissance-décès) ». */
+function buildGenealogyFolderTree(){
+  const root = INDEX[DATA.meta.root_individual];
+  const rootLabel = root ? `${root.surname || ''} ${root.given || ''}`.replace(/\s+/g, ' ').trim() : '';
+  const rootFolderName = sanitizeFileName(`Généalogie ${rootLabel || DATA.meta.root_name || ''}`.trim());
+
+  const included = DATA.individuals.filter(r => r.relation === 'blood' || r.relation === 'root');
+  const byGen = new Map();
+  for (const r of included) {
+    const g = r.generation != null ? r.generation : null;
+    if (!byGen.has(g)) byGen.set(g, []);
+    byGen.get(g).push(r);
+  }
+  const gensSorted = Array.from(byGen.keys()).sort((a, b) => {
+    if (a === null) return 1;
+    if (b === null) return -1;
+    return a - b;
+  });
+
+  const generations = gensSorted.map((g, idx) => {
+    const idxLabel = String(idx + 1).padStart(2, '0');
+    const genText = g === null ? 'Génération inconnue' : (g === 0 ? 'Génération 0 (racine)' : `Génération ${g > 0 ? '+' : ''}${g}`);
+    const folderName = sanitizeFileName(`${idxLabel} - ${genText}`);
+    const seen = new Map();
+    const people = byGen.get(g).slice()
+      .sort((a, b) => (a.birth.year ?? 9999) - (b.birth.year ?? 9999) || a.name.localeCompare(b.name, 'fr'))
+      .map(r => {
+        let name = personFolderName(r);
+        const count = (seen.get(name) || 0) + 1;
+        seen.set(name, count);
+        if (count > 1) name = sanitizeFileName(`${name} (${count})`);
+        return { id: r.id, folderName: name };
+      });
+    return { folderName, people };
+  });
+
+  return { rootFolderName, generations };
+}
+
+function folderTreeToPaths(tree){
+  const paths = [tree.rootFolderName];
+  for (const gen of tree.generations) {
+    const genPath = `${tree.rootFolderName}/${gen.folderName}`;
+    paths.push(genPath);
+    for (const p of gen.people) paths.push(`${genPath}/${p.folderName}`);
+  }
+  return paths;
+}
+
+/* ---- Archive ZIP minimale (dossiers vides uniquement, méthode "stored", sans dépendance) ---- */
+function zipU16(n){ return [n & 0xFF, (n >> 8) & 0xFF]; }
+function zipU32(n){ return [n & 0xFF, (n >> 8) & 0xFF, (n >> 16) & 0xFF, (n >> 24) & 0xFF]; }
+function zipConcat(chunks){
+  let total = 0;
+  for (const c of chunks) total += c.length;
+  const out = new Uint8Array(total);
+  let o = 0;
+  for (const c of chunks) { out.set(c, o); o += c.length; }
+  return out;
+}
+function buildEmptyFoldersZip(folderPaths){
+  const encoder = new TextEncoder();
+  const now = new Date();
+  const dosTime = ((now.getHours() & 0x1F) << 11) | ((now.getMinutes() & 0x3F) << 5) | (Math.floor(now.getSeconds() / 2) & 0x1F);
+  const dosDate = ((Math.max(0, now.getFullYear() - 1980) & 0x7F) << 9) | (((now.getMonth() + 1) & 0xF) << 5) | (now.getDate() & 0x1F);
+  const dirAttr = (0o40755 << 16) | 0x10; // dossier : bits Unix rwxr-xr-x + attribut MS-DOS "répertoire"
+
+  let offset = 0;
+  const localChunks = [], centralChunks = [];
+  for (const rawPath of folderPaths) {
+    const path = rawPath.endsWith('/') ? rawPath : rawPath + '/';
+    const nameBytes = encoder.encode(path);
+    const localHeader = new Uint8Array([
+      ...zipU32(0x04034b50), ...zipU16(20), ...zipU16(0x0800), ...zipU16(0),
+      ...zipU16(dosTime), ...zipU16(dosDate),
+      ...zipU32(0), ...zipU32(0), ...zipU32(0),
+      ...zipU16(nameBytes.length), ...zipU16(0),
+    ]);
+    const localEntry = zipConcat([localHeader, nameBytes]);
+    localChunks.push(localEntry);
+
+    const centralHeader = new Uint8Array([
+      ...zipU32(0x02014b50), ...zipU16(20), ...zipU16(20), ...zipU16(0x0800), ...zipU16(0),
+      ...zipU16(dosTime), ...zipU16(dosDate),
+      ...zipU32(0), ...zipU32(0), ...zipU32(0),
+      ...zipU16(nameBytes.length), ...zipU16(0), ...zipU16(0), ...zipU16(0), ...zipU16(0),
+      ...zipU32(dirAttr), ...zipU32(offset),
+    ]);
+    centralChunks.push(zipConcat([centralHeader, nameBytes]));
+    offset += localEntry.length;
+  }
+  const centralBytes = zipConcat(centralChunks);
+  const eocd = new Uint8Array([
+    ...zipU32(0x06054b50), ...zipU16(0), ...zipU16(0),
+    ...zipU16(folderPaths.length), ...zipU16(folderPaths.length),
+    ...zipU32(centralBytes.length), ...zipU32(offset),
+    ...zipU16(0),
+  ]);
+  return new Blob([zipConcat([...localChunks, centralBytes, eocd])], { type: 'application/zip' });
+}
+
+/** Crée l'arborescence de dossiers directement sur disque via la File System Access API
+ * (Chrome/Edge/Opera sur PC/Mac) ; si l'API n'est pas disponible (Safari, Firefox) ou si sa
+ * tentative échoue, replie automatiquement sur le téléchargement d'une archive .zip (même
+ * arborescence, à extraire manuellement — aucune bibliothèque externe requise). */
+async function createGenealogyFolders(){
+  const statusEl = document.getElementById('createFoldersStatus');
+  const tree = buildGenealogyFolderTree();
+  const totalPeople = tree.generations.reduce((sum, g) => sum + g.people.length, 0);
+  if (totalPeople === 0) { statusEl.textContent = 'Aucune personne à inclure (famille par le sang vide).'; return; }
+
+  let fallbackNote = '';
+  if (window.showDirectoryPicker) {
+    try {
+      const parentHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+      statusEl.textContent = 'Création des dossiers en cours…';
+      const rootHandle = await parentHandle.getDirectoryHandle(tree.rootFolderName, { create: true });
+      for (const gen of tree.generations) {
+        const genHandle = await rootHandle.getDirectoryHandle(gen.folderName, { create: true });
+        for (const p of gen.people) await genHandle.getDirectoryHandle(p.folderName, { create: true });
+      }
+      statusEl.textContent = `Dossiers créés : « ${tree.rootFolderName} » (${tree.generations.length} générations, ${totalPeople} personnes).`;
+      return;
+    } catch (err) {
+      if (err && err.name === 'AbortError') { statusEl.textContent = ''; return; }
+      fallbackNote = `Création directe indisponible (${err.message}) — `;
+    }
+  }
+
+  const blob = buildEmptyFoldersZip(folderTreeToPaths(tree));
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${tree.rootFolderName}.zip`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  statusEl.textContent = `${fallbackNote}archive téléchargée : « ${tree.rootFolderName}.zip » — décompressez-la pour obtenir les dossiers (${tree.generations.length} générations, ${totalPeople} personnes).`;
+}
+
 function renderEdition(){
   const panel = document.getElementById('panel-edition');
   panel.innerHTML = `
@@ -1732,6 +1901,15 @@ function renderEdition(){
         <button type="button" class="btn" id="exportGedBtn">Exporter en GEDCOM (.ged)</button>
         <span id="dirtyIndicator" class="pill warn" style="display:none; align-self:center;">Modifications non exportées</span>
       </div>
+    </div>
+
+    <div class="card wide" style="margin-top:16px;">
+      <h3 class="card-title">Créer une arborescence de dossiers</h3>
+      <p class="card-note">Crée un dossier « Généalogie NOM Prénom » avec un sous-dossier par génération et un sous-dossier vide par personne (nom (naissance-décès)) — famille par le sang uniquement (ascendants, descendants, collatéraux), prêt à recevoir vos scans/documents. Sur Chrome/Edge, les dossiers sont créés directement sur votre ordinateur ; sur les autres navigateurs, une archive .zip est téléchargée à décompresser.</p>
+      <div class="action-row">
+        <button type="button" class="btn" id="createFoldersBtn">Créer l'arborescence de dossiers</button>
+      </div>
+      <p class="card-note" id="createFoldersStatus" style="margin-top:8px;"></p>
     </div>
 
     <div class="card wide" style="margin-top:16px;" id="personFormMount"></div>
@@ -1776,6 +1954,8 @@ function renderEdition(){
     dirty = false;
     updateDirtyIndicator();
   });
+
+  document.getElementById('createFoldersBtn').addEventListener('mousedown', () => { createGenealogyFolders(); });
 
   renderPersonFormInto(document.getElementById('personFormMount'), null);
 }
