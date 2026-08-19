@@ -1736,15 +1736,43 @@ function personFolderName(r){
   return sanitizeFileName(`${label} (${personFolderYears(r)})`);
 }
 
-/** Regroupe la famille par le sang (ascendants, descendants, collatéraux — hors alliance) par
- * génération relative à la racine, et construit les noms de dossiers correspondants :
- * « Généalogie NOM Prénom » → « NN - Génération ... » → « Prénom NOM (naissance-décès) ». */
-function buildGenealogyFolderTree(){
+/** Ascendants + descendants directs de rootId (chaîne parent-enfant ininterrompue dans un sens
+ * ou l'autre) — exclut les collatéraux (frères et sœurs d'un ascendant, cousins, oncles/tantes…)
+ * que la classification "famille par le sang" du reste de l'outil inclut normalement. */
+function collectDirectLineIds(rootId){
+  const ids = new Set([rootId]);
+  for (const dir of ['parents', 'children']) {
+    let frontier = [rootId];
+    while (frontier.length) {
+      const next = [];
+      for (const id of frontier) {
+        const r = INDEX[id];
+        if (!r) continue;
+        for (const relId of r[dir]) { if (!ids.has(relId)) { ids.add(relId); next.push(relId); } }
+      }
+      frontier = next;
+    }
+  }
+  return ids;
+}
+
+/** Regroupe la famille (voir `scope`) par génération relative à la racine, et construit les
+ * noms de dossiers correspondants : « Généalogie NOM Prénom » → « NN - Génération ... » →
+ * « Prénom NOM (naissance-décès) ».
+ * scope: 'direct' (par défaut) = ascendants + descendants directs uniquement ; 'blood' = toute
+ * la famille par le sang, y compris les collatéraux (frères/sœurs d'ascendants, cousins…). */
+function buildGenealogyFolderTree(scope){
   const root = INDEX[DATA.meta.root_individual];
   const rootLabel = root ? `${root.surname || ''} ${root.given || ''}`.replace(/\s+/g, ' ').trim() : '';
   const rootFolderName = sanitizeFileName(`Généalogie ${rootLabel || DATA.meta.root_name || ''}`.trim());
 
-  const included = DATA.individuals.filter(r => r.relation === 'blood' || r.relation === 'root');
+  let included;
+  if (scope === 'blood') {
+    included = DATA.individuals.filter(r => r.relation === 'blood' || r.relation === 'root');
+  } else {
+    const directIds = DATA.meta.root_individual ? collectDirectLineIds(DATA.meta.root_individual) : new Set();
+    included = DATA.individuals.filter(r => directIds.has(r.id));
+  }
   const byGen = new Map();
   for (const r of included) {
     const g = r.generation != null ? r.generation : null;
@@ -1845,9 +1873,11 @@ function buildEmptyFoldersZip(folderPaths){
  * arborescence, à extraire manuellement — aucune bibliothèque externe requise). */
 async function createGenealogyFolders(){
   const statusEl = document.getElementById('createFoldersStatus');
-  const tree = buildGenealogyFolderTree();
+  const scopeSelect = document.getElementById('createFoldersScope');
+  const scope = scopeSelect ? scopeSelect.value : 'direct';
+  const tree = buildGenealogyFolderTree(scope);
   const totalPeople = tree.generations.reduce((sum, g) => sum + g.people.length, 0);
-  if (totalPeople === 0) { statusEl.textContent = 'Aucune personne à inclure (famille par le sang vide).'; return; }
+  if (totalPeople === 0) { statusEl.textContent = 'Aucune personne à inclure.'; return; }
 
   let fallbackNote = '';
   if (window.showDirectoryPicker) {
@@ -1905,7 +1935,13 @@ function renderEdition(){
 
     <div class="card wide" style="margin-top:16px;">
       <h3 class="card-title">Créer une arborescence de dossiers</h3>
-      <p class="card-note">Crée un dossier « Généalogie NOM Prénom » avec un sous-dossier par génération et un sous-dossier vide par personne (nom (naissance-décès)) — famille par le sang uniquement (ascendants, descendants, collatéraux), prêt à recevoir vos scans/documents. Sur Chrome/Edge, les dossiers sont créés directement sur votre ordinateur ; sur les autres navigateurs, une archive .zip est téléchargée à décompresser.</p>
+      <p class="card-note">Crée un dossier « Généalogie NOM Prénom » avec un sous-dossier par génération et un sous-dossier vide par personne (nom (naissance-décès)), prêt à recevoir vos scans/documents. Sur Chrome/Edge, les dossiers sont créés directement sur votre ordinateur ; sur les autres navigateurs, une archive .zip est téléchargée à décompresser.</p>
+      <label style="font-size:12.5px; color:var(--ink-soft); display:block; margin:8px 0;">Personnes incluses :
+        <select id="createFoldersScope" style="margin-left:6px; margin-top:4px; max-width:100%; box-sizing:border-box; display:block;">
+          <option value="direct" selected>Ligne directe uniquement (ascendants + descendants)</option>
+          <option value="blood">Toute la famille par le sang (avec collatéraux : oncles/tantes, cousins…)</option>
+        </select>
+      </label>
       <div class="action-row">
         <button type="button" class="btn" id="createFoldersBtn">Créer l'arborescence de dossiers</button>
       </div>
