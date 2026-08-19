@@ -2000,6 +2000,54 @@ function renderEdition(){
 /* Initialisation                                                       */
 /* ------------------------------------------------------------------ */
 
+/** Filtre global affiché dès l'ouverture de la page, qui restreint TOUT le tableau de bord
+ * (chaque onglet, y compris les totaux du bandeau d'en-tête) à la famille par le sang quand
+ * activé, en excluant les personnes reliées uniquement par un ou plusieurs mariages. */
+let globalScope = 'all'; // 'all' | 'blood'
+
+/** Construit une copie de l'état GEDCOM restreinte à la famille par le sang (ascendants,
+ * descendants, collatéraux) : les personnes reliées uniquement par alliance sont retirées, et
+ * détachées (husb/wife mis à null) des familles où elles figurent comme conjoint — sans jamais
+ * modifier STATE lui-même, qui reste la source d'édition/export complète. Une famille qui ne
+ * comporte plus aucun membre par le sang (ni conjoint, ni enfant) est retirée entièrement. */
+function buildFilteredGedcomState(gs, scope){
+  if (scope !== 'blood') return gs;
+  const root = findProband(gs);
+  if (root == null) return gs;
+  const bloodSet = computeBloodRelatives(gs, root);
+  bloodSet.add(root);
+
+  const individuals = new Map();
+  for (const [xref, ind] of gs.individuals) if (bloodSet.has(xref)) individuals.set(xref, ind);
+
+  const families = new Map();
+  for (const [xref, fam] of gs.families) {
+    const husbBlood = fam.husb && bloodSet.has(fam.husb);
+    const wifeBlood = fam.wife && bloodSet.has(fam.wife);
+    const bloodChildren = fam.chil.filter(c => bloodSet.has(c));
+    if (!husbBlood && !wifeBlood && bloodChildren.length === 0) continue;
+    families.set(xref, { ...fam, husb: husbBlood ? fam.husb : null, wife: wifeBlood ? fam.wife : null, chil: bloodChildren });
+  }
+
+  return { individuals, families, headerSource: gs.headerSource, headerAuthor: gs.headerAuthor, otherRecords: gs.otherRecords };
+}
+
+function renderScopeFilter(){
+  document.getElementById('scopeFilter').innerHTML = `
+    <label>Périmètre affiché :
+      <select id="globalScopeSelect">
+        <option value="all" ${globalScope === 'all' ? 'selected' : ''}>Toute la famille (sang et alliance)</option>
+        <option value="blood" ${globalScope === 'blood' ? 'selected' : ''}>Famille par le sang uniquement</option>
+      </select>
+    </label>
+    <span class="scope-note">S'applique à l'ensemble du tableau de bord (statistiques, arbre, calendrier, questions…).</span>
+  `;
+  document.getElementById('globalScopeSelect').addEventListener('change', e => {
+    globalScope = e.target.value;
+    refresh();
+  });
+}
+
 function renderMetaChips(){
   const m = DATA.meta;
   document.getElementById('metaChips').innerHTML = `
@@ -2030,12 +2078,14 @@ let STATE = null;
 let DATA = null;
 window.INDEX = {};
 
-/** Recalcule les statistiques depuis STATE et redessine tous les onglets. */
+/** Recalcule les statistiques depuis STATE (au travers du filtre de périmètre global) et
+ * redessine tous les onglets. */
 function refresh(){
-  DATA = analyzeGedcom(STATE);
+  DATA = analyzeGedcom(buildFilteredGedcomState(STATE, globalScope));
   window.INDEX = {};
   DATA.individuals.forEach(r => { INDEX[r.id] = r; });
 
+  renderScopeFilter();
   renderMetaChips();
   renderDemographie();
   renderChronologie();

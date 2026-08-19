@@ -20,6 +20,14 @@ aucune connexion internet requise.
 
 ## Contenu généré
 
+Un filtre **« Périmètre affiché »**, visible en permanence sous l'en-tête (donc
+sur tous les onglets), permet de restreindre l'ensemble du tableau de bord —
+statistiques, arbre, calendrier, questions, totaux de l'en-tête — à la
+famille par le sang uniquement, en excluant les personnes reliées
+uniquement par un ou plusieurs mariages. Ce filtre n'affecte que
+l'affichage : le chargement, l'édition et l'export GEDCOM continuent
+toujours de porter sur la totalité des données.
+
 Le dashboard présente 11 onglets :
 
 1. **Démographie** — effectifs, répartition par sexe/génération, pyramide

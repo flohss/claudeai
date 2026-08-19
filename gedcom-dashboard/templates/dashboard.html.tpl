@@ -75,6 +75,17 @@ header.masthead .subtitle{
   padding:5px 14px; border-radius:20px; font-size:12.5px; color: var(--ink-soft);
 }
 .meta-chip b{ color: var(--maroon-dark); }
+.scope-filter{
+  display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:8px;
+  margin: 12px auto 0; padding: 8px 16px; max-width:560px;
+  border:1px solid var(--gold-light); border-radius:20px; background: rgba(255,253,247,0.6);
+  font-size:12.5px; color: var(--ink-soft);
+}
+.scope-filter select{
+  font-family: var(--font-serif); font-size:12.5px; padding:4px 8px; border:1px solid var(--line);
+  border-radius:3px; background:#fffdf7; max-width:100%; box-sizing:border-box;
+}
+.scope-filter .scope-note{ width:100%; text-align:center; font-size:11px; color: var(--ink-faint); margin-top:2px; }
 
 /* ---------- nav tabs ---------- */
 nav.tabs{
@@ -439,6 +450,7 @@ footer.pagefoot{
   <h1 id="pageTitle">__ROOT_NAME__</h1>
   <div class="subtitle" id="pageSubtitle">__SUBTITLE__</div>
   <div class="meta-chips" id="metaChips"></div>
+  <div class="scope-filter" id="scopeFilter"></div>
 </header>
 
 <div class="wrap">
