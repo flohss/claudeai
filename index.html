@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>VORTEX INFINI</title>
+  <meta name="description" content="Un jeu de vol à la première personne à travers un vortex spatial infini, avec des portes à franchir et des obstacles à éviter." />
+  <link rel="icon" href="data:," />
+  <link rel="stylesheet" href="src/style.css" />
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./src/vendor/three/build/three.module.js",
+        "three/addons/": "./src/vendor/three/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <canvas id="scene"></canvas>
+
+  <!-- Cinematic overlay effects (CSS-only, layered above the WebGL canvas) -->
+  <div id="scanlines" aria-hidden="true"></div>
+  <div id="vignette" aria-hidden="true"></div>
+  <div id="hit-flash" aria-hidden="true"></div>
+
+  <!-- HUD -->
+  <div id="hud" class="hidden">
+    <div class="hud-top-left">
+      <div class="hud-label">SCORE</div>
+      <div class="hud-value" id="hud-score">0</div>
+      <div class="hud-sub" id="hud-combo"></div>
+    </div>
+    <div class="hud-top-right">
+      <div class="hud-label">VITESSE</div>
+      <div class="hud-value"><span id="hud-speed">0</span><span class="hud-unit">u/s</span></div>
+      <div class="hud-label" style="margin-top:8px">DISTANCE</div>
+      <div class="hud-value small" id="hud-distance">0</div>
+    </div>
+    <div class="hud-bottom-left">
+      <div class="hud-label">BOUCLIER</div>
+      <div class="shield-bar" id="shield-bar">
+        <span></span><span></span><span></span>
+      </div>
+    </div>
+    <div class="hud-bottom-right">
+      <div class="hud-label">BOOST</div>
+      <div class="boost-bar"><div id="boost-fill"></div></div>
+      <div class="hud-label" style="margin-top:8px">NIVEAU</div>
+      <div class="hud-value small" id="hud-level">1</div>
+    </div>
+    <div id="reticle"><div class="reticle-ring"></div><div class="reticle-dot"></div></div>
+    <div id="warning" class="hidden">DANGER — ALIGNEZ-VOUS SUR LA PORTE</div>
+  </div>
+
+  <!-- Start screen -->
+  <div id="start-screen" class="overlay">
+    <div class="panel">
+      <h1>VORTEX <span>INFINI</span></h1>
+      <p class="tagline">Plongez à la première personne dans un tunnel d'énergie sans fin.</p>
+      <div class="instructions">
+        <div><span class="key">Souris</span> / <span class="key">ZQSD</span> / <span class="key">↑↓←→</span> — Naviguer dans le vortex</div>
+        <div><span class="key">MAJ</span> — Boost de vitesse</div>
+        <div><span class="key">Échap</span> — Pause</div>
+        <div>Franchissez les <span class="hl cyan">portes lumineuses</span>, évitez les parois, ramassez les <span class="hl gold">orbes d'énergie</span>.</div>
+      </div>
+      <button id="btn-play" class="btn-play">JOUER</button>
+      <div class="foot">Meilleur score : <span id="best-score">0</span></div>
+    </div>
+  </div>
+
+  <!-- Pause screen -->
+  <div id="pause-screen" class="overlay hidden">
+    <div class="panel">
+      <h2>PAUSE</h2>
+      <button id="btn-resume" class="btn-play">REPRENDRE</button>
+    </div>
+  </div>
+
+  <!-- Game over screen -->
+  <div id="gameover-screen" class="overlay hidden">
+    <div class="panel">
+      <h2>EFFONDREMENT DU VORTEX</h2>
+      <div class="final-stats">
+        <div>Score final <strong id="final-score">0</strong></div>
+        <div>Distance parcourue <strong id="final-distance">0</strong> u</div>
+        <div>Portes franchies <strong id="final-gates">0</strong></div>
+      </div>
+      <button id="btn-restart" class="btn-play">REJOUER</button>
+    </div>
+  </div>
+
+  <div id="loading">CHARGEMENT DU VORTEX…</div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
