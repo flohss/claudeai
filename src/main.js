@@ -835,23 +835,56 @@ function evaluateGate(g) {
   }
 }
 
+// Flèche de guidage : indique en permanence vers quelle direction se
+// déplacer pour passer au centre de la prochaine porte. Le viseur change
+// de couleur (cyan = bien aligné, rouge = danger imminent) pour renforcer
+// le repère visuel sans avoir à lire le texte d'alerte.
+const guideArrow = document.getElementById("guide-arrow");
+const reticle = document.getElementById("reticle");
+const GUIDANCE_LOOKAHEAD = 55; // distance à laquelle la flèche apparaît
+const URGENT_DISTANCE = 16;    // distance à laquelle l'alerte rouge clignote
+
+function updateGuidance() {
+  const upcoming = gateManager.gates.find((g) => !g.resolved && g.s - player.s > 0 && g.s - player.s < GUIDANCE_LOOKAHEAD);
+
+  if (!upcoming) {
+    guideArrow.classList.remove("visible");
+    reticle.classList.remove("aligned", "danger");
+    warningTimer = Math.max(0, warningTimer - 0.1);
+    HUD.warning.classList.add("hidden");
+    return;
+  }
+
+  const distAhead = upcoming.s - player.s;
+  const playerAngle = Math.atan2(player.py, player.px);
+  const diff = Math.abs(angleDiff(playerAngle, upcoming.gapAngle));
+  const aligned = diff < upcoming.gapWidth / 2;
+
+  // Point visé : le centre de l'ouverture, à un rayon confortable dans la porte.
+  const aimRadius = TUNNEL_RADIUS * 0.35;
+  const dPx = Math.cos(upcoming.gapAngle) * aimRadius - player.px;
+  const dPy = Math.sin(upcoming.gapAngle) * aimRadius - player.py;
+  const deg = Math.atan2(dPx, dPy) * (180 / Math.PI);
+
+  guideArrow.style.transform = `translate(-50%, -50%) rotate(${deg}deg)`;
+  guideArrow.classList.toggle("visible", !aligned);
+  guideArrow.classList.toggle("urgent", !aligned && distAhead < URGENT_DISTANCE);
+
+  reticle.classList.toggle("aligned", aligned && distAhead < GUIDANCE_LOOKAHEAD * 0.6);
+  reticle.classList.toggle("danger", !aligned && distAhead < URGENT_DISTANCE);
+
+  const urgent = !aligned && distAhead < URGENT_DISTANCE;
+  warningTimer = urgent ? Math.min(1, warningTimer + 0.15) : Math.max(0, warningTimer - 0.12);
+  HUD.warning.classList.toggle("hidden", warningTimer < 0.4);
+}
+
 function updateHUD() {
   HUD.score.textContent = Math.floor(player.score);
   HUD.speed.textContent = Math.floor(player.speed * player.boost);
   HUD.distance.textContent = Math.floor(player.s);
   HUD.level.textContent = 1 + Math.floor(player.elapsed / 30);
   HUD.boostFill.style.width = `${Math.round(player.boostEnergy * 100)}%`;
-
-  const nearGate = gateManager.gates.find((g) => !g.resolved && g.s - player.s < 14 && g.s - player.s > 0);
-  if (nearGate) {
-    const playerAngle = Math.atan2(player.py, player.px);
-    const diff = Math.abs(angleDiff(playerAngle, nearGate.gapAngle));
-    const aligned = diff < nearGate.gapWidth / 2;
-    warningTimer = aligned ? 0 : Math.min(1, warningTimer + 0.1);
-  } else {
-    warningTimer = Math.max(0, warningTimer - 0.1);
-  }
-  HUD.warning.classList.toggle("hidden", warningTimer < 0.4);
+  updateGuidance();
 }
 
 // ---------------------------------------------------------------------------

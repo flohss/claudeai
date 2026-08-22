@@ -153,7 +153,31 @@ html, body {
   border-radius: 50%;
   transform: translate(-50%, -50%);
   box-shadow: 0 0 6px var(--cyan);
+  transition: background 150ms ease, box-shadow 150ms ease;
 }
+
+/* Alignement avec la prochaine porte : le viseur passe au vert quand c'est
+   bon, au rouge quand une collision est imminente. */
+#reticle.aligned .reticle-dot { background: #7dffb0; box-shadow: 0 0 10px #7dffb0; }
+#reticle.aligned .reticle-ring { border-color: rgba(125, 255, 176, 0.75); }
+#reticle.danger .reticle-dot { background: var(--red); box-shadow: 0 0 10px var(--red); }
+#reticle.danger .reticle-ring { border-color: rgba(255, 59, 92, 0.85); animation: blink 0.4s step-start infinite; }
+
+/* Flèche de guidage : pointe en permanence vers l'ouverture de la porte à
+   franchir, orbitant autour du viseur (rotation calculée en JS). */
+#guide-arrow {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--cyan);
+  fill: currentColor;
+  filter: drop-shadow(0 0 6px currentColor);
+  opacity: 0;
+  transition: opacity 180ms ease, color 150ms ease;
+  pointer-events: none;
+}
+#guide-arrow.visible { opacity: 0.9; }
+#guide-arrow.urgent { color: var(--red); opacity: 1; animation: blink 0.35s step-start infinite; }
 
 #warning {
   position: absolute;

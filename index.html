@@ -49,7 +49,13 @@
       <div class="hud-label" style="margin-top:8px">NIVEAU</div>
       <div class="hud-value small" id="hud-level">1</div>
     </div>
-    <div id="reticle"><div class="reticle-ring"></div><div class="reticle-dot"></div></div>
+    <div id="reticle">
+      <div class="reticle-ring"></div>
+      <div class="reticle-dot"></div>
+      <svg id="guide-arrow" viewBox="0 0 160 160" width="160" height="160">
+        <polygon points="80,4 66,36 94,36" />
+      </svg>
+    </div>
     <div id="warning" class="hidden">DANGER — ALIGNEZ-VOUS SUR LA PORTE</div>
     <div id="pointer-hint">CLIQUEZ POUR ACTIVER LA VISÉE SOURIS</div>
     <div id="control-tip">SOURIS : NAVIGUER&nbsp;&nbsp;•&nbsp;&nbsp;MAJ : BOOST&nbsp;&nbsp;•&nbsp;&nbsp;ÉCHAP : PAUSE</div>
