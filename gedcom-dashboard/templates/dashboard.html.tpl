@@ -439,7 +439,10 @@ table.data-table tr:hover td{ background: rgba(168,121,31,0.06); }
 .btn.danger:hover{ background: #f8e6e6; }
 .btn.small{ padding:4px 11px; font-size:11.5px; }
 .action-row{ display:flex; gap:10px; flex-wrap:wrap; margin-top:14px; }
-.fiche .fiche-actions{ display:flex; gap:8px; margin-top:16px; padding-top:14px; border-top:1px solid var(--line-soft); }
+.fiche .fiche-actions{ display:flex; gap:8px; flex-wrap:wrap; margin-top:16px; padding-top:14px; border-top:1px solid var(--line-soft); }
+@media (max-width: 600px){
+  .fiche .fiche-actions .btn{ flex:1 1 100%; }
+}
 .upload-row{ display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
 .upload-row input[type=file]{ font-family: var(--font-serif); font-size:13px; }
 .flash-msg{
