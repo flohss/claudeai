@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="fr">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Metro — 2D Metro Simulation</title>
+<title>Métro — Simulation de métro 2D</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><circle cx=%2250%22 cy=%2250%22 r=%2245%22 fill=%22%230e1420%22/><path d=%22M30 65 L50 30 L70 65%22 fill=%22none%22 stroke=%22%233aa0ff%22 stroke-width=%228%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22/></svg>" />
 <link rel="stylesheet" href="style.css" />
 </head>
@@ -13,11 +13,11 @@
   <div id="hud">
     <div id="hud-left">
       <div class="hud-stat"><span class="label">Score</span><span id="stat-score">0</span></div>
-      <div class="hud-stat"><span class="label">Week</span><span id="stat-week">1</span></div>
+      <div class="hud-stat"><span class="label">Semaine</span><span id="stat-week">1</span></div>
     </div>
     <div id="hud-right">
-      <div class="hud-stat"><span class="label">Lines</span><span id="stat-lines">0/3</span></div>
-      <div class="hud-stat"><span class="label">Trains in depot</span><span id="stat-trains">0</span></div>
+      <div class="hud-stat"><span class="label">Lignes</span><span id="stat-lines">0/3</span></div>
+      <div class="hud-stat"><span class="label">Trains au dépôt</span><span id="stat-trains">0</span></div>
     </div>
   </div>
 
@@ -27,23 +27,23 @@
 
   <div id="start-overlay" class="overlay">
     <div class="panel">
-      <h1>Metro</h1>
-      <p>Build a subway network to keep the city moving.</p>
+      <h1>Métro</h1>
+      <p>Construisez un réseau de métro pour faire vivre la ville.</p>
       <ul class="instructions">
-        <li>Click and drag from station to station to draw a line.</li>
-        <li>Drag from the end of an existing line to extend it.</li>
-        <li>Trains ferry passengers who want a station of matching shape.</li>
-        <li>Don't let a station overcrowd — keep the network flowing.</li>
+        <li>Cliquez-glissez d'une station à une autre pour tracer une ligne.</li>
+        <li>Glissez depuis l'extrémité d'une ligne existante pour la prolonger.</li>
+        <li>Les trains transportent les passagers vers une station de forme correspondante.</li>
+        <li>Évitez qu'une station soit surchargée — gardez le réseau fluide.</li>
       </ul>
-      <button id="start-btn">Start</button>
+      <button id="start-btn">Commencer</button>
     </div>
   </div>
 
   <div id="gameover-overlay" class="overlay hidden">
     <div class="panel">
-      <h1>Network Collapsed</h1>
+      <h1>Réseau effondré</h1>
       <p id="gameover-stats"></p>
-      <button id="restart-btn">Try Again</button>
+      <button id="restart-btn">Réessayer</button>
     </div>
   </div>
 

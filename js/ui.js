@@ -29,12 +29,12 @@ export function createUI() {
         info.className = "info";
         const trainCount = line.trains.length;
         const stationCount = line.stations.length;
-        info.textContent = `${stationCount} stops · ${trainCount} train${trainCount === 1 ? "" : "s"}`;
+        info.textContent = `${stationCount} arrêt${stationCount === 1 ? "" : "s"} · ${trainCount} train${trainCount === 1 ? "" : "s"}`;
         chip.appendChild(info);
 
         const addBtn = document.createElement("button");
         addBtn.textContent = "+";
-        addBtn.title = "Add train";
+        addBtn.title = "Ajouter un train";
         addBtn.disabled = game.trainPool <= 0;
         addBtn.addEventListener("click", () => game.addTrainToLine(line.id));
         chip.appendChild(addBtn);
@@ -42,7 +42,7 @@ export function createUI() {
         const delBtn = document.createElement("button");
         delBtn.textContent = "×";
         delBtn.className = "danger";
-        delBtn.title = "Remove line";
+        delBtn.title = "Supprimer la ligne";
         delBtn.addEventListener("click", () => game.deleteLine(line.id));
         chip.appendChild(delBtn);
 
@@ -61,7 +61,7 @@ export function createUI() {
     gameOver(score, elapsedSeconds) {
       const minutes = Math.floor(elapsedSeconds / 60);
       const seconds = Math.floor(elapsedSeconds % 60);
-      gameoverStats.textContent = `You delivered ${score} passengers and kept the network running for ${minutes}m ${seconds}s.`;
+      gameoverStats.textContent = `Vous avez transporté ${score} passager${score === 1 ? "" : "s"} et maintenu le réseau en marche pendant ${minutes} min ${seconds} s.`;
       gameoverOverlay.classList.remove("hidden");
     },
 

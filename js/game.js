@@ -114,20 +114,20 @@ export class Game {
       this.trainPool++;
       const emptyLine = this.lines.find((l) => l.trains.length === 0 && l.stations.length >= 2);
       if (emptyLine) this.assignTrain(emptyLine);
-      this.toast("New train ready");
+      this.toast("Nouveau train disponible");
     } else if (kind === "line") {
       this.linesMax++;
-      this.toast("New line available");
+      this.toast("Nouvelle ligne disponible");
     } else {
       const candidates = this.lines.filter((l) => l.trains.some((t) => t.cars < TRAIN_MAX_CARS));
       if (candidates.length) {
         const line = choice(candidates);
         const train = line.trains.find((t) => t.cars < TRAIN_MAX_CARS);
         train.cars++;
-        this.toast("Extra carriage added");
+        this.toast("Wagon supplémentaire ajouté");
       } else {
         this.trainPool++;
-        this.toast("New train ready");
+        this.toast("Nouveau train disponible");
       }
     }
   }
