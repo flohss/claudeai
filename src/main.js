@@ -102,6 +102,7 @@ const finalShader = {
     uAberration: { value: 0.0011 },
     uGrain: { value: 0.018 },
     uBoost: { value: 0 },
+    uImpact: { value: 0 },
   },
   vertexShader: `
     varying vec2 vUv;
@@ -116,6 +117,7 @@ const finalShader = {
     uniform float uAberration;
     uniform float uGrain;
     uniform float uBoost;
+    uniform float uImpact;
     varying vec2 vUv;
 
     float hash(vec2 p) { return fract(sin(dot(p, vec2(41.3, 289.1))) * 43758.5453); }
@@ -123,16 +125,25 @@ const finalShader = {
     void main() {
       vec2 centered = vUv - 0.5;
       float dist = length(centered);
-      float amt = uAberration * (1.0 + dist * 2.2) * (1.0 + uBoost * 2.0);
       vec2 dir = normalize(centered + 1e-6);
 
-      float r = texture2D(tDiffuse, vUv - dir * amt).r;
-      float g = texture2D(tDiffuse, vUv).g;
-      float b = texture2D(tDiffuse, vUv + dir * amt).b;
+      // Onde de choc radiale transitoire lors d'une collision.
+      vec2 uv = vUv;
+      if (uImpact > 0.001) {
+        float ripple = sin(dist * 22.0 - uImpact * 14.0) * 0.5 + 0.5;
+        uv += dir * ripple * uImpact * 0.05 * (1.0 - dist);
+      }
+
+      float amt = uAberration * (1.0 + dist * 2.2) * (1.0 + uBoost * 2.0 + uImpact * 3.0);
+
+      float r = texture2D(tDiffuse, uv - dir * amt).r;
+      float g = texture2D(tDiffuse, uv).g;
+      float b = texture2D(tDiffuse, uv + dir * amt).b;
       vec3 color = vec3(r, g, b);
 
       float vig = smoothstep(0.95, 0.35, dist);
       color *= mix(0.55, 1.0, vig);
+      color = mix(color, color * vec3(1.35, 0.55, 0.5), uImpact * 0.45);
 
       float grain = (hash(vUv * vec2(1920.0, 1080.0) + fract(uTime) * 97.0) - 0.5) * uGrain;
       color += grain;
@@ -483,17 +494,36 @@ const orbManager = new OrbManager();
 // ---------------------------------------------------------------------------
 // Entrées : souris + clavier (ZQSD / flèches), lissées avec inertie
 // ---------------------------------------------------------------------------
-const input = { mouseX: 0, mouseY: 0, key: { up: 0, down: 0, left: 0, right: 0, boost: false } };
+const input = { aimPx: 0, aimPy: 0, key: { up: 0, down: 0, left: 0, right: 0, boost: false } };
+const MOUSE_SENSITIVITY = 0.0026;
+const AIM_RECENTER_HALFLIFE = 0.35; // la visée "ressort" doucement vers le centre, façon manette
 
+// Mouse-look à la première personne : ne réagit qu'une fois le pointeur verrouillé
+// sur le canvas (vraies deltas de souris, pas de position absolue).
 window.addEventListener("mousemove", (e) => {
-  input.mouseX = (e.clientX / window.innerWidth) * 2 - 1;
-  input.mouseY = -((e.clientY / window.innerHeight) * 2 - 1);
+  if (document.pointerLockElement !== canvas) return;
+  input.aimPx = THREE.MathUtils.clamp(input.aimPx + e.movementX * MOUSE_SENSITIVITY, -1, 1);
+  input.aimPy = THREE.MathUtils.clamp(input.aimPy - e.movementY * MOUSE_SENSITIVITY, -1, 1);
 });
+// Tactile : pas de pointer lock possible, on garde un contrôle par position absolue.
 window.addEventListener("touchmove", (e) => {
   if (!e.touches[0]) return;
-  input.mouseX = (e.touches[0].clientX / window.innerWidth) * 2 - 1;
-  input.mouseY = -((e.touches[0].clientY / window.innerHeight) * 2 - 1);
+  input.aimPx = (e.touches[0].clientX / window.innerWidth) * 2 - 1;
+  input.aimPy = -((e.touches[0].clientY / window.innerHeight) * 2 - 1);
 }, { passive: true });
+
+function requestMouseLock() {
+  canvas.requestPointerLock?.();
+}
+const pointerHint = document.getElementById("pointer-hint");
+document.addEventListener("pointerlockchange", () => {
+  const locked = document.pointerLockElement === canvas;
+  pointerHint.classList.toggle("visible", !locked && state === "playing");
+  if (!locked && state === "playing") togglePause();
+});
+canvas.addEventListener("click", () => {
+  if (state === "playing" && document.pointerLockElement !== canvas) requestMouseLock();
+});
 
 const KEY_MAP = {
   ArrowUp: "up", KeyW: "up", KeyZ: "up",
@@ -601,6 +631,7 @@ const player = {
   gatesPassed: 0,
   elapsed: 0,
 };
+let impactPulse = 0; // secousse/distorsion transitoire à l'impact, décroît chaque frame
 
 function resetGame() {
   player.px = 0; player.py = 0;
@@ -634,6 +665,7 @@ function damagePlayer() {
   player.shields -= 1;
   player.combo = 0;
   player.invuln = 1.6;
+  impactPulse = 1;
   audio.hit();
   hitFlash.classList.add("active");
   setTimeout(() => hitFlash.classList.remove("active"), 140);
@@ -657,20 +689,34 @@ function togglePause() {
   if (state === "playing") {
     state = "paused";
     pauseScreen.classList.remove("hidden");
+    pointerHint.classList.remove("visible");
+    document.exitPointerLock?.();
   } else if (state === "paused") {
     state = "playing";
     pauseScreen.classList.add("hidden");
+    requestMouseLock();
   }
 }
+
+const TUTORIAL_KEY = "vortex-infini-tutorial-seen";
+const controlTip = document.getElementById("control-tip");
 
 function startGame() {
   resetGame();
   state = "playing";
+  impactPulse = 0;
   audio.ensure();
   startScreen.classList.add("hidden");
   gameoverScreen.classList.add("hidden");
   pauseScreen.classList.add("hidden");
   HUD.root.classList.remove("hidden");
+  requestMouseLock();
+
+  if (!localStorage.getItem(TUTORIAL_KEY)) {
+    localStorage.setItem(TUTORIAL_KEY, "1");
+    controlTip.classList.add("visible");
+    setTimeout(() => controlTip.classList.remove("visible"), 4500);
+  }
 }
 
 document.getElementById("btn-play").addEventListener("click", startGame);
@@ -690,12 +736,21 @@ function angleDiff(a, b) {
 function updatePlayer(dt) {
   const kx = input.key.right - input.key.left;
   const ky = input.key.up - input.key.down;
+
+  // La visée souris se recentre doucement (comme un manche à ressort) quand le
+  // pointeur est verrouillé ; en tactile elle reste en position absolue.
+  if (document.pointerLockElement === canvas) {
+    const decay = Math.pow(0.5, dt / AIM_RECENTER_HALFLIFE);
+    input.aimPx *= decay;
+    input.aimPy *= decay;
+  }
+
   player.targetPx = THREE.MathUtils.clamp(
-    input.mouseX * PLAYER_MAX_OFFSET + kx * PLAYER_MAX_OFFSET * 0.7,
+    input.aimPx * PLAYER_MAX_OFFSET + kx * PLAYER_MAX_OFFSET * 0.7,
     -PLAYER_MAX_OFFSET, PLAYER_MAX_OFFSET
   );
   player.targetPy = THREE.MathUtils.clamp(
-    input.mouseY * PLAYER_MAX_OFFSET + ky * PLAYER_MAX_OFFSET * 0.7,
+    input.aimPy * PLAYER_MAX_OFFSET + ky * PLAYER_MAX_OFFSET * 0.7,
     -PLAYER_MAX_OFFSET, PLAYER_MAX_OFFSET
   );
   const smoothing = 1 - Math.pow(0.001, dt);
@@ -739,7 +794,20 @@ function updateCamera() {
   camera.lookAt(lookTarget);
   camera.rotation.z += (player.targetPx - player.px) * -0.012;
 
-  camera.fov = THREE.MathUtils.lerp(camera.fov, 78 + (player.boost - 1) * 22, 0.08);
+  // Secousse de caméra : continue et proportionnelle au boost, plus une
+  // impulsion transitoire (impactPulse) à chaque collision.
+  const t = clock.elapsedTime;
+  const boostShake = Math.max(0, player.boost - 1) * 0.5;
+  const shakeMag = boostShake * 0.16 + impactPulse * 0.85;
+  if (shakeMag > 0.0005) {
+    const sx = (Math.sin(t * 41.0) + Math.sin(t * 17.3) * 0.6) * shakeMag;
+    const sy = (Math.sin(t * 33.0 + 1.1) + Math.sin(t * 12.7) * 0.6) * shakeMag;
+    camera.position.addScaledVector(frame.binormal, sx);
+    camera.position.addScaledVector(frame.normal, sy);
+    camera.rotation.z += sx * 0.012 + impactPulse * 0.05 * Math.sin(t * 53.0);
+  }
+
+  camera.fov = THREE.MathUtils.lerp(camera.fov, 78 + (player.boost - 1) * 22 + impactPulse * 6, 0.08);
   camera.updateProjectionMatrix();
 
   playerLight.position.copy(camera.position);
@@ -796,6 +864,8 @@ function animate() {
 
   tunnelMaterial.uniforms.uTime.value = t;
   finalPass.uniforms.uTime.value = t;
+  impactPulse = Math.max(0, impactPulse - dt * 2.4);
+  finalPass.uniforms.uImpact.value = impactPulse;
 
   if (state === "playing") {
     const { difficulty } = updatePlayer(dt);

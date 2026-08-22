@@ -169,6 +169,42 @@ html, body {
 #warning.hidden { display: none; }
 @keyframes blink { 50% { opacity: 0.15; } }
 
+#pointer-hint {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, calc(-50% + 70px));
+  color: #eaf6ff;
+  letter-spacing: 2px;
+  font-weight: 700;
+  font-size: 13px;
+  padding: 8px 16px;
+  background: rgba(6, 10, 20, 0.6);
+  border: 1px solid rgba(77, 243, 255, 0.4);
+  text-shadow: 0 0 8px rgba(77,243,255,0.8);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms ease;
+}
+#pointer-hint.visible { opacity: 1; }
+
+#control-tip {
+  position: absolute;
+  top: 90px; left: 50%;
+  transform: translateX(-50%);
+  color: var(--gold);
+  letter-spacing: 1.5px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px 18px;
+  background: rgba(6, 10, 20, 0.5);
+  border: 1px solid rgba(255, 207, 92, 0.35);
+  text-shadow: 0 0 8px rgba(255,207,92,0.7);
+  opacity: 0;
+  transition: opacity 500ms ease;
+  white-space: nowrap;
+}
+#control-tip.visible { opacity: 1; }
+
 /* ---------- Overlays (menus) ---------- */
 
 .overlay {
