@@ -331,6 +331,25 @@ table.data-table tr:hover td{ background: rgba(168,121,31,0.06); }
 .tree-side{ margin-top:16px; }
 .tree-side h4{ font-size:12px; text-transform:uppercase; letter-spacing:0.06em; color: var(--gold); margin:0 0 6px; }
 
+.lignee-scroll{ overflow-x:auto; padding-bottom:4px; }
+.lignee-frise{ display:flex; align-items:stretch; gap:0; min-width:min-content; }
+.lignee-node{
+  flex:0 0 160px; width:160px; background:#fffdf7; border:1px solid var(--line); border-top:4px solid var(--ink-faint);
+  border-radius:3px; padding:8px 10px; cursor:pointer; user-select:none; text-align:center;
+  box-shadow:0 1px 3px rgba(58,44,28,0.15); transition: background .15s;
+}
+.lignee-node:hover{ background:#fff8e8; border-color: var(--gold-light); }
+.lignee-node.sex-M{ border-top-color: var(--male); }
+.lignee-node.sex-F{ border-top-color: var(--female); }
+.lignee-node.is-end{ border-width:2px; border-top-width:5px; border-color: var(--gold); box-shadow:0 2px 10px rgba(168,121,31,0.35); }
+.lignee-node .ln-gen{ font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color: var(--gold); }
+.lignee-node .ln-name{ font-weight:bold; color: var(--maroon-dark); font-size:12.5px; margin-top:2px; }
+.lignee-node .ln-dates{ color: var(--ink-soft); font-size:11px; margin-top:2px; }
+.lignee-arrow{
+  flex:0 0 auto; display:flex; align-items:center; justify-content:center; width:30px;
+  color: var(--gold); font-size:18px;
+}
+
 .fan-chart{ display:block; }
 .fan-wedge{
   fill: var(--card-bg); stroke: var(--paper); stroke-width:1.5; cursor:pointer; transition: fill .15s;

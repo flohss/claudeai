@@ -859,6 +859,62 @@ function treeNodeHTML(node){
 }
 
 let treeViewMode = 'rect'; // 'rect' | 'fan'
+let ligneeTargetId = null;
+
+/** Cherche le chemin de fromId vers toId en remontant uniquement par les parents (un seul
+ * parent choisi à chaque génération) : ne renvoie un résultat que si toId est un ascendant
+ * direct de fromId. Comme chaque personne a au plus deux parents, ce chemin est unique quand
+ * il existe (l'arbre ascendant n'a pas de raccourci vers un même ascendant par deux voies). */
+function findAncestorPath(fromId, toId){
+  if (fromId === toId) return [fromId];
+  const r = INDEX[fromId];
+  if (!r) return null;
+  for (const pid of r.parents) {
+    const sub = findAncestorPath(pid, toId);
+    if (sub) return [fromId, ...sub];
+  }
+  return null;
+}
+/** Lignée directe entre rootId et targetId, dans un sens ou l'autre (targetId peut être un
+ * ascendant ou un descendant direct de rootId) — renvoie null si le lien n'est que collatéral
+ * (cousin, oncle/tante…), auquel cas il n'existe pas de chemin à une seule personne par
+ * génération. */
+function findLineagePath(rootId, targetId){
+  const up = findAncestorPath(rootId, targetId);
+  if (up) return { path: up, direction: 'ascendant' };
+  const down = findAncestorPath(targetId, rootId);
+  if (down) return { path: down.slice().reverse(), direction: 'descendant' };
+  return null;
+}
+
+function ligneeFriseHTML(){
+  const meId = DATA.meta.root_individual;
+  const me = meId ? INDEX[meId] : null;
+  if (!me) return '';
+  if (!ligneeTargetId || !INDEX[ligneeTargetId]) {
+    return `<p class="card-note">Choisissez une personne ci-dessus pour afficher la lignée directe qui vous y relie.</p>`;
+  }
+  if (ligneeTargetId === meId) return '';
+  const result = findLineagePath(meId, ligneeTargetId);
+  if (!result) {
+    const target = INDEX[ligneeTargetId];
+    return `<p class="card-note">Aucune lignée directe entre ${escapeHtml(me.name)} et ${escapeHtml(target.name)} : le lien passe uniquement par un ascendant commun (cousinage, oncle/tante…), pas par une chaîne parent-enfant directe.</p>`;
+  }
+  const cards = result.path.map((id, i) => {
+    const r = INDEX[id];
+    if (!r) return '';
+    const isEnd = i === 0 || i === result.path.length - 1;
+    return `<div class="lignee-node${isEnd ? ' is-end' : ''} sex-${r.sex}" data-open-id="${id}">
+      <div class="ln-gen">${escapeHtml(genLabel(r.generation))}</div>
+      <div class="ln-name">${escapeHtml(r.name)}</div>
+      <div class="ln-dates">${escapeHtml(lifeSpanShort(r))}</div>
+    </div>`;
+  }).join('<div class="lignee-arrow">&rarr;</div>');
+  const dirLabel = result.direction === 'ascendant' ? 'ascendante' : 'descendante';
+  return `
+    <p class="card-note">Lignée ${dirLabel} directe, ${result.path.length - 1} génération${result.path.length - 1 > 1 ? 's' : ''} — cliquez sur une case pour ouvrir sa fiche.</p>
+    <div class="lignee-scroll"><div class="lignee-frise">${cards}</div></div>`;
+}
 
 function renderTreeCanvas(){
   const mount = document.getElementById('treeCanvasMount');
@@ -980,6 +1036,14 @@ function renderArbre(){
     </div>
     <p class="card-note" style="margin:2px 0 10px;">L'export ouvre la boîte de dialogue d'impression du navigateur, orientation choisie automatiquement ; utilisez « Enregistrer au format PDF » comme destination pour obtenir un fichier.</p>
     <div class="tree-scroll"><div id="treeCanvasMount"></div></div>
+
+    <div class="card wide" id="ligneeCard" style="margin-top:16px;">
+      <h3 class="card-title">Lignée directe</h3>
+      <label style="font-size:12.5px; color:var(--ink-soft); display:block; margin-bottom:8px;">Relier ${DATA.meta.root_individual && INDEX[DATA.meta.root_individual] ? escapeHtml(INDEX[DATA.meta.root_individual].name) : 'la racine'} à :
+        <select id="ligneeTargetSelect" style="margin-left:6px; margin-top:4px; max-width:100%; box-sizing:border-box; display:block;">${personSelectOptions(ligneeTargetId, DATA.meta.root_individual)}</select>
+      </label>
+      <div id="ligneeMount">${ligneeFriseHTML()}</div>
+    </div>
     ${root ? `
     <div class="tree-side">
       <h4>Conjoint(s) de ${escapeHtml(root.name)}</h4>
@@ -990,6 +1054,11 @@ function renderArbre(){
   `;
 
   renderTreeCanvas();
+
+  document.getElementById('ligneeTargetSelect').addEventListener('change', e => {
+    ligneeTargetId = e.target.value || null;
+    document.getElementById('ligneeMount').innerHTML = ligneeFriseHTML();
+  });
 
   document.getElementById('treeRootSelect').addEventListener('change', e => {
     if (e.target.value) { treeRootId = e.target.value; renderArbre(); }
@@ -1463,6 +1532,7 @@ function openIndividual(id){
     <div class="rel-block"><h4>Frères et sœurs</h4><div class="rel-people">${relChips(r.siblings, 'Aucun connu')}</div></div>
     <div class="fiche-actions">
       <button type="button" class="btn secondary" id="ficheTreeBtn">Voir dans l'arbre</button>
+      ${DATA.meta.root_individual && id !== DATA.meta.root_individual ? `<button type="button" class="btn secondary" id="ficheLigneeBtn">Relier à ${escapeHtml(INDEX[DATA.meta.root_individual] ? INDEX[DATA.meta.root_individual].name : 'la racine')}</button>` : ''}
       <button type="button" class="btn secondary" id="ficheEditBtn">Modifier cette fiche</button>
       <button type="button" class="btn danger" id="ficheDeleteBtn">Supprimer</button>
     </div>
@@ -1477,6 +1547,17 @@ function openIndividual(id){
     goToTab('arbre');
     renderArbre();
   });
+  const ligneeBtn = document.getElementById('ficheLigneeBtn');
+  if (ligneeBtn) {
+    ligneeBtn.addEventListener('mousedown', () => {
+      closeFiche();
+      ligneeTargetId = id;
+      goToTab('arbre');
+      renderArbre();
+      const card = document.getElementById('ligneeCard');
+      if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }
   document.getElementById('ficheEditBtn').addEventListener('mousedown', () => {
     closeFiche();
     goToTab('edition');

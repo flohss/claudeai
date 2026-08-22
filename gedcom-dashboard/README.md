@@ -67,6 +67,10 @@ Le dashboard présente 11 onglets :
    automatiquement à l'écriture radiale). Export papier en A4 ou A3 via
    l'impression native du navigateur (« Enregistrer au format PDF »),
    orientation choisie automatiquement pour remplir au mieux la page.
+   Une **lignée directe** — frise horizontale reliant la racine à n'importe
+   quel ascendant ou descendant direct choisi, une seule personne par
+   génération — s'affiche sous l'arbre ; accessible aussi depuis la fiche
+   de n'importe quelle personne (« Relier à … »).
 9. **Calendrier perpétuel** — naissances, mariages et décès classés par
    jour de l'année (toutes années confondues), filtrables par mois/type/nom,
    avec un rappel « dans l'histoire familiale » pour la date du jour.
