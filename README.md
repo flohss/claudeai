@@ -12,7 +12,16 @@ WebAudio-synthesized soundtrack — no external assets required.
 
 ## Run it
 
-Any static file server works, e.g.:
+The game must be served over HTTP — opening `index.html` directly by
+double-clicking it (`file://…`) won't work, since browsers block ES module
+imports on that protocol.
+
+**Windows:** double-click `Lancer-Vortex-Infini.bat`. It starts a local
+server and opens the game in your browser automatically. Requires
+[Python](https://www.python.org/downloads/) (check "Add python.exe to PATH"
+during install).
+
+**Any other static file server works too**, e.g.:
 
 ```
 python3 -m http.server 8000
