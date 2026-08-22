@@ -59,6 +59,7 @@
     <div id="warning" class="hidden">DANGER — ALIGNEZ-VOUS SUR LA PORTE</div>
     <div id="pointer-hint">CLIQUEZ POUR ACTIVER LA VISÉE SOURIS</div>
     <div id="control-tip">SOURIS : NAVIGUER&nbsp;&nbsp;•&nbsp;&nbsp;MAJ : BOOST&nbsp;&nbsp;•&nbsp;&nbsp;ÉCHAP : PAUSE</div>
+    <div id="mode-badge" class="hidden">MODE EXPLORATION</div>
   </div>
 
   <!-- Start screen -->
@@ -73,6 +74,11 @@
         <div>Cliquez sur l'écran en jeu pour activer la visée souris (verrouillage du pointeur).</div>
         <div>Franchissez les <span class="hl cyan">portes lumineuses</span>, évitez les parois, ramassez les <span class="hl gold">orbes d'énergie</span>.</div>
       </div>
+      <label class="mode-toggle">
+        <input type="checkbox" id="exploration-toggle" />
+        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        <span class="toggle-label">Mode exploration <small>vol libre, sans risque ni alertes</small></span>
+      </label>
       <button id="btn-play" class="btn-play">JOUER</button>
       <div class="foot">Meilleur score : <span id="best-score">0</span></div>
     </div>
@@ -83,6 +89,7 @@
     <div class="panel">
       <h2>PAUSE</h2>
       <button id="btn-resume" class="btn-play">REPRENDRE</button>
+      <button id="btn-quit" class="btn-play btn-secondary">QUITTER</button>
     </div>
   </div>
 

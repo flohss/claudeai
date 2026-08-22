@@ -632,6 +632,7 @@ const player = {
   elapsed: 0,
 };
 let impactPulse = 0; // secousse/distorsion transitoire à l'impact, décroît chaque frame
+let explorationMode = false; // vol libre : pas de pénalité, pas d'alignement requis, pas d'alertes
 
 function resetGame() {
   player.px = 0; player.py = 0;
@@ -661,7 +662,7 @@ function updateShieldHUD() {
 }
 
 function damagePlayer() {
-  if (player.invuln > 0) return;
+  if (explorationMode || player.invuln > 0) return;
   player.shields -= 1;
   player.combo = 0;
   player.invuln = 1.6;
@@ -698,10 +699,22 @@ function togglePause() {
   }
 }
 
+function quitToMenu() {
+  state = "menu";
+  pauseScreen.classList.add("hidden");
+  HUD.root.classList.add("hidden");
+  modeBadge.classList.add("hidden");
+  startScreen.classList.remove("hidden");
+  document.exitPointerLock?.();
+}
+
 const TUTORIAL_KEY = "vortex-infini-tutorial-seen";
 const controlTip = document.getElementById("control-tip");
+const explorationToggle = document.getElementById("exploration-toggle");
+const modeBadge = document.getElementById("mode-badge");
 
 function startGame() {
+  explorationMode = explorationToggle.checked;
   resetGame();
   state = "playing";
   impactPulse = 0;
@@ -710,6 +723,8 @@ function startGame() {
   gameoverScreen.classList.add("hidden");
   pauseScreen.classList.add("hidden");
   HUD.root.classList.remove("hidden");
+  HUD.root.classList.toggle("exploration", explorationMode);
+  modeBadge.classList.toggle("hidden", !explorationMode);
   requestMouseLock();
 
   if (!localStorage.getItem(TUTORIAL_KEY)) {
@@ -722,6 +737,7 @@ function startGame() {
 document.getElementById("btn-play").addEventListener("click", startGame);
 document.getElementById("btn-restart").addEventListener("click", startGame);
 document.getElementById("btn-resume").addEventListener("click", togglePause);
+document.getElementById("btn-quit").addEventListener("click", quitToMenu);
 
 // ---------------------------------------------------------------------------
 // Boucle de simulation
@@ -835,6 +851,10 @@ function evaluateGate(g) {
   }
 }
 
+// Mode exploration : les portes deviennent purement décoratives, on les
+// marque juste comme franchies sans évaluer l'alignement ni y toucher au score.
+function resolveGateSilently() {}
+
 // Flèche de guidage : indique en permanence vers quelle direction se
 // déplacer pour passer au centre de la prochaine porte. Le viseur change
 // de couleur (cyan = bien aligné, rouge = danger imminent) pour renforcer
@@ -845,6 +865,8 @@ const GUIDANCE_LOOKAHEAD = 55; // distance à laquelle la flèche apparaît
 const URGENT_DISTANCE = 16;    // distance à laquelle l'alerte rouge clignote
 
 function updateGuidance() {
+  if (explorationMode) return; // pas d'alertes ni de guidage en mode exploration
+
   const upcoming = gateManager.gates.find((g) => !g.resolved && g.s - player.s > 0 && g.s - player.s < GUIDANCE_LOOKAHEAD);
 
   if (!upcoming) {
@@ -904,7 +926,7 @@ function animate() {
     const { difficulty } = updatePlayer(dt);
     gateManager.spawnUpTo(player.s + 220, difficulty);
     orbManager.spawnUpTo(player.s + 220);
-    gateManager.update(player.s, evaluateGate);
+    gateManager.update(player.s, explorationMode ? resolveGateSilently : evaluateGate);
     orbManager.update(player.s, dt, player.px, player.py, () => {
       player.score += 8;
       audio.orb();

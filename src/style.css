@@ -310,6 +310,70 @@ h2 {
 .btn-play:hover { transform: translateY(-2px); box-shadow: 0 0 34px rgba(77,243,255,0.85); }
 .btn-play:active { transform: translateY(0); }
 
+.btn-secondary {
+  margin-top: 14px;
+  color: #cfe9ff;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.25);
+  box-shadow: none;
+}
+.btn-secondary:hover { box-shadow: 0 0 16px rgba(255,255,255,0.15); }
+
+.mode-toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 24px;
+  cursor: pointer;
+  user-select: none;
+}
+.mode-toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
+.toggle-track {
+  position: relative;
+  width: 42px; height: 22px;
+  flex: none;
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(77,243,255,0.4);
+  border-radius: 999px;
+  transition: background 150ms ease, border-color 150ms ease;
+}
+.toggle-thumb {
+  position: absolute;
+  top: 2px; left: 2px;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: var(--cyan);
+  box-shadow: 0 0 6px var(--cyan);
+  transition: transform 150ms ease, background 150ms ease, box-shadow 150ms ease;
+}
+.mode-toggle input:checked ~ .toggle-track { background: rgba(125,255,176,0.22); border-color: #7dffb0; }
+.mode-toggle input:checked ~ .toggle-track .toggle-thumb { transform: translateX(20px); background: #7dffb0; box-shadow: 0 0 6px #7dffb0; }
+.toggle-label { text-align: left; font-size: 13.5px; color: #cfe9ff; }
+.toggle-label small { display: block; opacity: 0.6; font-size: 11px; margin-top: 2px; }
+
+#mode-badge {
+  position: absolute;
+  top: 18px; left: 50%;
+  transform: translateX(-50%);
+  color: #7dffb0;
+  letter-spacing: 3px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 6px 16px;
+  background: rgba(6, 10, 20, 0.55);
+  border: 1px solid rgba(125, 255, 176, 0.4);
+  text-shadow: 0 0 8px rgba(125,255,176,0.8);
+}
+#mode-badge.hidden { display: none; }
+
+/* Mode exploration : pas de pénalité, pas d'alignement requis, pas d'alertes. */
+#hud.exploration .hud-bottom-left,
+#hud.exploration .hud-sub,
+#hud.exploration #warning,
+#hud.exploration #guide-arrow {
+  display: none !important;
+}
+
 .foot { margin-top: 18px; font-size: 12px; opacity: 0.6; letter-spacing: 1px; }
 
 .final-stats {
