@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jeux de lettres et de chiffres</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="app-header">
+  <h1>🧩 Jeux de lettres &amp; de chiffres</h1>
+  <nav class="tabs">
+    <button class="tab-btn active" data-tab="wordsearch">Mots mêlés</button>
+    <button class="tab-btn" data-tab="crossword">Mots fléchés</button>
+    <button class="tab-btn" data-tab="sudoku">Sudoku</button>
+  </nav>
+</header>
+
+<main>
+  <!-- MOTS MÊLÉS -->
+  <section id="wordsearch" class="tab-panel active">
+    <div class="panel-controls">
+      <label>Thème
+        <select id="ws-theme"></select>
+      </label>
+      <label>Taille de la grille
+        <select id="ws-size">
+          <option value="10">10 × 10</option>
+          <option value="12" selected>12 × 12</option>
+          <option value="15">15 × 15</option>
+        </select>
+      </label>
+      <button id="ws-new" class="btn primary">Nouvelle grille</button>
+      <span class="timer">⏱ <span id="ws-timer">00:00</span></span>
+    </div>
+    <div class="ws-layout">
+      <div id="ws-grid" class="ws-grid"></div>
+      <div class="ws-words">
+        <h2>Mots à trouver</h2>
+        <ul id="ws-wordlist"></ul>
+        <p id="ws-status" class="status"></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- MOTS FLÉCHÉS -->
+  <section id="crossword" class="tab-panel">
+    <div class="panel-controls">
+      <label>Grille
+        <select id="cw-puzzle"></select>
+      </label>
+      <button id="cw-check" class="btn">Vérifier</button>
+      <button id="cw-solve" class="btn">Solution</button>
+      <button id="cw-reset" class="btn primary">Recommencer</button>
+    </div>
+    <div id="cw-grid" class="cw-grid"></div>
+    <p id="cw-status" class="status"></p>
+  </section>
+
+  <!-- SUDOKU -->
+  <section id="sudoku" class="tab-panel">
+    <div class="panel-controls">
+      <label>Difficulté
+        <select id="su-difficulty">
+          <option value="facile">Facile</option>
+          <option value="moyen" selected>Moyen</option>
+          <option value="difficile">Difficile</option>
+        </select>
+      </label>
+      <button id="su-new" class="btn primary">Nouvelle partie</button>
+      <button id="su-notes" class="btn">Notes : Off</button>
+      <button id="su-check" class="btn">Vérifier</button>
+      <button id="su-solve" class="btn">Solution</button>
+      <span class="timer">⏱ <span id="su-timer">00:00</span></span>
+      <span class="mistakes">Erreurs : <span id="su-mistakes">0</span></span>
+    </div>
+    <div class="su-layout">
+      <div id="su-grid" class="su-grid"></div>
+      <div class="su-numpad" id="su-numpad"></div>
+    </div>
+    <p id="su-status" class="status"></p>
+  </section>
+</main>
+
+<footer class="app-footer">Fait avec Claude</footer>
+
+<script src="js/wordsearch.js"></script>
+<script src="js/crossword-data.js"></script>
+<script src="js/crossword.js"></script>
+<script src="js/sudoku.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
