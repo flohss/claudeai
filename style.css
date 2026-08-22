@@ -1,0 +1,215 @@
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #0e1420;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  color: #eef2f7;
+}
+
+#game-canvas {
+  display: block;
+  position: fixed;
+  inset: 0;
+  touch-action: none;
+  cursor: crosshair;
+}
+
+#hud {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  padding: 14px 20px;
+  pointer-events: none;
+  z-index: 5;
+}
+
+#hud-left, #hud-right {
+  display: flex;
+  gap: 18px;
+}
+
+.hud-stat {
+  background: rgba(14, 20, 32, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 6px 12px;
+  min-width: 70px;
+  text-align: center;
+  backdrop-filter: blur(4px);
+}
+
+.hud-stat .label {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8ea0bd;
+}
+
+.hud-stat span:last-child {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+#toasts {
+  position: fixed;
+  top: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  z-index: 6;
+  pointer-events: none;
+}
+
+.toast {
+  background: rgba(255, 255, 255, 0.92);
+  color: #14202f;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+  animation: toast-in-out 2.6s ease forwards;
+}
+
+@keyframes toast-in-out {
+  0% { opacity: 0; transform: translateY(-8px); }
+  12% { opacity: 1; transform: translateY(0); }
+  78% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-6px); }
+}
+
+#line-panel {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  gap: 10px;
+  padding: 10px 14px;
+  overflow-x: auto;
+  z-index: 5;
+  background: linear-gradient(to top, rgba(6,9,16,0.85), transparent);
+}
+
+.line-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(14, 20, 32, 0.82);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 10px;
+  padding: 6px 8px;
+  flex-shrink: 0;
+}
+
+.line-chip .swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.line-chip .info {
+  font-size: 12px;
+  color: #c4d0e0;
+  white-space: nowrap;
+}
+
+.line-chip button {
+  border: none;
+  border-radius: 6px;
+  width: 22px;
+  height: 22px;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  background: rgba(255,255,255,0.1);
+  color: #eef2f7;
+}
+
+.line-chip button:hover {
+  background: rgba(255,255,255,0.22);
+}
+
+.line-chip button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.line-chip button.danger:hover {
+  background: #c0392b;
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(6, 9, 16, 0.78);
+  z-index: 10;
+}
+
+.overlay.hidden {
+  display: none;
+}
+
+.overlay .panel {
+  background: #141d2e;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px;
+  padding: 32px 36px;
+  max-width: 420px;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+
+.overlay h1 {
+  margin: 0 0 8px;
+  font-size: 28px;
+  letter-spacing: 0.02em;
+}
+
+.overlay p {
+  color: #a9b7cc;
+  margin: 0 0 14px;
+  line-height: 1.5;
+}
+
+.instructions {
+  text-align: left;
+  color: #c4d0e0;
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 0 0 22px;
+  padding-left: 20px;
+}
+
+.overlay button {
+  background: #3aa0ff;
+  color: #08131f;
+  border: none;
+  border-radius: 999px;
+  padding: 10px 28px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.overlay button:hover {
+  background: #5cb3ff;
+}
