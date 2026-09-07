@@ -20,3 +20,11 @@ python3 app.py
 - `culture_generale/data.py` : banque de questions, organisée par thématique puis par sujet.
 - `culture_generale/quiz.py` : logique de tirage aléatoire du sujet et déroulement du quiz.
 - `culture_generale/cli.py` : interface en ligne de commande (menus, questions, score).
+- `tests/` : tests unitaires (pytest).
+
+### Lancer les tests
+
+```bash
+pip install -r requirements-dev.txt
+python3 -m pytest
+```
