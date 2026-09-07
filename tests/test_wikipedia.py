@@ -46,6 +46,20 @@ def test_fetch_summary_parses_response(monkeypatch):
     }
 
 
+def test_fetch_summary_encodes_slashes_in_title(monkeypatch):
+    captured_urls = []
+
+    def fake_get_json(url):
+        captured_urls.append(url)
+        return {"title": "AC/DC", "extract": "Groupe de rock australien.", "content_urls": {}}
+
+    monkeypatch.setattr(wikipedia, "_get_json", fake_get_json)
+
+    wikipedia.fetch_summary("AC/DC")
+
+    assert captured_urls[0].endswith("AC%2FDC")
+
+
 def test_fetch_summary_handles_missing_extract(monkeypatch):
     monkeypatch.setattr(wikipedia, "_get_json", lambda url: {"title": "X", "content_urls": {}})
 

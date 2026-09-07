@@ -59,7 +59,7 @@ def search_titles(theme, limit=30):
 
 def fetch_summary(title):
     """Renvoie le résumé d'un article Wikipédia (titre, extrait, url)."""
-    encoded_title = urllib.parse.quote(title.replace(" ", "_"))
+    encoded_title = urllib.parse.quote(title.replace(" ", "_"), safe="")
     data = _get_json(SUMMARY_URL.format(encoded_title))
     return {
         "title": data.get("title", title),
