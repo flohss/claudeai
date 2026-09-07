@@ -4,8 +4,9 @@ Made with Claude
 ## Culture Générale — quiz en Python
 
 Application en ligne de commande, entièrement en Python (bibliothèque standard uniquement).
-Choisissez une thématique (Histoire, Géographie, Sciences, Littérature & Arts, Sport), puis
-un mode :
+Choisissez une thématique (Histoire, Géographie, Sciences, Nature, Littérature & Arts, Sport,
+Société & Monde — 62 sujets, 310 questions au total, inspirés de la collection encyclopédique
+« Tout l'Univers »), puis un mode :
 
 - **Quiz** : un sujet est ouvert au hasard dans la thématique, avec une série de questions à
   choix multiples mélangées aléatoirement.
