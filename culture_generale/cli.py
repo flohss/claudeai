@@ -67,6 +67,23 @@ def display_article(article):
         print(f"\n🔗 {article['url']}")
 
 
+def show_wikipedia_article_for(query):
+    try:
+        article = random_article(query)
+    except WikipediaError as exc:
+        print(f"⚠️  {exc}")
+    else:
+        display_article(article)
+
+
+def offer_wikipedia_article(subject_name):
+    answer = input(f"\nEn savoir plus sur « {subject_name} » avec Wikipédia ? (o/n) ").strip().lower()
+    if answer != "o":
+        return
+    print(f"\nRecherche d'un article sur « {subject_name} »...")
+    show_wikipedia_article_for(subject_name)
+
+
 def run_quiz_mode(quiz):
     print("\n--- Quiz de culture générale ---")
     print("Choisissez une thématique, un sujet sera ouvert au hasard pour vous.")
@@ -87,6 +104,8 @@ def run_quiz_mode(quiz):
         total_questions += count
         print(f"\nScore pour ce sujet : {score}/{count}")
 
+        offer_wikipedia_article(subject_name)
+
         again = input("\nRejouer avec une autre thématique ? (o/n) ").strip().lower()
         if again != "o":
             break
@@ -97,20 +116,16 @@ def run_quiz_mode(quiz):
 
 def run_wikipedia_mode(quiz):
     print("\n--- Article surprise (Wikipédia) ---")
-    print("Choisissez une thématique, un article Wikipédia sera ouvert au hasard.")
+    print("Choisissez une thématique, un sujet et un article Wikipédia seront ouverts au hasard.")
 
     while True:
         theme = choose_theme(quiz)
         if theme is None:
             break
 
-        print(f"\nRecherche d'un article sur la thématique « {theme} »...")
-        try:
-            article = random_article(theme)
-        except WikipediaError as exc:
-            print(f"⚠️  {exc}")
-        else:
-            display_article(article)
+        subject_name, _ = quiz.pick_subject(theme)
+        print(f"\nRecherche d'un article sur « {subject_name} » ({theme})...")
+        show_wikipedia_article_for(subject_name)
 
         again = input("\nVoir un autre article ? (o/n) ").strip().lower()
         if again != "o":

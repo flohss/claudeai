@@ -9,9 +9,11 @@ Société & Monde — 62 sujets, 310 questions au total, inspirés de la collect
 « Tout l'Univers »), puis un mode :
 
 - **Quiz** : un sujet est ouvert au hasard dans la thématique, avec une série de questions à
-  choix multiples mélangées aléatoirement.
-- **Article surprise (Wikipédia)** : un vrai article Wikipédia lié à la thématique est tiré au
-  hasard et son résumé (titre, extrait, lien) est affiché. Ce mode nécessite une connexion
+  choix multiples mélangées aléatoirement. À la fin, l'appli propose de lire l'article
+  Wikipédia du sujet tiré au sort pour en savoir plus.
+- **Article surprise (Wikipédia)** : un sujet est tiré au hasard dans la thématique, puis un
+  vrai article Wikipédia correspondant à ce sujet précis (et non à la thématique générale) est
+  recherché et son résumé (titre, extrait, lien) est affiché. Ce mode nécessite une connexion
   internet.
 
 ### Lancer l'application

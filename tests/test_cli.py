@@ -1,7 +1,17 @@
 """Tests de l'interface en ligne de commande."""
 
+import pytest
+
 from culture_generale import cli
-from culture_generale.cli import ask_question, choose_mode, choose_theme, display_article, run_wikipedia_mode
+from culture_generale.cli import (
+    ask_question,
+    choose_mode,
+    choose_theme,
+    display_article,
+    offer_wikipedia_article,
+    run_quiz_mode,
+    run_wikipedia_mode,
+)
 from culture_generale.quiz import Quiz
 from culture_generale.wikipedia import WikipediaError
 
@@ -109,20 +119,20 @@ def test_display_article_without_url(capsys):
 
 
 def test_run_wikipedia_mode_displays_article_then_stops(monkeypatch):
-    quiz = Quiz({"Histoire": {}})
+    quiz = Quiz({"Histoire": {"Napoléon Ier": []}})
     responses = iter(["1", "n"])
     monkeypatch.setattr("builtins.input", lambda _: next(responses))
-    monkeypatch.setattr(cli, "random_article", lambda theme: {"title": "T", "extract": "E", "url": "U"})
+    monkeypatch.setattr(cli, "random_article", lambda query: {"title": "T", "extract": "E", "url": "U"})
 
     run_wikipedia_mode(quiz)
 
 
 def test_run_wikipedia_mode_handles_error_gracefully(monkeypatch, capsys):
-    quiz = Quiz({"Histoire": {}})
+    quiz = Quiz({"Histoire": {"Napoléon Ier": []}})
     responses = iter(["1", "n"])
     monkeypatch.setattr("builtins.input", lambda _: next(responses))
 
-    def raise_error(theme):
+    def raise_error(query):
         raise WikipediaError("pas de connexion")
 
     monkeypatch.setattr(cli, "random_article", raise_error)
@@ -130,3 +140,50 @@ def test_run_wikipedia_mode_handles_error_gracefully(monkeypatch, capsys):
     run_wikipedia_mode(quiz)
 
     assert "pas de connexion" in capsys.readouterr().out
+
+
+def test_run_wikipedia_mode_searches_by_subject_not_theme(monkeypatch):
+    quiz = Quiz({"Histoire": {"Les dieux égyptiens": []}})
+    responses = iter(["1", "n"])
+    monkeypatch.setattr("builtins.input", lambda _: next(responses))
+    captured = {}
+
+    def fake_random_article(query):
+        captured["query"] = query
+        return {"title": "T", "extract": "E", "url": "U"}
+
+    monkeypatch.setattr(cli, "random_article", fake_random_article)
+
+    run_wikipedia_mode(quiz)
+
+    assert captured["query"] == "Les dieux égyptiens"
+
+
+def test_offer_wikipedia_article_declined(monkeypatch):
+    monkeypatch.setattr("builtins.input", lambda _: "n")
+    monkeypatch.setattr(cli, "random_article", lambda query: pytest.fail("ne doit pas être appelé"))
+
+    offer_wikipedia_article("Les dieux égyptiens")
+
+
+def test_offer_wikipedia_article_accepted(monkeypatch, capsys):
+    responses = iter(["o"])
+    monkeypatch.setattr("builtins.input", lambda _: next(responses))
+    monkeypatch.setattr(
+        cli, "random_article", lambda query: {"title": query, "extract": "Extrait.", "url": "U"}
+    )
+
+    offer_wikipedia_article("Les dieux égyptiens")
+
+    out = capsys.readouterr().out
+    assert "Les dieux égyptiens" in out
+    assert "Extrait." in out
+
+
+def test_run_quiz_mode_offers_wikipedia_article_after_scoring(monkeypatch):
+    quiz = Quiz({"Histoire": {"Sujet": []}})
+    responses = iter(["1", "n", "n"])
+    monkeypatch.setattr("builtins.input", lambda _: next(responses))
+    monkeypatch.setattr(cli, "random_article", lambda query: pytest.fail("ne doit pas être appelé"))
+
+    run_quiz_mode(quiz)
