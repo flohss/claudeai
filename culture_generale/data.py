@@ -341,6 +341,60 @@ THEMES = {
                 "answer": 0,
             },
         ],
+        "Renaissance": [
+            {
+                "question": "Dans quel pays la Renaissance artistique a-t-elle commencé, au XIVe-XVe siècle ?",
+                "choices": ["L'Italie", "La France", "L'Espagne", "L'Angleterre"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel roi de France a invité Léonard de Vinci à s'installer au Clos Lucé ?",
+                "choices": ["François Ier", "Louis XII", "Henri II", "Charles VIII"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle invention de Gutenberg vers 1450 favorise la diffusion des idées de la Renaissance ?",
+                "choices": ["L'imprimerie à caractères mobiles", "La boussole", "La poudre à canon", "Le papier"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel mouvement intellectuel de la Renaissance remet à l'honneur les textes antiques grecs et latins ?",
+                "choices": ["L'humanisme", "Le scolastique", "Le jansénisme", "Le romantisme"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel navigateur génois a atteint l'Amérique en 1492 pour le compte de l'Espagne ?",
+                "choices": ["Christophe Colomb", "Vasco de Gama", "Fernand de Magellan", "Jacques Cartier"],
+                "answer": 0,
+            },
+        ],
+        "Colonisation et décolonisation": [
+            {
+                "question": "Quelle conférence de 1885 organise le partage de l'Afrique entre puissances européennes ?",
+                "choices": ["La conférence de Berlin", "Le congrès de Vienne", "La conférence de Yalta", "Le traité de Versailles"],
+                "answer": 0,
+            },
+            {
+                "question": "En quelle décennie la plupart des colonies africaines accèdent-elles à l'indépendance ?",
+                "choices": ["Les années 1960", "Les années 1920", "Les années 1980", "Les années 1945"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle guerre oppose la France au mouvement indépendantiste algérien de 1954 à 1962 ?",
+                "choices": ["La guerre d'Algérie", "La guerre d'Indochine", "La guerre du Rif", "La guerre des Boers"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel dirigeant indien a mené une résistance non-violente contre la colonisation britannique ?",
+                "choices": ["Gandhi", "Nehru", "Nelson Mandela", "Hô Chi Minh"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on le processus par lequel une colonie devient un État indépendant ?",
+                "choices": ["La décolonisation", "L'annexion", "La colonisation", "Le protectorat"],
+                "answer": 0,
+            },
+        ],
     },
     "Géographie": {
         "Fleuves du monde": [
@@ -748,6 +802,33 @@ THEMES = {
                 "answer": 0,
             },
         ],
+        "Les climats du monde": [
+            {
+                "question": "Quel climat est caractérisé par des étés chauds et secs et des hivers doux et humides, autour de la Méditerranée ?",
+                "choices": ["Le climat méditerranéen", "Le climat équatorial", "Le climat polaire", "Le climat continental"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel climat se caractérise par des précipitations abondantes toute l'année et une température élevée constante ?",
+                "choices": ["Le climat équatorial", "Le climat désertique", "Le climat polaire", "Le climat tempéré"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel climat se rencontre aux pôles, avec des températures très basses toute l'année ?",
+                "choices": ["Le climat polaire", "Le climat tropical", "Le climat aride", "Le climat océanique"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelles lignes imaginaires délimitent la zone intertropicale où le climat est chaud toute l'année ?",
+                "choices": ["Les tropiques", "L'équateur seul", "Le cercle polaire", "Le méridien de Greenwich"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel climat, présent en France, se caractérise par des saisons bien marquées et des précipitations modérées réparties sur l'année ?",
+                "choices": ["Le climat tempéré", "Le climat équatorial", "Le climat désertique", "Le climat polaire"],
+                "answer": 0,
+            },
+        ],
     },
     "Sciences": {
         "Système solaire": [
@@ -1017,6 +1098,60 @@ THEMES = {
             {
                 "question": "Quelle réaction chimique se produit lorsqu'une substance se combine avec l'oxygène en dégageant chaleur et lumière ?",
                 "choices": ["La combustion", "La fermentation", "L'oxydation lente", "La dissolution"],
+                "answer": 0,
+            },
+        ],
+        "Physique": [
+            {
+                "question": "Quel physicien a formulé les lois de la gravitation universelle ?",
+                "choices": ["Isaac Newton", "Albert Einstein", "Galilée", "Niels Bohr"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle est l'unité de mesure de la force dans le système international ?",
+                "choices": ["Le newton", "Le joule", "Le watt", "Le pascal"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle théorie d'Einstein relie l'espace, le temps et la gravité ?",
+                "choices": ["La relativité générale", "La mécanique quantique", "La thermodynamique", "L'électromagnétisme"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle grandeur physique se mesure en degrés Celsius ou en kelvins ?",
+                "choices": ["La température", "La pression", "La masse", "La vitesse"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle est, en ordre de grandeur, la vitesse de la lumière dans le vide ?",
+                "choices": ["Environ 300 000 km/s", "Environ 30 000 km/s", "Environ 3 000 km/s", "Environ 3 000 000 km/s"],
+                "answer": 0,
+            },
+        ],
+        "Écologie et environnement": [
+            {
+                "question": "Comment appelle-t-on l'ensemble formé par les êtres vivants et leur milieu naturel en interaction ?",
+                "choices": ["Un écosystème", "Une biosphère", "Une biocénose", "Un biotope"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on le recyclage naturel de l'eau entre océans, atmosphère et sols ?",
+                "choices": ["Le cycle de l'eau", "L'effet de serre", "La photosynthèse", "L'évapotranspiration"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel gaz est le principal responsable de l'effet de serre additionnel d'origine humaine ?",
+                "choices": ["Le dioxyde de carbone (CO2)", "L'oxygène", "L'azote", "L'hydrogène"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on une espèce animale ou végétale en danger de disparition ?",
+                "choices": ["Une espèce menacée", "Une espèce invasive", "Une espèce endémique", "Une espèce domestique"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on les trois gestes pour réduire les déchets : réduire, réutiliser, recycler ?",
+                "choices": ["Les 3R", "Le tri sélectif", "Le compostage", "L'économie circulaire"],
                 "answer": 0,
             },
         ],
@@ -1292,6 +1427,33 @@ THEMES = {
                 "answer": 0,
             },
         ],
+        "Photographie": [
+            {
+                "question": "Quel procédé photographique du XIXe siècle porte le nom de son inventeur français, Louis Daguerre ?",
+                "choices": ["Le daguerréotype", "Le calotype", "La photographie argentique couleur", "Le Polaroid"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel photographe français est considéré comme l'auteur de la première photographie permanente connue ?",
+                "choices": ["Nicéphore Niépce", "Louis Daguerre", "Man Ray", "Henri Cartier-Bresson"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on l'ouverture qui règle la quantité de lumière entrant dans un appareil photo ?",
+                "choices": ["Le diaphragme", "L'obturateur", "Le viseur", "Le capteur"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel photographe français est célèbre pour le concept de « l'instant décisif » ?",
+                "choices": ["Henri Cartier-Bresson", "Robert Doisneau", "Man Ray", "Nadar"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel type de photographie capture des images en très gros plan de sujets minuscules ?",
+                "choices": ["La macrophotographie", "La photographie aérienne", "Le panoramique", "Le sténopé"],
+                "answer": 0,
+            },
+        ],
     },
     "Sport": {
         "Jeux Olympiques": [
@@ -1480,6 +1642,114 @@ THEMES = {
             {
                 "question": "Comment appelle-t-on un panier marqué en sautant pour enfoncer le ballon dans le cercle ?",
                 "choices": ["Un dunk", "Un lay-up", "Un airball", "Un alley-oop"],
+                "answer": 0,
+            },
+        ],
+        "Rugby": [
+            {
+                "question": "Combien de joueurs titulaires compte une équipe de rugby à XV sur le terrain ?",
+                "choices": ["15", "13", "11", "7"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on l'action de poser le ballon dans l'en-but adverse au rugby ?",
+                "choices": ["Un essai", "Un but", "Une transformation", "Une pénalité"],
+                "answer": 0,
+            },
+            {
+                "question": "Combien de points rapporte un essai au rugby à XV ?",
+                "choices": ["5", "3", "7", "2"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel tournoi annuel oppose la France, l'Angleterre, l'Écosse, le pays de Galles, l'Irlande et l'Italie ?",
+                "choices": ["Le Tournoi des Six Nations", "La Coupe du monde", "Le Tri Nations", "Le Challenge européen"],
+                "answer": 0,
+            },
+            {
+                "question": "Dans quel pays le rugby est-il né, selon la légende, au collège de Rugby ?",
+                "choices": ["Le Royaume-Uni", "La France", "L'Afrique du Sud", "La Nouvelle-Zélande"],
+                "answer": 0,
+            },
+        ],
+        "Natation": [
+            {
+                "question": "Quelle nage est considérée comme la plus rapide en compétition ?",
+                "choices": ["Le crawl (nage libre)", "La brasse", "Le dos", "Le papillon"],
+                "answer": 0,
+            },
+            {
+                "question": "Sur quelle distance se dispute le 100 mètres nage libre ?",
+                "choices": ["100 mètres", "50 mètres", "200 mètres", "400 mètres"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on l'épreuve où un nageur enchaîne les quatre styles de nage ?",
+                "choices": ["Le quatre nages individuel", "Le relais 4x100 m", "Le contre-la-montre", "Le combiné"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel nageur américain a remporté 23 médailles d'or olympiques, un record ?",
+                "choices": ["Michael Phelps", "Mark Spitz", "Ian Thorpe", "Caeleb Dressel"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle nage se caractérise par un mouvement de bras simultané et un battement de jambes en dauphin ?",
+                "choices": ["Le papillon", "Le crawl", "La brasse", "Le dos"],
+                "answer": 0,
+            },
+        ],
+        "Athlétisme": [
+            {
+                "question": "Quelle est l'épreuve reine du sprint sur piste ?",
+                "choices": ["Le 100 mètres", "Le 400 mètres", "Le 1 500 mètres", "Le marathon"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle distance parcourt un coureur de marathon ?",
+                "choices": ["42,195 km", "21 km", "100 km", "30 km"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle épreuve d'athlétisme consiste à franchir une barre le plus haut possible en sautant en arrière ?",
+                "choices": ["Le saut en hauteur", "Le saut en longueur", "Le triple saut", "Le saut à la perche"],
+                "answer": 0,
+            },
+            {
+                "question": "Combien d'épreuves comporte le décathlon masculin ?",
+                "choices": ["10", "7", "8", "12"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel athlète jamaïcain a détenu longtemps le record du monde du 100 mètres ?",
+                "choices": ["Usain Bolt", "Carl Lewis", "Justin Gatlin", "Tyson Gay"],
+                "answer": 0,
+            },
+        ],
+        "Formule 1": [
+            {
+                "question": "Combien de roues compte une monoplace de Formule 1 ?",
+                "choices": ["4", "6", "3", "8"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel circuit mythique accueille le Grand Prix de Monaco de Formule 1 chaque année ?",
+                "choices": ["Le circuit de Monaco", "Le circuit de Silverstone", "Le circuit de Spa-Francorchamps", "Le Nürburgring"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on l'arrêt aux stands pour changer les pneus pendant une course ?",
+                "choices": ["Le pit-stop", "Le drapeau à damier", "La grille de départ", "Le safety car"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel drapeau signale la fin d'une course de Formule 1 ?",
+                "choices": ["Le drapeau à damier", "Le drapeau jaune", "Le drapeau rouge", "Le drapeau vert"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel pilote français a été plusieurs fois champion du monde de Formule 1 dans les années 1980-1990 ?",
+                "choices": ["Alain Prost", "Michael Schumacher", "Ayrton Senna", "Nelson Piquet"],
                 "answer": 0,
             },
         ],
@@ -1755,6 +2025,33 @@ THEMES = {
                 "answer": 0,
             },
         ],
+        "Les dinosaures": [
+            {
+                "question": "À quelle ère géologique les dinosaures ont-ils dominé la Terre ?",
+                "choices": ["Le Mésozoïque (ère secondaire)", "Le Paléozoïque", "Le Cénozoïque", "Le Précambrien"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel dinosaure carnivore géant est célèbre pour ses petits bras et ses grandes dents ?",
+                "choices": ["Le Tyrannosaure (T. rex)", "Le Tricératops", "Le Diplodocus", "Le Stégosaure"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel dinosaure herbivore possédait trois cornes sur la tête ?",
+                "choices": ["Le Tricératops", "Le Tyrannosaure", "Le Vélociraptor", "Le Ptérodactyle"],
+                "answer": 0,
+            },
+            {
+                "question": "Les ptérodactyles étaient-ils de véritables dinosaures ?",
+                "choices": ["Non, ce sont des reptiles volants apparentés", "Oui, ce sont des dinosaures", "Non, ce sont des oiseaux", "Non, ce sont des poissons"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel événement est considéré comme responsable de l'extinction des dinosaures il y a environ 66 millions d'années ?",
+                "choices": ["La chute d'un astéroïde", "Une épidémie", "La dérive des continents", "L'apparition des mammifères"],
+                "answer": 0,
+            },
+        ],
     },
     "Société & Monde": {
         "Les grandes inventions": [
@@ -2024,6 +2321,33 @@ THEMES = {
             {
                 "question": "Comment appelle-t-on le vêtement traditionnel japonais porté avec une large ceinture, l'obi ?",
                 "choices": ["Le kimono", "Le sari", "Le boubou", "Le sarong"],
+                "answer": 0,
+            },
+        ],
+        "Éducation": [
+            {
+                "question": "Comment appelle-t-on l'enseignement obligatoire dispensé aux enfants dans la plupart des pays ?",
+                "choices": ["La scolarité obligatoire", "L'enseignement supérieur", "La formation continue", "L'apprentissage"],
+                "answer": 0,
+            },
+            {
+                "question": "En France, jusqu'à quel âge l'instruction est-elle obligatoire depuis 2019 ?",
+                "choices": ["16 ans", "14 ans", "18 ans", "12 ans"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on le diplôme obtenu à la fin des études secondaires en France ?",
+                "choices": ["Le baccalauréat", "Le brevet", "La licence", "Le CAP"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle organisation des Nations unies s'occupe de l'éducation, la science et la culture ?",
+                "choices": ["L'UNESCO", "L'UNICEF", "L'OMS", "La FAO"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on un établissement d'enseignement supérieur délivrant des diplômes universitaires ?",
+                "choices": ["Une université", "Un collège", "Un lycée", "Une école primaire"],
                 "answer": 0,
             },
         ],
