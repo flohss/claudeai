@@ -59,6 +59,19 @@ def _strip_trailing_parenthesis(query):
     return re.sub(r"\s*\([^)]*\)\s*$", "", query).strip() or query
 
 
+_LEADING_ARTICLE_RE = re.compile(r"^(?:les|la|le)\s+|^l['’]", re.IGNORECASE)
+
+
+def _strip_leading_article(text):
+    """Retire un article défini initial (« Les », « La », « Le », « L' »).
+
+    Les titres réels de Wikipédia commencent rarement par l'article défini
+    de nos intitulés de sujets (ex. « Liste des rois de France » plutôt que
+    « Les rois de France ») ; le retirer aide la recherche par titre.
+    """
+    return _LEADING_ARTICLE_RE.sub("", text, count=1).strip() or text
+
+
 def _significant_words(text):
     """Mots de 4 lettres ou plus, en minuscules — ignore les mots-outils courts."""
     return {word for word in re.findall(r"\w{4,}", text.lower())}
@@ -67,18 +80,20 @@ def _significant_words(text):
 def search_titles(query, limit=30):
     """Renvoie les titres d'articles Wikipédia liés à un sujet.
 
-    Cherche d'abord la phrase exacte (plus précis, évite les faux amis dus à
-    la racinisation, ex. « capitale » confondu avec « capital »). En dernier
-    recours, une recherche plein texte plus large est tentée, mais restreinte
-    aux résultats dont le titre partage au moins un mot significatif avec la
-    requête — une correspondance plein texte sans lien dans le titre (ex.
-    « Uchronie » pour « Le monde contemporain ») est trop souvent hors sujet.
+    Cherche d'abord des articles dont le TITRE contient la phrase du sujet
+    (le plus fiable : le titre garantit que l'article traite bien de ce
+    sujet). En dernier recours, une recherche plein texte est tentée, mais
+    restreinte aux résultats dont le titre partage au moins un mot
+    significatif avec la requête — une simple mention en passant dans le
+    corps d'un article sans rapport (ex. « Grégoire IX », dont la biographie
+    évoque une fois « les rois de France ») est trop souvent hors sujet.
     """
     cleaned = _strip_trailing_parenthesis(query)
-    titles = _search(f'"{cleaned}"', limit)
+    significant = _significant_words(cleaned)
+
+    titles = _search(f'intitle:"{_strip_leading_article(cleaned)}"', limit)
     if not titles:
-        loose = _search(cleaned, limit)
-        significant = _significant_words(cleaned)
+        loose = _search(f'"{cleaned}"', limit) or _search(cleaned, limit)
         titles = [title for title in loose if _significant_words(title) & significant]
     if not titles:
         raise WikipediaError(f"Aucun article suffisamment pertinent trouvé pour « {query} ».")

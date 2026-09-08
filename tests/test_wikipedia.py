@@ -26,27 +26,41 @@ def test_search_titles_raises_when_no_results(monkeypatch):
         wikipedia.search_titles("Histoire")
 
 
-def test_search_titles_tries_exact_phrase_first(monkeypatch):
+def test_search_titles_tries_intitle_first(monkeypatch):
     captured_expressions = []
 
     def fake_search(search_expression, limit):
         captured_expressions.append(search_expression)
-        return ["Les capitales du monde (liste)"]
+        return ["Liste des capitales du monde"]
 
     monkeypatch.setattr(wikipedia, "_search", fake_search)
 
     titles = wikipedia.search_titles("Les capitales du monde")
 
-    assert titles == ["Les capitales du monde (liste)"]
-    assert captured_expressions == ['"Les capitales du monde"']
+    assert titles == ["Liste des capitales du monde"]
+    assert captured_expressions == ['intitle:"capitales du monde"']
 
 
-def test_search_titles_falls_back_to_loose_search_when_title_is_related(monkeypatch):
+def test_search_titles_strips_leading_article_for_intitle_search(monkeypatch):
+    captured = []
+
+    def fake_search(search_expression, limit):
+        captured.append(search_expression)
+        return ["Liste des rois de France"]
+
+    monkeypatch.setattr(wikipedia, "_search", fake_search)
+
+    wikipedia.search_titles("Les rois de France")
+
+    assert captured[0] == 'intitle:"rois de France"'
+
+
+def test_search_titles_falls_back_to_body_search_when_title_is_related(monkeypatch):
     calls = []
 
     def fake_search(search_expression, limit):
         calls.append(search_expression)
-        if search_expression.startswith('"'):
+        if search_expression.startswith("intitle:") or search_expression.startswith('"'):
             return []
         return ["Un sujet historique obscur"]
 
@@ -55,12 +69,26 @@ def test_search_titles_falls_back_to_loose_search_when_title_is_related(monkeypa
     titles = wikipedia.search_titles("Un sujet obscur")
 
     assert titles == ["Un sujet historique obscur"]
-    assert calls == ['"Un sujet obscur"', "Un sujet obscur"]
+    assert calls == ['intitle:"Un sujet obscur"', '"Un sujet obscur"', "Un sujet obscur"]
+
+
+def test_search_titles_rejects_body_phrase_results_unrelated_to_the_query(monkeypatch):
+    def fake_search(search_expression, limit):
+        if search_expression.startswith("intitle:"):
+            return []
+        if search_expression.startswith('"'):
+            return ["Grégoire IX"]
+        return []
+
+    monkeypatch.setattr(wikipedia, "_search", fake_search)
+
+    with pytest.raises(wikipedia.WikipediaError):
+        wikipedia.search_titles("Les rois de France")
 
 
 def test_search_titles_rejects_loose_results_unrelated_to_the_query(monkeypatch):
     def fake_search(search_expression, limit):
-        if search_expression.startswith('"'):
+        if search_expression.startswith("intitle:") or search_expression.startswith('"'):
             return []
         return ["Uchronie"]
 
@@ -81,7 +109,7 @@ def test_search_titles_strips_trailing_parenthesis_before_searching(monkeypatch)
 
     wikipedia.search_titles("Le monde contemporain (XIXe-XXe siècle)")
 
-    assert captured[0] == '"Le monde contemporain"'
+    assert captured[0] == 'intitle:"monde contemporain"'
 
 
 def test_fetch_summary_parses_response(monkeypatch):
