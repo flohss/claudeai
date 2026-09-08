@@ -41,21 +41,47 @@ def test_search_titles_tries_exact_phrase_first(monkeypatch):
     assert captured_expressions == ['"Les capitales du monde"']
 
 
-def test_search_titles_falls_back_to_loose_search(monkeypatch):
+def test_search_titles_falls_back_to_loose_search_when_title_is_related(monkeypatch):
     calls = []
 
     def fake_search(search_expression, limit):
         calls.append(search_expression)
         if search_expression.startswith('"'):
             return []
-        return ["Un article vaguement lié"]
+        return ["Un sujet historique obscur"]
 
     monkeypatch.setattr(wikipedia, "_search", fake_search)
 
     titles = wikipedia.search_titles("Un sujet obscur")
 
-    assert titles == ["Un article vaguement lié"]
+    assert titles == ["Un sujet historique obscur"]
     assert calls == ['"Un sujet obscur"', "Un sujet obscur"]
+
+
+def test_search_titles_rejects_loose_results_unrelated_to_the_query(monkeypatch):
+    def fake_search(search_expression, limit):
+        if search_expression.startswith('"'):
+            return []
+        return ["Uchronie"]
+
+    monkeypatch.setattr(wikipedia, "_search", fake_search)
+
+    with pytest.raises(wikipedia.WikipediaError):
+        wikipedia.search_titles("Le monde contemporain")
+
+
+def test_search_titles_strips_trailing_parenthesis_before_searching(monkeypatch):
+    captured = []
+
+    def fake_search(search_expression, limit):
+        captured.append(search_expression)
+        return ["Résultat"]
+
+    monkeypatch.setattr(wikipedia, "_search", fake_search)
+
+    wikipedia.search_titles("Le monde contemporain (XIXe-XXe siècle)")
+
+    assert captured[0] == '"Le monde contemporain"'
 
 
 def test_fetch_summary_parses_response(monkeypatch):

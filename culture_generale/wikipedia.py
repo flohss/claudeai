@@ -2,6 +2,7 @@
 
 import json
 import random
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -48,16 +49,39 @@ def _search(search_expression, limit):
     return [result["title"] for result in data.get("query", {}).get("search", [])]
 
 
+def _strip_trailing_parenthesis(query):
+    """Retire un qualificatif entre parenthèses en fin de chaîne (ex. « (Tome 2) »).
+
+    Ces qualificatifs sont nos propres regroupements de sujets, pas des
+    formulations qu'on retrouve telles quelles dans la prose de Wikipédia :
+    les garder ne fait que bruiter la recherche.
+    """
+    return re.sub(r"\s*\([^)]*\)\s*$", "", query).strip() or query
+
+
+def _significant_words(text):
+    """Mots de 4 lettres ou plus, en minuscules — ignore les mots-outils courts."""
+    return {word for word in re.findall(r"\w{4,}", text.lower())}
+
+
 def search_titles(query, limit=30):
     """Renvoie les titres d'articles Wikipédia liés à un sujet.
 
     Cherche d'abord la phrase exacte (plus précis, évite les faux amis dus à
-    la racinisation, ex. « capitale » confondu avec « capital ») avant de se
-    rabattre sur une recherche plein texte plus large si rien n'est trouvé.
+    la racinisation, ex. « capitale » confondu avec « capital »). En dernier
+    recours, une recherche plein texte plus large est tentée, mais restreinte
+    aux résultats dont le titre partage au moins un mot significatif avec la
+    requête — une correspondance plein texte sans lien dans le titre (ex.
+    « Uchronie » pour « Le monde contemporain ») est trop souvent hors sujet.
     """
-    titles = _search(f'"{query}"', limit) or _search(query, limit)
+    cleaned = _strip_trailing_parenthesis(query)
+    titles = _search(f'"{cleaned}"', limit)
     if not titles:
-        raise WikipediaError(f"Aucun article trouvé pour « {query} ».")
+        loose = _search(cleaned, limit)
+        significant = _significant_words(cleaned)
+        titles = [title for title in loose if _significant_words(title) & significant]
+    if not titles:
+        raise WikipediaError(f"Aucun article suffisamment pertinent trouvé pour « {query} ».")
     return titles
 
 
