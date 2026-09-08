@@ -1184,6 +1184,114 @@ THEMES = {
                 "answer": 0,
             },
         ],
+        "Poésie": [
+            {
+                "question": "Quel poète français est l'auteur des « Fleurs du mal » ?",
+                "choices": ["Charles Baudelaire", "Arthur Rimbaud", "Paul Verlaine", "Victor Hugo"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle forme poétique fixe comporte 14 vers ?",
+                "choices": ["Le sonnet", "La ballade", "L'ode", "Le haïku"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel poème japonais très court en trois vers évoque souvent la nature ?",
+                "choices": ["Le haïku", "Le sonnet", "La ballade", "L'élégie"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel poète français a écrit « Le Dormeur du val » ?",
+                "choices": ["Arthur Rimbaud", "Charles Baudelaire", "Paul Verlaine", "Stéphane Mallarmé"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on la répétition d'un même son à la fin de deux ou plusieurs vers ?",
+                "choices": ["La rime", "La strophe", "La césure", "L'allitération"],
+                "answer": 0,
+            },
+        ],
+        "Danse": [
+            {
+                "question": "Quelle danse de couple d'origine argentine est reconnue au patrimoine de l'UNESCO ?",
+                "choices": ["Le tango", "La salsa", "Le flamenco", "La valse"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle danse classique se pratique généralement sur pointes ?",
+                "choices": ["Le ballet", "Le tango", "Le hip-hop", "Le flamenco"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle danse espagnole s'accompagne souvent de guitare et de castagnettes ?",
+                "choices": ["Le flamenco", "Le tango", "La salsa", "La samba"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel style de danse est né dans les rues des quartiers afro-américains et latinos de New York dans les années 1970 ?",
+                "choices": ["Le hip-hop", "Le ballet", "La valse", "Le flamenco"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on un spectacle de danse classique raconté en musique, comme « Le Lac des cygnes » ?",
+                "choices": ["Un ballet", "Un opéra", "Une comédie musicale", "Un récital"],
+                "answer": 0,
+            },
+        ],
+        "Architecture": [
+            {
+                "question": "Quel style architectural médiéval est caractérisé par des arcs brisés et de hautes voûtes, comme à Notre-Dame de Paris ?",
+                "choices": ["Le gothique", "Le roman", "Le baroque", "Le néoclassique"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel architecte est célèbre pour la Sagrada Família à Barcelone ?",
+                "choices": ["Antoni Gaudí", "Le Corbusier", "Gustave Eiffel", "Frank Lloyd Wright"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel style architectural précède le gothique, avec des arcs en plein cintre et des murs épais ?",
+                "choices": ["Le roman", "Le baroque", "Le gothique flamboyant", "L'Art nouveau"],
+                "answer": 0,
+            },
+            {
+                "question": "Qui a conçu la tour qui porte son nom, construite pour l'Exposition universelle de 1889 à Paris ?",
+                "choices": ["Gustave Eiffel", "Georges-Eugène Haussmann", "Antoni Gaudí", "Le Corbusier"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on un édifice religieux musulman ?",
+                "choices": ["Une mosquée", "Une synagogue", "Une cathédrale", "Une pagode"],
+                "answer": 0,
+            },
+        ],
+        "Bande dessinée": [
+            {
+                "question": "Quel dessinateur belge a créé Tintin ?",
+                "choices": ["Hergé", "René Goscinny", "Albert Uderzo", "Franquin"],
+                "answer": 0,
+            },
+            {
+                "question": "Qui a créé le personnage d'Astérix avec Albert Uderzo ?",
+                "choices": ["René Goscinny", "Hergé", "Franquin", "Peyo"],
+                "answer": 0,
+            },
+            {
+                "question": "Dans quel pays la bande dessinée est-elle appelée « manga » ?",
+                "choices": ["Le Japon", "La Corée du Sud", "La Chine", "Les États-Unis"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel petit village gaulois résiste encore et toujours à l'envahisseur romain dans la BD d'Uderzo et Goscinny ?",
+                "choices": ["Le village d'Astérix", "Moulinsart", "Champignac", "Marcinelle"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on le célèbre festival de bande dessinée qui se tient chaque année en Charente ?",
+                "choices": ["Le Festival d'Angoulême", "Le Festival de Cannes", "Le Salon du Livre", "Japan Expo"],
+                "answer": 0,
+            },
+        ],
     },
     "Sport": {
         "Jeux Olympiques": [
@@ -1264,6 +1372,114 @@ THEMES = {
             {
                 "question": "Combien de sets faut-il gagner pour remporter un match de tennis en cinq sets gagnants (Grand Chelem masculin) ?",
                 "choices": ["3", "2", "4", "5"],
+                "answer": 0,
+            },
+        ],
+        "Tennis": [
+            {
+                "question": "Sur quelle surface se joue le tournoi de Roland-Garros ?",
+                "choices": ["La terre battue", "Le gazon", "Le dur", "La moquette"],
+                "answer": 0,
+            },
+            {
+                "question": "Combien de Grands Chelems existe-t-il dans le tennis professionnel ?",
+                "choices": ["4", "3", "5", "6"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on le geste qui consiste à frapper la balle avant qu'elle ne rebondisse ?",
+                "choices": ["La volée", "Le service", "Le smash", "Le lob"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on un score de 40-40 au tennis ?",
+                "choices": ["Égalité (deuce)", "Avantage", "Jeu blanc", "Bris d'égalité"],
+                "answer": 0,
+            },
+            {
+                "question": "Sur quelle surface se joue le tournoi de Wimbledon ?",
+                "choices": ["Le gazon", "La terre battue", "Le dur", "Le synthétique"],
+                "answer": 0,
+            },
+        ],
+        "Cyclisme": [
+            {
+                "question": "Comment s'appelle la plus célèbre course cycliste française par étapes ?",
+                "choices": ["Le Tour de France", "Le Giro", "La Vuelta", "Paris-Roubaix"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel maillot porte le leader du classement général au Tour de France ?",
+                "choices": ["Le maillot jaune", "Le maillot vert", "Le maillot à pois", "Le maillot blanc"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel maillot récompense le meilleur grimpeur au Tour de France ?",
+                "choices": ["Le maillot à pois", "Le maillot jaune", "Le maillot vert", "Le maillot blanc"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle célèbre course cycliste italienne par étapes se déroule au printemps ?",
+                "choices": ["Le Giro d'Italia", "La Vuelta", "Le Tour de France", "Paris-Nice"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on une course cycliste d'un seul jour, comme Paris-Roubaix ?",
+                "choices": ["Une classique", "Une étape", "Un contre-la-montre", "Un critérium"],
+                "answer": 0,
+            },
+        ],
+        "Sports d'hiver": [
+            {
+                "question": "Quel sport d'hiver combine le ski de fond et le tir à la carabine ?",
+                "choices": ["Le biathlon", "Le combiné nordique", "Le ski alpin", "Le patinage de vitesse"],
+                "answer": 0,
+            },
+            {
+                "question": "Sur quel type de terrain se pratique le ski alpin ?",
+                "choices": ["Une piste enneigée en descente", "Une patinoire", "Une piste d'athlétisme", "Un anneau de glace"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel sport d'hiver se pratique sur une patinoire avec des pierres et des balais ?",
+                "choices": ["Le curling", "Le hockey sur glace", "Le patinage artistique", "Le bobsleigh"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel sport d'hiver se joue en équipe avec un palet sur une patinoire ?",
+                "choices": ["Le hockey sur glace", "Le curling", "Le patinage de vitesse", "Le ski de fond"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on la discipline de ski où l'on saute depuis un tremplin ?",
+                "choices": ["Le saut à ski", "Le ski de fond", "Le slalom", "Le combiné nordique"],
+                "answer": 0,
+            },
+        ],
+        "Basketball": [
+            {
+                "question": "Dans quel pays le basketball a-t-il été inventé, en 1891 ?",
+                "choices": ["Les États-Unis", "Le Canada", "La France", "Le Royaume-Uni"],
+                "answer": 0,
+            },
+            {
+                "question": "Combien de points rapporte un panier marqué derrière la ligne à 3 points ?",
+                "choices": ["3", "2", "1", "4"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle est la ligue de basketball professionnelle la plus prestigieuse au monde ?",
+                "choices": ["La NBA", "La NFL", "La NHL", "La MLB"],
+                "answer": 0,
+            },
+            {
+                "question": "Combien de joueurs une équipe de basketball a-t-elle sur le terrain simultanément ?",
+                "choices": ["5", "6", "7", "11"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on un panier marqué en sautant pour enfoncer le ballon dans le cercle ?",
+                "choices": ["Un dunk", "Un lay-up", "Un airball", "Un alley-oop"],
                 "answer": 0,
             },
         ],
@@ -1700,6 +1916,114 @@ THEMES = {
             {
                 "question": "Comment appelle-t-on l'accroissement des échanges économiques et culturels à l'échelle mondiale ?",
                 "choices": ["La mondialisation", "La décentralisation", "Le protectionnisme", "L'autarcie"],
+                "answer": 0,
+            },
+        ],
+        "Économie": [
+            {
+                "question": "Comment appelle-t-on l'augmentation générale et durable des prix ?",
+                "choices": ["L'inflation", "La déflation", "La récession", "La croissance"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle institution est chargée de la politique monétaire de la zone euro ?",
+                "choices": ["La Banque centrale européenne", "Le FMI", "La Banque mondiale", "L'OMC"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on le principe économique selon lequel l'offre et la demande déterminent les prix ?",
+                "choices": ["La loi du marché", "La loi de l'offre", "La loi de Say", "La loi de Gresham"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on une période de recul de l'activité économique ?",
+                "choices": ["Une récession", "Une inflation", "Une expansion", "Une dévaluation"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle monnaie commune est utilisée par la plupart des pays de l'Union européenne ?",
+                "choices": ["L'euro", "Le franc", "Le dollar", "La livre"],
+                "answer": 0,
+            },
+        ],
+        "Gastronomie": [
+            {
+                "question": "Quel pays est réputé pour l'invention de la pizza napolitaine ?",
+                "choices": ["L'Italie", "La France", "L'Espagne", "La Grèce"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel fromage français à pâte molle est originaire de Normandie ?",
+                "choices": ["Le camembert", "Le comté", "Le roquefort", "Le reblochon"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle sauce froide est composée d'huile, de jaune d'œuf et de moutarde ?",
+                "choices": ["La mayonnaise", "La vinaigrette", "La béchamel", "Le pesto"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel plat japonais se compose de riz vinaigré et de poisson cru ?",
+                "choices": ["Les sushis", "Les ramens", "Les tempuras", "Les yakitoris"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle boisson chaude est obtenue par infusion de feuilles séchées, très consommée en Asie ?",
+                "choices": ["Le thé", "Le café", "Le chocolat chaud", "La tisane"],
+                "answer": 0,
+            },
+        ],
+        "Droit et justice": [
+            {
+                "question": "Comment appelle-t-on le principe selon lequel toute personne est innocente jusqu'à preuve du contraire ?",
+                "choices": ["La présomption d'innocence", "La légitime défense", "La prescription", "L'amnistie"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle juridiction française juge les crimes les plus graves avec un jury populaire ?",
+                "choices": ["La cour d'assises", "Le tribunal de police", "Le conseil des prud'hommes", "Le tribunal de commerce"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on un texte de loi voté par le Parlement ?",
+                "choices": ["Une loi", "Un décret", "Un arrêté", "Une ordonnance"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle institution internationale juge les crimes de guerre et les génocides ?",
+                "choices": ["La Cour pénale internationale", "L'ONU", "L'OTAN", "L'UNESCO"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on l'ensemble des règles qui organisent la vie en société et sont sanctionnées par l'État ?",
+                "choices": ["Le droit", "La morale", "La coutume", "L'étiquette"],
+                "answer": 0,
+            },
+        ],
+        "Mode et vêtements": [
+            {
+                "question": "Quel couturier français a créé la petite robe noire, révolutionnant la mode féminine au XXe siècle ?",
+                "choices": ["Coco Chanel", "Christian Dior", "Yves Saint Laurent", "Pierre Cardin"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle fibre textile naturelle provient du cocon d'une chenille ?",
+                "choices": ["La soie", "Le coton", "Le lin", "La laine"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle fibre textile est obtenue à partir de la toison des moutons ?",
+                "choices": ["La laine", "La soie", "Le coton", "Le polyester"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle ville est considérée comme une capitale historique de la haute couture ?",
+                "choices": ["Paris", "Londres", "Berlin", "Madrid"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on le vêtement traditionnel japonais porté avec une large ceinture, l'obi ?",
+                "choices": ["Le kimono", "Le sari", "Le boubou", "Le sarong"],
                 "answer": 0,
             },
         ],
