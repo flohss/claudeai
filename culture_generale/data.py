@@ -517,7 +517,7 @@ THEMES = {
                 "answer": 2,
             },
             {
-                "question": "Quel désert est considéré comme le plus aride du monde ?",
+                "question": "Quel désert chaud est considéré comme le plus aride du monde ?",
                 "choices": ["Le désert d'Atacama", "Le Sahara", "Le désert de Namib", "Le désert du Néguev"],
                 "answer": 0,
             },
@@ -528,14 +528,14 @@ THEMES = {
             },
             {
                 "question": "Quel désert australien est le plus vaste ?",
-                "choices": ["Simpson", "Grand désert de sable", "Gibson", "Tanami"],
-                "answer": 1,
+                "choices": ["Grand désert Victoria", "Grand désert de sable", "Simpson", "Tanami"],
+                "answer": 0,
             },
         ],
         "L'atlas du monde": [
             {
-                "question": "Combien de continents compte-t-on généralement dans l'enseignement français ?",
-                "choices": ["6", "5", "7", "4"],
+                "question": "Combien de continents compte-t-on généralement selon l'expression française « les cinq continents » ?",
+                "choices": ["5", "6", "7", "4"],
                 "answer": 0,
             },
             {
@@ -2898,8 +2898,8 @@ THEMES = {
                 "answer": 0,
             },
             {
-                "question": "En France, jusqu'à quel âge l'instruction est-elle obligatoire depuis 2019 ?",
-                "choices": ["16 ans", "14 ans", "18 ans", "12 ans"],
+                "question": "En France, depuis la réforme de 2019, à partir de quel âge l'instruction est-elle obligatoire ?",
+                "choices": ["3 ans", "6 ans", "4 ans", "5 ans"],
                 "answer": 0,
             },
             {
