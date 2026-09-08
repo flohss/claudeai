@@ -3,6 +3,8 @@ Made with Claude
 
 ## Culture Générale — quiz en Python
 
+[![Tests](https://github.com/flohss/claudeai/actions/workflows/tests.yml/badge.svg)](https://github.com/flohss/claudeai/actions/workflows/tests.yml)
+
 Application en ligne de commande, entièrement en Python (bibliothèque standard uniquement).
 Choisissez une thématique (Histoire, Géographie, Sciences, Nature, Littérature & Arts, Sport,
 Société & Monde — 62 sujets, 310 questions au total, inspirés de la collection encyclopédique
@@ -31,6 +33,8 @@ python3 app.py
   (API MediaWiki, sans dépendance externe).
 - `culture_generale/cli.py` : interface en ligne de commande (menus, questions, score).
 - `tests/` : tests unitaires (pytest).
+- `.github/workflows/tests.yml` : intégration continue, lance la suite de tests à chaque push
+  et pull request.
 
 ### Lancer les tests
 
