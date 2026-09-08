@@ -2925,7 +2925,7 @@ THEMES = {
                 "answer": 0,
             },
             {
-                "question": "Quelle organisation économique et militaire regroupe des pays d'Amérique du Nord et d'Europe pour leur défense collective ?",
+                "question": "Quelle alliance politico-militaire regroupe des pays d'Amérique du Nord et d'Europe pour leur défense collective ?",
                 "choices": ["L'OTAN", "L'ONU", "L'Union européenne", "Le FMI"],
                 "answer": 0,
             },
