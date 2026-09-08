@@ -26,6 +26,38 @@ def test_search_titles_raises_when_no_results(monkeypatch):
         wikipedia.search_titles("Histoire")
 
 
+def test_search_titles_tries_exact_phrase_first(monkeypatch):
+    captured_expressions = []
+
+    def fake_search(search_expression, limit):
+        captured_expressions.append(search_expression)
+        return ["Les capitales du monde (liste)"]
+
+    monkeypatch.setattr(wikipedia, "_search", fake_search)
+
+    titles = wikipedia.search_titles("Les capitales du monde")
+
+    assert titles == ["Les capitales du monde (liste)"]
+    assert captured_expressions == ['"Les capitales du monde"']
+
+
+def test_search_titles_falls_back_to_loose_search(monkeypatch):
+    calls = []
+
+    def fake_search(search_expression, limit):
+        calls.append(search_expression)
+        if search_expression.startswith('"'):
+            return []
+        return ["Un article vaguement lié"]
+
+    monkeypatch.setattr(wikipedia, "_search", fake_search)
+
+    titles = wikipedia.search_titles("Un sujet obscur")
+
+    assert titles == ["Un article vaguement lié"]
+    assert calls == ['"Un sujet obscur"', "Un sujet obscur"]
+
+
 def test_fetch_summary_parses_response(monkeypatch):
     monkeypatch.setattr(
         wikipedia,
@@ -69,6 +101,17 @@ def test_fetch_summary_handles_missing_extract(monkeypatch):
     assert summary["url"] == ""
 
 
+def test_fetch_summary_raises_on_disambiguation_page(monkeypatch):
+    monkeypatch.setattr(
+        wikipedia,
+        "_get_json",
+        lambda url: {"title": "Moyen Âge (homonymie)", "type": "disambiguation"},
+    )
+
+    with pytest.raises(wikipedia.DisambiguationPage):
+        wikipedia.fetch_summary("Moyen Âge (homonymie)")
+
+
 def test_random_article_uses_search_then_fetch(monkeypatch):
     monkeypatch.setattr(wikipedia, "search_titles", lambda theme: ["A", "B", "C"])
     monkeypatch.setattr(
@@ -78,6 +121,32 @@ def test_random_article_uses_search_then_fetch(monkeypatch):
     result = wikipedia.random_article("Histoire", choose=lambda titles: titles[1])
 
     assert result["title"] == "B"
+
+
+def test_random_article_skips_disambiguation_pages(monkeypatch):
+    monkeypatch.setattr(wikipedia, "search_titles", lambda query: ["Moyen Âge (homonymie)", "Charlemagne"])
+
+    def fake_fetch_summary(title):
+        if title == "Moyen Âge (homonymie)":
+            raise wikipedia.DisambiguationPage(title)
+        return {"title": title, "extract": "...", "url": "..."}
+
+    monkeypatch.setattr(wikipedia, "fetch_summary", fake_fetch_summary)
+
+    result = wikipedia.random_article("Moyen Âge", choose=lambda candidates: candidates[0])
+
+    assert result["title"] == "Charlemagne"
+
+
+def test_random_article_raises_when_only_disambiguation_pages_found(monkeypatch):
+    def always_disambiguation(title):
+        raise wikipedia.DisambiguationPage(title)
+
+    monkeypatch.setattr(wikipedia, "search_titles", lambda query: ["Moyen Âge (homonymie)"])
+    monkeypatch.setattr(wikipedia, "fetch_summary", always_disambiguation)
+
+    with pytest.raises(wikipedia.WikipediaError):
+        wikipedia.random_article("Moyen Âge", choose=lambda candidates: candidates[0])
 
 
 def test_get_json_wraps_network_errors(monkeypatch):
