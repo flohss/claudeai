@@ -5,18 +5,22 @@ Made with Claude
 
 [![Tests](https://github.com/flohss/claudeai/actions/workflows/tests.yml/badge.svg)](https://github.com/flohss/claudeai/actions/workflows/tests.yml)
 
-Application en ligne de commande, entièrement en Python (bibliothèque standard uniquement).
-Choisissez une thématique (Histoire, Géographie, Sciences, Nature, Littérature & Arts, Sport,
-Société & Monde — 62 sujets, 310 questions au total, inspirés de la collection encyclopédique
-« Tout l'Univers »), puis un mode :
+Application en ligne de commande, entièrement en Python (bibliothèque standard uniquement),
+avec trois modes au choix :
 
-- **Quiz** : un sujet est ouvert au hasard dans la thématique, avec une série de questions à
-  choix multiples mélangées aléatoirement. À la fin, l'appli propose de lire l'article
-  Wikipédia du sujet tiré au sort pour en savoir plus.
-- **Article surprise (Wikipédia)** : un sujet est tiré au hasard dans la thématique, puis un
-  vrai article Wikipédia correspondant à ce sujet précis (et non à la thématique générale) est
-  recherché et son résumé (titre, extrait, lien) est affiché. Ce mode nécessite une connexion
-  internet.
+- **Quiz de culture générale** : choisissez une thématique (Histoire, Géographie, Sciences,
+  Nature, Littérature & Arts, Sport, Société & Monde — 62 sujets, 310 questions au total,
+  inspirés de la collection encyclopédique « Tout l'Univers »), un sujet est ouvert au hasard
+  dans cette thématique, avec une série de questions à choix multiples mélangées
+  aléatoirement. À la fin, l'appli propose de lire l'article Wikipédia du sujet tiré au sort
+  pour en savoir plus.
+- **Article surprise (Wikipédia)** : une thématique puis un sujet sont tirés au hasard, puis un
+  vrai article Wikipédia correspondant à ce sujet précis est recherché et son résumé (titre,
+  extrait, lien) est affiché.
+- **Recherche par mot-clé (Wikipédia)** : tapez un mot-clé ou un sujet de votre choix pour
+  lister les articles Wikipédia correspondants, puis choisissez-en un pour en lire le résumé.
+
+Les modes Wikipédia nécessitent une connexion internet.
 
 ### Lancer l'application
 

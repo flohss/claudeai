@@ -9,11 +9,12 @@ from culture_generale.cli import (
     choose_theme,
     display_article,
     offer_wikipedia_article,
+    run_keyword_search_mode,
     run_quiz_mode,
     run_wikipedia_mode,
 )
 from culture_generale.quiz import Quiz
-from culture_generale.wikipedia import WikipediaError
+from culture_generale.wikipedia import DisambiguationPage, WikipediaError
 
 QUESTION = {
     "question": "2 + 2 ?",
@@ -90,6 +91,12 @@ def test_choose_mode_wikipedia(monkeypatch):
     monkeypatch.setattr("builtins.input", lambda _: "2")
 
     assert choose_mode() == "wikipedia"
+
+
+def test_choose_mode_search(monkeypatch):
+    monkeypatch.setattr("builtins.input", lambda _: "3")
+
+    assert choose_mode() == "search"
 
 
 def test_choose_mode_reprompts_on_invalid_choice(monkeypatch):
@@ -187,3 +194,77 @@ def test_run_quiz_mode_offers_wikipedia_article_after_scoring(monkeypatch):
     monkeypatch.setattr(cli, "random_article", lambda query: pytest.fail("ne doit pas être appelé"))
 
     run_quiz_mode(quiz)
+
+
+def test_run_keyword_search_mode_quits_immediately(monkeypatch):
+    monkeypatch.setattr("builtins.input", lambda _: "0")
+    monkeypatch.setattr(cli, "search_titles", lambda keyword, limit: pytest.fail("ne doit pas être appelé"))
+
+    run_keyword_search_mode()
+
+
+def test_run_keyword_search_mode_reprompts_on_empty_keyword(monkeypatch, capsys):
+    responses = iter(["", "0"])
+    monkeypatch.setattr("builtins.input", lambda _: next(responses))
+
+    run_keyword_search_mode()
+
+    assert "Merci d'indiquer un mot-clé" in capsys.readouterr().out
+
+
+def test_run_keyword_search_mode_lists_titles_and_shows_chosen_article(monkeypatch, capsys):
+    responses = iter(["dinosaures", "2", "n"])
+    monkeypatch.setattr("builtins.input", lambda _: next(responses))
+    monkeypatch.setattr(
+        cli, "search_titles", lambda keyword, limit: ["Tyrannosaure", "Diplodocus", "Vélociraptor"]
+    )
+    monkeypatch.setattr(
+        cli, "fetch_summary", lambda title: {"title": title, "extract": "Un dinosaure.", "url": "U"}
+    )
+
+    run_keyword_search_mode()
+
+    out = capsys.readouterr().out
+    assert "1. Tyrannosaure" in out
+    assert "2. Diplodocus" in out
+    assert "3. Vélociraptor" in out
+    assert "Diplodocus" in out
+    assert "Un dinosaure." in out
+
+
+def test_run_keyword_search_mode_ignores_empty_choice(monkeypatch, capsys):
+    responses = iter(["dinosaures", "", "n"])
+    monkeypatch.setattr("builtins.input", lambda _: next(responses))
+    monkeypatch.setattr(cli, "search_titles", lambda keyword, limit: ["Tyrannosaure"])
+    monkeypatch.setattr(cli, "fetch_summary", lambda title: pytest.fail("ne doit pas être appelé"))
+
+    run_keyword_search_mode()
+
+
+def test_run_keyword_search_mode_handles_no_results(monkeypatch, capsys):
+    responses = iter(["xyzzy", "0"])
+    monkeypatch.setattr("builtins.input", lambda _: next(responses))
+
+    def raise_error(keyword, limit):
+        raise WikipediaError("Aucun article suffisamment pertinent trouvé pour « xyzzy ».")
+
+    monkeypatch.setattr(cli, "search_titles", raise_error)
+
+    run_keyword_search_mode()
+
+    assert "Aucun article suffisamment pertinent trouvé" in capsys.readouterr().out
+
+
+def test_run_keyword_search_mode_handles_disambiguation_choice(monkeypatch, capsys):
+    responses = iter(["moyen âge", "1", "n"])
+    monkeypatch.setattr("builtins.input", lambda _: next(responses))
+    monkeypatch.setattr(cli, "search_titles", lambda keyword, limit: ["Moyen Âge (homonymie)"])
+
+    def raise_disambiguation(title):
+        raise DisambiguationPage(title)
+
+    monkeypatch.setattr(cli, "fetch_summary", raise_disambiguation)
+
+    run_keyword_search_mode()
+
+    assert "page d'homonymie" in capsys.readouterr().out

@@ -2,15 +2,17 @@
 
 from .data import THEMES
 from .quiz import Quiz
-from .wikipedia import WikipediaError, random_article
+from .wikipedia import DisambiguationPage, WikipediaError, fetch_summary, random_article, search_titles
 
 LETTERS = "ABCD"
+KEYWORD_SEARCH_LIMIT = 10
 
 
 def choose_mode():
     print("\nQue voulez-vous faire ?")
     print("  1. Quiz de culture générale")
     print("  2. Article surprise (Wikipédia)")
+    print("  3. Recherche par mot-clé (Wikipédia)")
     print("  0. Quitter")
 
     while True:
@@ -21,6 +23,8 @@ def choose_mode():
             return "quiz"
         if choice == "2":
             return "wikipedia"
+        if choice == "3":
+            return "search"
         print("Choix invalide, réessayez.")
 
 
@@ -132,6 +136,43 @@ def run_wikipedia_mode(quiz):
             break
 
 
+def run_keyword_search_mode():
+    print("\n--- Recherche par mot-clé (Wikipédia) ---")
+    print("Tapez un mot-clé ou un sujet pour lister les articles Wikipédia correspondants.")
+
+    while True:
+        keyword = input("\nMot-clé (0 pour revenir au menu principal) : ").strip()
+        if keyword == "0":
+            break
+        if not keyword:
+            print("Merci d'indiquer un mot-clé, ou 0 pour revenir au menu principal.")
+            continue
+
+        print(f"\nRecherche d'articles pour « {keyword} »...")
+        try:
+            titles = search_titles(keyword, limit=KEYWORD_SEARCH_LIMIT)
+        except WikipediaError as exc:
+            print(f"⚠️  {exc}")
+            continue
+
+        print(f"\n{len(titles)} article(s) trouvé(s) :")
+        for i, title in enumerate(titles, start=1):
+            print(f"  {i}. {title}")
+
+        choice = input("\nNuméro d'un article pour en savoir plus (Entrée pour ignorer) : ").strip()
+        if choice.isdigit() and 1 <= int(choice) <= len(titles):
+            try:
+                display_article(fetch_summary(titles[int(choice) - 1]))
+            except DisambiguationPage as exc:
+                print(f"⚠️  « {exc} » est une page d'homonymie, pas un article dédié.")
+            except WikipediaError as exc:
+                print(f"⚠️  {exc}")
+
+        again = input("\nFaire une nouvelle recherche ? (o/n) ").strip().lower()
+        if again != "o":
+            break
+
+
 def main():
     quiz = Quiz(THEMES)
     print("=== Culture Générale ===")
@@ -145,6 +186,8 @@ def main():
                 run_quiz_mode(quiz)
             elif mode == "wikipedia":
                 run_wikipedia_mode(quiz)
+            elif mode == "search":
+                run_keyword_search_mode()
     except (KeyboardInterrupt, EOFError):
         print()
 
