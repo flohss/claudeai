@@ -23,6 +23,34 @@ def test_pick_subject_can_return_different_subjects():
     assert len(picks) > 1
 
 
+def test_pick_subject_does_not_repeat_until_all_subjects_seen():
+    quiz = Quiz({"Thème": {"A": [], "B": [], "C": []}})
+    seen = set()
+    for _ in range(3):
+        subject_name, _ = quiz.pick_subject("Thème")
+        assert subject_name not in seen
+        seen.add(subject_name)
+    assert seen == {"A", "B", "C"}
+
+
+def test_pick_subject_resets_once_all_subjects_have_been_seen():
+    quiz = Quiz({"Thème": {"A": [], "B": []}})
+    first_round = {quiz.pick_subject("Thème")[0] for _ in range(2)}
+    assert first_round == {"A", "B"}
+
+    subject_name, _ = quiz.pick_subject("Thème")
+    assert subject_name in {"A", "B"}
+
+
+def test_pick_subject_tracks_repeats_independently_per_theme():
+    quiz = Quiz({"X": {"Commun": []}, "Y": {"Commun": []}})
+    quiz.pick_subject("X")
+
+    subject_name, _ = quiz.pick_subject("Y")
+
+    assert subject_name == "Commun"
+
+
 def test_run_subject_counts_correct_answers():
     quiz = Quiz(THEMES)
     questions = [
