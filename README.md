@@ -9,11 +9,11 @@ Application en ligne de commande, entièrement en Python (bibliothèque standard
 avec trois modes au choix :
 
 - **Quiz de culture générale** : choisissez une thématique (Histoire, Géographie, Sciences,
-  Nature, Littérature & Arts, Sport, Société & Monde — 86 sujets, 430 questions au total), un
-  sujet est ouvert au hasard dans cette thématique (sans repasser deux fois par le même avant
-  d'avoir fait le tour), avec une série de questions à choix multiples mélangées aléatoirement.
-  À la fin, l'appli propose de lire l'article Wikipédia du sujet tiré au sort pour en savoir
-  plus.
+  Nature, Littérature & Arts, Sport, Société & Monde — 16 sujets et 5 questions par sujet dans
+  chacune, soit 112 sujets et 560 questions au total), un sujet est ouvert au hasard dans cette
+  thématique (sans repasser deux fois par le même avant d'avoir fait le tour), avec une série
+  de questions à choix multiples mélangées aléatoirement. À la fin, l'appli propose de lire
+  l'article Wikipédia du sujet tiré au sort pour en savoir plus.
 - **Article surprise (Wikipédia)** : une thématique puis un sujet sont tirés au hasard, puis un
   vrai article Wikipédia correspondant à ce sujet précis est recherché et son résumé (titre,
   extrait, lien) est affiché.

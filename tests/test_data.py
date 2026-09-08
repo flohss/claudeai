@@ -18,6 +18,20 @@ def test_each_subject_has_questions():
             assert questions, f"Le sujet « {subject} » ({theme}) n'a aucune question"
 
 
+def test_every_theme_has_the_same_number_of_subjects():
+    subject_counts = {theme: len(subjects) for theme, subjects in THEMES.items()}
+    assert len(set(subject_counts.values())) == 1, subject_counts
+
+
+def test_every_subject_has_the_same_number_of_questions():
+    question_counts = {
+        f"{theme} / {subject}": len(questions)
+        for theme, subjects in THEMES.items()
+        for subject, questions in subjects.items()
+    }
+    assert len(set(question_counts.values())) == 1, question_counts
+
+
 def test_questions_are_well_formed():
     for theme, subjects in THEMES.items():
         for subject, questions in subjects.items():

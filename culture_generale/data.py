@@ -395,6 +395,60 @@ THEMES = {
                 "answer": 0,
             },
         ],
+        "Première Guerre mondiale": [
+            {
+                "question": "En quelle année la Première Guerre mondiale a-t-elle commencé ?",
+                "choices": ["1914", "1918", "1912", "1916"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel assassinat déclenche la Première Guerre mondiale en 1914 ?",
+                "choices": ["Celui de l'archiduc François-Ferdinand", "Celui du tsar Nicolas II", "Celui du roi George V", "Celui du Kaiser Guillaume II"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on le système de combat qui a caractérisé le front occidental, avec des lignes fortifiées ?",
+                "choices": ["La guerre de tranchées", "Le blitzkrieg", "La guerre éclair", "La guerre de mouvement"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel traité met officiellement fin à la Première Guerre mondiale en 1919 ?",
+                "choices": ["Le traité de Versailles", "Le traité de Yalta", "Le traité de Vienne", "Le traité de Munich"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle bataille de 1916, l'une des plus meurtrières, s'est déroulée dans la Meuse ?",
+                "choices": ["La bataille de Verdun", "La bataille de la Somme", "La bataille de la Marne", "La bataille d'Ypres"],
+                "answer": 0,
+            },
+        ],
+        "Guerre froide": [
+            {
+                "question": "Quelles deux superpuissances s'opposent pendant la guerre froide ?",
+                "choices": ["Les États-Unis et l'URSS", "La France et l'Allemagne", "Le Royaume-Uni et la Chine", "Le Japon et les États-Unis"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on la stratégie qui repose sur la menace des armes nucléaires pour éviter un conflit direct ?",
+                "choices": ["La dissuasion nucléaire", "Le désarmement", "La détente", "La non-prolifération"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel mur symbolise la division de l'Europe pendant la guerre froide ?",
+                "choices": ["Le mur de Berlin", "Le mur d'Hadrien", "La muraille de Chine", "Le mur de Chine"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle crise de 1962 a mis le monde au bord d'une guerre nucléaire ?",
+                "choices": ["La crise des missiles de Cuba", "La crise de Suez", "La crise de Berlin", "La crise des otages iraniens"],
+                "answer": 0,
+            },
+            {
+                "question": "En quelle année l'URSS s'est-elle dissoute, marquant la fin de la guerre froide ?",
+                "choices": ["1991", "1989", "1985", "1993"],
+                "answer": 0,
+            },
+        ],
     },
     "Géographie": {
         "Fleuves du monde": [
@@ -1155,6 +1209,114 @@ THEMES = {
                 "answer": 0,
             },
         ],
+        "Génétique": [
+            {
+                "question": "Quelle molécule porte l'information génétique dans les cellules ?",
+                "choices": ["L'ADN", "L'ARN", "Les protéines", "Les lipides"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel moine autrichien est considéré comme le père de la génétique moderne ?",
+                "choices": ["Gregor Mendel", "Charles Darwin", "Louis Pasteur", "James Watson"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on l'unité de base de l'hérédité portée par l'ADN ?",
+                "choices": ["Le gène", "Le chromosome", "La cellule", "L'enzyme"],
+                "answer": 0,
+            },
+            {
+                "question": "Combien de paires de chromosomes possède une cellule humaine normale ?",
+                "choices": ["23", "22", "24", "46"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle structure en double hélice a été décrite par Watson et Crick en 1953 ?",
+                "choices": ["L'ADN", "L'ARN messager", "Le ribosome", "La protéine"],
+                "answer": 0,
+            },
+        ],
+        "Le cerveau humain": [
+            {
+                "question": "Combien d'hémisphères possède le cerveau humain ?",
+                "choices": ["2", "1", "3", "4"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle partie du cerveau est responsable de la coordination des mouvements et de l'équilibre ?",
+                "choices": ["Le cervelet", "Le cortex", "L'hypothalamus", "Le bulbe rachidien"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on les cellules nerveuses qui transmettent l'information dans le cerveau ?",
+                "choices": ["Les neurones", "Les globules rouges", "Les hépatocytes", "Les ostéoblastes"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle partie du cerveau gère les fonctions vitales comme la respiration ?",
+                "choices": ["Le tronc cérébral", "Le cortex préfrontal", "L'hippocampe", "Le cervelet"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle structure du cerveau joue un rôle central dans la mémoire ?",
+                "choices": ["L'hippocampe", "Le cervelet", "Le thalamus", "L'amygdale"],
+                "answer": 0,
+            },
+        ],
+        "Informatique": [
+            {
+                "question": "Quelle unité mesure la quantité d'information numérique de base (0 ou 1) ?",
+                "choices": ["Le bit", "L'octet", "Le pixel", "Le hertz"],
+                "answer": 0,
+            },
+            {
+                "question": "Combien de bits compose un octet ?",
+                "choices": ["8", "4", "16", "2"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on le programme qui gère les ressources d'un ordinateur (Windows, macOS, Linux...) ?",
+                "choices": ["Le système d'exploitation", "Le navigateur", "Le pilote", "Le compilateur"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel langage de programmation est très utilisé pour l'intelligence artificielle et la science des données ?",
+                "choices": ["Python", "HTML", "SQL", "CSS"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on un programme malveillant qui se propage automatiquement pour infecter des ordinateurs ?",
+                "choices": ["Un virus informatique", "Un pare-feu", "Un antivirus", "Un cookie"],
+                "answer": 0,
+            },
+        ],
+        "Volcans et séismes": [
+            {
+                "question": "Comment appelle-t-on le point de la surface terrestre situé à la verticale du foyer d'un séisme ?",
+                "choices": ["L'épicentre", "L'hypocentre", "Le magma", "Le cratère"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on la roche en fusion qui s'écoule à la surface lors d'une éruption volcanique ?",
+                "choices": ["La lave", "Le magma", "Le basalte", "Le granite"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle échelle mesure la magnitude d'un séisme ?",
+                "choices": ["L'échelle de Richter", "L'échelle de Beaufort", "L'échelle de Celsius", "L'échelle de Kelvin"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on la zone qui concentre la majorité des volcans et séismes autour de l'océan Pacifique ?",
+                "choices": ["La ceinture de feu du Pacifique", "La faille de San Andreas", "La dorsale médio-atlantique", "Le point chaud d'Hawaï"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on un volcan qui n'est plus entré en éruption depuis très longtemps mais pourrait se réveiller ?",
+                "choices": ["Un volcan endormi", "Un volcan éteint", "Un volcan actif", "Un geyser"],
+                "answer": 0,
+            },
+        ],
     },
     "Littérature & Arts": {
         "Peinture": [
@@ -1451,6 +1613,141 @@ THEMES = {
             {
                 "question": "Quel type de photographie capture des images en très gros plan de sujets minuscules ?",
                 "choices": ["La macrophotographie", "La photographie aérienne", "Le panoramique", "Le sténopé"],
+                "answer": 0,
+            },
+        ],
+        "Sculpture": [
+            {
+                "question": "Qui a sculpté « Le Penseur » ?",
+                "choices": ["Auguste Rodin", "Michel-Ange", "Camille Claudel", "Constantin Brâncuși"],
+                "answer": 0,
+            },
+            {
+                "question": "Qui a sculpté le « David », statue emblématique de la Renaissance italienne ?",
+                "choices": ["Michel-Ange", "Donatello", "Léonard de Vinci", "Bernin"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle technique de sculpture consiste à retirer de la matière (pierre, bois) pour façonner une forme ?",
+                "choices": ["La taille directe", "Le moulage", "La fonte", "Le modelage"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle sculptrice française, élève et compagne de Rodin, est célèbre pour « La Valse » ?",
+                "choices": ["Camille Claudel", "Niki de Saint Phalle", "Louise Bourgeois", "Germaine Richier"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle statue monumentale, offerte par la France aux États-Unis en 1886, orne le port de New York ?",
+                "choices": ["La Statue de la Liberté", "Le Christ Rédempteur", "La Petite Sirène", "Le Colosse de Rhodes"],
+                "answer": 0,
+            },
+        ],
+        "Contes et légendes": [
+            {
+                "question": "Qui a écrit les célèbres contes « Cendrillon » et « Le Petit Chaperon rouge » en France au XVIIe siècle ?",
+                "choices": ["Charles Perrault", "Jean de La Fontaine", "Les frères Grimm", "Hans Christian Andersen"],
+                "answer": 0,
+            },
+            {
+                "question": "Quels frères allemands ont collecté des contes populaires comme « Blanche-Neige » et « Hansel et Gretel » ?",
+                "choices": ["Les frères Grimm", "Les frères Lumière", "Les frères Montgolfier", "Les frères Goncourt"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel écrivain danois est l'auteur de « La Petite Sirène » et du « Vilain Petit Canard » ?",
+                "choices": ["Hans Christian Andersen", "Charles Perrault", "Lewis Carroll", "Jules Verne"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel roi légendaire britannique est associé aux chevaliers de la Table ronde ?",
+                "choices": ["Le roi Arthur", "Le roi Richard Cœur de Lion", "Le roi Alfred le Grand", "Le roi Henri VIII"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on un récit merveilleux transmis de génération en génération, souvent avec une morale ?",
+                "choices": ["Un conte", "Un roman", "Une biographie", "Un essai"],
+                "answer": 0,
+            },
+        ],
+        "Opéra": [
+            {
+                "question": "Quel compositeur allemand est l'auteur de l'opéra « La Flûte enchantée » ?",
+                "choices": ["Wolfgang Amadeus Mozart", "Ludwig van Beethoven", "Richard Wagner", "Giuseppe Verdi"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel compositeur italien a écrit « La Traviata » et « Aïda » ?",
+                "choices": ["Giuseppe Verdi", "Gioachino Rossini", "Giacomo Puccini", "Gaetano Donizetti"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on un air chanté en solo par un personnage d'opéra ?",
+                "choices": ["Un air (ou aria)", "Un chœur", "Un récitatif", "Un duo"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel opéra parisien est célèbre pour son architecture du XIXe siècle et son plafond peint par Chagall ?",
+                "choices": ["L'Opéra Garnier", "L'Opéra Bastille", "La Scala", "Le Bolchoï"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on la voix masculine la plus aiguë en chant lyrique ?",
+                "choices": ["Le ténor", "La basse", "Le baryton", "Le contralto"],
+                "answer": 0,
+            },
+        ],
+        "Street art et graffiti": [
+            {
+                "question": "Quel artiste britannique anonyme est célèbre pour ses œuvres de street art engagées au pochoir ?",
+                "choices": ["Banksy", "Keith Haring", "Jean-Michel Basquiat", "Shepard Fairey"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on la technique consistant à peindre à travers une forme découpée pour reproduire un motif ?",
+                "choices": ["Le pochoir", "Le collage", "La fresque", "La mosaïque"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel artiste américain, proche du mouvement hip-hop des années 1980, est connu pour ses figures dansantes au trait simple ?",
+                "choices": ["Keith Haring", "Banksy", "Andy Warhol", "Jean-Michel Basquiat"],
+                "answer": 0,
+            },
+            {
+                "question": "Dans quelle ville des États-Unis le mouvement du graffiti moderne est-il né dans les années 1970 ?",
+                "choices": ["New York", "Los Angeles", "Chicago", "Miami"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on une peinture murale de grande taille réalisée directement sur un mur ?",
+                "choices": ["Une fresque", "Une gravure", "Une enluminure", "Une tapisserie"],
+                "answer": 0,
+            },
+        ],
+        "Cirque": [
+            {
+                "question": "Comment appelle-t-on l'artiste qui marche en équilibre sur un fil tendu en hauteur ?",
+                "choices": ["Un funambule", "Un trapéziste", "Un jongleur", "Un contorsionniste"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle compagnie québécoise a révolutionné le cirque moderne sans animaux depuis les années 1980 ?",
+                "choices": ["Le Cirque du Soleil", "Le Cirque Pinder", "Le Cirque Bouglione", "Le Cirque Medrano"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on l'artiste qui dirige et présente le spectacle dans un cirque traditionnel ?",
+                "choices": ["Le maître de piste (monsieur Loyal)", "Le dompteur", "L'acrobate", "Le clown"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on la discipline acrobatique où l'artiste évolue suspendu à deux tissus tendus depuis le plafond ?",
+                "choices": ["Le tissu aérien", "Le trapèze fixe", "L'équilibre sur mains", "Le monocycle"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on l'artiste comique au nez rouge et au costume extravagant, figure emblématique du cirque ?",
+                "choices": ["Le clown", "L'acrobate", "Le dompteur", "L'illusionniste"],
                 "answer": 0,
             },
         ],
@@ -1753,6 +2050,141 @@ THEMES = {
                 "answer": 0,
             },
         ],
+        "Boxe": [
+            {
+                "question": "Comment appelle-t-on l'espace clos entouré de cordes où se déroule un combat de boxe ?",
+                "choices": ["Le ring", "L'octogone", "Le tatami", "L'arène"],
+                "answer": 0,
+            },
+            {
+                "question": "Combien de rounds compte généralement un championnat du monde de boxe professionnelle ?",
+                "choices": ["12", "10", "15", "8"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on la victoire obtenue quand l'adversaire ne peut plus se relever avant la fin du compte ?",
+                "choices": ["Le knock-out (KO)", "Le décompte", "L'abandon", "La disqualification"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel boxeur américain, surnommé « The Greatest », a marqué l'histoire de la boxe dans les années 1960-1970 ?",
+                "choices": ["Mohamed Ali", "Mike Tyson", "Joe Frazier", "George Foreman"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on la catégorie de poids la plus lourde en boxe ?",
+                "choices": ["Les poids lourds", "Les poids plumes", "Les poids welters", "Les poids coqs"],
+                "answer": 0,
+            },
+        ],
+        "Golf": [
+            {
+                "question": "Comment appelle-t-on un coup réalisé en un coup de moins que le par sur un trou ?",
+                "choices": ["Un birdie", "Un bogey", "Un eagle", "Un albatros"],
+                "answer": 0,
+            },
+            {
+                "question": "Combien de trous compte un parcours de golf standard ?",
+                "choices": ["18", "9", "12", "24"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on le petit support sur lequel on pose la balle pour le premier coup d'un trou ?",
+                "choices": ["Un tee", "Un green", "Un bunker", "Un fairway"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on la zone d'herbe courte autour du trou où l'on putte ?",
+                "choices": ["Le green", "Le fairway", "Le rough", "Le bunker"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel golfeur américain a dominé le circuit professionnel dans les années 2000, avec de nombreuses victoires en tournois majeurs ?",
+                "choices": ["Tiger Woods", "Jack Nicklaus", "Arnold Palmer", "Rory McIlroy"],
+                "answer": 0,
+            },
+        ],
+        "Volley-ball": [
+            {
+                "question": "Combien de joueurs par équipe sont sur le terrain au volley-ball (hors remplaçants) ?",
+                "choices": ["6", "5", "7", "4"],
+                "answer": 0,
+            },
+            {
+                "question": "Combien de points faut-il pour remporter un set au volley-ball (avec deux points d'écart) ?",
+                "choices": ["25", "21", "15", "30"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on l'action de renvoyer violemment le ballon par-dessus le filet vers le camp adverse ?",
+                "choices": ["Le smash (ou attaque)", "Le service", "La passe", "Le contre"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on le joueur spécialisé en défense, qui ne peut ni attaquer ni bloquer et porte souvent un maillot différent ?",
+                "choices": ["Le libéro", "Le passeur", "Le pointu", "Le central"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle variante du volley-ball se joue à deux contre deux sur sable ?",
+                "choices": ["Le beach-volley", "Le volley indoor", "Le foot-volley", "Le mini-volley"],
+                "answer": 0,
+            },
+        ],
+        "Handball": [
+            {
+                "question": "Combien de joueurs de champ (hors gardien) une équipe de handball aligne-t-elle sur le terrain ?",
+                "choices": ["6", "7", "5", "8"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on la zone semi-circulaire devant chaque but où seul le gardien peut évoluer ?",
+                "choices": ["La zone (ou surface) de but", "Le rond central", "Le couloir", "Le carré de service"],
+                "answer": 0,
+            },
+            {
+                "question": "Dans quels pays le handball moderne s'est-il particulièrement développé et structuré au XXe siècle ?",
+                "choices": ["L'Allemagne et les pays scandinaves", "Le Brésil et l'Argentine", "Le Japon et la Corée", "L'Australie et la Nouvelle-Zélande"],
+                "answer": 0,
+            },
+            {
+                "question": "Combien de temps dure un match de handball senior (hors prolongation), en deux mi-temps ?",
+                "choices": ["60 minutes (2 x 30)", "90 minutes (2 x 45)", "40 minutes (2 x 20)", "80 minutes (2 x 40)"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel pays a remporté de nombreux titres mondiaux et olympiques de handball masculin dans les années 2000-2010 ?",
+                "choices": ["La France", "L'Allemagne", "L'Espagne", "La Croatie"],
+                "answer": 0,
+            },
+        ],
+        "Escrime": [
+            {
+                "question": "Combien d'armes différentes sont pratiquées en escrime olympique ?",
+                "choices": ["3 (fleuret, épée, sabre)", "2", "4", "5"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on la protection métallique portée sur le visage par les escrimeurs ?",
+                "choices": ["Le masque", "Le casque", "La visière", "Le heaume"],
+                "answer": 0,
+            },
+            {
+                "question": "Sur quelle surface se déroule un assaut d'escrime ?",
+                "choices": ["La piste", "Le tatami", "Le ring", "Le tapis"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle arme d'escrime permet de toucher l'adversaire sur tout le corps, y compris les jambes ?",
+                "choices": ["L'épée", "Le fleuret", "Le sabre", "La rapière"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel pays est traditionnellement l'une des grandes nations de l'escrime, avec de nombreux titres olympiques ?",
+                "choices": ["La France", "L'Allemagne", "Le Brésil", "La Suède"],
+                "answer": 0,
+            },
+        ],
     },
     "Nature": {
         "Les animaux marins": [
@@ -2052,6 +2484,141 @@ THEMES = {
                 "answer": 0,
             },
         ],
+        "Les félins": [
+            {
+                "question": "Quel est le plus grand félin sauvage du monde ?",
+                "choices": ["Le tigre", "Le lion", "Le léopard", "Le jaguar"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel félin est le plus rapide sur terre, capable de sprints à plus de 100 km/h ?",
+                "choices": ["Le guépard", "Le lion", "Le tigre", "Le puma"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel félin vit en groupe social appelé une troupe, contrairement aux autres grands félins plutôt solitaires ?",
+                "choices": ["Le lion", "Le tigre", "Le léopard", "Le jaguar"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel félin d'Amérique du Sud possède l'une des morsures les plus puissantes parmi les grands félins ?",
+                "choices": ["Le jaguar", "Le puma", "L'ocelot", "Le lynx"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on le petit félin sauvage aux oreilles pointues à pinceaux, présent en Europe ?",
+                "choices": ["Le lynx", "Le chat sauvage", "Le caracal", "Le serval"],
+                "answer": 0,
+            },
+        ],
+        "Les primates": [
+            {
+                "question": "Quel est le plus grand primate actuel ?",
+                "choices": ["Le gorille", "Le chimpanzé", "L'orang-outan", "Le babouin"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel primate partage environ 98 % de son ADN avec l'être humain ?",
+                "choices": ["Le chimpanzé", "Le gorille", "Le babouin", "Le lémurien"],
+                "answer": 0,
+            },
+            {
+                "question": "Sur quel continent vit l'orang-outan à l'état sauvage ?",
+                "choices": ["L'Asie", "L'Afrique", "L'Amérique du Sud", "L'Océanie"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel primate, étudié notamment par Jane Goodall, vit en communautés complexes dirigées par un mâle dominant ?",
+                "choices": ["Le chimpanzé", "Le gorille", "L'orang-outan", "Le gibbon"],
+                "answer": 0,
+            },
+            {
+                "question": "Sur quelle île se trouvent la plupart des espèces de lémuriens à l'état sauvage ?",
+                "choices": ["Madagascar", "Bornéo", "Sumatra", "Ceylan"],
+                "answer": 0,
+            },
+        ],
+        "La forêt amazonienne": [
+            {
+                "question": "Sur quel continent se situe la majeure partie de la forêt amazonienne ?",
+                "choices": ["L'Amérique du Sud", "L'Afrique", "L'Asie", "L'Océanie"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel pays abrite la plus grande partie de la forêt amazonienne ?",
+                "choices": ["Le Brésil", "Le Pérou", "La Colombie", "L'Équateur"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel grand fleuve traverse la forêt amazonienne ?",
+                "choices": ["L'Amazone", "Le Nil", "Le Congo", "Le Mississippi"],
+                "answer": 0,
+            },
+            {
+                "question": "Pourquoi la forêt amazonienne est-elle parfois surnommée « le poumon de la planète » ?",
+                "choices": ["Elle produit une grande partie de l'oxygène et absorbe du CO2", "Elle abrite le plus grand volcan", "Elle est la plus froide des forêts", "Elle ne contient aucune rivière"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle activité humaine menace le plus la forêt amazonienne aujourd'hui ?",
+                "choices": ["La déforestation", "La pollution sonore", "La surpêche", "L'urbanisation côtière"],
+                "answer": 0,
+            },
+        ],
+        "Les abeilles": [
+            {
+                "question": "Quel produit sucré les abeilles fabriquent-elles à partir du nectar des fleurs ?",
+                "choices": ["Le miel", "La gelée royale", "La propolis", "Le pollen"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on la seule femelle capable de pondre des œufs dans une colonie d'abeilles ?",
+                "choices": ["La reine", "L'ouvrière", "Le faux-bourdon", "La nymphe"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel rôle essentiel les abeilles jouent-elles pour de nombreuses plantes à fleurs ?",
+                "choices": ["La pollinisation", "La photosynthèse", "La décomposition", "La germination"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on la communication des abeilles ouvrières pour indiquer la direction d'une source de nourriture ?",
+                "choices": ["La danse des abeilles", "Le chant des abeilles", "Les phéromones seules", "Le vol stationnaire"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on l'habitat construit par les abeilles où elles stockent le miel ?",
+                "choices": ["La ruche", "Le nid", "La fourmilière", "Le terrier"],
+                "answer": 0,
+            },
+        ],
+        "Les espèces en voie de disparition": [
+            {
+                "question": "Quel grand félin d'Asie, aux rayures caractéristiques, est aujourd'hui menacé dans la nature ?",
+                "choices": ["Le tigre", "Le lion", "Le guépard", "Le lynx"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel grand mammifère marin a été chassé au point de devenir menacé, aujourd'hui protégé dans de nombreux pays ?",
+                "choices": ["La baleine", "Le dauphin", "Le phoque", "La loutre de mer"],
+                "answer": 0,
+            },
+            {
+                "question": "Comment appelle-t-on la liste internationale qui recense l'état de conservation des espèces menacées ?",
+                "choices": ["La Liste rouge de l'UICN", "Le Livre blanc", "Le Registre vert", "La Charte de la biodiversité"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel grand singe d'Afrique, notamment de la région des Virunga, est classé en danger critique d'extinction ?",
+                "choices": ["Le gorille des montagnes", "Le chimpanzé", "L'orang-outan", "Le bonobo"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle pratique illégale, consistant à tuer des animaux protégés pour leurs cornes ou défenses, menace rhinocéros et éléphants ?",
+                "choices": ["Le braconnage", "La chasse sportive", "L'élevage", "La pêche"],
+                "answer": 0,
+            },
+        ],
     },
     "Société & Monde": {
         "Les grandes inventions": [
@@ -2348,6 +2915,141 @@ THEMES = {
             {
                 "question": "Comment appelle-t-on un établissement d'enseignement supérieur délivrant des diplômes universitaires ?",
                 "choices": ["Une université", "Un collège", "Un lycée", "Une école primaire"],
+                "answer": 0,
+            },
+        ],
+        "Les organisations internationales": [
+            {
+                "question": "Quelle organisation regroupe la majorité des pays du monde pour maintenir la paix internationale, fondée en 1945 ?",
+                "choices": ["L'Organisation des Nations unies (ONU)", "L'Union européenne", "L'OTAN", "Le G7"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle organisation économique et militaire regroupe des pays d'Amérique du Nord et d'Europe pour leur défense collective ?",
+                "choices": ["L'OTAN", "L'ONU", "L'Union européenne", "Le FMI"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle organisation regroupe des pays européens autour d'un marché commun et d'institutions communes ?",
+                "choices": ["L'Union européenne", "L'OTAN", "L'ONU", "Le Conseil de l'Europe"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle organisation internationale s'occupe de la santé publique mondiale ?",
+                "choices": ["L'Organisation mondiale de la santé (OMS)", "L'UNESCO", "L'UNICEF", "La Croix-Rouge"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle organisation humanitaire, fondée par Henry Dunant, porte une croix rouge comme emblème ?",
+                "choices": ["La Croix-Rouge", "Médecins Sans Frontières", "L'UNICEF", "Amnesty International"],
+                "answer": 0,
+            },
+        ],
+        "Fêtes et traditions du monde": [
+            {
+                "question": "Quelle fête chinoise, célébrée selon le calendrier lunaire, est marquée par des dragons et des feux d'artifice ?",
+                "choices": ["Le Nouvel An chinois", "Thanksgiving", "Halloween", "Diwali"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle fête indienne des lumières est célébrée par les hindous, sikhs et jaïns ?",
+                "choices": ["Diwali", "Holi", "Vaisakhi", "Navratri"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle fête mexicaine, colorée et festive, célèbre la mémoire des défunts fin octobre-début novembre ?",
+                "choices": ["Le jour des Morts (Día de los Muertos)", "Le Carnaval", "Le Cinco de Mayo", "La Piñata"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle fête chrétienne célèbre la naissance de Jésus le 25 décembre ?",
+                "choices": ["Noël", "Pâques", "L'Épiphanie", "La Pentecôte"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel mois de jeûne est observé par les musulmans du lever au coucher du soleil ?",
+                "choices": ["Le ramadan", "L'Aïd", "Le Mouharram", "Le Hajj"],
+                "answer": 0,
+            },
+        ],
+        "Les langues du monde": [
+            {
+                "question": "Quelle langue compte le plus grand nombre de locuteurs natifs (langue maternelle) au monde ?",
+                "choices": ["Le mandarin", "L'anglais", "L'espagnol", "Le hindi"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle langue est officielle dans la quasi-totalité des pays d'Amérique du Sud, héritée de la colonisation ?",
+                "choices": ["L'espagnol", "Le portugais", "Le français", "L'anglais"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle langue est officielle au Brésil, contrairement au reste de l'Amérique du Sud ?",
+                "choices": ["Le portugais", "L'espagnol", "Le français", "L'italien"],
+                "answer": 0,
+            },
+            {
+                "question": "Combien de langues officielles compte la Suisse ?",
+                "choices": ["4", "2", "3", "1"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle famille de langues regroupe le français, l'espagnol, l'italien, le portugais et le roumain ?",
+                "choices": ["Les langues romanes", "Les langues germaniques", "Les langues slaves", "Les langues celtiques"],
+                "answer": 0,
+            },
+        ],
+        "Monnaies et unités de mesure": [
+            {
+                "question": "Quelle monnaie est utilisée par la majorité des pays de l'Union européenne ?",
+                "choices": ["L'euro", "Le franc", "Le dollar", "La livre"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle monnaie est utilisée aux États-Unis ?",
+                "choices": ["Le dollar américain", "L'euro", "La livre sterling", "Le yen"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel système d'unités, basé sur le mètre et le kilogramme, est utilisé dans la majorité des pays du monde ?",
+                "choices": ["Le système métrique", "Le système impérial", "Le système avoirdupois", "Le système anglo-saxon"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel pays utilise encore majoritairement les miles, livres et pouces plutôt que le système métrique ?",
+                "choices": ["Les États-Unis", "La France", "Le Japon", "L'Allemagne"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle monnaie officielle est utilisée au Japon ?",
+                "choices": ["Le yen", "Le won", "Le yuan", "Le dong"],
+                "answer": 0,
+            },
+        ],
+        "Drapeaux et symboles nationaux": [
+            {
+                "question": "Quelles sont les trois couleurs du drapeau français ?",
+                "choices": ["Bleu, blanc, rouge", "Bleu, blanc, vert", "Rouge, blanc, noir", "Vert, blanc, rouge"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel oiseau est le symbole emblématique des États-Unis, visible sur leurs armoiries ?",
+                "choices": ["Le pygargue à tête blanche", "L'aigle royal", "Le condor", "Le faucon"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle fleur symbolise traditionnellement le printemps au Japon, très célébrée chaque année (hanami) ?",
+                "choices": ["La fleur de cerisier (sakura)", "Le chrysanthème", "Le lotus", "L'iris"],
+                "answer": 0,
+            },
+            {
+                "question": "Quel symbole figure au centre du drapeau du Canada ?",
+                "choices": ["Une feuille d'érable", "Un castor", "Une fleur de lys", "Une étoile"],
+                "answer": 0,
+            },
+            {
+                "question": "Quelle couleur ne figure pas sur le drapeau de l'Italie (vert, blanc, rouge) ?",
+                "choices": ["Le bleu", "Le vert", "Le blanc", "Le rouge"],
                 "answer": 0,
             },
         ],
