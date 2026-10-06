@@ -1,0 +1,698 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Du battement à la note</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Figtree:wght@400;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: one centered instrument column, phone-first — title, stage path, live readout, orbit, frequency ruler, explanation, controls */
+:root {
+  --bg: #080b17;
+  --bg-2: #121838;
+  --ink: #eef0ff;
+  --muted: #8d94ba;
+  --line: rgba(160, 172, 235, 0.2);
+  --hot: #ff3b62;
+  --on-hot: #ffffff;
+  --v1: #ffb347;
+  --v2: #ff5fae;
+  --v3: #48d2ff;
+  --v4: #b597ff;
+  --rhythm: rgba(255, 150, 80, 0.13);
+  --pitch: rgba(72, 160, 255, 0.14);
+  --f-display: "Bricolage Grotesque", "Arial Black", system-ui, sans-serif;
+  --f-body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { min-height: 100%; }
+body {
+  margin: 0;
+  background: radial-gradient(110% 65% at 50% 38%, var(--bg-2), var(--bg) 72%) fixed, var(--bg);
+  color: var(--ink);
+  font: 16px/1.5 var(--f-body);
+}
+.app {
+  max-width: 560px;
+  margin: 0 auto;
+  padding-inline: 16px;
+  padding-block: 22px 36px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+header { display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; }
+h1 {
+  margin: 0;
+  font-family: var(--f-display);
+  font-weight: 800;
+  line-height: 1.05;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-wrap: balance;
+}
+h1 .badge {
+  background: var(--hot);
+  color: var(--on-hot);
+  padding: 0.1em 0.45em 0.14em;
+  border-radius: 9px;
+  font-size: clamp(24px, 7vw, 34px);
+  box-shadow: 0 6px 30px rgba(255, 59, 98, 0.35);
+}
+h1 .rest { font-size: clamp(22px, 6.2vw, 30px); }
+
+.stages {
+  display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 4px;
+  font-family: var(--f-mono); font-weight: 600; font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase;
+}
+.stages button {
+  all: unset; cursor: pointer; padding: 6px 7px; border-radius: 6px; color: var(--muted);
+  transition: color 0.2s, text-shadow 0.2s;
+}
+.stages button.done { color: var(--ink); }
+.stages button[aria-current="step"] { color: var(--sc); text-shadow: 0 0 18px var(--sc); }
+.stages .dash { width: 16px; height: 2px; background: var(--line); border-radius: 2px; }
+.stages .dash.done { background: var(--ink); opacity: 0.7; }
+button:focus-visible, .ruler:focus-visible { outline: 2px solid var(--v3); outline-offset: 3px; }
+
+.readout { display: flex; flex-direction: column; align-items: center; gap: 4px; min-height: 112px; justify-content: center; }
+.big {
+  display: flex; align-items: center; gap: 14px;
+  font-family: var(--f-display); font-weight: 800; line-height: 1;
+  font-size: clamp(58px, 17vw, 86px); font-variant-numeric: tabular-nums; letter-spacing: -0.01em;
+}
+.big.mid { font-size: clamp(48px, 13vw, 72px); }
+.big.long { font-size: clamp(38px, 10.5vw, 58px); }
+.big .colon { color: var(--ink); margin: 0 0.08em; }
+.pill {
+  font-family: var(--f-mono); font-size: 18px; font-weight: 600; letter-spacing: 0.02em;
+  color: var(--pc, var(--v1)); border: 2px solid var(--pc, var(--v1)); border-radius: 8px; padding: 2px 9px;
+  background: rgba(255, 179, 71, 0.08);
+}
+.pill small { font-weight: 500; opacity: 0.75; margin-left: 4px; font-size: 14px; }
+.unit { font-family: var(--f-mono); font-size: 15px; color: var(--muted); font-variant-numeric: tabular-nums; text-align: center; }
+.unit b { font-weight: 600; }
+
+.orb { display: block; width: min(100%, 440px); aspect-ratio: 1; max-width: 100%; align-self: center; }
+
+.ruler { position: relative; height: 104px; touch-action: none; cursor: ew-resize; border-radius: 10px; }
+.ruler canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+.caption { display: flex; flex-direction: column; gap: 4px; min-height: 104px; }
+.caption h2 { margin: 0; font-family: var(--f-display); font-weight: 800; font-size: 23px; line-height: 1.15; text-wrap: balance; color: var(--cc, var(--ink)); }
+.caption p { margin: 0; color: var(--muted); max-width: 62ch; }
+.caption p b { color: var(--ink); font-weight: 600; }
+
+.controls { display: flex; flex-direction: column; gap: 10px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn {
+  font: 600 14px/1 var(--f-body); color: var(--ink);
+  background: rgba(255, 255, 255, 0.05); border: 1px solid var(--line); border-radius: 999px;
+  padding: 10px 15px; cursor: pointer; transition: background 0.15s, border-color 0.15s;
+}
+.btn:hover { background: rgba(255, 255, 255, 0.1); }
+.btn.primary { background: var(--hot); color: var(--on-hot); border-color: transparent; padding-inline: 20px; }
+.btn.primary[aria-pressed="true"] { background: rgba(255, 59, 98, 0.18); color: var(--ink); border-color: var(--hot); }
+.chip { font-family: var(--f-body); }
+.chip .r { font-family: var(--f-mono); font-weight: 600; margin-right: 6px; color: var(--v2); }
+.chip[aria-pressed="true"] { border-color: var(--v2); background: rgba(255, 95, 174, 0.16); }
+.prog { display: flex; gap: 6px; align-items: center; font-family: var(--f-mono); font-weight: 600; }
+.prog span { padding: 6px 12px; border-radius: 8px; border: 1px solid var(--line); color: var(--muted); transition: all 0.15s; }
+.prog span.on { color: var(--bg); background: var(--v4); border-color: var(--v4); }
+.label { font-family: var(--f-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+.foot { font-size: 13px; color: var(--muted); text-align: center; margin-top: 6px; }
+@media (prefers-reduced-motion: reduce) { .stages button { transition: none; } }
+</style>
+</head>
+<body>
+<main class="app">
+  <header>
+    <h1><span class="badge">Quand un battement</span><span class="rest">devient-il une note&nbsp;?</span></h1>
+    <nav class="stages" id="stages" aria-label="Étapes">
+      <button data-stage="beat" style="--sc: var(--v1)">Rythme</button><span class="dash"></span>
+      <button data-stage="note" style="--sc: var(--v3)">Note</button><span class="dash"></span>
+      <button data-stage="chord" style="--sc: var(--v2)">Accord</button><span class="dash"></span>
+      <button data-stage="song" style="--sc: var(--v4)">Chanson</button>
+    </nav>
+  </header>
+
+  <section class="readout">
+    <div class="big" id="big"></div>
+    <div class="unit" id="unit"></div>
+  </section>
+
+  <canvas class="orb" id="orb" aria-label="Visualisation : chaque point est un coup de tambour, l'aiguille parcourt un cycle" role="img"></canvas>
+
+  <div class="ruler" id="ruler" tabindex="0" role="slider" aria-label="Vitesse des coups (Hz)" aria-valuemin="1" aria-valuemax="1000">
+    <canvas id="spec"></canvas>
+  </div>
+
+  <section class="caption" id="caption" aria-live="polite">
+    <h2 id="capTitle"></h2>
+    <p id="capText"></p>
+  </section>
+
+  <section class="controls">
+    <div class="row">
+      <button class="btn primary" id="play" aria-pressed="false">▶ Écouter</button>
+      <button class="btn" id="sweep">Accélérer ↗</button>
+      <button class="btn" id="down" aria-label="Diviser la vitesse par deux">÷2</button>
+      <button class="btn" id="up" aria-label="Multiplier la vitesse par deux">×2</button>
+    </div>
+    <div class="row" id="chords" hidden></div>
+    <div class="row" id="song" hidden>
+      <span class="label" style="align-self:center">Progression</span>
+      <div class="prog" id="prog"></div>
+    </div>
+  </section>
+  <p class="foot">Glisse sur la règle (ou flèches du clavier) pour changer la vitesse. Mets le son&nbsp;: c'est le même signal du début à la fin, seulement plus rapide.</p>
+</main>
+
+<script>
+(() => {
+  // ---------- data ----------
+  const FMIN = 1, FMAX = 1000;
+  const css = getComputedStyle(document.documentElement);
+  const tok = n => css.getPropertyValue('--' + n).trim();
+  const C = { ink: tok('ink'), muted: tok('muted'), line: tok('line'), v1: tok('v1'), v2: tok('v2'), v3: tok('v3'), v4: tok('v4'), rhythm: tok('rhythm'), pitch: tok('pitch'), bg: tok('bg') };
+  const MONO = '"IBM Plex Mono", ui-monospace, monospace';
+  const PAL = { 1: ['v1'], 2: ['v1', 'v3'], 3: ['v1', 'v2', 'v3'], 4: ['v1', 'v2', 'v3', 'v4'] };
+  const colorsFor = n => PAL[n].map(k => C[k]);
+  const cssColorsFor = n => PAL[n].map(k => `var(--${k})`);
+
+  const STAGES = ['beat', 'note', 'chord', 'song'];
+  const CHORDS = [
+    { id: 'octave', r: [1, 2], name: 'Octave', art: 'une octave', note: 'La même note, en plus aigu.' },
+    { id: 'fifth', r: [2, 3], name: 'Quinte juste', art: 'une quinte juste', note: 'Le « power chord » du rock.' },
+    { id: 'fourth', r: [3, 4], name: 'Quarte juste', art: 'une quarte juste', note: 'La quinte, renversée.' },
+    { id: 'major', r: [4, 5, 6], name: 'Accord majeur', art: 'un accord majeur', note: 'Lumineux et stable : le socle de la pop.' },
+    { id: 'minor', r: [10, 12, 15], name: 'Accord mineur', art: 'un accord mineur', note: 'Les mêmes intervalles dans l\'autre ordre : plus sombre.' },
+    { id: 'dom7', r: [4, 5, 6, 7], name: 'Septième', art: 'un accord de septième', note: 'Une tension qui appelle la résolution, typique du blues.' },
+    { id: 'tritone', r: [32, 45], name: 'Triton', art: 'un triton', note: '« Le diable en musique » : le motif met une éternité à revenir.' },
+  ];
+  const SONG = [
+    { deg: 'I', mult: 1, r: [4, 5, 6] },
+    { deg: 'V', mult: 3 / 2, r: [4, 5, 6] },
+    { deg: 'vi', mult: 5 / 3, r: [10, 12, 15] },
+    { deg: 'IV', mult: 4 / 3, r: [4, 5, 6] },
+  ];
+  const state = {
+    stage: 'beat',
+    f0: { beat: 2.4, note: 110, chord: 2, song: 2 },
+    chord: 'fifth',
+    step: 0,
+    sweep: null,
+  };
+  const chordById = id => CHORDS.find(c => c.id === id);
+  const target = () => state.f0[state.stage];
+
+  // ---------- formatting ----------
+  const nf1 = new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  const nf0 = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 });
+  const fmt = f => (f < 100 ? nf1.format(f) : nf0.format(f));
+  const NAMES = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B'];
+  const SOLF = ['do', 'do♯', 'ré', 'ré♯', 'mi', 'fa', 'fa♯', 'sol', 'sol♯', 'la', 'la♯', 'si'];
+  function noteOf(f) {
+    const m = 69 + 12 * Math.log2(f / 440), r = Math.round(m), pc = ((r % 12) + 12) % 12;
+    return { name: NAMES[pc] + (Math.floor(r / 12) - 1), solf: SOLF[pc], cents: Math.round((m - r) * 100), midi: r };
+  }
+  const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+  const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // ---------- audio: one band-limited click train per voice ----------
+  // A click repeated f times per second. Slow = drum ticks; fast = a pitched buzz. Same signal, only the rate changes.
+  const A = { ctx: null, on: false, wave: null, cum: null, out: null, N: 2048 };
+  function audioInit() {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    const ctx = new AC();
+    const N = A.N, real = new Float32Array(N + 1), imag = new Float32Array(N + 1), cum = new Float32Array(N + 1);
+    for (let n = 1; n <= N; n++) { real[n] = 1 / Math.sqrt(n); cum[n] = cum[n - 1] + real[n]; }
+    A.wave = ctx.createPeriodicWave(real, imag, { disableNormalization: true });
+    const master = ctx.createGain(); master.gain.value = 0.9;
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 6500;
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -16; comp.ratio.value = 4; comp.attack.value = 0.003; comp.release.value = 0.2;
+    master.connect(lp); lp.connect(comp); comp.connect(ctx.destination);
+    Object.assign(A, { ctx, cum, out: master });
+  }
+  function voiceGain(f, n) {
+    const K = clamp(Math.floor(A.ctx.sampleRate / 2 / f), 1, A.N);
+    return 0.75 / A.cum[K] / Math.pow(n, 0.7);
+  }
+  function makeNodes(freqs, when) {
+    return freqs.map(f => {
+      const osc = A.ctx.createOscillator();
+      osc.setPeriodicWave(A.wave);
+      osc.frequency.value = f;
+      const g = A.ctx.createGain();
+      const gv = voiceGain(f, freqs.length);
+      g.gain.value = gv;
+      osc.connect(g); g.connect(A.out);
+      osc.start(when);
+      return { osc, g, f, gv };
+    });
+  }
+  function releaseNodes(nodes, when) {
+    for (const n of nodes || []) {
+      try {
+        n.g.gain.cancelScheduledValues(when);
+        n.g.gain.setValueAtTime(n.gv, when);
+        n.g.gain.linearRampToValueAtTime(0, when + 0.015);
+        n.osc.stop(when + 0.03);
+      } catch (e) { /* already stopped */ }
+    }
+  }
+  function killNodes(nodes) { for (const n of nodes || []) { try { n.osc.stop(); } catch (e) {} } }
+
+  // ---------- timeline ----------
+  let lf = Math.log(target());          // smoothed log-frequency of the base voice
+  const fsm = () => Math.exp(lf);
+  let cur = null, pending = null, lastT = 0;
+  const now = () => (A.on ? A.ctx.currentTime : performance.now() / 1000);
+
+  function spec() {
+    if (state.stage === 'beat' || state.stage === 'note') return { r: [1], mult: 1 };
+    if (state.stage === 'chord') return { r: chordById(state.chord).r, mult: 1 };
+    return SONG[state.step];
+  }
+  const segFreqs = (seg, base) => { const root = base * seg.mult; return seg.r.map(x => root * x / seg.r[0]); };
+  const segG = (seg, base) => segFreqs(seg, base)[0] / seg.r[0];
+
+  function makeSeg(start, sp) {
+    const seg = { start, r: sp.r, mult: sp.mult, sp, phase: 0, nodes: null };
+    seg.cycles = Math.max(1, Math.ceil(1.6 * segG(seg, target())));
+    if (A.on) seg.nodes = makeNodes(segFreqs(seg, fsm()), start);
+    return seg;
+  }
+  function restart() {
+    const t = now() + (A.on ? 0.04 : 0);
+    if (cur) A.on ? releaseNodes(cur.nodes, t) : killNodes(cur.nodes);
+    if (pending) killNodes(pending.nodes);
+    cur = makeSeg(t, spec());
+    pending = null;
+    lastT = now();
+  }
+  function songTick() {
+    if (state.stage !== 'song' || pending || !cur) return;
+    const t = now(), g = segG(cur, fsm());
+    if (t < cur.start) return;
+    if ((cur.cycles - cur.phase) / g > 1.6 + 1 / g) cur.cycles = Math.max(1, Math.ceil(cur.phase + 1e-6));
+    const remaining = (cur.cycles - cur.phase) / g;
+    if (remaining < 0.2) {
+      const at = t + Math.max(0, remaining);
+      state.step = (state.step + 1) % SONG.length;
+      pending = makeSeg(at, SONG[state.step]);
+      if (A.on) releaseNodes(cur.nodes, at);
+    }
+  }
+  setInterval(songTick, 40);
+
+  // ---------- canvases ----------
+  const orb = document.getElementById('orb'), octx = orb.getContext('2d');
+  const spc = document.getElementById('spec'), sctx = spc.getContext('2d');
+  const ruler = document.getElementById('ruler');
+  let dpr = 1, oSize = 400, sW = 400, sH = 104;
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    const ob = orb.getBoundingClientRect(); oSize = ob.width || 400;
+    orb.width = Math.round(oSize * dpr); orb.height = Math.round(oSize * dpr);
+    const sb = ruler.getBoundingClientRect(); sW = sb.width || 400; sH = sb.height || 104;
+    spc.width = Math.round(sW * dpr); spc.height = Math.round(sH * dpr);
+  }
+  new ResizeObserver(resize).observe(document.querySelector('.app'));
+  resize();
+
+  const AK = Array.from({ length: 13 }, (_, k) => (k ? 1 / Math.sqrt(k) : 0));
+  const SUMAK = AK.reduce((a, b) => a + b, 0);
+
+  function drawOrb(freqs, seg, tt) {
+    const ctx = octx, s = oSize, cx = s / 2, cy = s / 2, R = s * 0.37;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, s, s);
+    const n = seg.r.length, cols = colorsFor(n);
+    const g = freqs[0] / seg.r[0];
+    const b = smooth(Math.log(12), Math.log(30), Math.log(freqs[0])); // 0 = rhythm view, 1 = pitch view
+    const ph = seg.phase, frac = ph - Math.floor(ph);
+    const th = -Math.PI / 2 + 2 * Math.PI * frac;
+    const ang = (k, m) => -Math.PI / 2 + 2 * Math.PI * k / m;
+    let maxPulse = 0;
+
+    // faint orbit
+    ctx.lineWidth = 1.5; ctx.strokeStyle = C.line;
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
+
+    const aR = 1 - b;
+    if (aR > 0.01) {
+      ctx.save(); ctx.globalAlpha = aR;
+      // polygons: each drum's hits spaced evenly around one cycle
+      for (let i = 0; i < n; i++) {
+        const m = seg.r[i]; if (m < 2) continue;
+        ctx.strokeStyle = cols[i]; ctx.globalAlpha = aR * (m > 20 ? 0.35 : 0.7); ctx.lineWidth = m > 20 ? 1 : 1.6;
+        ctx.beginPath();
+        for (let k = 0; k <= m; k++) { const a = ang(k % m, m); const x = cx + R * Math.cos(a), y = cy + R * Math.sin(a); k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+        ctx.stroke();
+      }
+      ctx.globalAlpha = aR;
+      // hand + comet trail (fade when it spins too fast to follow)
+      const hf = aR * clamp((8 - g) / 5, 0, 1);
+      if (hf > 0.01) {
+        ctx.lineCap = 'round';
+        const span = Math.min(1.2, 0.5 + g * 0.6);
+        for (let k = 0; k < 28; k++) {
+          ctx.globalAlpha = hf * 0.55 * (1 - k / 28);
+          ctx.strokeStyle = C.ink; ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.arc(cx, cy, R, th - (k + 1) * span / 28, th - k * span / 28); ctx.stroke();
+        }
+        ctx.globalAlpha = hf;
+        ctx.strokeStyle = C.ink; ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(cx + R * 0.14 * Math.cos(th), cy + R * 0.14 * Math.sin(th));
+        ctx.lineTo(cx + R * 0.86 * Math.cos(th), cy + R * 0.86 * Math.sin(th));
+        ctx.stroke();
+      }
+      // hits
+      for (let i = 0; i < n; i++) {
+        const m = seg.r[i], base = m > 20 ? 2.6 : 6.5;
+        for (let k = 0; k < m; k++) {
+          let d = ph - k / m; d -= Math.floor(d);
+          const since = d / g, p = Math.exp(-since * 7);
+          maxPulse = Math.max(maxPulse, p);
+          const a = ang(k, m), x = cx + R * Math.cos(a), y = cy + R * Math.sin(a);
+          if (!reduceMotion && since < 0.5 && m <= 20) {
+            ctx.globalAlpha = aR * 0.7 * (1 - since / 0.5);
+            ctx.strokeStyle = cols[i]; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(x, y, base + 6 + since * 70, 0, Math.PI * 2); ctx.stroke();
+          }
+          ctx.globalAlpha = aR;
+          ctx.shadowColor = cols[i]; ctx.shadowBlur = 22 * p;
+          ctx.fillStyle = cols[i];
+          ctx.beginPath(); ctx.arc(x, y, base * (0.75 + 0.6 * p), 0, Math.PI * 2); ctx.fill();
+          ctx.shadowBlur = 0;
+        }
+      }
+      ctx.restore();
+    }
+
+    if (b > 0.01) {
+      // the same hits, so fast they merge: one cycle of the summed wave drawn around the circle
+      ctx.save();
+      const H = 10, rmax = Math.max(...seg.r);
+      const M = Math.min(4000, Math.max(600, rmax * H * 6));
+      const shimmer = reduceMotion ? 0 : 0.035;
+      ctx.beginPath();
+      for (let j = 0; j <= M; j++) {
+        const t = (2 * Math.PI * j) / M;
+        let x = 0;
+        for (let i = 0; i < n; i++) for (let k = 1; k <= H; k++) x += AK[k] * Math.cos(k * seg.r[i] * t);
+        x /= n * (SUMAK - AK[11] - AK[12]);
+        x += shimmer * Math.sin(t * 41 + tt * 9) * Math.sin(t * 7 - tt * 2);
+        const rho = R * (0.9 + 0.3 * x), a = -Math.PI / 2 + t;
+        const px = cx + rho * Math.cos(a), py = cy + rho * Math.sin(a);
+        j ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+      }
+      ctx.closePath();
+      const wc = n === 1 ? C.v1 : C.ink;
+      ctx.globalAlpha = b; ctx.strokeStyle = wc; ctx.lineWidth = 2.6; ctx.lineJoin = 'round';
+      ctx.shadowColor = n === 1 ? C.v1 : C.v3; ctx.shadowBlur = 18;
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      // ghost hit positions
+      ctx.globalAlpha = b * 0.35;
+      for (let i = 0; i < n; i++) {
+        const m = seg.r[i]; if (m > 20) continue;
+        ctx.fillStyle = cols[i];
+        for (let k = 0; k < m; k++) { const a = ang(k, m); ctx.beginPath(); ctx.arc(cx + R * 0.78 * Math.cos(a), cy + R * 0.78 * Math.sin(a), 3, 0, Math.PI * 2); ctx.fill(); }
+      }
+      ctx.restore();
+      maxPulse = Math.max(maxPulse, 0.35 + 0.08 * Math.sin(tt * 6));
+    }
+
+    // central sun
+    const sr = R * (0.2 + 0.045 * maxPulse * (1 - b) + 0.02 * b);
+    const grd = octx.createRadialGradient(cx - sr * 0.2, cy - sr * 0.25, sr * 0.05, cx, cy, sr * 1.9);
+    grd.addColorStop(0, 'rgba(255,240,215,1)');
+    grd.addColorStop(0.32, 'rgba(255,179,71,0.95)');
+    grd.addColorStop(0.55, 'rgba(255,140,60,0.25)');
+    grd.addColorStop(1, 'rgba(255,140,60,0)');
+    ctx.fillStyle = grd;
+    ctx.beginPath(); ctx.arc(cx, cy, sr * 1.9, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,200,140,0.55)'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(cx, cy, sr * 0.62, 0, Math.PI * 2); ctx.stroke();
+  }
+
+  const padX = 12;
+  const X = f => padX + (Math.log(f / FMIN) / Math.log(FMAX / FMIN)) * (sW - 2 * padX);
+  const invX = x => FMIN * Math.pow(FMAX / FMIN, clamp((x - padX) / (sW - 2 * padX), 0, 1));
+
+  function drawSpec(freqs) {
+    const ctx = sctx, w = sW, h = sH;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    const bandY = 14, bandH = 22, x20 = X(20);
+    ctx.fillStyle = C.rhythm; ctx.fillRect(X(FMIN), bandY, x20 - X(FMIN), bandH);
+    ctx.fillStyle = C.pitch; ctx.fillRect(x20, bandY, X(FMAX) - x20, bandH);
+    ctx.font = `600 11px ${MONO}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = C.v1; ctx.fillText('RYTHME', (X(FMIN) + x20) / 2, bandY + bandH / 2 + 1);
+    ctx.fillStyle = C.v3; ctx.fillText('HAUTEUR', (x20 + X(FMAX)) / 2, bandY + bandH / 2 + 1);
+
+    const axisY = bandY + bandH + 6;
+    ctx.strokeStyle = C.line; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(X(FMIN), axisY); ctx.lineTo(X(FMAX), axisY); ctx.stroke();
+
+    // piano keys (A0 → B5)
+    const active = new Map();
+    freqs.forEach((f, i) => { if (f >= 20) active.set(noteOf(f).midi, i); });
+    const cols = colorsFor(freqs.length);
+    const keyY = axisY + 5, keyH = 22;
+    for (let m = 21; m <= 83; m++) {
+      const f = 440 * Math.pow(2, (m - 69) / 12), x = X(f);
+      const wSemi = X(f * Math.pow(2, 1 / 24)) - X(f * Math.pow(2, -1 / 24));
+      const black = [1, 3, 6, 8, 10].includes(m % 12);
+      if (active.has(m)) ctx.fillStyle = cols[active.get(m)];
+      else ctx.fillStyle = black ? 'rgba(120,130,170,0.25)' : 'rgba(220,226,255,0.55)';
+      ctx.fillRect(x - wSemi * 0.4, keyY, Math.max(1, wSemi * 0.8), black ? keyH * 0.62 : keyH);
+    }
+
+    // 20 Hz threshold
+    ctx.setLineDash([3, 3]); ctx.strokeStyle = 'rgba(238,240,255,0.55)';
+    ctx.beginPath(); ctx.moveTo(x20, bandY - 6); ctx.lineTo(x20, h - 16); ctx.stroke(); ctx.setLineDash([]);
+
+    // tick labels
+    ctx.font = `500 10.5px ${MONO}`; ctx.fillStyle = C.muted; ctx.textBaseline = 'alphabetic';
+    const ticks = w < 380 ? [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000] : [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000];
+    for (const t of ticks) {
+      const x = X(t);
+      ctx.textAlign = t === 1 ? 'left' : t === 1000 ? 'right' : 'center';
+      const lab = t === 20 ? '20 Hz' : t === 1000 ? '1000' : String(t);
+      ctx.fillText(lab, t === 1 ? x - 3 : t === 1000 ? x + 3 : x, h - 3);
+    }
+
+    // voice markers
+    freqs.forEach((f, i) => {
+      const x = X(clamp(f, FMIN, FMAX));
+      ctx.fillStyle = cols[i]; ctx.strokeStyle = cols[i]; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(x, bandY + 2); ctx.lineTo(x, keyY + keyH); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x - 6, 2); ctx.lineTo(x + 6, 2); ctx.lineTo(x, 12); ctx.closePath(); ctx.fill();
+    });
+  }
+
+  // ---------- readout + captions ----------
+  const el = id => document.getElementById(id);
+  const big = el('big'), unit = el('unit'), capTitle = el('capTitle'), capText = el('capText'), capBox = el('caption');
+  let lastBig = '', lastUnit = '', lastCap = '';
+  const setHTML = (node, html, key) => { if (node[key] !== html) { node.innerHTML = html; node[key] = html; } };
+
+  function ratioHTML(seg) {
+    const n = seg.r.length, cc = cssColorsFor(n);
+    const order = n === 2 ? [1, 0] : seg.r.map((_, i) => i);
+    return order.map((i, j) => `${j ? '<span class="colon">:</span>' : ''}<span style="color:${cc[i]}">${seg.r[i]}</span>`).join('');
+  }
+  function freqList(freqs) {
+    const cc = cssColorsFor(freqs.length);
+    const pitched = freqs[0] >= 20;
+    const parts = freqs.map((f, i) => `<b style="color:${cc[i]}">${fmt(f)}${pitched ? ' Hz' : ''}</b>`);
+    return pitched ? parts.join(' + ') : parts.join(' &amp; ') + ' coups/s';
+  }
+
+  function updateText(freqs, seg) {
+    const f = freqs[0], pitched = f >= 20, g = f / seg.r[0];
+    let bigH, unitH, title, text, cc = 'var(--ink)';
+    const nt = noteOf(f);
+    big.className = 'big' + (seg.r.join('').length > 5 ? ' long' : seg.r.length > 2 ? ' mid' : '');
+
+    if (state.stage === 'beat' || state.stage === 'note') {
+      bigH = `<span>${fmt(f)}</span>` + (pitched ? `<span class="pill" style="--pc:var(--v1)">${nt.name}<small>${nt.solf}</small></span>` : '');
+      unitH = pitched ? 'coups par seconde = Hz' : 'coups par seconde';
+    } else {
+      bigH = ratioHTML(seg);
+      if (state.stage === 'song') bigH += `<span class="pill" style="--pc:var(--v4)">${seg.sp.deg}</span>`;
+      unitH = freqList(freqs);
+    }
+
+    if (state.stage === 'beat') {
+      if (f < 12) { title = `${fmt(f)} coups par seconde : tu entends des coups`; text = 'Sous 20 coups par seconde environ, l\'oreille suit chaque frappe une à une : c\'est du <b>rythme</b>. Fais glisser la règle vers la droite, ou appuie sur « Accélérer ».'; cc = 'var(--v1)'; }
+      else if (f < 30) { title = 'La zone de bascule'; text = 'Entre 15 et 30 coups par seconde, les frappes se collent les unes aux autres. Ce n\'est plus vraiment un rythme, pas encore tout à fait une note.'; }
+      else { title = `Une note : ${nt.name} (${nt.solf})`; text = 'Trop rapide pour compter. Le cerveau fusionne les coups en une <b>hauteur</b>. Les hertz, c\'est simplement le nombre de coups par seconde.'; cc = 'var(--v3)'; }
+    } else if (state.stage === 'note') {
+      if (pitched) { title = '2× plus vite = +1 octave'; text = `<b>${fmt(f / 2)} → ${fmt(f)} → ${fmt(f * 2)} Hz</b> : trois fois la même note (${nt.solf}), de plus en plus aiguë. Essaie ÷2 et ×2, ou glisse sur le clavier.`; cc = 'var(--v3)'; }
+      else { title = 'Encore un rythme'; text = 'Sous 20 Hz, doubler la vitesse double le tempo. Au-dessus, ça fait monter la note d\'une <b>octave</b>.'; }
+    } else if (state.stage === 'chord') {
+      const ch = chordById(state.chord), n = seg.r.length;
+      const lab = (n === 2 ? [...seg.r].reverse() : seg.r).join(' : ');
+      if (!pitched) {
+        title = `${n === 2 ? 'Deux' : n === 3 ? 'Trois' : 'Quatre'} tambours : ${lab}`;
+        text = `Le motif complet revient toutes les <b>${fmt(1 / g)} s</b>. Accélère-le au-dessus de 20 Hz : ce même rythme devient ${ch.art}.`;
+        cc = 'var(--v1)';
+      } else {
+        title = `${lab} = ${ch.name.toLowerCase()}`;
+        text = `${ch.note} Le motif se répète ${fmt(g)} fois par seconde : plus le rapport est simple, plus il revient souvent, plus l'accord sonne <b>consonant</b>.`;
+        cc = 'var(--v2)';
+      }
+    } else {
+      if (!pitched) { title = 'Une chanson, au ralenti'; text = '<b>I – V – vi – IV</b>, la progression de milliers de tubes pop, jouée comme une polyrythmie : chaque accord dure un cycle complet. Accélère pour l\'entendre chanter.'; cc = 'var(--v1)'; }
+      else { title = 'Une chanson, c\'est un rythme très rapide'; text = `Les mêmes rapports de vitesse, ${fmt(f / 2)}× plus vite : des accords. Tonalité ${noteOf(f).name}, accord <b>${seg.sp.deg}</b> en ce moment.`; cc = 'var(--v4)'; }
+    }
+
+    setHTML(big, bigH, '_h');
+    setHTML(unit, unitH, '_h');
+    if (title !== lastCap) { capTitle.textContent = title; lastCap = title; }
+    setHTML(capText, text, '_h');
+    capBox.style.setProperty('--cc', cc);
+
+    const tf = target();
+    ruler.setAttribute('aria-valuenow', tf.toFixed(2));
+    ruler.setAttribute('aria-valuetext', tf >= 20 ? `${fmt(tf)} Hz, ${noteOf(tf).name}` : `${fmt(tf)} coups par seconde`);
+    sweepBtn.textContent = tf < 20 ? 'Accélérer ↗' : 'Ralentir ↘';
+    if (state.stage === 'song') prog.querySelectorAll('span').forEach((s, i) => s.classList.toggle('on', SONG[i] === seg.sp));
+  }
+
+  // ---------- main loop ----------
+  function frame() {
+    const t = now();
+    let dt = t - lastT;
+    if (!(dt >= 0) || dt > 0.25) dt = 0.016;
+    const prevT = lastT; lastT = t;
+
+    if (state.sweep) {
+      const sw = state.sweep, p = clamp((performance.now() - sw.t0) / sw.dur, 0, 1);
+      const e = p * p * (3 - 2 * p);
+      state.f0[state.stage] = sw.from * Math.pow(sw.to / sw.from, e);
+      if (p >= 1) state.sweep = null;
+    }
+    const k = 1 - Math.exp(-dt / 0.06);
+    lf += (Math.log(target()) - lf) * k;
+
+    if (pending && t >= pending.start) { cur = pending; pending = null; }
+    const freqs = segFreqs(cur, fsm());
+    const g = freqs[0] / cur.r[0];
+    if (t > cur.start) cur.phase += g * (t - Math.max(prevT, cur.start));
+
+    if (A.on && cur.nodes) {
+      const at = A.ctx.currentTime;
+      cur.nodes.forEach((nd, i) => {
+        const f = freqs[i];
+        if (Math.abs(f - nd.f) / f > 1e-5) {
+          nd.osc.frequency.setValueAtTime(f, at);
+          nd.gv = voiceGain(f, freqs.length);
+          nd.g.gain.setValueAtTime(nd.gv, at);
+          nd.f = f;
+        }
+      });
+    }
+
+    drawOrb(freqs, cur, performance.now() / 1000);
+    drawSpec(freqs);
+    updateText(freqs, cur);
+    requestAnimationFrame(frame);
+  }
+
+  // ---------- controls ----------
+  const stagesNav = el('stages'), chordsRow = el('chords'), songRow = el('song'), prog = el('prog');
+  const sweepBtn = el('sweep'), playBtn = el('play');
+
+  CHORDS.forEach(ch => {
+    const b = document.createElement('button');
+    b.className = 'btn chip'; b.dataset.chord = ch.id;
+    const lab = (ch.r.length === 2 ? [...ch.r].reverse() : ch.r).join(':');
+    b.innerHTML = `<span class="r">${lab}</span>${ch.name}`;
+    b.addEventListener('click', () => { state.chord = ch.id; syncUI(); restart(); });
+    chordsRow.appendChild(b);
+  });
+  SONG.forEach(c => { const s = document.createElement('span'); s.textContent = c.deg; prog.appendChild(s); });
+
+  function syncUI() {
+    const idx = STAGES.indexOf(state.stage);
+    stagesNav.querySelectorAll('button').forEach((b, i) => {
+      if (i === idx) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current');
+      b.classList.toggle('done', i < idx);
+    });
+    stagesNav.querySelectorAll('.dash').forEach((d, i) => d.classList.toggle('done', i < idx));
+    chordsRow.hidden = state.stage !== 'chord';
+    songRow.hidden = state.stage !== 'song';
+    chordsRow.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.chord === state.chord)));
+  }
+  function setStage(s) {
+    if (s === state.stage) return;
+    state.stage = s; state.sweep = null;
+    if (s === 'song') state.step = 0;
+    syncUI(); restart();
+  }
+  stagesNav.addEventListener('click', e => { const b = e.target.closest('button'); if (b) setStage(b.dataset.stage); });
+
+  function setF(f) { state.sweep = null; state.f0[state.stage] = clamp(f, FMIN, FMAX); }
+  el('up').addEventListener('click', () => setF(target() * 2));
+  el('down').addEventListener('click', () => setF(target() / 2));
+  sweepBtn.addEventListener('click', () => {
+    const from = target(), up = from < 20;
+    state.sweep = { from, to: up ? 110 : (state.stage === 'beat' ? 2.4 : 2), t0: performance.now(), dur: 9000 };
+  });
+
+  playBtn.addEventListener('click', async () => {
+    if (!A.on) {
+      try {
+        if (!A.ctx) audioInit();
+        await A.ctx.resume();
+        A.on = true;
+      } catch (e) { capText.textContent = 'Le son n\'a pas pu démarrer dans ce navigateur. La visualisation reste disponible.'; return; }
+    } else {
+      killNodes(cur && cur.nodes); killNodes(pending && pending.nodes);
+      if (cur) cur.nodes = null; if (pending) pending.nodes = null;
+      A.on = false;
+    }
+    playBtn.setAttribute('aria-pressed', String(A.on));
+    playBtn.textContent = A.on ? '■ Couper le son' : '▶ Écouter';
+    restart();
+  });
+
+  // ruler: drag + keyboard
+  let dragging = false;
+  const fromPointer = e => { const r = ruler.getBoundingClientRect(); setF(invX(e.clientX - r.left)); };
+  ruler.addEventListener('pointerdown', e => { dragging = true; ruler.setPointerCapture(e.pointerId); fromPointer(e); });
+  ruler.addEventListener('pointermove', e => { if (dragging) fromPointer(e); });
+  const endDrag = () => { dragging = false; };
+  ruler.addEventListener('pointerup', endDrag);
+  ruler.addEventListener('pointercancel', endDrag);
+  ruler.addEventListener('keydown', e => {
+    const semi = Math.pow(2, 1 / 12);
+    const map = { ArrowRight: semi, ArrowUp: semi, ArrowLeft: 1 / semi, ArrowDown: 1 / semi, PageUp: 2, PageDown: 0.5 };
+    if (e.key in map) { setF(target() * (e.shiftKey ? (map[e.key] > 1 ? 2 : 0.5) : map[e.key])); e.preventDefault(); }
+    else if (e.key === 'Home') { setF(FMIN); e.preventDefault(); }
+    else if (e.key === 'End') { setF(FMAX); e.preventDefault(); }
+  });
+
+  document.addEventListener('visibilitychange', () => { lastT = now(); });
+
+  syncUI();
+  restart();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
