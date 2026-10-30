@@ -2,19 +2,24 @@ import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 
 import { hillRadius } from './physics/orbits';
 import { habitableZone } from './physics/stars';
 import { AU_KM } from './physics/units';
+import { distance } from './physics/vec3';
 import type { SceneRenderer, ViewOptions } from './render/SceneRenderer';
+import { protoplanetaryDisk, type DiskParams } from './sim/disk';
 import { estimateRadiusKm, makeOrbiter } from './sim/factory';
-import { emptySystem, solarSystem } from './sim/presets';
+import { emptySystem, solarSystem, tightBinary, wideBinary } from './sim/presets';
 import { randomSystem } from './sim/random';
 import { deserialize, serialize } from './sim/serialization';
 import { Simulation, type SystemDefinition } from './sim/Simulation';
+import { Telemetry } from './sim/telemetry';
 import { BodyList } from './ui/BodyList';
 import { BodyPanel } from './ui/BodyPanel';
+import { ChartsPanel } from './ui/ChartsPanel';
+import { DiskDialog } from './ui/DiskDialog';
 import { EventLog } from './ui/EventLog';
 import { SceneView } from './ui/SceneView';
-import { StarPanel } from './ui/StarPanel';
+import { StarsPanel } from './ui/StarsPanel';
 import { TimeBar } from './ui/TimeBar';
-import { TopBar } from './ui/TopBar';
+import { TopBar, type PresetId } from './ui/TopBar';
 
 /** Force un nouveau rendu à intervalle régulier pour les valeurs qui évoluent en continu. */
 function useTick(ms: number) {
@@ -25,18 +30,29 @@ function useTick(ms: number) {
   }, [ms]);
 }
 
+const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII'];
+
 export function App() {
   const sim = useMemo(() => new Simulation(solarSystem()), []);
+  const telemetry = useMemo(() => new Telemetry(), []);
   useSyncExternalStore(sim.subscribe, sim.getVersion);
   useTick(250);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [renderer, setRenderer] = useState<SceneRenderer | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [diskDialog, setDiskDialog] = useState(false);
+  const [showCharts, setShowCharts] = useState(false);
   const [options, setOptions] = useState<ViewOptions>({ showTrails: true, showLabels: true, showZones: true, followSelected: false });
 
   const selected = sim.getBody(selectedId);
   const star = sim.star;
+
+  // L'historique des graphiques est enregistré en continu, même graphiques fermés.
+  useEffect(() => {
+    const id = setInterval(() => telemetry.record(sim), 250);
+    return () => clearInterval(id);
+  }, [sim, telemetry]);
 
   const loadSystem = useCallback(
     (def: SystemDefinition, placeFromElements = true) => {
@@ -60,9 +76,37 @@ export function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, [sim]);
 
+  const onPreset = (id: PresetId) => {
+    switch (id) {
+      case 'solaire':
+        return loadSystem(solarSystem());
+      case 'kepler16':
+        sim.setSpeed(30);
+        return loadSystem(tightBinary());
+      case 'centaure':
+        sim.setSpeed(3652.5);
+        return loadSystem(wideBinary());
+      case 'aleatoire':
+        return loadSystem(randomSystem());
+      case 'disque':
+        return setDiskDialog(true);
+      case 'vide':
+        return loadSystem(emptySystem(star?.star?.spectralClass ?? 'G'));
+    }
+  };
+
+  const startDisk = (params: DiskParams) => {
+    setDiskDialog(false);
+    loadSystem(protoplanetaryDisk(params));
+    // La vitesse demandée est volontairement haute : le budget de calcul la limitera.
+    sim.setSpeed(3652.5);
+    setOptions((o) => ({ ...o, showTrails: false }));
+    setShowCharts(true);
+  };
+
   const addPlanet = () => {
     if (!star) return;
-    const planets = sim.children(star.id);
+    const planets = sim.children(star.id).filter((p) => p.kind === 'planet' && !p.circumbinary);
     const outermost = Math.max(0, ...planets.map((p) => p.elements?.a ?? 0));
     const hz = habitableZone(star.star!.luminosity);
     const a = outermost > 0 ? outermost * 1.6 : (hz.inner + hz.outer) / 2;
@@ -80,10 +124,11 @@ export function App() {
 
   const parentForMoon = selected && selected.kind === 'planet' ? selected : null;
   const addMoon = () => {
-    if (!parentForMoon || !star) return;
+    const host = parentForMoon && sim.frameOf(parentForMoon);
+    if (!parentForMoon || !host) return;
     const moons = sim.children(parentForMoon.id);
     const el = parentForMoon.elements;
-    const hill = hillRadius(el?.a ?? 1, el?.e ?? 0, parentForMoon.mass, star.mass);
+    const hill = hillRadius(distance(parentForMoon.position, host.position), el?.e ?? 0, parentForMoon.mass, host.mass);
     const outermost = Math.max(0, ...moons.map((m) => m.elements?.a ?? 0));
     const a = outermost > 0 ? outermost * 1.6 : (parentForMoon.radiusKm * 15) / AU_KM;
     if (a > 0.4 * hill) {
@@ -92,7 +137,7 @@ export function App() {
     }
     const massEarth = 0.01;
     const moon = makeOrbiter({
-      name: `${parentForMoon.name} ${['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII'][moons.length] ?? moons.length + 1}`,
+      name: `${parentForMoon.name} ${ROMAN[moons.length] ?? moons.length + 1}`,
       kind: 'moon',
       planetType: 'naine',
       massEarth,
@@ -127,9 +172,7 @@ export function App() {
     <div className="app">
       <TopBar
         systemName={sim.name}
-        onSolar={() => loadSystem(solarSystem())}
-        onRandom={() => loadSystem(randomSystem())}
-        onEmpty={() => loadSystem(emptySystem(star?.star?.spectralClass ?? 'G'))}
+        onPreset={onPreset}
         onReset={() => {
           sim.reset();
           renderer?.clearTrails();
@@ -139,7 +182,7 @@ export function App() {
         onFrame={() => renderer?.frameSystem(sim.bodies)}
       />
       <aside className="sidebar sidebar--left">
-        {star && <StarPanel star={star} onChangeClass={(c) => sim.setStarClass(c)} />}
+        {star && <StarsPanel sim={sim} />}
         <BodyList bodies={sim.bodies} selectedId={selectedId} onSelect={setSelectedId} onAddPlanet={addPlanet} onAddMoon={parentForMoon ? addMoon : null} />
       </aside>
       <main className="viewport">
@@ -152,6 +195,7 @@ export function App() {
             </button>
           </div>
         )}
+        {showCharts && <ChartsPanel telemetry={telemetry} selectedId={selected?.id ?? null} onSelect={setSelectedId} onClose={() => setShowCharts(false)} />}
       </main>
       <aside className="sidebar sidebar--right">
         {selected ? (
@@ -164,7 +208,8 @@ export function App() {
         )}
         <EventLog events={sim.events} />
       </aside>
-      <TimeBar sim={sim} options={options} onOptions={setOptions} />
+      <TimeBar sim={sim} options={options} onOptions={setOptions} showCharts={showCharts} onToggleCharts={() => setShowCharts((v) => !v)} />
+      {diskDialog && <DiskDialog onStart={startDisk} onCancel={() => setDiskDialog(false)} />}
     </div>
   );
 }

@@ -8,9 +8,11 @@ interface Props {
   sim: Simulation;
   options: ViewOptions;
   onOptions: (o: ViewOptions) => void;
+  showCharts: boolean;
+  onToggleCharts: () => void;
 }
 
-export function TimeBar({ sim, options, onOptions }: Props) {
+export function TimeBar({ sim, options, onOptions, showCharts, onToggleCharts }: Props) {
   const limited = !sim.paused && sim.effectiveSpeed > 0 && sim.effectiveSpeed < sim.speed * 0.85;
   const toggle = (k: keyof ViewOptions) => onOptions({ ...options, [k]: !options[k] });
   return (
@@ -36,6 +38,9 @@ export function TimeBar({ sim, options, onOptions }: Props) {
         </div>
       </div>
       <div className="toggles">
+        <button type="button" className={showCharts ? 'is-active' : ''} aria-pressed={showCharts} onClick={onToggleCharts}>
+          📈 Graphiques
+        </button>
         <label>
           <input type="checkbox" checked={options.showTrails} onChange={() => toggle('showTrails')} /> Trajectoires
         </label>

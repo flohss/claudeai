@@ -56,7 +56,7 @@ describe('Simulation', () => {
 
   it("recalcule les orbites quand la classe de l'étoile change", () => {
     const sim = new Simulation(solarSystem());
-    sim.setStarClass('M');
+    sim.setStarClass(sim.star!.id, 'M');
     expect(sim.star!.mass).toBeCloseTo(0.3);
     const earth = currentElements(byName(sim, 'Terre'), sim.star!);
     expect(earth.a).toBeCloseTo(1, 2);

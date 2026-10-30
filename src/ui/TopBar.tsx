@@ -1,17 +1,26 @@
 import { useRef } from 'react';
 
+export type PresetId = 'solaire' | 'kepler16' | 'centaure' | 'aleatoire' | 'disque' | 'vide';
+
+const PRESETS: [PresetId, string][] = [
+  ['solaire', 'Système solaire'],
+  ['kepler16', 'Kepler-16 — binaire serrée'],
+  ['centaure', 'Alpha du Centaure — binaire large'],
+  ['aleatoire', 'Système aléatoire'],
+  ['disque', 'Disque protoplanétaire…'],
+  ['vide', 'Étoile seule'],
+];
+
 interface Props {
   systemName: string;
-  onSolar: () => void;
-  onRandom: () => void;
-  onEmpty: () => void;
+  onPreset: (id: PresetId) => void;
   onReset: () => void;
   onSave: () => void;
   onLoad: (file: File) => void;
   onFrame: () => void;
 }
 
-export function TopBar({ systemName, onSolar, onRandom, onEmpty, onReset, onSave, onLoad, onFrame }: Props) {
+export function TopBar({ systemName, onPreset, onReset, onSave, onLoad, onFrame }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   return (
     <header className="topbar">
@@ -20,18 +29,37 @@ export function TopBar({ systemName, onSolar, onRandom, onEmpty, onReset, onSave
         <span className="system-name">{systemName}</span>
       </div>
       <nav className="actions">
-        <div className="group" role="group" aria-label="Préréglages">
-          <button type="button" onClick={onSolar}>Système solaire</button>
-          <button type="button" onClick={onRandom}>🎲 Aléatoire</button>
-          <button type="button" onClick={onEmpty}>Étoile seule</button>
+        <label className="preset-select">
+          <span className="visually-hidden">Préréglage</span>
+          <select
+            value=""
+            onChange={(e) => {
+              if (e.target.value) onPreset(e.target.value as PresetId);
+            }}
+          >
+            <option value="">Nouveau système…</option>
+            {PRESETS.map(([id, label]) => (
+              <option key={id} value={id}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="group">
+          <button type="button" onClick={onReset} title="Revenir à l'état chargé">
+            ↺ Réinitialiser
+          </button>
+          <button type="button" onClick={onFrame} title="Recentrer la caméra">
+            ⌖ Recentrer
+          </button>
         </div>
         <div className="group">
-          <button type="button" onClick={onReset} title="Revenir à l'état chargé">↺ Réinitialiser</button>
-          <button type="button" onClick={onFrame} title="Recentrer la caméra">⌖ Recentrer</button>
-        </div>
-        <div className="group">
-          <button type="button" onClick={onSave}>Sauvegarder</button>
-          <button type="button" onClick={() => fileRef.current?.click()}>Charger…</button>
+          <button type="button" onClick={onSave}>
+            Sauvegarder
+          </button>
+          <button type="button" onClick={() => fileRef.current?.click()}>
+            Charger…
+          </button>
           <input
             ref={fileRef}
             type="file"

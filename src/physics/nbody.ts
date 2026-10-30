@@ -137,10 +137,10 @@ export function recenter(bodies: Body[], positions = true): void {
 export function findCollision(bodies: Body[], dt = 0): [number, number] | null {
   for (let i = 0; i < bodies.length; i++) {
     const a = bodies[i];
-    const ra = kmToAu(a.radiusKm);
+    const ra = kmToAu(a.radiusKm * (a.accretionScale ?? 1));
     for (let j = i + 1; j < bodies.length; j++) {
       const b = bodies[j];
-      const r = ra + kmToAu(b.radiusKm);
+      const r = ra + kmToAu(b.radiusKm * (b.accretionScale ?? 1));
       let dx = b.position.x - a.position.x;
       let dy = b.position.y - a.position.y;
       let dz = b.position.z - a.position.z;
@@ -183,6 +183,7 @@ export function mergeBodies(a: Body, b: Body): [Body, Body] {
     z: big.velocity.z * w1 + small.velocity.z * w2,
   };
   big.mass = m;
+  if (big.star && small.star) big.star.luminosity += small.star.luminosity;
   if (big.kind !== 'star') {
     big.radiusKm = Math.cbrt(big.radiusKm ** 3 + small.radiusKm ** 3);
   }

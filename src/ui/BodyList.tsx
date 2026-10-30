@@ -1,4 +1,6 @@
 import type { Body } from '../physics/types';
+import { EARTH_MASS_SUN } from '../physics/units';
+import { num } from './format';
 
 interface Props {
   bodies: Body[];
@@ -9,7 +11,7 @@ interface Props {
 }
 
 function Item({ body, bodies, selectedId, onSelect, depth }: { body: Body; bodies: Body[]; selectedId: string | null; onSelect: (id: string) => void; depth: number }) {
-  const children = bodies.filter((b) => b.parentId === body.id);
+  const children = bodies.filter((b) => b.parentId === body.id && b.kind !== 'planetesimal');
   return (
     <li>
       <button
@@ -19,7 +21,17 @@ function Item({ body, bodies, selectedId, onSelect, depth }: { body: Body; bodie
         onClick={() => onSelect(body.id)}
       >
         <span className="dot" style={{ background: body.color }} />
-        {body.name}
+        <span className="body-name">{body.name}</span>
+        {body.circumbinary && (
+          <span className="tag" title="Tourne autour des deux étoiles">
+            circumbinaire
+          </span>
+        )}
+        {body.rings && (
+          <span className="tag" aria-label="anneaux" title="Anneaux">
+            ◎
+          </span>
+        )}
       </button>
       {children.length > 0 && (
         <ul>
@@ -34,6 +46,8 @@ function Item({ body, bodies, selectedId, onSelect, depth }: { body: Body; bodie
 
 export function BodyList({ bodies, selectedId, onSelect, onAddPlanet, onAddMoon }: Props) {
   const roots = bodies.filter((b) => !b.parentId);
+  const planetesimals = bodies.filter((b) => b.kind === 'planetesimal');
+  const planetesimalMass = planetesimals.reduce((s, b) => s + b.mass, 0) / EARTH_MASS_SUN;
   return (
     <section className="panel">
       <h2>Corps du système</h2>
@@ -42,6 +56,11 @@ export function BodyList({ bodies, selectedId, onSelect, onAddPlanet, onAddMoon 
           <Item key={b.id} body={b} bodies={bodies} selectedId={selectedId} onSelect={onSelect} depth={0} />
         ))}
       </ul>
+      {planetesimals.length > 0 && (
+        <p className="hint planetesimal-count">
+          + {planetesimals.length} planétésimaux ({num(planetesimalMass)} M⊕ au total), cliquables dans la vue.
+        </p>
+      )}
       <div className="row">
         <button type="button" onClick={onAddPlanet}>
           + Planète

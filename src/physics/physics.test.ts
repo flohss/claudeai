@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { density, equilibriumTemperature, escapeVelocity, surfaceGravity, zoneStatus } from './derived';
+import { pTypeCriticalAu, sTypeCriticalAu } from './binary';
+import { density, equilibriumTemperature, equilibriumTemperatureFromFlux, escapeVelocity, rocheLimitKm, stellarFlux, surfaceGravity, zoneStatus } from './derived';
 import { computeAccelerations, makeAccelerationBuffer, mergeBodies, recenter, totalEnergy, totalMomentum, verletStep } from './nbody';
 import { elementsToState, mu, orbitalPeriod, stateToElements } from './orbits';
 import { habitableZone, snowLine } from './stars';
@@ -121,5 +122,34 @@ describe('grandeurs physiques', () => {
   });
   it('situe la ligne des glaces vers 2,7 UA pour le Soleil', () => {
     expect(snowLine(1)).toBeCloseTo(2.7, 5);
+  });
+});
+
+describe('systèmes doubles et marées', () => {
+  it('donne les limites de stabilité de Holman-Wiegert pour une binaire circulaire de masses égales', () => {
+    expect(sTypeCriticalAu(1, 0, 0.5)).toBeCloseTo(0.274, 3);
+    expect(pTypeCriticalAu(1, 0, 0.5)).toBeCloseTo(2.3875, 3);
+  });
+
+  it('additionne le flux de deux étoiles', () => {
+    const a = { ...body('a', 1, 695700), kind: 'star' as const, star: { spectralClass: 'G' as const, luminosity: 1, temperatureK: 5778 } };
+    const b = { ...a, id: 'b', position: { x: 2, y: 0, z: 0 } };
+    const p = body('p', EARTH_MASS_SUN, 6371);
+    p.position = { x: 1, y: 0, z: 0 };
+    expect(stellarFlux(p, [a, b])).toBeCloseTo(2, 10);
+    expect(equilibriumTemperatureFromFlux(2, 0.3)).toBeCloseTo(equilibriumTemperature(1, 1, 0.3) * Math.pow(2, 0.25), 6);
+  });
+
+  it('place la limite de Roche Terre-Lune vers 18 400 km', () => {
+    const roche = rocheLimitKm(6371, density(EARTH_MASS_SUN, 6371), 3.34);
+    expect(roche).toBeGreaterThan(18000);
+    expect(roche).toBeLessThan(19000);
+  });
+
+  it('additionne les luminosités quand deux étoiles fusionnent', () => {
+    const a = { ...body('a', 1, 695700), kind: 'star' as const, star: { spectralClass: 'G' as const, luminosity: 1, temperatureK: 5778 } };
+    const b = { ...body('b', 0.5, 400000), kind: 'star' as const, star: { spectralClass: 'K' as const, luminosity: 0.2, temperatureK: 4600 } };
+    mergeBodies(a, b);
+    expect(a.star.luminosity).toBeCloseTo(1.2, 10);
   });
 });

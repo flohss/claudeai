@@ -1,5 +1,5 @@
 import type { Body } from '../physics/types';
-import type { Simulation, SystemDefinition } from './Simulation';
+import type { FormationSettings, Simulation, SystemDefinition } from './Simulation';
 
 export const FILE_FORMAT = 'simulateur-systeme-solaire';
 export const FILE_VERSION = 1;
@@ -9,12 +9,20 @@ interface SystemFile {
   version: number;
   name: string;
   time: number;
+  formation?: FormationSettings | null;
   bodies: Body[];
 }
 
 export function serialize(sim: Simulation): string {
   const snap = sim.snapshot();
-  const file: SystemFile = { format: FILE_FORMAT, version: FILE_VERSION, name: snap.name, time: snap.time ?? 0, bodies: snap.bodies };
+  const file: SystemFile = {
+    format: FILE_FORMAT,
+    version: FILE_VERSION,
+    name: snap.name,
+    time: snap.time ?? 0,
+    formation: snap.formation ?? null,
+    bodies: snap.bodies,
+  };
   return JSON.stringify(file, null, 2);
 }
 
@@ -35,7 +43,8 @@ export function deserialize(text: string): SystemDefinition {
   if (!Array.isArray(file.bodies) || file.bodies.length === 0) throw new Error('La sauvegarde ne contient aucun corps.');
 
   const stars = file.bodies.filter((b) => b?.kind === 'star');
-  if (stars.length !== 1) throw new Error('La sauvegarde doit contenir exactement une étoile.');
+  if (stars.length === 0) throw new Error('La sauvegarde doit contenir au moins une étoile.');
+  if (stars.filter((b) => !b.parentId).length !== 1) throw new Error('La sauvegarde doit contenir une seule étoile principale.');
   const ids = new Set<string>();
   for (const b of file.bodies) {
     if (!b || typeof b.id !== 'string' || typeof b.name !== 'string') throw new Error('Corps invalide dans la sauvegarde.');
@@ -47,5 +56,8 @@ export function deserialize(text: string): SystemDefinition {
   for (const b of file.bodies) {
     if (b.parentId && !ids.has(b.parentId)) throw new Error(`Parent introuvable pour « ${b.name} ».`);
   }
-  return { name: file.name ?? 'Système importé', time: isNum(file.time) ? file.time : 0, bodies: file.bodies };
+  const f = file.formation;
+  const formation =
+    f && [f.gasUntil, f.gasTimescale, f.coreMassEarth, f.maxGiantMassEarth].every(isNum) ? f : null;
+  return { name: file.name ?? 'Système importé', time: isNum(file.time) ? file.time : 0, formation, bodies: file.bodies };
 }

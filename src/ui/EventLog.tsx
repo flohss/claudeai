@@ -1,14 +1,14 @@
 import type { SimEvent } from '../sim/Simulation';
 import { elapsed } from './format';
 
-const ICONS: Record<SimEvent['kind'], string> = { collision: '💥', ejection: '🚀', evasion: '🌀', info: 'ℹ️' };
+const ICONS: Record<SimEvent['kind'], string> = { collision: '💥', ejection: '🚀', evasion: '🌀', formation: '🪐', roche: '💫', info: 'ℹ️' };
 
 export function EventLog({ events }: { events: SimEvent[] }) {
   return (
     <section className="panel">
       <h2>Journal</h2>
       {events.length === 0 ? (
-        <p className="hint">Aucun événement. Les collisions, éjections et lunes arrachées apparaîtront ici.</p>
+        <p className="hint">Aucun événement. Les collisions, éjections, lunes arrachées ou disloquées et la naissance de protoplanètes apparaîtront ici.</p>
       ) : (
         <ul className="event-log">
           {events.map((e, k) => (

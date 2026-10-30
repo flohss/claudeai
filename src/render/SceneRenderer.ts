@@ -2,16 +2,32 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CSS2DObject, CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import { habitableZone, snowLine } from '../physics/stars';
-import type { Body, PlanetType } from '../physics/types';
+import type { Body, BodyKind, PlanetType, Rings } from '../physics/types';
 import { SUN_RADIUS_KM } from '../physics/units';
 import type { Vec3 } from '../physics/vec3';
-import { makeGlowTexture, makePlanetTexture } from './textures';
+import { makeGlowTexture, makePlanetTexture, makeRingTexture } from './textures';
 
 /** Unités de scène par UA. */
 export const AU_SCALE = 10;
 /** Exagération des distances lune-planète, sans quoi les lunes seraient dans leur planète. */
 const MOON_DISTANCE_EXAGGERATION = 30;
 const TRAIL_POINTS = 600;
+
+// Géométries partagées par tous les corps (les planétésimaux peuvent être des centaines).
+const SPHERE = new THREE.SphereGeometry(1, 48, 32);
+const SMALL_SPHERE = new THREE.SphereGeometry(1, 8, 6);
+
+/** Anneau plat dont la coordonnée de texture u va du bord intérieur (0) au bord extérieur (1). */
+function makeRingGeometry(inner: number, outer: number): THREE.RingGeometry {
+  const geom = new THREE.RingGeometry(inner, outer, 128, 1);
+  const pos = geom.getAttribute('position');
+  const uv = geom.getAttribute('uv');
+  for (let k = 0; k < pos.count; k++) {
+    const r = Math.hypot(pos.getX(k), pos.getY(k));
+    uv.setXY(k, (r - inner) / (outer - inner), 0.5);
+  }
+  return geom;
+}
 
 export interface ViewOptions {
   showTrails: boolean;
@@ -22,7 +38,8 @@ export interface ViewOptions {
 
 /** Les tailles réelles sont invisibles à l'échelle d'un système : on utilise une échelle logarithmique. */
 export function visualRadius(body: Body): number {
-  if (body.kind === 'star') return 0.7 + 0.5 * Math.log10(1 + (body.radiusKm / SUN_RADIUS_KM) * 2);
+  if (body.kind === 'star') return 0.4 + 0.35 * Math.log10(1 + (body.radiusKm / SUN_RADIUS_KM) * 2);
+  if (body.kind === 'planetesimal') return 0.04 + 0.12 * Math.log10(1 + body.radiusKm / 1000);
   const r = 0.08 + 0.2 * Math.log10(1 + body.radiusKm / 1000);
   return body.kind === 'moon' ? r * 0.8 : r;
 }
@@ -32,8 +49,12 @@ const toScene = (p: Vec3, out: THREE.Vector3) => out.set(p.x * AU_SCALE, p.z * A
 
 interface Entry {
   body: Body;
+  kind: BodyKind;
   group: THREE.Group;
+  /** Porte le corps et ses anneaux, incliné selon l'axe de rotation */
+  tilt: THREE.Group;
   mesh: THREE.Mesh;
+  ring?: THREE.Mesh;
   label: CSS2DObject;
   labelEl: HTMLDivElement;
   appearanceKey: string;
@@ -50,12 +71,11 @@ export class SceneRenderer {
   private readonly controls: OrbitControls;
   private readonly entries = new Map<string, Entry>();
   private readonly selectionRing: THREE.Mesh;
-  private readonly habitableRing: THREE.Mesh;
-  private readonly snowRing: THREE.LineLoop;
+  private readonly habitableRings: THREE.Mesh[] = [];
+  private readonly snowRings: THREE.LineLoop[] = [];
   private readonly tmp = new THREE.Vector3();
   private readonly lastFollow = new THREE.Vector3();
   private followId: string | null = null;
-  private zonesKey = '';
   private readonly resizeObserver: ResizeObserver;
 
   constructor(private readonly container: HTMLElement, private readonly onPick: (id: string | null) => void) {
@@ -89,20 +109,6 @@ export class SceneRenderer {
     this.selectionRing.renderOrder = 10;
     this.selectionRing.visible = false;
     this.scene.add(this.selectionRing);
-
-    this.habitableRing = new THREE.Mesh(
-      new THREE.RingGeometry(1, 2, 128),
-      new THREE.MeshBasicMaterial({ color: '#3fbf6a', transparent: true, opacity: 0.12, side: THREE.DoubleSide, depthWrite: false }),
-    );
-    this.habitableRing.rotation.x = -Math.PI / 2;
-    this.scene.add(this.habitableRing);
-
-    const snowGeom = new THREE.BufferGeometry().setFromPoints(
-      Array.from({ length: 256 }, (_, k) => new THREE.Vector3(Math.cos((k / 256) * Math.PI * 2), 0, Math.sin((k / 256) * Math.PI * 2))),
-    );
-    this.snowRing = new THREE.LineLoop(snowGeom, new THREE.LineDashedMaterial({ color: '#8fd8ff', dashSize: 0.04, gapSize: 0.04, transparent: true, opacity: 0.45 }));
-    this.snowRing.computeLineDistances();
-    this.scene.add(this.snowRing);
 
     this.renderer.domElement.addEventListener('pointerdown', this.onPointerDown);
     this.renderer.domElement.addEventListener('pointerup', this.onPointerUp);
@@ -170,8 +176,10 @@ export class SceneRenderer {
 
   private createEntry(body: Body): Entry {
     const group = new THREE.Group();
-    const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 32));
-    group.add(mesh);
+    const tilt = new THREE.Group();
+    group.add(tilt);
+    const mesh = new THREE.Mesh(body.kind === 'planetesimal' ? SMALL_SPHERE : SPHERE);
+    tilt.add(mesh);
 
     const labelEl = document.createElement('div');
     labelEl.className = `body-label body-label--${body.kind}`;
@@ -179,8 +187,8 @@ export class SceneRenderer {
     const label = new CSS2DObject(labelEl);
     group.add(label);
 
-    const entry: Entry = { body, group, mesh, label, labelEl, appearanceKey: '' };
-    if (body.kind !== 'moon') {
+    const entry: Entry = { body, kind: body.kind, group, tilt, mesh, label, labelEl, appearanceKey: '' };
+    if (body.kind === 'planet' || (body.kind === 'star' && body.parentId)) {
       const positions = new Float32Array(TRAIL_POINTS * 3);
       const geom = new THREE.BufferGeometry();
       geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
@@ -196,7 +204,7 @@ export class SceneRenderer {
 
   private updateAppearance(entry: Entry): void {
     const b = entry.body;
-    const key = [b.kind, b.planetType, b.color, b.radiusKm.toFixed(0), b.name].join('|');
+    const key = [b.kind, b.planetType, b.color, b.radiusKm.toFixed(0), b.name, b.axialTilt ?? 0, JSON.stringify(b.rings ?? null)].join('|');
     if (key === entry.appearanceKey) return;
     entry.appearanceKey = key;
 
@@ -215,19 +223,49 @@ export class SceneRenderer {
         entry.group.add(entry.light);
       }
       entry.glow.material.color.set(b.color);
-      entry.glow.scale.setScalar(r * 7);
+      entry.glow.scale.setScalar(r * 6);
       entry.light!.color.set(b.color);
+    } else if (b.kind === 'planetesimal') {
+      entry.mesh.material = new THREE.MeshStandardMaterial({ color: b.color, roughness: 1 });
     } else {
       const texture = makePlanetTexture(b.planetType as PlanetType, b.color, b.id);
       entry.mesh.material = new THREE.MeshStandardMaterial({ map: texture, roughness: 0.9, metalness: 0 });
     }
+    entry.tilt.rotation.set(0, 0, ((b.axialTilt ?? 0) * Math.PI) / 180);
+    this.updateRing(entry, b.rings, r);
     if (entry.trail) (entry.trail.line.material as THREE.LineBasicMaterial).color.set(b.color);
+  }
+
+  private updateRing(entry: Entry, rings: Rings | undefined, planetRadius: number): void {
+    if (entry.ring) {
+      entry.tilt.remove(entry.ring);
+      entry.ring.geometry.dispose();
+      const mat = entry.ring.material as THREE.MeshBasicMaterial;
+      mat.map?.dispose();
+      mat.dispose();
+      entry.ring = undefined;
+    }
+    if (!rings || rings.outer <= rings.inner) return;
+    const ring = new THREE.Mesh(
+      makeRingGeometry(rings.inner, rings.outer),
+      new THREE.MeshBasicMaterial({
+        map: makeRingTexture(rings.color, entry.body.id),
+        transparent: true,
+        opacity: rings.opacity,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      }),
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.scale.setScalar(planetRadius);
+    entry.tilt.add(ring);
+    entry.ring = ring;
   }
 
   private disposeEntry(entry: Entry): void {
     this.scene.remove(entry.group);
     entry.labelEl.remove();
-    entry.mesh.geometry.dispose();
+    this.updateRing(entry, undefined, 1);
     const mat = entry.mesh.material as THREE.MeshStandardMaterial;
     mat.map?.dispose();
     mat.dispose();
@@ -273,6 +311,11 @@ export class SceneRenderer {
     for (const body of bodies) {
       alive.add(body.id);
       let entry = this.entries.get(body.id);
+      if (entry && entry.kind !== body.kind) {
+        // Un planétésimal devenu protoplanète change de représentation.
+        this.disposeEntry(entry);
+        entry = undefined;
+      }
       if (!entry) {
         entry = this.createEntry(body);
         this.entries.set(body.id, entry);
@@ -289,7 +332,7 @@ export class SceneRenderer {
 
     // Positions : les parents d'abord (les corps sont triés par hiérarchie).
     const byId = new Map(bodies.map((b) => [b.id, b]));
-    const star = bodies.find((b) => b.kind === 'star');
+    const star = bodies.find((b) => b.kind === 'star' && !b.parentId) ?? bodies.find((b) => b.kind === 'star');
     for (const body of bodies) {
       const entry = this.entries.get(body.id)!;
       const parent = byId.get(body.parentId ?? '');
@@ -308,7 +351,10 @@ export class SceneRenderer {
       // Les noms des lunes n'apparaissent que de près, sinon ils recouvrent ceux des planètes.
       const related = body.id === selectedId || body.parentId === selectedId || byId.get(selectedId ?? '')?.parentId === body.parentId;
       entry.label.visible =
-        options.showLabels && (body.kind !== 'moon' || related || entry.group.position.distanceTo(this.camera.position) < 25);
+        options.showLabels &&
+        (body.kind === 'planetesimal'
+          ? body.id === selectedId
+          : body.kind !== 'moon' || related || entry.group.position.distanceTo(this.camera.position) < 25);
       entry.labelEl.classList.toggle('is-selected', body.id === selectedId);
       if (entry.trail) {
         entry.trail.line.visible = options.showTrails;
@@ -319,24 +365,7 @@ export class SceneRenderer {
       }
     }
 
-    // Zones de l'étoile (zone habitable et ligne des glaces).
-    if (star?.star) {
-      const starPos = this.entries.get(star.id)!.group.position;
-      const L = star.star.luminosity;
-      const zKey = L.toPrecision(6);
-      if (zKey !== this.zonesKey) {
-        this.zonesKey = zKey;
-        const hz = habitableZone(L);
-        this.habitableRing.geometry.dispose();
-        this.habitableRing.geometry = new THREE.RingGeometry(hz.inner * AU_SCALE, hz.outer * AU_SCALE, 160);
-        const s = snowLine(L) * AU_SCALE;
-        this.snowRing.scale.setScalar(s);
-      }
-      this.habitableRing.position.copy(starPos);
-      this.snowRing.position.copy(starPos);
-    }
-    this.habitableRing.visible = options.showZones && !!star;
-    this.snowRing.visible = options.showZones && !!star;
+    this.updateZones(bodies.filter((b) => b.kind === 'star'), options.showZones);
 
     // Sélection et suivi caméra.
     const selected = selectedId ? this.entries.get(selectedId) : undefined;
@@ -372,17 +401,76 @@ export class SceneRenderer {
   }
 
   /**
+   * Zone habitable et ligne des glaces. Pour une binaire serrée, les deux étoiles
+   * éclairent comme une seule : une zone commune autour du barycentre. Pour une
+   * binaire large, chaque étoile a la sienne.
+   */
+  private updateZones(stars: Body[], visible: boolean): void {
+    const specs: { position: THREE.Vector3; luminosity: number }[] = [];
+    const lum = (s: Body) => s.star?.luminosity ?? 0;
+    const pos = (s: Body) => this.entries.get(s.id)!.group.position;
+    if (stars.length > 1) {
+      const total = stars.reduce((sum, s) => sum + lum(s), 0);
+      let maxSep = 0;
+      for (const a of stars) for (const b of stars) maxSep = Math.max(maxSep, pos(a).distanceTo(pos(b)) / AU_SCALE);
+      if (maxSep < 0.5 * habitableZone(total).inner) {
+        const mass = stars.reduce((sum, s) => sum + s.mass, 0);
+        const center = new THREE.Vector3();
+        for (const s of stars) center.addScaledVector(pos(s), s.mass / mass);
+        specs.push({ position: center, luminosity: total });
+      }
+    }
+    if (specs.length === 0) for (const s of stars) specs.push({ position: pos(s).clone(), luminosity: lum(s) });
+
+    while (this.habitableRings.length < specs.length) {
+      const hz = new THREE.Mesh(
+        new THREE.RingGeometry(1, 2, 160),
+        new THREE.MeshBasicMaterial({ color: '#3fbf6a', transparent: true, opacity: 0.12, side: THREE.DoubleSide, depthWrite: false }),
+      );
+      hz.rotation.x = -Math.PI / 2;
+      hz.userData.key = '';
+      this.scene.add(hz);
+      this.habitableRings.push(hz);
+      const snow = new THREE.LineLoop(
+        new THREE.BufferGeometry().setFromPoints(
+          Array.from({ length: 256 }, (_, k) => new THREE.Vector3(Math.cos((k / 256) * Math.PI * 2), 0, Math.sin((k / 256) * Math.PI * 2))),
+        ),
+        new THREE.LineDashedMaterial({ color: '#8fd8ff', dashSize: 0.04, gapSize: 0.04, transparent: true, opacity: 0.45 }),
+      );
+      snow.computeLineDistances();
+      this.scene.add(snow);
+      this.snowRings.push(snow);
+    }
+    this.habitableRings.forEach((hz, k) => {
+      const spec = specs[k];
+      const snow = this.snowRings[k];
+      hz.visible = snow.visible = visible && !!spec && spec.luminosity > 0;
+      if (!spec) return;
+      const key = spec.luminosity.toPrecision(6);
+      if (hz.userData.key !== key) {
+        hz.userData.key = key;
+        const zone = habitableZone(spec.luminosity);
+        hz.geometry.dispose();
+        hz.geometry = new THREE.RingGeometry(zone.inner * AU_SCALE, zone.outer * AU_SCALE, 160);
+        snow.scale.setScalar(snowLine(spec.luminosity) * AU_SCALE);
+      }
+      hz.position.copy(spec.position);
+      snow.position.copy(spec.position);
+    });
+  }
+
+  /**
    * Recentre la caméra sur le système. On cadre sur la distance médiane des
    * planètes : cadrer sur la plus lointaine rendrait les planètes intérieures invisibles.
    */
   frameSystem(bodies: Body[]): void {
-    const star = bodies.find((b) => b.kind === 'star');
+    const star = bodies.find((b) => b.kind === 'star' && !b.parentId);
     const distances = bodies
-      .filter((b) => b.kind === 'planet' && star)
+      .filter((b) => (b.kind === 'planet' || b.kind === 'planetesimal') && star)
       .map((b) => Math.hypot(b.position.x - star!.position.x, b.position.y - star!.position.y, b.position.z - star!.position.z) * AU_SCALE)
       .sort((x, y) => x - y);
     const median = distances.length ? distances[Math.floor((distances.length - 1) / 2)] : 10;
-    const r = Math.max(median * 1.5, 8);
+    const r = Math.max(median * 1.5, 6);
     this.controls.target.set(0, 0, 0);
     this.camera.position.set(0, r * 0.9, r * 1.4);
     this.followId = null;

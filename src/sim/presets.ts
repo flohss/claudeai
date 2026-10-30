@@ -22,6 +22,12 @@ export function solarSystem(): SystemDefinition {
   const m = (name: string, parent: { id: string }, massEarth: number, radiusKm: number, aKm: number, e: number, i: number, nu: number, color: string) =>
     makeOrbiter({ name, kind: 'moon', planetType: 'naine', massEarth, radiusKm, parentId: parent.id, elements: { a: aKm / 1.495978707e8, e, i, nu }, color, albedo: 0.2 });
 
+  // Inclinaison des axes de rotation : elle oriente les anneaux.
+  const tilts: [typeof earth, number][] = [[mercury, 0], [venus, 177], [earth, 23.4], [mars, 25.2], [jupiter, 3.1], [saturn, 26.7], [uranus, 97.8], [neptune, 28.3], [pluto, 120]];
+  for (const [body, tilt] of tilts) body.axialTilt = tilt;
+  saturn.rings = { inner: 1.24, outer: 2.27, color: '#d9c7a0', opacity: 0.8 };
+  uranus.rings = { inner: 1.64, outer: 2.0, color: '#8a9aa6', opacity: 0.25 };
+
   return {
     name: 'Système solaire',
     bodies: [
@@ -34,6 +40,62 @@ export function solarSystem(): SystemDefinition {
       m('Titan', saturn, 0.0225, 2575, 1221870, 0.0288, 2.5, 60, '#e0a84a'),
     ],
   };
+}
+
+/**
+ * Kepler-16 : une naine orange et une naine rouge en orbite serrée, autour
+ * desquelles tourne une planète de la masse de Saturne (première planète
+ * circumbinaire découverte, 2011). Elle se trouve juste au-delà de la limite de
+ * stabilité de Holman-Wiegert (~0,65 UA). Kepler-16 c est hypothétique.
+ */
+export function tightBinary(): SystemDefinition {
+  const a = makeStar('K', 'Kepler-16 A');
+  a.mass = 0.69;
+  const b = makeStar('M', 'Kepler-16 B');
+  b.mass = 0.2;
+  b.star!.luminosity = 0.005;
+  b.parentId = a.id;
+  b.elements = { a: 0.224, e: 0.16, i: 0, Omega: 0, omega: 263.5, nu: 0 };
+  const planet = makeOrbiter({
+    name: 'Kepler-16 b',
+    planetType: 'geante-gazeuse',
+    massEarth: 105.8,
+    radiusKm: 52700,
+    parentId: a.id,
+    elements: { a: 0.7048, e: 0.0069, i: 0.3, omega: 318, nu: 90 },
+    color: '#d8c49a',
+  });
+  planet.circumbinary = true;
+  const outer = makeOrbiter({
+    name: 'Kepler-16 c (hypothétique)',
+    planetType: 'geante-glace',
+    massEarth: 15,
+    radiusKm: 24000,
+    parentId: a.id,
+    elements: { a: 1.6, e: 0.02, i: 1, nu: 250 },
+  });
+  outer.circumbinary = true;
+  return { name: 'Kepler-16 (binaire serrée)', bodies: [a, b, planet, outer] };
+}
+
+/**
+ * Alpha du Centaure A et B : deux étoiles proches du Soleil sur une orbite large
+ * et très excentrique. Chaque étoile peut retenir des planètes jusqu'à ~2,8 UA.
+ * Les planètes sont hypothétiques, placées dans la zone habitable de chaque étoile.
+ */
+export function wideBinary(): SystemDefinition {
+  const a = makeStar('G', 'Alpha Centauri A');
+  a.mass = 1.08;
+  a.star!.luminosity = 1.52;
+  const b = makeStar('K', 'Alpha Centauri B');
+  b.mass = 0.91;
+  b.star!.luminosity = 0.5;
+  b.parentId = a.id;
+  b.elements = { a: 23.4, e: 0.52, i: 0, Omega: 0, omega: 0, nu: 180 };
+  const pa = makeOrbiter({ name: 'Centauri A b (hypothétique)', planetType: 'tellurique', massEarth: 1.2, radiusKm: 6700, parentId: a.id, elements: { a: 1.25, e: 0.01, nu: 40 }, color: '#4f8cc9' });
+  const pa2 = makeOrbiter({ name: 'Centauri A c (hypothétique)', planetType: 'geante-glace', massEarth: 12, radiusKm: 23000, parentId: a.id, elements: { a: 2.4, e: 0.02, nu: 200 } });
+  const pb = makeOrbiter({ name: 'Centauri B b (hypothétique)', planetType: 'tellurique', massEarth: 0.8, radiusKm: 5900, parentId: b.id, elements: { a: 0.75, e: 0.01, nu: 120 }, color: '#6b8e4e' });
+  return { name: 'Alpha du Centaure (binaire large)', bodies: [a, b, pa, pa2, pb] };
 }
 
 /** Une étoile seule, pour construire son propre système. */

@@ -124,6 +124,13 @@ export function randomSystem(seed = Math.floor(Math.random() * 1e9)): SystemDefi
         nu: rng.range(0, 360),
       },
     });
+    if (planetType === 'geante-gazeuse' || planetType === 'geante-glace') {
+      planet.axialTilt = rng.range(0, 35);
+      if (rng.next() < 0.35) {
+        const inner = rng.range(1.2, 1.6);
+        planet.rings = { inner, outer: inner + rng.range(0.4, 1.2), color: rng.pick(['#d9c7a0', '#b8a888', '#9aa8b4', '#c8b8a0']), opacity: rng.range(0.3, 0.8) };
+      }
+    }
     planets.push(planet);
     bodies.push(planet);
     a *= rng.range(1.4, 2.0);

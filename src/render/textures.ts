@@ -101,3 +101,29 @@ export function makeGlowTexture(): THREE.CanvasTexture {
   glow = new THREE.CanvasTexture(canvas);
   return glow;
 }
+
+/**
+ * Texture radiale d'anneaux : u = 0 au bord intérieur, 1 au bord extérieur.
+ * Des bandes de densité variable, avec une division sombre comme celle de Cassini.
+ */
+export function makeRingTexture(color: string, seedKey: string): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 1;
+  const ctx = canvas.getContext('2d')!;
+  const rand = seeded(hashString(`anneau-${seedKey}`));
+  const base = new THREE.Color(color);
+  const gap = 0.55 + rand() * 0.2;
+  for (let x = 0; x < 512; x++) {
+    const u = x / 511;
+    let alpha = 0.35 + 0.65 * rand();
+    if (Math.abs(u - gap) < 0.025) alpha *= 0.08;
+    alpha *= Math.min(1, u * 12, (1 - u) * 12);
+    ctx.fillStyle = shade(base, 0.8 + rand() * 0.35);
+    ctx.globalAlpha = alpha;
+    ctx.fillRect(x, 0, 1, 1);
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
