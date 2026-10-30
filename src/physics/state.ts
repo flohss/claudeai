@@ -101,6 +101,16 @@ export class NBodyState {
    * bornée sur le long terme. Les accélérations doivent être à jour en entrée.
    */
   step(dt: number): void {
+    this.kickDrift(dt);
+    this.finishStep(dt);
+  }
+
+  /**
+   * Première moitié du pas : demi-impulsion puis déplacement. On peut tester les
+   * collisions à ce stade, avant de calculer la gravité aux nouvelles positions :
+   * deux corps qui se traversent subiraient sinon une attraction quasi infinie.
+   */
+  kickDrift(dt: number): void {
     const { n, px, py, pz, vx, vy, vz, ax, ay, az } = this;
     const half = dt / 2;
     for (let i = 0; i < n; i++) {
@@ -111,6 +121,12 @@ export class NBodyState {
       py[i] += vy[i] * dt;
       pz[i] += vz[i] * dt;
     }
+  }
+
+  /** Seconde moitié du pas : gravité aux nouvelles positions, puis demi-impulsion. */
+  finishStep(dt: number): void {
+    const { n, vx, vy, vz, ax, ay, az } = this;
+    const half = dt / 2;
     this.computeAccelerations();
     for (let i = 0; i < n; i++) {
       vx[i] += ax[i] * half;

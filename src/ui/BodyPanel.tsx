@@ -26,6 +26,8 @@ interface Props {
   onClose: () => void;
 }
 
+export const REMNANT_LABELS = { 'trou-noir': 'Trou noir', 'etoile-a-neutrons': 'Étoile à neutrons', 'naine-blanche': 'Naine blanche' } as const;
+
 const ZONE_LABELS = { 'trop-chaud': 'Trop chaud', habitable: 'Zone habitable', 'trop-froid': 'Trop froid' } as const;
 const VERDICT_LABELS = {
   'potentiellement-habitable': 'Potentiellement habitable',
@@ -42,24 +44,34 @@ function StarFacts({ sim, body }: { sim: Simulation; body: Body }) {
   const orbiting = sim.bodies.filter((b) => b.parentId === body.id && b.kind !== 'star' && !b.circumbinary);
   const primary = body.parentId ? sim.getBody(body.parentId) : undefined;
   const bin = primary ? currentElements(body, primary) : null;
+  const giant = sim.evolutions.some((e) => e.starId === body.id);
   return (
     <dl className="facts">
-      <dt>Classe</dt>
-      <dd>{SPECTRAL_CLASSES[props.spectralClass].label}</dd>
+      <dt>{props.remnant || giant ? 'Nature' : 'Classe'}</dt>
+      <dd>{props.remnant ? REMNANT_LABELS[props.remnant] : giant ? 'Géante rouge (en cours)' : SPECTRAL_CLASSES[props.spectralClass].label}</dd>
       <dt>Masse</dt>
       <dd>{num(body.mass)} M☉</dd>
-      <dt>Rayon</dt>
-      <dd>{num(body.radiusKm / SUN_RADIUS_KM)} R☉</dd>
-      <dt>Luminosité</dt>
-      <dd>{num(props.luminosity)} L☉</dd>
-      <dt>Température</dt>
-      <dd>{num(props.temperatureK, 4)} K</dd>
-      <dt>Zone habitable propre</dt>
-      <dd>
-        {num(hz.inner)} – {num(hz.outer)} UA
-      </dd>
-      <dt>Ligne des glaces</dt>
-      <dd>{num(snowLine(props.luminosity))} UA</dd>
+      {props.remnant === 'trou-noir' ? (
+        <>
+          <dt title="Rien, pas même la lumière, ne ressort de cette sphère.">Horizon des événements</dt>
+          <dd>{num(body.radiusKm, 3)} km</dd>
+        </>
+      ) : (
+        <>
+          <dt>Rayon</dt>
+          <dd>{props.remnant ? `${num(body.radiusKm, 3)} km` : `${num(body.radiusKm / SUN_RADIUS_KM)} R☉`}</dd>
+          <dt>Luminosité</dt>
+          <dd>{num(props.luminosity)} L☉</dd>
+          <dt>Température</dt>
+          <dd>{num(props.temperatureK, 4)} K</dd>
+          <dt>Zone habitable propre</dt>
+          <dd>
+            {num(hz.inner)} – {num(hz.outer)} UA
+          </dd>
+          <dt>Ligne des glaces</dt>
+          <dd>{num(snowLine(props.luminosity))} UA</dd>
+        </>
+      )}
       <dt>Corps en orbite</dt>
       <dd>{orbiting.filter((b) => b.kind !== 'planetesimal').length}</dd>
       {primary && bin && bin.a > 0 && (
@@ -86,7 +98,7 @@ function OrbiterFacts({ sim, body }: { sim: Simulation; body: Body }) {
   const bound = osc && osc.a > 0 && Number.isFinite(osc.a) && osc.e < 1;
   const aroundStars = body.circumbinary || parent?.kind === 'star';
   // Une lune reçoit la lumière des étoiles à la distance de sa planète.
-  const flux = stellarFlux(body, stars);
+  const flux = stellarFlux(body, sim.luminousBodies);
   const temp = equilibriumTemperatureFromFlux(flux, body.albedo);
   const zone = stars.length ? zoneStatusFromFlux(flux) : null;
   const habit = stars.length && body.kind !== 'planetesimal' ? assessHabitability(body, flux) : null;
@@ -394,7 +406,8 @@ export function BodyPanel({ sim, body, onClose }: Props) {
         </button>
       </header>
       {body.kind === 'star' ? <StarFacts sim={sim} body={body} /> : <OrbiterFacts sim={sim} body={body} />}
-      {body.kind !== 'star' && <EditForm key={`${body.id}-${body.parentId}-${body.kind}`} sim={sim} body={body} />}
+      {body.kind !== 'star' && !body.intruder && <EditForm key={`${body.id}-${body.parentId}-${body.kind}`} sim={sim} body={body} />}
+      {body.intruder && <p className="hint">Corps venu de l'extérieur : il traverse le système et n'y appartient pas.</p>}
     </section>
   );
 }

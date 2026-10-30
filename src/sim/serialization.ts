@@ -1,5 +1,5 @@
 import type { Body } from '../physics/types';
-import type { FormationSettings, Simulation, SystemDefinition } from './Simulation';
+import type { FormationSettings, Simulation, StellarEvolution, SystemDefinition } from './Simulation';
 
 export const FILE_FORMAT = 'simulateur-systeme-solaire';
 export const FILE_VERSION = 1;
@@ -10,6 +10,7 @@ interface SystemFile {
   name: string;
   time: number;
   formation?: FormationSettings | null;
+  evolutions?: StellarEvolution[];
   bodies: Body[];
 }
 
@@ -21,6 +22,7 @@ export function serialize(sim: Simulation): string {
     name: snap.name,
     time: snap.time ?? 0,
     formation: snap.formation ?? null,
+    evolutions: snap.evolutions ?? [],
     bodies: snap.bodies,
   };
   return JSON.stringify(file, null, 2);
@@ -44,7 +46,7 @@ export function deserialize(text: string): SystemDefinition {
 
   const stars = file.bodies.filter((b) => b?.kind === 'star');
   if (stars.length === 0) throw new Error('La sauvegarde doit contenir au moins une étoile.');
-  if (stars.filter((b) => !b.parentId).length !== 1) throw new Error('La sauvegarde doit contenir une seule étoile principale.');
+  if (stars.filter((b) => !b.parentId && !b.intruder).length !== 1) throw new Error('La sauvegarde doit contenir une seule étoile principale.');
   const ids = new Set<string>();
   for (const b of file.bodies) {
     if (!b || typeof b.id !== 'string' || typeof b.name !== 'string') throw new Error('Corps invalide dans la sauvegarde.');
@@ -59,5 +61,8 @@ export function deserialize(text: string): SystemDefinition {
   const f = file.formation;
   const formation =
     f && [f.gasUntil, f.gasTimescale, f.coreMassEarth, f.maxGiantMassEarth].every(isNum) ? f : null;
-  return { name: file.name ?? 'Système importé', time: isNum(file.time) ? file.time : 0, formation, bodies: file.bodies };
+  const evolutions = (Array.isArray(file.evolutions) ? file.evolutions : []).filter(
+    (e) => e && ids.has(e.starId) && [e.start, e.duration, e.from?.mass, e.from?.radiusKm, e.from?.luminosity, e.to?.mass, e.to?.radiusKm, e.to?.luminosity].every(isNum),
+  );
+  return { name: file.name ?? 'Système importé', time: isNum(file.time) ? file.time : 0, formation, evolutions, bodies: file.bodies };
 }

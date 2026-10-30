@@ -28,7 +28,8 @@ export function equilibriumTemperature(luminosity: number, distanceAu: number, a
 
 /** Même calcul à partir du flux reçu, en multiples du flux reçu par la Terre. */
 export function equilibriumTemperatureFromFlux(flux: number, albedo: number): number {
-  return 278.6 * Math.pow(flux * (1 - albedo), 0.25);
+  // Sans étoile, il reste le rayonnement fossile du Big Bang (2,7 K).
+  return Math.pow(278.6 ** 4 * flux * (1 - albedo) + 2.725 ** 4, 0.25);
 }
 
 /** Flux total reçu de toutes les étoiles (1 = flux reçu par la Terre). */

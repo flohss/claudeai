@@ -1,12 +1,22 @@
-import { currentElements, density, rocheLimitKm, type Frame } from '../physics/derived';
+import { currentElements, density, rocheLimitKm, surfaceGravity, type Frame } from '../physics/derived';
+import {
+  CHICXULUB_MT,
+  MEGATON_J,
+  craterDiameterKm,
+  impactEnergyJ,
+  impactSeverity,
+  schwarzschildRadiusKm,
+  tidalRadiusKm,
+} from '../physics/impacts';
 import { centerOfMass, findCollision, mergeBodies, recenter } from '../physics/nbody';
 import { NBodyState } from '../physics/state';
-import { elementsToState, hillRadius, mu, orbitalPeriod } from '../physics/orbits';
+import { elementsToState, hillRadius, hyperbolicState, mu, orbitalPeriod } from '../physics/orbits';
 import { SPECTRAL_CLASSES, snowLine, starPropsFor } from '../physics/stars';
-import type { Body, OrbitalElements, PlanetType, SpectralClass } from '../physics/types';
-import { AU_KM, DAYS_PER_YEAR, EARTH_MASS_SUN, G, SUN_RADIUS_KM } from '../physics/units';
-import { add, clone, distance, dot, scale, sub } from '../physics/vec3';
-import { DEFAULT_COLOR, estimateRadiusKm, makeStar } from './factory';
+import type { Body, OrbitalElements, PlanetType, Remnant, SpectralClass } from '../physics/types';
+import { AU_KM, DAYS_PER_YEAR, EARTH_MASS_SUN, G, SUN_RADIUS_KM, kmToAu } from '../physics/units';
+import { add, clone, cross, distance, dot, length, scale, sub, type Vec3 } from '../physics/vec3';
+import { num } from '../format';
+import { DEFAULT_COLOR, estimateRadiusKm, makeOrbiter, makeStar } from './factory';
 
 /**
  * Paramètres du modèle (accéléré) de formation planétaire. Tant que le gaz du
@@ -24,19 +34,69 @@ export interface FormationSettings {
   maxGiantMassEarth: number;
 }
 
+/** Évolution progressive d'une étoile (phase de géante rouge, en temps accéléré). */
+export interface StellarEvolution {
+  starId: string;
+  start: number;
+  duration: number;
+  from: { mass: number; radiusKm: number; luminosity: number };
+  to: { mass: number; radiusKm: number; luminosity: number };
+}
+
 export interface SystemDefinition {
   name: string;
   bodies: Body[];
   /** Temps simulé (années). Absent = 0. */
   time?: number;
   formation?: FormationSettings | null;
+  evolutions?: StellarEvolution[];
 }
 
 export interface SimEvent {
   time: number;
-  kind: 'collision' | 'ejection' | 'evasion' | 'formation' | 'roche' | 'info';
+  kind: 'collision' | 'ejection' | 'evasion' | 'formation' | 'roche' | 'impact' | 'maree' | 'etoile' | 'intrus' | 'info';
   message: string;
+  /** Lieu de l'événement, pour l'effet visuel */
+  position?: Vec3;
+  flash?: 'impact' | 'supernova' | 'maree';
 }
+
+/** Corps venu de l'extérieur qui traverse le système. */
+export interface IntruderSpec {
+  id: string;
+  name: string;
+  type: 'etoile' | 'trou-noir' | 'planete';
+  /** Masse (M☉) */
+  mass: number;
+  /** Pour une étoile */
+  spectralClass?: SpectralClass;
+  periapsisAu: number;
+  speedKmS: number;
+  /** Orientation de la trajectoire (°) */
+  i: number;
+  Omega: number;
+  omega: number;
+}
+
+/** Astéroïde ou planétésimal lancé sur un corps. */
+export interface ImpactorSpec {
+  id: string;
+  targetId: string;
+  name: string;
+  /** Diamètre (km) */
+  diameterKm: number;
+  /** Masse (M☉) */
+  mass: number;
+  speedKmS: number;
+  /** Direction d'arrivée (°) */
+  azimuth: number;
+  elevation: number;
+}
+
+export type ImpulseDirection = 'prograde' | 'retrograde' | 'exterieur' | 'interieur' | 'perpendiculaire';
+
+/** 1 km/s en UA/an */
+export const KM_S = 0.210945;
 
 export type BodyPatch = Partial<Pick<Body, 'name' | 'planetType' | 'mass' | 'radiusKm' | 'color' | 'albedo' | 'rings' | 'axialTilt'>> & {
   elements?: OrbitalElements;
@@ -49,7 +109,7 @@ export const PROTOPLANET_MASS_EARTH = 0.5;
 const MAX_EVENTS = 80;
 
 /** Nombre court au format français pour le journal. */
-const fr = (n: number, digits: number) => n.toPrecision(digits).replace('.', ',');
+const fr = (n: number, digits: number) => num(n, digits);
 
 const cloneBody = (b: Body): Body => ({
   ...b,
@@ -89,6 +149,16 @@ function classify(massEarth: number, beyondSnowLine: boolean): PlanetType {
   return 'tellurique';
 }
 
+/**
+ * Éléments orbitaux de référence d'un corps qui change d'hôte. Une trajectoire
+ * non liée (hyperbolique) n'a pas d'orbite de référence : on garde alors une
+ * orbite circulaire à la distance actuelle, dans le même plan.
+ */
+function referenceElements(el: OrbitalElements, distanceAu: number): OrbitalElements {
+  if (el.a > 0 && Number.isFinite(el.a) && el.e < 1) return el;
+  return { ...el, a: distanceAu, e: 0 };
+}
+
 /** Mélange de deux couleurs pondéré par la masse. */
 function blendColors(c1: string, m1: number, c2: string, m2: number): string {
   const p = (c: string, k: number) => parseInt(c.slice(1 + 2 * k, 3 + 2 * k), 16);
@@ -118,11 +188,14 @@ export class Simulation {
   /** Incrémenté à chaque chargement ou réinitialisation (repart d'un nouvel historique) */
   epoch = 0;
   formation: FormationSettings | null = null;
+  evolutions: StellarEvolution[] = [];
 
   /** Copie compacte de l'état dynamique, synchronisée avec `bodies` par `rebuild`. */
   private state = new NBodyState();
   private dtMax = 0.001;
   private protoCounter = 0;
+  /** Corps déjà signalés comme n'étant plus liés à leur étoile */
+  private unboundLogged = new Set<string>();
   private initial: SystemDefinition = { name: '', bodies: [] };
   private listeners = new Set<() => void>();
 
@@ -142,13 +215,20 @@ export class Simulation {
     this.listeners.forEach((l) => l());
   }
 
+  /** Étoiles du système (sans les étoiles ou trous noirs de passage). */
   get stars(): Body[] {
-    return this.bodies.filter((b) => b.kind === 'star');
+    return this.bodies.filter((b) => b.kind === 'star' && !b.intruder);
+  }
+
+  /** Toutes les sources de lumière, y compris une étoile de passage. */
+  get luminousBodies(): Body[] {
+    return this.bodies.filter((b) => b.kind === 'star' && (b.star?.luminosity ?? 0) > 0);
   }
 
   /** L'étoile principale (sans parent). */
   get star(): Body | undefined {
-    return this.bodies.find((b) => b.kind === 'star' && !b.parentId) ?? this.bodies.find((b) => b.kind === 'star');
+    const stars = this.stars;
+    return stars.find((b) => !b.parentId) ?? stars[0];
   }
 
   /** Index par identifiant, reconstruit quand le tableau `bodies` est remplacé. */
@@ -196,6 +276,7 @@ export class Simulation {
     this.name = def.name;
     this.time = def.time ?? 0;
     this.formation = def.formation ? { ...def.formation } : null;
+    this.evolutions = (def.evolutions ?? []).map((e) => structuredClone(e));
     this.bodies = orderByHierarchy(def.bodies.map(cloneBody));
     this.protoCounter = this.bodies.filter((b) => b.accretionScale && b.kind !== 'planetesimal').length;
     if (placeFromElements) {
@@ -203,6 +284,7 @@ export class Simulation {
       recenter(this.bodies);
     }
     this.events = [];
+    this.unboundLogged.clear();
     this.initial = this.snapshot();
     this.epoch += 1;
     this.rebuild();
@@ -218,6 +300,7 @@ export class Simulation {
       name: this.name,
       time: this.time,
       formation: this.formation ? { ...this.formation } : null,
+      evolutions: this.evolutions.map((e) => structuredClone(e)),
       bodies: this.bodies.map(cloneBody),
     };
   }
@@ -346,8 +429,8 @@ export class Simulation {
     this.changed();
   }
 
-  private log(kind: SimEvent['kind'], message: string): void {
-    this.events.unshift({ time: this.time, kind, message });
+  private log(kind: SimEvent['kind'], message: string, extra?: Pick<SimEvent, 'position' | 'flash'>): void {
+    this.events.unshift({ time: this.time, kind, message, ...extra });
     if (this.events.length > MAX_EVENTS) this.events.length = MAX_EVENTS;
   }
 
@@ -356,7 +439,60 @@ export class Simulation {
     this.state.load(this.bodies);
     this.state.computeAccelerations();
     this.dtMax = this.computeMaxDt();
+    this.prepareTidal();
     this.changed();
+  }
+
+  /** Corps compacts (trous noirs, étoiles à neutrons) et carré des rayons de marée de leurs victimes (UA²). */
+  private tidal: { index: number; r2: Float64Array }[] = [];
+
+  private prepareTidal(): void {
+    this.tidal = [];
+    this.bodies.forEach((c, index) => {
+      const remnant = c.star?.remnant;
+      if (remnant !== 'trou-noir' && remnant !== 'etoile-a-neutrons') return;
+      const r2 = new Float64Array(this.bodies.length);
+      this.bodies.forEach((v, j) => {
+        if (j === index || v.mass >= c.mass || v.star?.remnant === 'trou-noir' || v.star?.remnant === 'etoile-a-neutrons') return;
+        const r = kmToAu(tidalRadiusKm(v.radiusKm, c.mass, v.mass));
+        r2[j] = r * r;
+      });
+      this.tidal.push({ index, r2 });
+    });
+  }
+
+  /** Renvoie [compact, victime] si un corps vient de passer sous un rayon de marée. */
+  private findTidalDisruption(): [number, number] | null {
+    const { px, py, pz } = this.state;
+    for (const { index: c, r2 } of this.tidal) {
+      for (let j = 0; j < r2.length; j++) {
+        if (r2[j] === 0) continue;
+        const dx = px[j] - px[c];
+        const dy = py[j] - py[c];
+        const dz = pz[j] - pz[c];
+        if (dx * dx + dy * dy + dz * dz < r2[j]) return [c, j];
+      }
+    }
+    return null;
+  }
+
+  private handleTidalDisruption(c: number, j: number): void {
+    const compact = this.bodies[c];
+    const victim = this.bodies[j];
+    const position = clone(victim.position);
+    const wasHost = victim.kind === 'star' && !victim.intruder;
+    mergeBodies(compact, victim);
+    this.bodies = this.bodies.filter((x) => x !== victim);
+    for (const x of this.bodies) if (x.parentId === victim.id) x.parentId = compact.id;
+    // Un intrus qui détruit l'étoile du système en devient le centre.
+    if (wasHost) compact.intruder = false;
+    const fate = compact.star?.remnant === 'trou-noir' ? 'ses débris tombent dans le trou noir' : "ses débris s'écrasent sur l'étoile à neutrons";
+    this.log('maree', `${victim.name} est déchiquetée par les forces de marée de ${compact.name} (« spaghettification ») ; ${fate}.`, {
+      position,
+      flash: 'maree',
+    });
+    this.bodies = orderByHierarchy(this.bodies);
+    this.rebuild();
   }
 
   /** ~200 pas par orbite au périastre pour l'orbite la plus rapide. */
@@ -365,14 +501,18 @@ export class Simulation {
     for (const b of this.bodies) {
       const frame = this.frameOf(b);
       if (!frame) continue;
-      let { a, e } = b.elements ?? { a: distance(b.position, frame.position), e: 0 };
+      let a = distance(b.position, frame.position);
+      let e = 0;
+      if (b.elements && b.elements.a > 0 && b.elements.e < 1) ({ a, e } = b.elements);
       const osc = currentElements(b, frame);
       if (osc.a > 0 && Number.isFinite(osc.a) && osc.e < 1) {
         a = osc.a;
         e = osc.e;
       }
       const period = orbitalPeriod(a, frame.mass, b.mass);
-      dt = Math.min(dt, (period * Math.pow(1 - Math.min(e, 0.95), 1.5)) / 200);
+      const candidate = (period * Math.pow(1 - Math.min(e, 0.95), 1.5)) / 200;
+      // Garde-fou : une valeur invalide ne doit jamais contaminer tout le calcul.
+      if (Number.isFinite(candidate) && candidate > 0) dt = Math.min(dt, candidate);
     }
     return Math.max(dt, 1e-7);
   }
@@ -402,27 +542,60 @@ export class Simulation {
     this.run(years, Infinity);
   }
 
+  /**
+   * Pas maximal imposé par les intrus : leur rencontre avec un corps doit être
+   * découpée finement, quelle que soit la stabilité des orbites du système.
+   */
+  private encounterDt(): number {
+    let dt = Infinity;
+    const { px, py, pz, m, n } = this.state;
+    for (let c = 0; c < n; c++) {
+      if (!this.bodies[c]?.intruder) continue;
+      for (let j = 0; j < n; j++) {
+        if (j === c) continue;
+        const d2 = (px[j] - px[c]) ** 2 + (py[j] - py[c]) ** 2 + (pz[j] - pz[c]) ** 2;
+        const d = Math.sqrt(d2);
+        const candidate = 0.01 * Math.sqrt((d2 * d) / (G * (m[c] + m[j])));
+        if (Number.isFinite(candidate)) dt = Math.min(dt, candidate);
+      }
+    }
+    return Math.max(dt, 1e-8);
+  }
+
   private run(years: number, budgetMs: number): number {
     const start = performance.now();
-    const steps = Math.max(1, Math.ceil(years / this.dtMax));
-    const dt = years / steps;
     let done = 0;
+    let encounter = this.encounterDt();
     // L'intégration se fait dans `state` ; les corps sont mis à jour avant
     // chaque règle qui les lit, et `rebuild` recharge l'état après une modification.
-    for (let k = 0; k < steps; k++) {
-      this.state.step(dt);
+    // Le pas est recalculé à chaque tour : une fusion, une lune née d'un impact
+    // ou l'approche d'un intrus peuvent exiger des pas plus fins.
+    for (let k = 0; done < years * (1 - 1e-12); k++) {
+      const dt = Math.min(this.dtMax, encounter, years - done);
+      this.state.kickDrift(dt);
       this.time += dt;
       done += dt;
+      // Collisions et marées sont testées avant la gravité aux nouvelles positions.
+      // Après une fusion, `rebuild` recalcule les accélérations et la demi-impulsion
+      // finale est sautée (la collision, inélastique, ne conserve pas l'énergie).
       const pair = this.state.findCollision(dt);
+      const disruption = pair ? null : this.tidal.length > 0 ? this.findTidalDisruption() : null;
       if (pair) {
         this.state.store(this.bodies);
         this.handleCollisions(pair);
+      } else if (disruption) {
+        this.state.store(this.bodies);
+        this.handleTidalDisruption(...disruption);
+      } else {
+        this.state.finishStep(dt);
       }
       if ((k & 31) === 31) {
+        encounter = this.encounterDt();
         // Les règles plus coûteuses ne sont évaluées que périodiquement.
         this.state.store(this.bodies);
         this.handleEscapes();
         this.handleRoche();
+        this.applyEvolutions();
         if (performance.now() - start > budgetMs) break;
       }
     }
@@ -430,6 +603,7 @@ export class Simulation {
     this.handleEscapes();
     this.handleRoche();
     this.handleGasAccretion(done);
+    this.applyEvolutions();
     return done;
   }
 
@@ -440,6 +614,7 @@ export class Simulation {
       const b = this.bodies[pair[1]];
       const colorA = a.color;
       const colorB = b.color;
+      const relativeSpeed = length(sub(a.velocity, b.velocity));
       const [survivor, absorbed] = mergeBodies(a, b);
       this.bodies = this.bodies.filter((x) => x !== absorbed);
       for (const x of this.bodies) if (x.parentId === absorbed.id) x.parentId = survivor.id;
@@ -449,12 +624,285 @@ export class Simulation {
         this.growFromDisk(survivor);
       }
       // Les fusions de planétésimaux sont trop nombreuses pour être toutes journalisées.
-      if (absorbed.kind !== 'planetesimal') {
-        this.log('collision', `Collision : ${survivor.name} absorbe ${absorbed.name}.`);
-      }
+      if (absorbed.kind !== 'planetesimal') this.describeCollision(survivor, absorbed, relativeSpeed);
       pair = findCollision(this.bodies);
     }
     this.bodies = orderByHierarchy(this.bodies);
+    this.rebuild();
+  }
+
+  /** Journalise une collision, avec l'énergie libérée et ses conséquences. */
+  private describeCollision(survivor: Body, absorbed: Body, relativeSpeed: number): void {
+    const position = clone(survivor.position);
+    const remnant = survivor.star?.remnant;
+    if (remnant === 'trou-noir' || remnant === 'etoile-a-neutrons') {
+      const fate = remnant === 'trou-noir' ? 'ses débris tombent dans le trou noir' : "ses débris s'écrasent sur l'étoile à neutrons";
+      this.log('maree', `${absorbed.name} est déchiquetée par les forces de marée de ${survivor.name} (« spaghettification ») ; ${fate}.`, {
+        position,
+        flash: 'maree',
+      });
+      if (absorbed.kind === 'star' && !absorbed.intruder) survivor.intruder = false;
+      return;
+    }
+    if (survivor.kind === 'star') {
+      this.log('collision', `${absorbed.name} est engloutie par ${survivor.name}.`, { position, flash: 'impact' });
+      return;
+    }
+    const before = survivor.mass - absorbed.mass;
+    const ratio = absorbed.mass / before;
+    const megatons = impactEnergyJ(before, absorbed.mass, relativeSpeed) / MEGATON_J;
+    const speedKmS = relativeSpeed / KM_S;
+    const energy = `${fr(megatons, 2)} Mt de TNT, ${fr(megatons / CHICXULUB_MT, 2)} × Chicxulub`;
+    const solid = survivor.planetType === 'tellurique' || survivor.planetType === 'naine';
+    if (ratio < 1e-3) {
+      let detail: string;
+      if (!solid) {
+        detail = "il disparaît dans l'atmosphère de la géante, comme la comète Shoemaker-Levy 9 sur Jupiter en 1994";
+      } else {
+        const g = surfaceGravity(before, survivor.radiusKm);
+        const crater = craterDiameterKm(absorbed.radiusKm * 2, speedKmS, g);
+        detail = `cratère d'environ ${fr(crater, 2)} km ; ${impactSeverity(megatons)}`;
+      }
+      this.log('impact', `Impact de ${absorbed.name} sur ${survivor.name} à ${fr(speedKmS, 2)} km/s : ${energy} ; ${detail}.`, { position, flash: 'impact' });
+      return;
+    }
+    let message = `Impact géant : ${survivor.name} absorbe ${absorbed.name} (${energy}).`;
+    if (solid) message += ' La surface fond entièrement en un océan de magma.';
+    // Comme pour la formation de la Lune, une partie des débris peut se rassembler en orbite.
+    if (ratio >= 0.01 && survivor.kind === 'planet' && !survivor.accretionScale) {
+      const moonMassEarth = (0.15 * absorbed.mass) / EARTH_MASS_SUN;
+      const moonRadius = estimateRadiusKm('naine', moonMassEarth);
+      const roche = rocheLimitKm(survivor.radiusKm, density(survivor.mass, survivor.radiusKm), 3.3);
+      const moon = makeOrbiter({
+        name: `Lune de ${survivor.name}`,
+        kind: 'moon',
+        planetType: 'naine',
+        massEarth: moonMassEarth,
+        radiusKm: moonRadius,
+        parentId: survivor.id,
+        color: '#b9b2a8',
+        elements: { a: kmToAu(roche * 1.6), e: 0.02 },
+      });
+      survivor.mass -= moon.mass;
+      this.bodies.push(moon);
+      this.place(moon);
+      message += ` Une partie des débris s'agrège en orbite : naissance de « ${moon.name} ».`;
+    }
+    this.log('impact', message, { position, flash: 'impact' });
+  }
+
+  // ─── Événements déclenchés par l'utilisateur ──────────────────────────────
+
+  /**
+   * Fait traverser le système par un corps venu de loin, sur une trajectoire
+   * hyperbolique autour du barycentre des étoiles. Renvoie le temps (années)
+   * avant son passage au plus près.
+   */
+  launchIntruder(spec: IntruderSpec): number {
+    const frame = this.stars.length ? this.starsFrame() : centerOfMass(this.bodies);
+    const outermost = Math.max(0, ...this.bodies.map((b) => distance(b.position, frame.position)));
+    const startDistance = Math.min(Math.max(spec.periapsisAu * 4, outermost * 1.3, 15), EJECTION_DISTANCE_AU * 0.6);
+    const body =
+      spec.type === 'planete'
+        ? makeOrbiter({
+            id: spec.id,
+            name: spec.name,
+            planetType: 'geante-gazeuse',
+            massEarth: spec.mass / EARTH_MASS_SUN,
+            radiusKm: estimateRadiusKm('geante-gazeuse', spec.mass / EARTH_MASS_SUN),
+            parentId: '',
+            elements: { a: 1 },
+            color: '#8d7bb8',
+          })
+        : makeStar(spec.spectralClass ?? 'K', spec.name);
+    body.id = spec.id;
+    body.parentId = null;
+    body.elements = null;
+    body.intruder = true;
+    if (spec.type === 'etoile') body.mass = spec.mass;
+    if (spec.type === 'trou-noir') this.makeRemnant(body, 'trou-noir', spec.mass);
+    const muValue = mu(frame.mass, body.mass);
+    const hyper = hyperbolicState(spec.periapsisAu, spec.speedKmS * KM_S, startDistance, spec, muValue);
+    body.position = add(frame.position, hyper.position);
+    body.velocity = add(frame.velocity, hyper.velocity);
+    this.bodies.push(body);
+    this.bodies = orderByHierarchy(this.bodies);
+    const what = spec.type === 'trou-noir' ? 'Un trou noir' : spec.type === 'etoile' ? 'Une étoile' : 'Une planète vagabonde';
+    this.log('intrus', `${what} (${body.name}) approche : passage au plus près à ${fr(spec.periapsisAu, 3)} UA dans environ ${fr(hyper.timeToPeriapsis, 2)} ans.`);
+    this.rebuild();
+    return hyper.timeToPeriapsis;
+  }
+
+  /** Lance un impacteur droit sur un corps. */
+  launchImpactor(spec: ImpactorSpec): void {
+    const target = this.getBody(spec.targetId);
+    if (!target) return;
+    const az = (spec.azimuth * Math.PI) / 180;
+    const el = (spec.elevation * Math.PI) / 180;
+    const dir = { x: Math.cos(el) * Math.cos(az), y: Math.cos(el) * Math.sin(az), z: Math.sin(el) };
+    // Départ à 60 rayons de la cible : assez loin pour que la trajectoire se courbe, assez près pour toucher.
+    const d = kmToAu(target.radiusKm * 60);
+    const radiusKm = spec.diameterKm / 2;
+    const body = makeOrbiter({ id: spec.id, name: spec.name, planetType: 'naine', massEarth: spec.mass / EARTH_MASS_SUN, radiusKm, parentId: '', elements: { a: 1 }, color: '#8a7f73' });
+    body.parentId = null;
+    body.elements = null;
+    body.intruder = true;
+    body.position = add(target.position, scale(dir, d));
+    body.velocity = sub(target.velocity, scale(dir, spec.speedKmS * KM_S));
+    this.bodies.push(body);
+    this.bodies = orderByHierarchy(this.bodies);
+    this.rebuild();
+  }
+
+  /** Transforme une étoile en astre compact (masse, rayon, luminosité, couleur). */
+  private makeRemnant(star: Body, remnant: Remnant, mass: number): void {
+    star.mass = mass;
+    star.star = { ...(star.star ?? starPropsFor('M')), remnant };
+    if (remnant === 'trou-noir') {
+      star.radiusKm = schwarzschildRadiusKm(mass);
+      star.star.luminosity = 0;
+      star.star.temperatureK = 0;
+      star.color = '#000000';
+    } else if (remnant === 'etoile-a-neutrons') {
+      star.radiusKm = 12;
+      star.star.luminosity = 1e-4;
+      star.star.temperatureK = 600000;
+      star.color = '#cfe3ff';
+    } else {
+      star.radiusKm = 7000;
+      star.star.luminosity = 1e-3;
+      star.star.temperatureK = 25000;
+      star.color = '#e8eeff';
+    }
+  }
+
+  /**
+   * Supernova : l'étoile perd brutalement l'essentiel de sa masse. Les planètes
+   * gardent leur vitesse mais l'attraction chute : au-delà de 50 % de masse
+   * perdue, une orbite circulaire n'est plus liée.
+   */
+  supernova(starId: string, remnantMass: number): void {
+    const star = this.getBody(starId);
+    if (!star?.star) return;
+    const lost = 1 - remnantMass / star.mass;
+    const remnant: Remnant = remnantMass > 3 ? 'trou-noir' : remnantMass >= 1.2 ? 'etoile-a-neutrons' : 'naine-blanche';
+    this.makeRemnant(star, remnant, remnantMass);
+    const names = { 'trou-noir': 'un trou noir', 'etoile-a-neutrons': 'une étoile à neutrons', 'naine-blanche': 'une naine blanche' };
+    this.log(
+      'etoile',
+      `Supernova ! ${star.name} expulse ${fr(lost * 100, 2)} % de sa masse et laisse ${names[remnant]}.` +
+        (lost > 0.5 ? " Plus de la moitié de la masse a disparu : les planètes sur des orbites presque circulaires ne sont plus retenues." : ' Les orbites s’élargissent.'),
+      { position: clone(star.position), flash: 'supernova' },
+    );
+    this.evolutions = this.evolutions.filter((e) => e.starId !== starId);
+    this.rebuild();
+  }
+
+  /** L'étoile devient un trou noir de même masse : les orbites ne changent pas, la lumière disparaît. */
+  collapseToBlackHole(starId: string): void {
+    const star = this.getBody(starId);
+    if (!star?.star) return;
+    this.makeRemnant(star, 'trou-noir', star.mass);
+    this.log(
+      'etoile',
+      `${star.name} s'effondre en un trou noir de même masse (horizon de ${fr(star.radiusKm, 2)} km). Les orbites ne changent pas : seule la masse compte pour la gravité. Mais les planètes plongent dans le noir et le froid.`,
+      { position: clone(star.position), flash: 'maree' },
+    );
+    this.evolutions = this.evolutions.filter((e) => e.starId !== starId);
+    this.rebuild();
+  }
+
+  /**
+   * Phase de géante rouge, en temps accéléré : l'étoile gonfle jusqu'à ~250 fois
+   * son rayon, devient des milliers de fois plus lumineuse et perd 30 % de sa
+   * masse. Elle engloutit les planètes proches ; les autres s'éloignent.
+   * Elle finit en naine blanche.
+   */
+  startRedGiant(starId: string, durationYears: number): void {
+    const star = this.getBody(starId);
+    if (!star?.star || star.star.remnant) return;
+    this.evolutions = this.evolutions.filter((e) => e.starId !== starId);
+    this.evolutions.push({
+      starId,
+      start: this.time,
+      duration: Math.max(durationYears, 0.1),
+      from: { mass: star.mass, radiusKm: star.radiusKm, luminosity: star.star.luminosity },
+      to: { mass: star.mass * 0.7, radiusKm: 256 * SUN_RADIUS_KM * Math.sqrt(star.mass), luminosity: 2500 * star.mass },
+    });
+    this.log('etoile', `${star.name} épuise son hydrogène et commence à gonfler en géante rouge.`);
+    this.changed();
+  }
+
+  private applyEvolutions(): void {
+    if (this.evolutions.length === 0) return;
+    let changed = false;
+    for (const evo of this.evolutions.slice()) {
+      const star = this.getBody(evo.starId);
+      if (!star?.star) {
+        this.evolutions = this.evolutions.filter((e) => e !== evo);
+        continue;
+      }
+      const f = Math.min(1, (this.time - evo.start) / evo.duration);
+      const geo = (a: number, b: number) => a * Math.pow(b / a, f);
+      const radius = geo(evo.from.radiusKm, evo.to.radiusKm);
+      // L'essentiel de la masse est perdu en fin de phase, quand l'étoile est la plus grosse.
+      const mass = evo.from.mass + (evo.to.mass - evo.from.mass) * f * f;
+      // On ne reconstruit l'état que si l'étoile a sensiblement changé.
+      if (Math.abs(radius / star.radiusKm - 1) > 0.003 || Math.abs(mass / star.mass - 1) > 0.001 || f >= 1) {
+        star.radiusKm = radius;
+        star.mass = mass;
+        star.star.luminosity = geo(evo.from.luminosity, evo.to.luminosity);
+        star.star.temperatureK = 3500 + (5800 - 3500) * (1 - f);
+        star.color = blendColors('#ff7a3d', f, '#fff1c9', 1 - f + 1e-9);
+        changed = true;
+      }
+      if (f >= 1) {
+        this.evolutions = this.evolutions.filter((e) => e !== evo);
+        this.makeRemnant(star, 'naine-blanche', evo.to.mass * 0.78);
+        this.log(
+          'etoile',
+          `${star.name} rejette ses couches externes (nébuleuse planétaire) : il reste une naine blanche de la taille de la Terre.`,
+          { position: clone(star.position), flash: 'supernova' },
+        );
+      }
+    }
+    if (changed) this.rebuild();
+  }
+
+  /**
+   * Donne une impulsion à un corps (et à ses lunes). Les directions sont
+   * relatives à son orbite ; pour un corps sans orbite, elles sont prises dans
+   * le plan de référence.
+   */
+  applyImpulse(id: string, deltaVKmS: number, direction: ImpulseDirection): void {
+    const body = this.getBody(id);
+    if (!body) return;
+    const frame = this.frameOf(body) ?? centerOfMass(this.bodies.filter((b) => b !== body));
+    let r = sub(body.position, frame.position);
+    let v = sub(body.velocity, frame.velocity);
+    if (length(r) < 1e-9 || length(v) < 1e-9 || length(cross(r, v)) < 1e-12) {
+      r = { x: 1, y: 0, z: 0 };
+      v = { x: 0, y: 1, z: 0 };
+    }
+    const unit = (u: Vec3) => scale(u, 1 / length(u));
+    const dirs: Record<ImpulseDirection, Vec3> = {
+      prograde: unit(v),
+      retrograde: scale(unit(v), -1),
+      exterieur: unit(r),
+      interieur: scale(unit(r), -1),
+      perpendiculaire: unit(cross(r, v)),
+    };
+    const dv = scale(dirs[direction], deltaVKmS * KM_S);
+    const moved = body.kind === 'star' ? [body] : this.subtree(id);
+    for (const b of moved) b.velocity = add(b.velocity, dv);
+    const labels: Record<ImpulseDirection, string> = {
+      prograde: 'dans le sens du mouvement',
+      retrograde: 'contre le mouvement',
+      exterieur: "vers l'extérieur",
+      interieur: "vers l'intérieur",
+      perpendiculaire: 'perpendiculairement à son orbite',
+    };
+    this.log('info', `${body.name} reçoit une impulsion de ${fr(deltaVKmS, 3)} km/s ${labels[direction]}.`);
     this.rebuild();
   }
 
@@ -547,12 +995,18 @@ export class Simulation {
       const d = Math.sqrt(dot(r, r));
       const energy = dot(v, v) / 2 - mu(parent.mass, b.mass) / d;
       if (parent.kind === 'star') {
+        if (!binary && energy >= 0 && !this.unboundLogged.has(b.id)) {
+          // Signalée une seule fois : l'éjection proprement dite n'arrive qu'à 1 000 UA.
+          this.unboundLogged.add(b.id);
+          this.log('evasion', `${b.name} n'est plus retenue par ${parent.name} : elle quitte le système.`);
+        }
         // Dans un système double, une planète libérée de son étoile tourne autour des deux.
         if (binary && energy >= 0) {
           this.log('evasion', `${b.name} quitte l'orbite de ${parent.name} et tourne désormais autour des deux étoiles.`);
           b.circumbinary = true;
           b.parentId = primary.id;
-          b.elements = currentElements(b, this.starsFrame());
+          const frame = this.starsFrame();
+          b.elements = referenceElements(currentElements(b, frame), distance(b.position, frame.position));
           structural = true;
         }
         continue;
@@ -566,7 +1020,7 @@ export class Simulation {
         b.circumbinary = parent.circumbinary;
         b.kind = 'planet';
         const frame = this.frameOf(b);
-        if (frame) b.elements = currentElements(b, frame);
+        if (frame) b.elements = referenceElements(currentElements(b, frame), distance(b.position, frame.position));
         structural = true;
       }
     }
@@ -574,7 +1028,7 @@ export class Simulation {
     const frame = this.starsFrame();
     const ejected: Body[] = [];
     for (const b of this.bodies) {
-      if (b.kind === 'star') continue;
+      if (b.kind === 'star' && !b.intruder) continue;
       const r = sub(b.position, frame.position);
       const d = Math.sqrt(dot(r, r));
       if (d < EJECTION_DISTANCE_AU) continue;
@@ -584,7 +1038,8 @@ export class Simulation {
     if (ejected.length > 0) {
       const ids = new Set(ejected.map((b) => b.id));
       for (const b of ejected) {
-        if (b.kind !== 'planetesimal') this.log('ejection', `${b.name} est éjectée du système.`);
+        if (b.intruder) this.log('intrus', `${b.name} s'éloigne définitivement du système.`);
+        else if (b.kind !== 'planetesimal') this.log('ejection', `${b.name} est éjectée du système.`);
       }
       this.bodies = this.bodies.filter((b) => !ids.has(b.id));
       for (const b of this.bodies) if (b.parentId && ids.has(b.parentId)) b.parentId = primary.id;

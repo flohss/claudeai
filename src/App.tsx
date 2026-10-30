@@ -18,6 +18,7 @@ import { BodyPanel } from './ui/BodyPanel';
 import { ChartsPanel } from './ui/ChartsPanel';
 import { DiskDialog } from './ui/DiskDialog';
 import { EventLog } from './ui/EventLog';
+import { EventsDialog } from './ui/EventsDialog';
 import { ShareDialog } from './ui/ShareDialog';
 import { SceneView } from './ui/SceneView';
 import { StarsPanel } from './ui/StarsPanel';
@@ -52,6 +53,7 @@ export function App() {
   const [diskDialog, setDiskDialog] = useState(false);
   const [showCharts, setShowCharts] = useState(false);
   const [shareLink, setShareLink] = useState<string | null>(null);
+  const [eventsDialog, setEventsDialog] = useState(false);
   const [options, setOptions] = useState<ViewOptions>({ showTrails: true, showLabels: true, showZones: true, followSelected: false });
 
   const selected = sim.getBody(selectedId);
@@ -220,6 +222,7 @@ export function App() {
         onLoad={load}
         onFrame={() => renderer?.frameSystem(sim.bodies)}
         onShare={share}
+        onEvents={() => setEventsDialog(true)}
       />
       <aside className="sidebar sidebar--left">
         {star && <StarsPanel sim={sim} />}
@@ -251,6 +254,19 @@ export function App() {
       <TimeBar sim={sim} options={options} onOptions={setOptions} showCharts={showCharts} onToggleCharts={() => setShowCharts((v) => !v)} />
       {diskDialog && <DiskDialog onStart={startDisk} onCancel={() => setDiskDialog(false)} />}
       {shareLink && <ShareDialog url={shareLink} onClose={() => setShareLink(null)} />}
+      {eventsDialog && (
+        <EventsDialog
+          sim={sim}
+          selectedId={selected?.id ?? null}
+          onCancel={() => setEventsDialog(false)}
+          onDone={(focusId, speed) => {
+            setEventsDialog(false);
+            if (focusId) setSelectedId(focusId);
+            if (speed !== null) sim.setSpeed(speed);
+            if (sim.paused) sim.setPaused(false);
+          }}
+        />
+      )}
     </div>
   );
 }

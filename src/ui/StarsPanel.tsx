@@ -4,6 +4,7 @@ import { currentElements } from '../physics/derived';
 import { SPECTRAL_CLASSES, SPECTRAL_ORDER, habitableZone, snowLine } from '../physics/stars';
 import type { Body, SpectralClass } from '../physics/types';
 import type { Simulation } from '../sim/Simulation';
+import { REMNANT_LABELS } from './BodyPanel';
 import { num } from './format';
 
 const parse = (s: string) => Number(s.replace(',', '.'));
@@ -29,7 +30,11 @@ function StarBlock({ sim, star }: { sim: Simulation; star: Body }) {
         <span>
           <span className="dot" style={{ background: star.color }} /> {star.name}
         </span>
-        <ClassSelect value={props.spectralClass} onChange={(c) => sim.setStarClass(star.id, c)} />
+        {props.remnant || sim.evolutions.some((e) => e.starId === star.id) ? (
+          <span className="remnant">{props.remnant ? REMNANT_LABELS[props.remnant] : 'Géante rouge (en cours)'}</span>
+        ) : (
+          <ClassSelect value={props.spectralClass} onChange={(c) => sim.setStarClass(star.id, c)} />
+        )}
       </label>
       <dl className="facts compact">
         <dt>Masse</dt>

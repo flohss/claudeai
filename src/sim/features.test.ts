@@ -59,6 +59,27 @@ describe('Systèmes doubles', () => {
   });
 });
 
+describe('Robustesse', () => {
+  it("donne une orbite de référence valide à une lune arrachée sur une trajectoire hyperbolique", () => {
+    const def = emptySystem('G');
+    const planet = makeOrbiter({ name: 'P', planetType: 'tellurique', massEarth: 1, radiusKm: 6371, parentId: def.bodies[0].id, elements: { a: 1 } });
+    const moon = makeOrbiter({ name: 'M', kind: 'moon', planetType: 'naine', massEarth: 0.01, radiusKm: 1000, parentId: planet.id, elements: { a: 0.002 } });
+    def.bodies.push(planet, moon);
+    const sim = new Simulation(def);
+    // Coup de vitesse violent : la lune part sur une hyperbole.
+    sim.applyImpulse(sim.bodies.find((b) => b.name === 'M')!.id, 0, 'prograde');
+    const m = sim.bodies.find((b) => b.name === 'M')!;
+    m.velocity = { x: m.velocity.x + 30, y: m.velocity.y, z: m.velocity.z };
+    sim.updateBody(m.id, {});
+    sim.stepFor(0.05);
+    expect(m.parentId).toBe(sim.star!.id);
+    expect(m.elements!.a).toBeGreaterThan(0);
+    expect(m.elements!.e).toBeLessThan(1);
+    expect(Number.isFinite(sim.time)).toBe(true);
+    expect(sim.bodies.every((b) => Number.isFinite(b.position.x))).toBe(true);
+  });
+});
+
 describe('Limite de Roche', () => {
   it('disloque une lune trop proche en anneau, sans perte de masse', () => {
     const def = emptySystem('G');

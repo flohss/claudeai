@@ -8,6 +8,13 @@ Application web pour créer un système planétaire et l'observer évoluer, avec
 - **Systèmes doubles** : on peut ajouter une étoile compagne (classe, séparation, excentricité). Les planètes peuvent tourner autour d'une seule étoile (type S) ou des deux (circumbinaires, type P). Le panneau indique les limites de stabilité selon le critère de Holman et Wiegert (1999), et chaque fiche dit si l'orbite est stable. La température et la zone habitable tiennent compte de la lumière des deux étoiles. Une planète arrachée à son étoile devient circumbinaire.
 - **Formation planétaire** : un disque protoplanétaire de planétésimaux autour d'une jeune étoile. En se percutant, ils fusionnent en protoplanètes puis en planètes. Au-delà de la ligne des glaces, les noyaux d'au moins 3 M⊕ capturent le gaz du disque et deviennent des géantes, jusqu'à ce que ce gaz se dissipe. Le modèle est accéléré (rayons de capture agrandis, gaz dissipé en 300 ans) pour voir le résultat en quelques minutes.
 - **Anneaux** : Saturne et Uranus en ont, comme certaines géantes des systèmes aléatoires, et on peut en ajouter à toute planète (bords, opacité, couleur). Ils sont orientés selon l'axe de rotation. Une lune qui franchit la limite de Roche de sa planète est disloquée par les marées et forme un anneau.
+- **Événements** (menu « ⚡ Événements »), applicables à n'importe quel système :
+  - **intrus** : un trou noir, une étoile ou une planète vagabonde traverse le système sur une trajectoire hyperbolique ; près d'un trou noir ou d'une étoile à neutrons, un corps qui passe sous le rayon de marée est déchiqueté (« spaghettification ») ;
+  - **impact** : astéroïde de référence (Tcheliabinsk, Toungouska, Meteor Crater, Chicxulub, Vesta, Théia) lancé sur une planète ou une lune. Le journal donne l'énergie (Mt de TNT), la taille du cratère (loi de Collins et al., 2005) et les conséquences ; un impact géant fait naître une lune avec les débris ;
+  - **destin de l'étoile** : géante rouge (l'étoile gonfle jusqu'à ~1,2 UA, engloutit les planètes proches, perd 30 % de sa masse puis devient une naine blanche) ; supernova (perte de masse brutale ; au-delà de 50 %, les orbites circulaires se défont) ; effondrement en trou noir de même masse (les orbites ne changent pas, la lumière disparaît) ; expulsion de l'étoile ;
+  - **impulsion** : un coup de vitesse donné à n'importe quel corps, dans la direction voulue.
+
+  Les impacts, la supernova et les déchirements par marée s'accompagnent d'un flash dans la vue 3D. Le trou noir s'affiche avec un disque d'accrétion.
 - **Graphiques en temps réel** : la dérive de l'énergie totale (elle mesure la précision du calcul ; les collisions apparaissent en pointillés), l'excentricité et le demi-grand axe des planètes. Chaque graphique a un réticule et une infobulle, une légende cliquable qui sélectionne le corps, et un tableau de valeurs.
 - **Planètes et lunes** : on peut les ajouter, les modifier et les supprimer (nom, type, masse, rayon, demi-grand axe, excentricité, inclinaison, albédo, couleur). Une orbite modifiée repart de la position actuelle du corps.
 - **Simulation à N corps** : toutes les attractions entre tous les corps sont calculées, avec un intégrateur symplectique Velocity Verlet. Le pas de calcul s'adapte à l'orbite la plus rapide (environ 200 pas par orbite). Si la machine ne suit pas, la simulation ralentit au lieu de perdre en précision, et la vitesse réellement atteinte s'affiche.
@@ -54,12 +61,13 @@ npm run build    # vérification des types + build de production dans dist/
 src/
   physics/   Moteur physique pur, sans dépendance au rendu
     units.ts      Unités internes : UA, masse solaire, année (G = 4π²)
-    orbits.ts     Éléments orbitaux ⇄ position/vitesse, période, rayon de Hill
+    orbits.ts     Éléments orbitaux ⇄ position/vitesse, trajectoires hyperboliques, période, rayon de Hill
     binary.ts     Limites de stabilité des systèmes doubles (Holman & Wiegert)
     state.ts      État compact (tableaux typés) : gravité, pas Verlet, collisions
     nbody.ts      Énergie, quantité de mouvement, fusions, raccourcis sur les corps
     stars.ts      Classes spectrales, zone habitable, ligne des glaces
     derived.ts    Gravité, flux reçu, température d'équilibre, limite de Roche, habitabilité…
+    impacts.ts    Énergie d'impact, cratère, rayon de marée, rayon de Schwarzschild
   sim/       État de la simulation et données
     Simulation.ts Store observable : pas de temps, événements (collisions, Roche,
                   évasions, capture de gaz), éditions, étoiles multiples

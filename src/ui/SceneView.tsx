@@ -27,7 +27,7 @@ export function SceneView({ sim, selectedId, options, onPick, onReady }: Props) 
       const dt = Math.min(0.1, (now - last) / 1000);
       last = now;
       sim.advance(dt);
-      renderer.update(sim.bodies, live.current.selectedId, live.current.options);
+      renderer.update(sim.bodies, live.current.selectedId, live.current.options, sim.events, sim.epoch);
       renderer.render();
       frame = requestAnimationFrame(loop);
     };

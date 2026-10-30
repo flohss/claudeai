@@ -1,7 +1,18 @@
 import type { SimEvent } from '../sim/Simulation';
 import { elapsed } from './format';
 
-const ICONS: Record<SimEvent['kind'], string> = { collision: '💥', ejection: '🚀', evasion: '🌀', formation: '🪐', roche: '💫', info: 'ℹ️' };
+const ICONS: Record<SimEvent['kind'], string> = {
+  collision: '💥',
+  impact: '☄️',
+  ejection: '🚀',
+  evasion: '🌀',
+  formation: '🪐',
+  roche: '💫',
+  maree: '🕳️',
+  etoile: '🌟',
+  intrus: '👁️',
+  info: 'ℹ️',
+};
 
 export function EventLog({ events }: { events: SimEvent[] }) {
   return (

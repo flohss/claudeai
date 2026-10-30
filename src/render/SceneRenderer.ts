@@ -3,7 +3,8 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CSS2DObject, CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import { habitableZone, snowLine } from '../physics/stars';
 import type { Body, BodyKind, PlanetType, Rings } from '../physics/types';
-import { SUN_RADIUS_KM } from '../physics/units';
+import type { SimEvent } from '../sim/Simulation';
+import { AU_KM, SUN_RADIUS_KM } from '../physics/units';
 import type { Vec3 } from '../physics/vec3';
 import { makeGlowTexture, makePlanetTexture, makeRingTexture } from './textures';
 
@@ -38,7 +39,14 @@ export interface ViewOptions {
 
 /** Les tailles réelles sont invisibles à l'échelle d'un système : on utilise une échelle logarithmique. */
 export function visualRadius(body: Body): number {
-  if (body.kind === 'star') return 0.4 + 0.35 * Math.log10(1 + (body.radiusKm / SUN_RADIUS_KM) * 2);
+  if (body.kind === 'star') {
+    const remnant = body.star?.remnant;
+    if (remnant === 'trou-noir') return 0.3;
+    if (remnant === 'etoile-a-neutrons') return 0.12;
+    if (remnant === 'naine-blanche') return 0.16;
+    // Une géante rouge s'affiche au moins à sa vraie taille, pour voir qui elle engloutit.
+    return Math.max(0.4 + 0.35 * Math.log10(1 + (body.radiusKm / SUN_RADIUS_KM) * 2), (body.radiusKm / AU_KM) * AU_SCALE);
+  }
   if (body.kind === 'planetesimal') return 0.04 + 0.12 * Math.log10(1 + body.radiusKm / 1000);
   const r = 0.08 + 0.2 * Math.log10(1 + body.radiusKm / 1000);
   return body.kind === 'moon' ? r * 0.8 : r;
@@ -188,7 +196,7 @@ export class SceneRenderer {
     group.add(label);
 
     const entry: Entry = { body, kind: body.kind, group, tilt, mesh, label, labelEl, appearanceKey: '' };
-    if (body.kind === 'planet' || (body.kind === 'star' && body.parentId)) {
+    if (body.kind === 'planet' || (body.kind === 'star' && (body.parentId || body.intruder))) {
       const positions = new Float32Array(TRAIL_POINTS * 3);
       const geom = new THREE.BufferGeometry();
       geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
@@ -204,7 +212,7 @@ export class SceneRenderer {
 
   private updateAppearance(entry: Entry): void {
     const b = entry.body;
-    const key = [b.kind, b.planetType, b.color, b.radiusKm.toFixed(0), b.name, b.axialTilt ?? 0, JSON.stringify(b.rings ?? null)].join('|');
+    const key = [b.kind, b.planetType, b.color, b.radiusKm.toPrecision(3), b.name, b.axialTilt ?? 0, JSON.stringify(b.rings ?? null), b.star?.remnant].join('|');
     if (key === entry.appearanceKey) return;
     entry.appearanceKey = key;
 
@@ -215,6 +223,7 @@ export class SceneRenderer {
 
     (entry.mesh.material as THREE.Material).dispose();
     if (b.kind === 'star') {
+      const remnant = b.star?.remnant;
       entry.mesh.material = new THREE.MeshBasicMaterial({ color: b.color });
       if (!entry.glow) {
         entry.glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: makeGlowTexture(), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
@@ -222,21 +231,25 @@ export class SceneRenderer {
         entry.light = new THREE.PointLight(0xffffff, 2.2, 0, 0);
         entry.group.add(entry.light);
       }
+      // Un trou noir n'éclaire rien : seul son disque d'accrétion brille.
+      entry.glow.visible = remnant !== 'trou-noir';
       entry.glow.material.color.set(b.color);
-      entry.glow.scale.setScalar(r * 6);
+      entry.glow.scale.setScalar(remnant ? r * 10 : r * 6);
       entry.light!.color.set(b.color);
+      entry.light!.intensity = remnant === 'trou-noir' ? 0 : remnant ? 0.5 : 2.2;
     } else if (b.kind === 'planetesimal') {
       entry.mesh.material = new THREE.MeshStandardMaterial({ color: b.color, roughness: 1 });
     } else {
       const texture = makePlanetTexture(b.planetType as PlanetType, b.color, b.id);
       entry.mesh.material = new THREE.MeshStandardMaterial({ map: texture, roughness: 0.9, metalness: 0 });
     }
-    entry.tilt.rotation.set(0, 0, ((b.axialTilt ?? 0) * Math.PI) / 180);
-    this.updateRing(entry, b.rings, r);
+    entry.tilt.rotation.set(0, 0, ((b.axialTilt ?? (b.star?.remnant === 'trou-noir' ? 20 : 0)) * Math.PI) / 180);
+    const accretionDisk = b.star?.remnant === 'trou-noir' ? { inner: 1.6, outer: 4.5, color: '#ff9a3c', opacity: 0.95 } : undefined;
+    this.updateRing(entry, b.rings ?? accretionDisk, r, !!accretionDisk);
     if (entry.trail) (entry.trail.line.material as THREE.LineBasicMaterial).color.set(b.color);
   }
 
-  private updateRing(entry: Entry, rings: Rings | undefined, planetRadius: number): void {
+  private updateRing(entry: Entry, rings: Rings | undefined, planetRadius: number, glowing = false): void {
     if (entry.ring) {
       entry.tilt.remove(entry.ring);
       entry.ring.geometry.dispose();
@@ -254,6 +267,7 @@ export class SceneRenderer {
         opacity: rings.opacity,
         side: THREE.DoubleSide,
         depthWrite: false,
+        blending: glowing ? THREE.AdditiveBlending : THREE.NormalBlending,
       }),
     );
     ring.rotation.x = -Math.PI / 2;
@@ -306,7 +320,7 @@ export class SceneRenderer {
   }
 
   /** Synchronise la scène avec l'état de la simulation. Appelé à chaque image. */
-  update(bodies: Body[], selectedId: string | null, options: ViewOptions): void {
+  update(bodies: Body[], selectedId: string | null, options: ViewOptions, events: SimEvent[] = [], epoch = 0): void {
     const alive = new Set<string>();
     for (const body of bodies) {
       alive.add(body.id);
@@ -332,7 +346,7 @@ export class SceneRenderer {
 
     // Positions : les parents d'abord (les corps sont triés par hiérarchie).
     const byId = new Map(bodies.map((b) => [b.id, b]));
-    const star = bodies.find((b) => b.kind === 'star' && !b.parentId) ?? bodies.find((b) => b.kind === 'star');
+    const star = bodies.find((b) => b.kind === 'star' && !b.parentId && !b.intruder) ?? bodies.find((b) => b.kind === 'star');
     for (const body of bodies) {
       const entry = this.entries.get(body.id)!;
       const parent = byId.get(body.parentId ?? '');
@@ -365,7 +379,8 @@ export class SceneRenderer {
       }
     }
 
-    this.updateZones(bodies.filter((b) => b.kind === 'star'), options.showZones);
+    this.updateZones(bodies.filter((b) => b.kind === 'star' && !b.intruder), options.showZones);
+    this.updateFlashes(events, epoch);
 
     // Sélection et suivi caméra.
     const selected = selectedId ? this.entries.get(selectedId) : undefined;
@@ -464,7 +479,7 @@ export class SceneRenderer {
    * planètes : cadrer sur la plus lointaine rendrait les planètes intérieures invisibles.
    */
   frameSystem(bodies: Body[]): void {
-    const star = bodies.find((b) => b.kind === 'star' && !b.parentId);
+    const star = bodies.find((b) => b.kind === 'star' && !b.parentId && !b.intruder);
     const distances = bodies
       .filter((b) => (b.kind === 'planet' || b.kind === 'planetesimal') && star)
       .map((b) => Math.hypot(b.position.x - star!.position.x, b.position.y - star!.position.y, b.position.z - star!.position.z) * AU_SCALE)
@@ -474,6 +489,45 @@ export class SceneRenderer {
     this.controls.target.set(0, 0, 0);
     this.camera.position.set(0, r * 0.9, r * 1.4);
     this.followId = null;
+  }
+
+  // ─── Flashs des événements (impacts, supernova, marées) ───────────────────
+
+  private flashes: { sprite: THREE.Sprite; born: number; duration: number; size: number }[] = [];
+  private seenEpoch = -1;
+  private lastEventTime = -Infinity;
+
+  private updateFlashes(events: SimEvent[], epoch: number): void {
+    const now = performance.now();
+    if (epoch !== this.seenEpoch) {
+      // Nouveau système : les événements déjà présents ne déclenchent pas de flash.
+      this.seenEpoch = epoch;
+      this.lastEventTime = events[0]?.time ?? -Infinity;
+    }
+    for (const e of events) {
+      if (e.time <= this.lastEventTime) break;
+      if (!e.flash || !e.position) continue;
+      const style = { impact: ['#ffb347', 3, 1200], supernova: ['#dfeaff', 60, 3000], maree: ['#ff6ad5', 6, 1800] } as const;
+      const [color, size, duration] = style[e.flash];
+      const sprite = new THREE.Sprite(
+        new THREE.SpriteMaterial({ map: makeGlowTexture(), color, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }),
+      );
+      toScene(e.position, sprite.position);
+      this.scene.add(sprite);
+      this.flashes.push({ sprite, born: now, duration, size });
+    }
+    if (events[0]) this.lastEventTime = Math.max(this.lastEventTime, events[0].time);
+    this.flashes = this.flashes.filter((f) => {
+      const t = (now - f.born) / f.duration;
+      if (t >= 1) {
+        this.scene.remove(f.sprite);
+        f.sprite.material.dispose();
+        return false;
+      }
+      f.sprite.scale.setScalar(f.size * (0.3 + t));
+      f.sprite.material.opacity = 1 - t;
+      return true;
+    });
   }
 
   render(): void {

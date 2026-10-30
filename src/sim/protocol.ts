@@ -1,5 +1,5 @@
 import type { Body } from '../physics/types';
-import type { FormationSettings, SimEvent, Simulation } from './Simulation';
+import type { FormationSettings, SimEvent, Simulation, StellarEvolution } from './Simulation';
 
 /** Canal de messages : un Worker, `self` dans le Worker, ou un canal en mémoire pour les tests. */
 export interface Port {
@@ -8,7 +8,23 @@ export interface Port {
 }
 
 /** Méthodes de `Simulation` que le fil principal peut faire exécuter au Worker. */
-export const COMMANDS = ['load', 'reset', 'addBody', 'updateBody', 'setStarClass', 'addCompanion', 'removeBody', 'setSpeed', 'setPaused'] as const;
+export const COMMANDS = [
+  'load',
+  'reset',
+  'addBody',
+  'updateBody',
+  'setStarClass',
+  'addCompanion',
+  'removeBody',
+  'setSpeed',
+  'setPaused',
+  'launchIntruder',
+  'launchImpactor',
+  'supernova',
+  'collapseToBlackHole',
+  'startRedGiant',
+  'applyImpulse',
+] as const;
 export type CommandName = (typeof COMMANDS)[number];
 
 export interface CommandMessage {
@@ -36,5 +52,6 @@ export interface StateMessage {
     bodies: Body[];
     events: SimEvent[];
     formation: FormationSettings | null;
+    evolutions: StellarEvolution[];
   };
 }

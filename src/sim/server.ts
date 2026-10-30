@@ -67,7 +67,7 @@ export class SimulationServer {
       kinematics,
     };
     if (structural) {
-      msg.structure = { name: sim.name, bodies: sim.bodies, events: sim.events, formation: sim.formation };
+      msg.structure = { name: sim.name, bodies: sim.bodies, events: sim.events, formation: sim.formation, evolutions: sim.evolutions };
     }
     this.publishedVersion = sim.version;
     this.publishedTime = sim.time;

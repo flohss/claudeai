@@ -114,7 +114,8 @@ export function mergeBodies(a: Body, b: Body): [Body, Body] {
     z: big.velocity.z * w1 + small.velocity.z * w2,
   };
   big.mass = m;
-  if (big.star && small.star) big.star.luminosity += small.star.luminosity;
+  // Un trou noir n'émet pas de lumière, même après avoir avalé une étoile.
+  if (big.star && small.star && big.star.remnant !== 'trou-noir') big.star.luminosity += small.star.luminosity;
   if (big.kind !== 'star') {
     big.radiusKm = Math.cbrt(big.radiusKm ** 3 + small.radiusKm ** 3);
   }

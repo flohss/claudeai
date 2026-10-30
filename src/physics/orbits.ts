@@ -8,8 +8,37 @@ export const mu = (parentMass: number, mass: number) => G * (parentMass + mass);
 /** Convertit des éléments orbitaux en position/vitesse relatives au parent. */
 export function elementsToState(el: OrbitalElements, muValue: number): { position: Vec3; velocity: Vec3 } {
   const e = Math.min(Math.max(el.e, 0), 0.99);
+  return conicToState(el.a * (1 - e * e), e, el, muValue);
+}
+
+/**
+ * Trajectoire hyperbolique d'un corps venu de loin : vitesse à l'infini `vInf`
+ * (UA/an), distance au plus près `periapsis` (UA). Le corps est placé sur la
+ * branche d'arrivée, à la distance `startDistance` (UA) du foyer.
+ * Les angles (Ω, ω, i) orientent la trajectoire ; `nu` est ignoré.
+ */
+export function hyperbolicState(
+  periapsis: number,
+  vInf: number,
+  startDistance: number,
+  angles: Pick<OrbitalElements, 'i' | 'Omega' | 'omega'>,
+  muValue: number,
+): { position: Vec3; velocity: Vec3; timeToPeriapsis: number } {
+  const a = -muValue / (vInf * vInf);
+  const e = 1 - periapsis / a;
+  const p = a * (1 - e * e);
+  const r0 = Math.max(startDistance, periapsis);
+  // Anomalie vraie négative : le corps approche du périastre.
+  const nu = -Math.acos(Math.min(1, Math.max(-1, (p / r0 - 1) / e)));
+  // Temps jusqu'au périastre, par l'anomalie hyperbolique F (équation de Kepler hyperbolique).
+  const F = 2 * Math.atanh(Math.sqrt((e - 1) / (e + 1)) * Math.tan(nu / 2));
+  const timeToPeriapsis = -(e * Math.sinh(F) - F) * Math.sqrt((-a) ** 3 / muValue);
+  return { ...conicToState(p, e, { ...angles, nu: radToDeg(nu) }, muValue), timeToPeriapsis };
+}
+
+/** Position et vitesse sur une conique de paramètre `p` et d'excentricité `e`, orientée par les angles. */
+function conicToState(p: number, e: number, el: Pick<OrbitalElements, 'i' | 'Omega' | 'omega' | 'nu'>, muValue: number) {
   const nu = degToRad(el.nu);
-  const p = el.a * (1 - e * e);
   const r = p / (1 + e * Math.cos(nu));
 
   const px = r * Math.cos(nu);

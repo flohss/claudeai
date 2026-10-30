@@ -37,9 +37,11 @@ describe('Simulation', () => {
     const sim = new Simulation(def);
     const massBefore = sim.bodies.reduce((s, x) => s + x.mass, 0);
     sim.stepFor(0.6);
-    expect(sim.bodies).toHaveLength(2);
-    expect(sim.events[0].kind).toBe('collision');
-    expect(sim.events[0].message).toContain('A absorbe B');
+    expect(sim.bodies.filter((x) => x.kind === 'planet').map((x) => x.name)).toEqual(['A']);
+    const impact = sim.events.find((e) => e.kind === 'impact')!;
+    expect(impact.message).toContain('Impact géant : A absorbe B');
+    // Comme pour la Terre et Théia, une partie des débris forme une lune.
+    expect(sim.bodies.filter((x) => x.kind === 'moon')).toHaveLength(1);
     expect(sim.bodies.reduce((s, x) => s + x.mass, 0)).toBeCloseTo(massBefore, 12);
   });
 

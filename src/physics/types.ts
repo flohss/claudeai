@@ -23,8 +23,13 @@ export interface OrbitalElements {
   nu: number;
 }
 
+/** Ce qui reste d'une étoile en fin de vie. */
+export type Remnant = 'naine-blanche' | 'etoile-a-neutrons' | 'trou-noir';
+
 export interface StarProps {
   spectralClass: SpectralClass;
+  /** Absent pour une étoile ordinaire */
+  remnant?: Remnant;
   /** Luminosité (L☉) */
   luminosity: number;
   /** Température effective (K) */
@@ -69,6 +74,11 @@ export interface Body {
    * le modèle accéléré de formation planétaire ; absent = rayon réel.
    */
   accretionScale?: number;
+  /**
+   * Corps venu de l'extérieur (étoile de passage, trou noir, planète vagabonde,
+   * astéroïde) : il agit par sa gravité mais ne fait pas partie du système.
+   */
+  intruder?: boolean;
   /** Éléments orbitaux de définition (null pour l'étoile) */
   elements: OrbitalElements | null;
   /** État dynamique, en coordonnées barycentriques (UA, UA/an) */

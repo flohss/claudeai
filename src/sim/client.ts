@@ -1,7 +1,7 @@
 import type { Body, SpectralClass } from '../physics/types';
 import { newId } from './factory';
 import type { CommandMessage, CommandName, Port, StateMessage } from './protocol';
-import { Simulation, type BodyPatch, type SystemDefinition } from './Simulation';
+import { Simulation, type BodyPatch, type ImpactorSpec, type ImpulseDirection, type IntruderSpec, type SystemDefinition } from './Simulation';
 
 /**
  * Côté fil principal : un miroir de la simulation qui tourne dans le Worker.
@@ -32,6 +32,7 @@ export class SimulationClient extends Simulation {
       this.bodies = msg.structure.bodies;
       this.events = msg.structure.events;
       this.formation = msg.structure.formation;
+      this.evolutions = msg.structure.evolutions;
       this.serverVersion = msg.version;
     } else if (msg.version !== this.serverVersion) {
       return;
@@ -101,6 +102,37 @@ export class SimulationClient extends Simulation {
   override setPaused(paused: boolean): void {
     super.setPaused(paused);
     this.send('setPaused', [paused]);
+  }
+
+  override launchIntruder(spec: IntruderSpec): number {
+    const eta = super.launchIntruder(spec);
+    this.send('launchIntruder', [spec]);
+    return eta;
+  }
+
+  override launchImpactor(spec: ImpactorSpec): void {
+    super.launchImpactor(spec);
+    this.send('launchImpactor', [spec]);
+  }
+
+  override supernova(starId: string, remnantMass: number): void {
+    super.supernova(starId, remnantMass);
+    this.send('supernova', [starId, remnantMass]);
+  }
+
+  override collapseToBlackHole(starId: string): void {
+    super.collapseToBlackHole(starId);
+    this.send('collapseToBlackHole', [starId]);
+  }
+
+  override startRedGiant(starId: string, durationYears: number): void {
+    super.startRedGiant(starId, durationYears);
+    this.send('startRedGiant', [starId, durationYears]);
+  }
+
+  override applyImpulse(id: string, deltaVKmS: number, direction: ImpulseDirection): void {
+    super.applyImpulse(id, deltaVKmS, direction);
+    this.send('applyImpulse', [id, deltaVKmS, direction]);
   }
 }
 

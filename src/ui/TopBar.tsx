@@ -19,9 +19,10 @@ interface Props {
   onLoad: (file: File) => void;
   onFrame: () => void;
   onShare: () => void;
+  onEvents: () => void;
 }
 
-export function TopBar({ systemName, onPreset, onReset, onSave, onLoad, onFrame, onShare }: Props) {
+export function TopBar({ systemName, onPreset, onReset, onSave, onLoad, onFrame, onShare, onEvents }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   return (
     <header className="topbar">
@@ -46,6 +47,9 @@ export function TopBar({ systemName, onPreset, onReset, onSave, onLoad, onFrame,
             ))}
           </select>
         </label>
+        <button type="button" className="events-button" onClick={onEvents} title="Trou noir, impact, supernova, géante rouge…">
+          ⚡ Événements
+        </button>
         <div className="group">
           <button type="button" onClick={onReset} title="Revenir à l'état chargé">
             ↺ Réinitialiser
