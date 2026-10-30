@@ -2,8 +2,6 @@
 
 Application web pour créer un système planétaire et l'observer évoluer, avec une physique gravitationnelle réaliste.
 
-**En ligne : https://flohss.github.io/claudeai/** (publiée automatiquement à chaque push sur `main`).
-
 ## Fonctionnalités
 
 - **Étoile configurable** : classes spectrales O à M. La classe fixe la masse, la luminosité et la couleur de l'étoile. Les zones correspondantes s'affichent dans la vue 3D : la zone habitable (anneau vert) et la ligne des glaces (cercle pointillé).
@@ -48,9 +46,7 @@ npm test         # tests du moteur physique et de la simulation
 npm run build    # vérification des types + build de production dans dist/
 ```
 
-### Publication
-
-`.github/workflows/deploy.yml` teste, construit et publie l'application sur GitHub Pages à chaque push sur `main`. Il faut d'abord, une seule fois, choisir **Settings → Pages → Source : GitHub Actions** dans le dépôt. `.github/workflows/ci.yml` lance les tests et le build sur les autres branches et les pull requests.
+`.github/workflows/ci.yml` lance les tests et le build sur GitHub à chaque push et pour chaque pull request.
 
 ## Architecture
 
