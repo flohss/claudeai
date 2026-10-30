@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { hillRadius } from './physics/orbits';
 import { habitableZone } from './physics/stars';
 import { AU_KM } from './physics/units';
@@ -9,13 +9,16 @@ import { estimateRadiusKm, makeOrbiter } from './sim/factory';
 import { emptySystem, solarSystem, tightBinary, wideBinary } from './sim/presets';
 import { randomSystem } from './sim/random';
 import { deserialize, serialize } from './sim/serialization';
-import { Simulation, type SystemDefinition } from './sim/Simulation';
+import { decodeSystem, encodeSystem, sharedFromHash, shareUrl } from './sim/share';
+import { createSimulation } from './sim/client';
+import type { Simulation, SystemDefinition } from './sim/Simulation';
 import { Telemetry } from './sim/telemetry';
 import { BodyList } from './ui/BodyList';
 import { BodyPanel } from './ui/BodyPanel';
 import { ChartsPanel } from './ui/ChartsPanel';
 import { DiskDialog } from './ui/DiskDialog';
 import { EventLog } from './ui/EventLog';
+import { ShareDialog } from './ui/ShareDialog';
 import { SceneView } from './ui/SceneView';
 import { StarsPanel } from './ui/StarsPanel';
 import { TimeBar } from './ui/TimeBar';
@@ -32,8 +35,13 @@ function useTick(ms: number) {
 
 const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII'];
 
+// Une seule simulation (et un seul Worker) pour toute l'application, même si
+// React appelle deux fois les initialisations en mode strict.
+let appSimulation: Simulation | null = null;
+const getSimulation = () => (appSimulation ??= createSimulation(solarSystem()));
+
 export function App() {
-  const sim = useMemo(() => new Simulation(solarSystem()), []);
+  const sim = getSimulation();
   const telemetry = useMemo(() => new Telemetry(), []);
   useSyncExternalStore(sim.subscribe, sim.getVersion);
   useTick(250);
@@ -43,6 +51,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [diskDialog, setDiskDialog] = useState(false);
   const [showCharts, setShowCharts] = useState(false);
+  const [shareLink, setShareLink] = useState<string | null>(null);
   const [options, setOptions] = useState<ViewOptions>({ showTrails: true, showLabels: true, showZones: true, followSelected: false });
 
   const selected = sim.getBody(selectedId);
@@ -64,6 +73,36 @@ export function App() {
     },
     [sim, renderer],
   );
+
+  // Un système reçu par lien (#systeme=…) est chargé à l'ouverture, ou quand le lien change.
+  const openedHash = useRef<string | null>(null);
+  useEffect(() => {
+    if (!renderer) return;
+    const openShared = async () => {
+      const encoded = sharedFromHash(window.location.hash);
+      if (!encoded || encoded === openedHash.current) return;
+      openedHash.current = encoded;
+      try {
+        loadSystem(await decodeSystem(encoded), false);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
+    };
+    void openShared();
+    window.addEventListener('hashchange', openShared);
+    return () => window.removeEventListener('hashchange', openShared);
+  }, [renderer, loadSystem]);
+
+  const share = async () => {
+    try {
+      const encoded = await encodeSystem(sim);
+      // Le lien ouvert ici est déjà ce système : pas besoin de le recharger.
+      openedHash.current = encoded;
+      setShareLink(shareUrl(window.location.href, encoded));
+    } catch (e) {
+      setError(`Impossible de créer le lien : ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -180,6 +219,7 @@ export function App() {
         onSave={save}
         onLoad={load}
         onFrame={() => renderer?.frameSystem(sim.bodies)}
+        onShare={share}
       />
       <aside className="sidebar sidebar--left">
         {star && <StarsPanel sim={sim} />}
@@ -210,6 +250,7 @@ export function App() {
       </aside>
       <TimeBar sim={sim} options={options} onOptions={setOptions} showCharts={showCharts} onToggleCharts={() => setShowCharts((v) => !v)} />
       {diskDialog && <DiskDialog onStart={startDisk} onCancel={() => setDiskDialog(false)} />}
+      {shareLink && <ShareDialog url={shareLink} onClose={() => setShareLink(null)} />}
     </div>
   );
 }

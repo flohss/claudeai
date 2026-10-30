@@ -2,6 +2,8 @@
 
 Application web pour créer un système planétaire et l'observer évoluer, avec une physique gravitationnelle réaliste.
 
+**En ligne : https://flohss.github.io/claudeai/** (publiée automatiquement à chaque push sur `main`).
+
 ## Fonctionnalités
 
 - **Étoile configurable** : classes spectrales O à M. La classe fixe la masse, la luminosité et la couleur de l'étoile. Les zones correspondantes s'affichent dans la vue 3D : la zone habitable (anneau vert) et la ligne des glaces (cercle pointillé).
@@ -25,8 +27,17 @@ Application web pour créer un système planétaire et l'observer évoluer, avec
   - un système aléatoire plausible (planètes rocheuses à l'intérieur de la ligne des glaces, géantes au-delà, espacement stable) ;
   - un disque protoplanétaire paramétrable ;
   - une étoile seule.
+- **Partage par lien** : le bouton « Partager » copie une adresse qui contient tout le système, compressé dans le fragment `#systeme=…`. La personne qui l'ouvre retrouve le même système, sans compte ni serveur. Un système solaire tient en environ 3 000 caractères ; pour un gros disque, l'interface conseille plutôt la sauvegarde en fichier.
 - **Sauvegarde et chargement** au format JSON, qui reprend l'état exact du système.
 - **Vue 3D** : caméra orbitale, trajectoires, noms, suivi du corps sélectionné, contrôle du temps de 1 jour à environ 27 ans par seconde (la touche Espace met en pause).
+
+## Performances
+
+- **Web Worker** : la simulation tourne dans un fil d'exécution séparé ; le fil principal ne fait qu'afficher. Il garde un miroir de l'état, applique les modifications tout de suite pour que l'interface réagisse sans attendre, puis se cale sur le Worker.
+- **Tableaux typés** : positions, vitesses et masses sont rangées dans des `Float64Array` pendant l'intégration. La boucle de gravité O(N²) y est environ 3,5 fois plus rapide que sur des objets, au bit près.
+- **Collisions par tri et balayage** : les corps sont triés le long de l'axe x (tri par insertion, presque linéaire d'un pas à l'autre) et seules les paires proches sont testées.
+
+Le disque protoplanétaire avance environ 8 fois plus vite qu'avant ces optimisations. J'ai aussi mesuré l'algorithme de Barnes-Hut : jusqu'à environ 1 200 corps, il était plus lent ou plus imprécis que la somme directe sur tableaux typés, et je ne l'ai donc pas retenu.
 
 ## Démarrer
 
@@ -37,6 +48,10 @@ npm test         # tests du moteur physique et de la simulation
 npm run build    # vérification des types + build de production dans dist/
 ```
 
+### Publication
+
+`.github/workflows/deploy.yml` teste, construit et publie l'application sur GitHub Pages à chaque push sur `main`. Il faut d'abord, une seule fois, choisir **Settings → Pages → Source : GitHub Actions** dans le dépôt. `.github/workflows/ci.yml` lance les tests et le build sur les autres branches et les pull requests.
+
 ## Architecture
 
 ```
@@ -45,7 +60,8 @@ src/
     units.ts      Unités internes : UA, masse solaire, année (G = 4π²)
     orbits.ts     Éléments orbitaux ⇄ position/vitesse, période, rayon de Hill
     binary.ts     Limites de stabilité des systèmes doubles (Holman & Wiegert)
-    nbody.ts      Accélérations, pas Verlet, collisions (détection continue), fusions
+    state.ts      État compact (tableaux typés) : gravité, pas Verlet, collisions
+    nbody.ts      Énergie, quantité de mouvement, fusions, raccourcis sur les corps
     stars.ts      Classes spectrales, zone habitable, ligne des glaces
     derived.ts    Gravité, flux reçu, température d'équilibre, limite de Roche, habitabilité…
   sim/       État de la simulation et données
@@ -54,6 +70,9 @@ src/
     disk.ts       Disque protoplanétaire et paramètres de formation
     telemetry.ts  Historique énergie / orbites pour les graphiques
     stability.ts  Verdict de stabilité d'une orbite dans un système double
+    server.ts     Côté Worker : fait avancer la simulation, publie son état
+    client.ts     Côté page : miroir de la simulation, envoie les commandes
+    share.ts      Encodage du système dans un lien (compression + base64)
     presets.ts    Système solaire, Kepler-16, Alpha du Centaure, étoile seule
     random.ts     Générateur de systèmes déterministe (graine)
     serialization.ts  Sauvegarde/chargement validés

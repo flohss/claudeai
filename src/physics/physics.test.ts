@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { pTypeCriticalAu, sTypeCriticalAu } from './binary';
 import { density, equilibriumTemperature, equilibriumTemperatureFromFlux, escapeVelocity, rocheLimitKm, stellarFlux, surfaceGravity, zoneStatus } from './derived';
-import { computeAccelerations, makeAccelerationBuffer, mergeBodies, recenter, totalEnergy, totalMomentum, verletStep } from './nbody';
+import { mergeBodies, recenter, totalEnergy, totalMomentum } from './nbody';
+import { NBodyState } from './state';
 import { elementsToState, mu, orbitalPeriod, stateToElements } from './orbits';
 import { habitableZone, snowLine } from './stars';
 import type { Body } from './types';
@@ -62,20 +63,24 @@ describe('intégrateur N corps', () => {
   it("ramène la planète à son point de départ après une période", () => {
     const bodies = twoBody(0.3);
     const start = { ...bodies[1].position };
-    const acc = makeAccelerationBuffer(2);
-    computeAccelerations(bodies, acc);
+    const state = new NBodyState();
+    state.load(bodies);
+    state.computeAccelerations();
     const period = orbitalPeriod(1, 1, EARTH_MASS_SUN);
     const steps = 4000;
-    for (let k = 0; k < steps; k++) verletStep(bodies, acc, period / steps);
+    for (let k = 0; k < steps; k++) state.step(period / steps);
+    state.store(bodies);
     expect(distance(bodies[1].position, start)).toBeLessThan(1e-3);
   });
 
   it("conserve l'énergie et la quantité de mouvement sur 100 orbites", () => {
     const bodies = twoBody(0.1);
-    const acc = makeAccelerationBuffer(2);
-    computeAccelerations(bodies, acc);
+    const state = new NBodyState();
+    state.load(bodies);
+    state.computeAccelerations();
     const e0 = totalEnergy(bodies);
-    for (let k = 0; k < 100 * 400; k++) verletStep(bodies, acc, 1 / 400);
+    for (let k = 0; k < 100 * 400; k++) state.step(1 / 400);
+    state.store(bodies);
     expect(Math.abs((totalEnergy(bodies) - e0) / e0)).toBeLessThan(1e-4);
     expect(length(totalMomentum(bodies))).toBeLessThan(1e-12);
   });
@@ -94,6 +99,41 @@ describe('intégrateur N corps', () => {
     expect(p1.x).toBeCloseTo(p0.x, 15);
     expect(p1.y).toBeCloseTo(p0.y, 15);
     expect(survivor.radiusKm).toBeCloseTo(Math.cbrt(6000 ** 3 + 3000 ** 3), 6);
+  });
+});
+
+describe('état compact', () => {
+  it('donne les mêmes accélérations que la somme directe sur les objets', () => {
+    const bodies = [body('a', 1, 695700), body('b', 1e-3, 70000), body('c', 3e-6, 6371)];
+    bodies[1].position = { x: 5.2, y: 0.3, z: 0.1 };
+    bodies[2].position = { x: -0.7, y: 0.7, z: 0 };
+    const state = new NBodyState();
+    state.load(bodies);
+    state.computeAccelerations();
+    // Accélération de c, calculée à la main
+    let ax = 0;
+    for (const o of [bodies[0], bodies[1]]) {
+      const dx = o.position.x - bodies[2].position.x;
+      const dy = o.position.y - bodies[2].position.y;
+      const dz = o.position.z - bodies[2].position.z;
+      const d = Math.hypot(dx, dy, dz);
+      ax += (4 * Math.PI * Math.PI * o.mass * dx) / d ** 3;
+    }
+    expect(state.ax[2]).toBeCloseTo(ax, 12);
+  });
+
+  it('détecte deux corps qui se croisent entre deux pas', () => {
+    const a = body('a', 1e-6, 6371);
+    const b = body('b', 1e-6, 6371);
+    a.position = { x: -0.01, y: 0, z: 0 };
+    b.position = { x: 0.01, y: 0, z: 0 };
+    a.velocity = { x: -10, y: 0, z: 0 };
+    b.velocity = { x: 10, y: 0, z: 0 };
+    const state = new NBodyState();
+    state.load([a, b]);
+    // Ils viennent de se croiser (ils s'éloignent) : seul le test continu le voit.
+    expect(state.findCollision(0)).toBeNull();
+    expect(state.findCollision(0.002)).toEqual([0, 1]);
   });
 });
 

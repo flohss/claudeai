@@ -1,18 +1,11 @@
 import { currentElements, density, rocheLimitKm, type Frame } from '../physics/derived';
-import {
-  centerOfMass,
-  computeAccelerations,
-  findCollision,
-  makeAccelerationBuffer,
-  mergeBodies,
-  recenter,
-  verletStep,
-} from '../physics/nbody';
+import { centerOfMass, findCollision, mergeBodies, recenter } from '../physics/nbody';
+import { NBodyState } from '../physics/state';
 import { elementsToState, hillRadius, mu, orbitalPeriod } from '../physics/orbits';
 import { SPECTRAL_CLASSES, snowLine, starPropsFor } from '../physics/stars';
 import type { Body, OrbitalElements, PlanetType, SpectralClass } from '../physics/types';
 import { AU_KM, DAYS_PER_YEAR, EARTH_MASS_SUN, G, SUN_RADIUS_KM } from '../physics/units';
-import { add, clone, distance, dot, scale, sub, type Vec3 } from '../physics/vec3';
+import { add, clone, distance, dot, scale, sub } from '../physics/vec3';
 import { DEFAULT_COLOR, estimateRadiusKm, makeStar } from './factory';
 
 /**
@@ -126,7 +119,8 @@ export class Simulation {
   epoch = 0;
   formation: FormationSettings | null = null;
 
-  private acc: Vec3[] = [];
+  /** Copie compacte de l'état dynamique, synchronisée avec `bodies` par `rebuild`. */
+  private state = new NBodyState();
   private dtMax = 0.001;
   private protoCounter = 0;
   private initial: SystemDefinition = { name: '', bodies: [] };
@@ -143,7 +137,7 @@ export class Simulation {
 
   getVersion = (): number => this.version;
 
-  private changed(): void {
+  protected changed(): void {
     this.version += 1;
     this.listeners.forEach((l) => l());
   }
@@ -157,8 +151,17 @@ export class Simulation {
     return this.bodies.find((b) => b.kind === 'star' && !b.parentId) ?? this.bodies.find((b) => b.kind === 'star');
   }
 
+  /** Index par identifiant, reconstruit quand le tableau `bodies` est remplacé. */
+  private index = new Map<string, Body>();
+  private indexOf: Body[] | null = null;
+
   getBody(id: string | null | undefined): Body | undefined {
-    return id ? this.bodies.find((b) => b.id === id) : undefined;
+    if (!id) return undefined;
+    if (this.indexOf !== this.bodies || this.index.size !== this.bodies.length) {
+      this.index = new Map(this.bodies.map((b) => [b.id, b]));
+      this.indexOf = this.bodies;
+    }
+    return this.index.get(id);
   }
 
   children(id: string): Body[] {
@@ -287,7 +290,8 @@ export class Simulation {
     };
     if (!dynamic) {
       apply();
-      this.changed();
+      // Le rayon (donc le rayon de collision) a pu changer.
+      this.rebuild();
       return;
     }
     // Si une étoile change, toutes les orbites qui en dépendent sont recalculées.
@@ -308,10 +312,11 @@ export class Simulation {
   }
 
   /** Ajoute une étoile compagne en orbite autour de l'étoile principale. */
-  addCompanion(spectralClass: SpectralClass, a: number, e: number): Body | undefined {
+  addCompanion(spectralClass: SpectralClass, a: number, e: number, id?: string): Body | undefined {
     const primary = this.star;
     if (!primary) return undefined;
     const companion = makeStar(spectralClass, `${primary.name} B`);
+    if (id) companion.id = id;
     companion.parentId = primary.id;
     companion.elements = { a, e, i: 0, Omega: 0, omega: 0, nu: 180 };
     this.addBody(companion);
@@ -348,8 +353,8 @@ export class Simulation {
 
   /** Recalcule les accélérations et le pas de temps maximal après un changement de structure. */
   private rebuild(): void {
-    this.acc = makeAccelerationBuffer(this.bodies.length);
-    if (this.bodies.length > 0) computeAccelerations(this.bodies, this.acc);
+    this.state.load(this.bodies);
+    this.state.computeAccelerations();
     this.dtMax = this.computeMaxDt();
     this.changed();
   }
@@ -402,27 +407,34 @@ export class Simulation {
     const steps = Math.max(1, Math.ceil(years / this.dtMax));
     const dt = years / steps;
     let done = 0;
+    // L'intégration se fait dans `state` ; les corps sont mis à jour avant
+    // chaque règle qui les lit, et `rebuild` recharge l'état après une modification.
     for (let k = 0; k < steps; k++) {
-      verletStep(this.bodies, this.acc, dt);
+      this.state.step(dt);
       this.time += dt;
       done += dt;
-      this.handleCollisions(dt);
+      const pair = this.state.findCollision(dt);
+      if (pair) {
+        this.state.store(this.bodies);
+        this.handleCollisions(pair);
+      }
       if ((k & 31) === 31) {
         // Les règles plus coûteuses ne sont évaluées que périodiquement.
+        this.state.store(this.bodies);
         this.handleEscapes();
         this.handleRoche();
         if (performance.now() - start > budgetMs) break;
       }
     }
+    this.state.store(this.bodies);
     this.handleEscapes();
     this.handleRoche();
     this.handleGasAccretion(done);
     return done;
   }
 
-  private handleCollisions(dt: number): void {
-    let pair = findCollision(this.bodies, dt);
-    if (!pair) return;
+  private handleCollisions(first: [number, number]): void {
+    let pair: [number, number] | null = first;
     while (pair) {
       const a = this.bodies[pair[0]];
       const b = this.bodies[pair[1]];

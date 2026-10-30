@@ -7,6 +7,8 @@ export default defineConfig({
   base: './',
   // Three.js pèse à lui seul ~600 ko : l'avertissement par défaut (500 ko) n'est pas pertinent ici.
   build: { chunkSizeWarningLimit: 900 },
+  // Le Worker de simulation importe des modules : il doit être émis en ES.
+  worker: { format: 'es' },
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts'],

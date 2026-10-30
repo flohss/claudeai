@@ -18,9 +18,10 @@ interface Props {
   onSave: () => void;
   onLoad: (file: File) => void;
   onFrame: () => void;
+  onShare: () => void;
 }
 
-export function TopBar({ systemName, onPreset, onReset, onSave, onLoad, onFrame }: Props) {
+export function TopBar({ systemName, onPreset, onReset, onSave, onLoad, onFrame, onShare }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   return (
     <header className="topbar">
@@ -54,6 +55,9 @@ export function TopBar({ systemName, onPreset, onReset, onSave, onLoad, onFrame 
           </button>
         </div>
         <div className="group">
+          <button type="button" className="primary" onClick={onShare}>
+            🔗 Partager
+          </button>
           <button type="button" onClick={onSave}>
             Sauvegarder
           </button>

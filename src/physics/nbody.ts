@@ -1,65 +1,24 @@
-import { G, kmToAu } from './units';
+import { NBodyState } from './state';
+import { G } from './units';
 import type { Body } from './types';
 import { vec3, type Vec3 } from './vec3';
 
+// Les calculs O(N²) sont faits sur des tableaux typés (voir state.ts) ;
+// ces fonctions en sont des raccourcis pour travailler directement sur des corps.
+const scratch = new NBodyState();
+
 /** Calcule les accélérations gravitationnelles de chaque corps (UA/an²). */
 export function computeAccelerations(bodies: Body[], out: Vec3[]): void {
-  const n = bodies.length;
-  for (let i = 0; i < n; i++) {
-    const a = out[i];
-    a.x = 0;
-    a.y = 0;
-    a.z = 0;
-  }
-  for (let i = 0; i < n; i++) {
-    const bi = bodies[i];
-    const pi = bi.position;
-    for (let j = i + 1; j < n; j++) {
-      const bj = bodies[j];
-      const dx = bj.position.x - pi.x;
-      const dy = bj.position.y - pi.y;
-      const dz = bj.position.z - pi.z;
-      const d2 = dx * dx + dy * dy + dz * dz;
-      const invD3 = 1 / (d2 * Math.sqrt(d2));
-      const fi = G * bj.mass * invD3;
-      const fj = G * bi.mass * invD3;
-      out[i].x += dx * fi;
-      out[i].y += dy * fi;
-      out[i].z += dz * fi;
-      out[j].x -= dx * fj;
-      out[j].y -= dy * fj;
-      out[j].z -= dz * fj;
-    }
+  scratch.load(bodies);
+  scratch.computeAccelerations();
+  for (let i = 0; i < bodies.length; i++) {
+    out[i].x = scratch.ax[i];
+    out[i].y = scratch.ay[i];
+    out[i].z = scratch.az[i];
   }
 }
 
 export const makeAccelerationBuffer = (n: number): Vec3[] => Array.from({ length: n }, () => vec3());
-
-/**
- * Un pas d'intégration Velocity Verlet (kick-drift-kick), symplectique :
- * l'énergie reste bornée sur le long terme. `acc` doit contenir les
- * accélérations à l'instant courant ; elle est mise à jour en sortie.
- */
-export function verletStep(bodies: Body[], acc: Vec3[], dt: number): void {
-  const half = dt / 2;
-  const n = bodies.length;
-  for (let i = 0; i < n; i++) {
-    const b = bodies[i];
-    b.velocity.x += acc[i].x * half;
-    b.velocity.y += acc[i].y * half;
-    b.velocity.z += acc[i].z * half;
-    b.position.x += b.velocity.x * dt;
-    b.position.y += b.velocity.y * dt;
-    b.position.z += b.velocity.z * dt;
-  }
-  computeAccelerations(bodies, acc);
-  for (let i = 0; i < n; i++) {
-    const b = bodies[i];
-    b.velocity.x += acc[i].x * half;
-    b.velocity.y += acc[i].y * half;
-    b.velocity.z += acc[i].z * half;
-  }
-}
 
 export function totalEnergy(bodies: Body[]): number {
   let kinetic = 0;
@@ -128,38 +87,10 @@ export function recenter(bodies: Body[], positions = true): void {
   }
 }
 
-/**
- * Renvoie la première paire de corps qui se sont touchés pendant le dernier pas
- * de durée `dt`, ou null. On teste la distance minimale atteinte sur le pas
- * (mouvement relatif supposé rectiligne) pour ne pas manquer deux corps rapides
- * qui se croiseraient entre deux pas.
- */
+/** Première paire de corps qui se sont touchés pendant le dernier pas `dt` (voir `NBodyState.findCollision`). */
 export function findCollision(bodies: Body[], dt = 0): [number, number] | null {
-  for (let i = 0; i < bodies.length; i++) {
-    const a = bodies[i];
-    const ra = kmToAu(a.radiusKm * (a.accretionScale ?? 1));
-    for (let j = i + 1; j < bodies.length; j++) {
-      const b = bodies[j];
-      const r = ra + kmToAu(b.radiusKm * (b.accretionScale ?? 1));
-      let dx = b.position.x - a.position.x;
-      let dy = b.position.y - a.position.y;
-      let dz = b.position.z - a.position.z;
-      if (dt > 0) {
-        const wx = b.velocity.x - a.velocity.x;
-        const wy = b.velocity.y - a.velocity.y;
-        const wz = b.velocity.z - a.velocity.z;
-        const w2 = wx * wx + wy * wy + wz * wz;
-        if (w2 > 0) {
-          const t = Math.min(Math.max((dx * wx + dy * wy + dz * wz) / w2, 0), dt);
-          dx -= wx * t;
-          dy -= wy * t;
-          dz -= wz * t;
-        }
-      }
-      if (dx * dx + dy * dy + dz * dz < r * r) return [i, j];
-    }
-  }
-  return null;
+  scratch.load(bodies);
+  return scratch.findCollision(dt);
 }
 
 /**
