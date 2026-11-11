@@ -48,6 +48,7 @@ LOCKED = {
     "REPLAY_SIZE": "the fixed length of a mind's memory of shocks",
     "MEM_COLS": "affect-map width - saved minds are restored to this grid",
     "MEM_ROWS": "affect-map height - saved minds are restored to this grid",
+    "FREE_HIDDEN": "hidden units in a no-code brain - saved brains are built to this",
     "WIDTH": "world width - positions in a save are relative to it",
     "HEIGHT": "world height - positions in a save are relative to it",
 }
@@ -111,6 +112,10 @@ GROUPS = [
     ("master", "Master Mode", "Mode Maitre", [
         "EROSION_PER_AFRAID", "UPRISING_UNREST", "UPRISING_EROSION_MULT",
         "REBEL_RALLY_STRENGTH",
+    ]),
+    ("free", "No-code model", "Modele sans code", [
+        "FREE_INIT_SCALE", "FREE_MUTATION_RATE", "FREE_MUTATION_SCALE", "FREE_FLOOR",
+        "FREE_USAGE_DECAY",
     ]),
     ("history", "Bookkeeping", "Journalisation", [
         "VOCAB_HISTORY_INTERVAL",

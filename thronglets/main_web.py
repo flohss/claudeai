@@ -55,12 +55,12 @@ COMPARE_DEPTHS = {"quick": (4, 8000), "thorough": (8, 40000), "expert": (16, 600
 
 
 def _new_world(mode, predator_count, init_pop=DEFAULT_INIT_POP, seed_genome=None,
-               adaptive_traits=False, learning=False):
+               adaptive_traits=False, learning=False, free=False):
     if mode == "manual":
         return World(init_pop=init_pop, manual_food=True, manual_predators=True, seed_genome=seed_genome,
-                     adaptive_traits=adaptive_traits, learning=learning)
+                     adaptive_traits=adaptive_traits, learning=learning, free=free)
     return World(init_pop=init_pop, predator_count=predator_count, seed_genome=seed_genome,
-                 adaptive_traits=adaptive_traits, learning=learning)
+                 adaptive_traits=adaptive_traits, learning=learning, free=free)
 
 
 class SimState:
@@ -75,6 +75,7 @@ class SimState:
         self.active_seed_genome = None
         self.adaptive_traits = False
         self.learning = False
+        self.free = False   # the no-code model (World(free=True)) instead of the classic one
         # the fire tool is armed/disarmed like the pygame one: a left click
         # burns instead of dropping food while it is on
         self.fire_armed = False
@@ -147,6 +148,11 @@ def snapshot(state):
             for c in w.creatures if c.alive
         ],
         "learning": bool(getattr(w, "learning", False)),
+        # the no-code model: None in a classic world, else what the brains
+        # have found out on their own (World.free_probe) and the rescue count
+        "free": ({"seek": w.free_seek, "flee": w.free_flee, "immigrants": int(w.immigrants),
+                  "history": [[a, b] for a, b in list(w.free_history)[-240:]]}
+                 if getattr(w, "free", False) else None),
         "deaths_by": dict(getattr(w, "deaths_by", {})),
         "vocabulary": {
             STATE_IDS[s]: [[int(t), float(f)] for t, f in breakdown[s]]
@@ -403,6 +409,7 @@ class Handler(BaseHTTPRequestHandler):
                     state.active_seed_genome = None
                     state.adaptive_traits = state.world.adaptive_traits
                     state.learning = getattr(state.world, "learning", False)
+                    state.free = getattr(state.world, "free", False)
                     state.family_focus_id = None
                     state.started = True
                 except (OSError, ValueError, KeyError):
@@ -415,9 +422,14 @@ class Handler(BaseHTTPRequestHandler):
                     init_pop = DEFAULT_INIT_POP
                 state.init_pop = max(1, min(MAX_POPULATION, init_pop))
                 state.adaptive_traits = bool(body.get("adaptive_traits"))
-                state.learning = bool(body.get("learning"))
+                # the two models coexist; the no-code one has no learned mind
+                # and makes its own calls, so it takes neither option below
+                state.free = body.get("model") == "free"
+                state.learning = bool(body.get("learning")) and not state.free
 
-                if state.cli_seed_genome is not None:
+                if state.free:
+                    state.active_seed_genome = None
+                elif state.cli_seed_genome is not None:
                     state.active_seed_genome = state.cli_seed_genome
                 elif body.get("use_ai"):
                     try:
@@ -432,7 +444,7 @@ class Handler(BaseHTTPRequestHandler):
                     state.active_seed_genome = None
 
                 state.world = _new_world(state.mode, 6, state.init_pop, state.active_seed_genome,
-                                          state.adaptive_traits, state.learning)
+                                          state.adaptive_traits, state.learning, state.free)
                 state.family_focus_id = None
                 state.started = True
             elif not state.started:
@@ -446,7 +458,7 @@ class Handler(BaseHTTPRequestHandler):
             elif action == "reset":
                 state.world = _new_world(state.mode, len(state.world.predators), state.init_pop,
                                           state.active_seed_genome, state.adaptive_traits,
-                                          state.learning)
+                                          state.learning, state.free)
                 state.family_focus_id = None
                 state.paused = False
             elif action == "speed":
@@ -762,6 +774,14 @@ INDEX_HTML = """<!doctype html>
       <span data-i18n="initPopLabel"></span>
       <input type="number" id="initPop" value="100" min="1" max="220">
     </label>
+    <label>
+      <span data-i18n="modelLabel"></span>
+      <select id="model">
+        <option value="classic" data-i18n="modelClassic"></option>
+        <option value="free" data-i18n="modelFree"></option>
+      </select>
+    </label>
+    <p id="modelExplain" style="font-size:12px; opacity:0.65; margin-top:-8px;"></p>
     <label><input type="checkbox" id="useAi"> <span data-i18n="useAiLabel"></span></label>
     <label><input type="checkbox" id="adaptiveTraits" checked> <span data-i18n="adaptiveTraitsLabel"></span></label>
     <label><input type="checkbox" id="learning"> <span data-i18n="learningLabel"></span></label>
@@ -775,6 +795,7 @@ INDEX_HTML = """<!doctype html>
     <div id="hud">
       <div class="row" id="header"></div>
       <div class="row" id="hud-summary" style="display:none"></div>
+      <div class="row" id="hud-free" style="display:none"></div>
       <div id="hud-details">
         <div class="row" id="settings"></div>
         <div class="row" id="hud-disposition" style="display:none"></div>
@@ -1052,6 +1073,12 @@ const STRINGS = {
     hudExpandHint: "   (V or click here = show full HUD)",
     graphDispLabel: "how the flock feels about you",
     learningPrefix: "learning:",
+    modelLabel: "Kind of creature",
+    modelClassic: "Classic - instincts written in",
+    modelFree: "No code - they find out by themselves",
+    modelExplainClassic: "Classic: fleeing hunters and walking to food are written in. Only the language evolves.",
+    modelExplainFree: "No code: each creature is born with a random little brain; survivors pass it on. Clumsy at first.",
+    freeLine: "no code:  to food {seek}   from hunters {flee}   newcomers {imm}",
     choiceApproach: "coming",
     choiceFlee: "fleeing",
     choiceIgnore: "ignoring you",
@@ -1170,6 +1197,12 @@ const STRINGS = {
     hudExpandHint: "   (V ou clique ici = HUD complet)",
     graphDispLabel: "ce que le groupe ressent pour toi",
     learningPrefix: "apprentissage :",
+    modelLabel: "Genre de creature",
+    modelClassic: "Classique - instincts ecrits",
+    modelFree: "Sans code - elles trouvent seules",
+    modelExplainClassic: "Classique : fuir les chasseurs et aller vers la nourriture sont ecrits. Seul le langage evolue.",
+    modelExplainFree: "Sans code : chaque creature nait avec un petit cerveau au hasard ; les survivantes le transmettent. Maladroites au debut.",
+    freeLine: "sans code :  vers la nourriture {seek}   loin des chasseurs {flee}   renforts {imm}",
     choiceApproach: "viennent",
     choiceFlee: "fuient",
     choiceIgnore: "t'ignorent",
@@ -1227,6 +1260,7 @@ function applyLanguage(lang) {
     const key = el.dataset.i18n;
     if (t[key] !== undefined) el.textContent = t[key];
   });
+  if (typeof syncModelChoice === 'function') syncModelChoice();
   document.getElementById('langEn').classList.toggle('active', lang === 'en');
   document.getElementById('langFr').classList.toggle('active', lang === 'fr');
   document.getElementById('pause').textContent = paused ? t.resumeText : t.pauseText;
@@ -1388,6 +1422,7 @@ function render(state) {
   applyHudExpanded();
 
   renderLearned(state);
+  renderFree(state);
   renderMind(state);
 
   renderVocabRow('vocab-danger', t.labelDanger, state.vocabulary['danger']);
@@ -1543,7 +1578,8 @@ async function startGame(mode) {
   const useAi = document.getElementById('useAi').checked;
   const adaptiveTraits = document.getElementById('adaptiveTraits').checked;
   const learning = document.getElementById('learning').checked;
-  const res = await post('start', {mode, init_pop: startingInitPop(), use_ai: useAi, adaptive_traits: adaptiveTraits, learning});
+  const model = document.getElementById('model').value;
+  const res = await post('start', {mode, init_pop: startingInitPop(), use_ai: useAi, adaptive_traits: adaptiveTraits, learning, model});
   if (res.error === 'ai_missing') alert(STRINGS[uiLang].errorAiMissing(res.file));
 }
 async function resumeGame() {
@@ -1747,6 +1783,31 @@ compareOverlay.addEventListener('click', (ev) => {
 
 const translatorOverlay = document.getElementById('translator-overlay');
 const translatorContent = document.getElementById('translator-content');
+
+// the two start options that only make sense for the classic model are
+// greyed out when the no-code one is picked
+function syncModelChoice() {
+  const free = document.getElementById('model').value === 'free';
+  for (const id of ['useAi', 'learning']) {
+    const box = document.getElementById(id);
+    box.disabled = free;
+    box.parentElement.style.opacity = free ? 0.4 : 1;
+  }
+  const t = STRINGS[uiLang];
+  document.getElementById('modelExplain').textContent = free ? t.modelExplainFree : t.modelExplainClassic;
+}
+document.getElementById('model').addEventListener('change', syncModelChoice);
+syncModelChoice();
+
+function renderFree(state) {
+  const row = document.getElementById('hud-free');
+  if (!state.free) { row.style.display = 'none'; return; }
+  const show = v => v === null || v === undefined ? '...' : (v >= 0 ? '+' : '') + v.toFixed(2);
+  row.innerHTML = '<span style="color:#bed7eb">' + STRINGS[uiLang].freeLine
+    .replace('{seek}', show(state.free.seek)).replace('{flee}', show(state.free.flee))
+    .replace('{imm}', state.free.immigrants) + '</span>';
+  row.style.display = '';
+}
 
 function renderLearned(state) {
   const t = STRINGS[uiLang];

@@ -208,6 +208,14 @@ TEXT = {
         "choose_traits_no": "  N = no - everyone has the same fixed stats",
         "choose_traits_hint": "Press Y or N, or ENTER for the default (yes).",
 
+        "choose_model_prompt": "Which kind of creature?",
+        "choose_model_1": "  1 = Classic (default) - instincts are written in: run from hunters,",
+        "choose_model_1b": "      walk to food. Only their language evolves. Works from the first second.",
+        "choose_model_2": "  2 = No code - nothing is written in. Each one is born with a random little",
+        "choose_model_2b": "      brain; the ones that survive pass it on. Clumsy at first, then they find out.",
+        "choose_model_hint": "Press 1 or 2, or ENTER for the default (classic).",
+        "hud_free": "no code:  to food {seek}   from hunters {flee}   newcomers {imm}",
+        "hud_free_tag": "no-code model",
         "choose_learning_prompt": "Let the flock learn to trust or fear you?",
         "choose_learning_explain1": "  Placing food is kindness, a predator is harm - creatures learn",
         "choose_learning_explain2": "  which, adapt to you, and pass it on. Not evolution: a learned mind.",
@@ -514,6 +522,14 @@ TEXT = {
         "choose_traits_no": "  N = non - tout le monde a les memes stats fixes",
         "choose_traits_hint": "Appuie sur O ou N, ou ENTREE pour le defaut (oui).",
 
+        "choose_model_prompt": "Quel genre de creature ?",
+        "choose_model_1": "  1 = Classique (defaut) - les instincts sont ecrits : fuir les chasseurs,",
+        "choose_model_1b": "      aller vers la nourriture. Seul leur langage evolue. Marche des la 1re seconde.",
+        "choose_model_2": "  2 = Sans code - rien n'est ecrit. Chacune nait avec un petit cerveau au hasard ;",
+        "choose_model_2b": "      celles qui survivent le transmettent. Maladroites au debut, puis elles trouvent.",
+        "choose_model_hint": "Appuie sur 1 ou 2, ou ENTREE pour le defaut (classique).",
+        "hud_free": "sans code :  vers la nourriture {seek}   loin des chasseurs {flee}   renforts {imm}",
+        "hud_free_tag": "modele sans code",
         "choose_learning_prompt": "Laisser le groupe apprendre a te faire confiance ou a te craindre ?",
         "choose_learning_explain1": "  Nourriture = bienveillance, predateur = mal : les creatures",
         "choose_learning_explain2": "  apprennent, s'adaptent a toi et transmettent. Un esprit appris.",
@@ -1676,6 +1692,8 @@ def draw_hud(screen, font, world, paused, speed, mode, lang, expanded, trained=F
 
     # run-state tags right-aligned on the header row, out of the way
     tag_parts = [t["hud_trained_tag"]] if trained else []
+    if getattr(world, "free", False):
+        tag_parts.append(t["hud_free_tag"])
     if world.adaptive_traits:
         tag_parts.append(t["hud_traits_tag"])
     if muted:
@@ -1694,6 +1712,8 @@ def draw_hud(screen, font, world, paused, speed, mode, lang, expanded, trained=F
         ob = world.obedience_summary() or 0.0
         unrest = world.master_unrest() or 0.0
         y = _obedience_gauge(screen, font, 10, y, ob, unrest, t)
+    elif getattr(world, "free", False):
+        y = _free_gauge(screen, font, 10, y, world, t)
     else:
         disp = world.disposition_summary()
         if disp is not None:
@@ -1749,14 +1769,16 @@ def draw_hud(screen, font, world, paused, speed, mode, lang, expanded, trained=F
 
 
 def _new_world(mode, predator_count, init_pop=DEFAULT_INIT_POP, seed_genome=None,
-               adaptive_traits=False, learning=False):
+               adaptive_traits=False, learning=False, free=False):
     # learning is a start-screen choice (default off = pure natural selection,
     # the original spirit); the headless compare_seeds runs are unaffected.
     if mode == "manual":
         return World(init_pop=init_pop, manual_food=True, manual_predators=True,
-                      seed_genome=seed_genome, adaptive_traits=adaptive_traits, learning=learning)
+                      seed_genome=seed_genome, adaptive_traits=adaptive_traits, learning=learning,
+                      free=free)
     return World(init_pop=init_pop, predator_count=predator_count,
-                 seed_genome=seed_genome, adaptive_traits=adaptive_traits, learning=learning)
+                 seed_genome=seed_genome, adaptive_traits=adaptive_traits, learning=learning,
+                 free=free)
 
 
 def choose_language(screen, font):
@@ -1873,6 +1895,44 @@ def choose_adaptive_traits(screen, font, lang):
                     return True
                 if event.key == pygame.K_n:
                     return False
+
+
+def choose_model(screen, font, lang):
+    """Which of the two models drives the creatures: the classic one (instincts
+    written by hand, language evolves) or the free one (nothing written, an
+    inherited brain - World(free=True)). Returns True for the free model.
+    Default (ENTER) is the classic one, so nothing changes for a bare run."""
+    t = TEXT[lang]
+    lines = ["Thronglets", "", t["choose_model_prompt"], "",
+             t["choose_model_1"], t["choose_model_1b"], "",
+             t["choose_model_2"], t["choose_model_2b"], "",
+             t["choose_model_hint"]]
+    while True:
+        screen.fill(BG)
+        for i, line in enumerate(lines):
+            screen.blit(font.render(line, True, TEXT_COLOR), (20, 20 + i * 26))
+        pygame.display.flip()
+        for event in events():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.KEYDOWN:
+                if event.key in (pygame.K_1, pygame.K_KP1, pygame.K_RETURN):
+                    return False
+                if event.key in (pygame.K_2, pygame.K_KP2):
+                    return True
+
+
+def _free_gauge(screen, font, x, y, world, t):
+    """The no-code model's one HUD line: what the brains have found out on
+    their own (World.free_probe), and how many newcomers had to be brought in
+    to keep the world from ending."""
+    def show(v):
+        return "..." if v is None else f"{v:+.2f}"
+    line = t["hud_free"].format(seek=show(world.free_seek), flee=show(world.free_flee),
+                                imm=world.immigrants)
+    screen.blit(font.render(line, True, (190, 215, 235)), (x, y))
+    return y + 22
 
 
 def choose_learning(screen, font, lang):
@@ -3095,15 +3155,23 @@ def main():
 
     seed_genome = None
     learning = False
+    free = False
     if world is None:
         mode = choose_mode(screen, font, lang)
         init_pop = choose_population(screen, font, lang)
         adaptive_traits = choose_adaptive_traits(screen, font, lang)
         # Master Mode needs the learned mind (to break its will), so it forces
         # learning on and skips the usual opt-in prompt.
-        learning = True if master_mode else choose_learning(screen, font, lang)
+        # The two models sit side by side; Master Mode is built on the learned
+        # mind, so it stays classic. A free flock has no learned mind and no
+        # use for a ready-made language - its calls come out of its brain - so
+        # those two questions are skipped for it.
+        free = False if master_mode else choose_model(screen, font, lang)
+        learning = True if master_mode else (False if free else choose_learning(screen, font, lang))
 
-        if args.language:
+        if free:
+            pass
+        elif args.language:
             seed_genome = load_seed_genome(args.language)
         else:
             ai_choice = choose_ai(screen, font, lang)
@@ -3123,18 +3191,24 @@ def main():
         # Master Mode: no predators at all, and the flock never reproduces on
         # its own - it only grows when the master spawns a creature by hand.
         world = _new_world(mode, 0 if master_mode else 6, init_pop, seed_genome,
-                           adaptive_traits, learning)
+                           adaptive_traits, learning, free)
         if master_mode:
             world.allow_reproduction = False
     else:
         adaptive_traits = world.adaptive_traits
         learning = getattr(world, "learning", False)   # honour the saved world
+        free = getattr(world, "free", False)           # and the model it was running
         master_mode = getattr(world, "master_mode", False)   # a resumed Master game stays Master
     world.master_mode = master_mode
 
     # the disposition line takes one extra row, so grow both HUD sizes to fit
     # it (only when learning is on - a pure-selection run keeps the old, tidy
     # heights)
+    if free:
+        MINIMAL_HUD_H += 22   # the no-code gauge row
+        EXPANDED_HUD_H += 22
+        HUD_H = MINIMAL_HUD_H
+        SCALE_Y = (SCREEN_H - HUD_H) / HEIGHT
     if learning:
         MINIMAL_HUD_H += 22   # the disposition/obedience gauge row
         EXPANDED_HUD_H += 88   # gauge + choice breakdown + mood legend + memory hint
@@ -3168,7 +3242,7 @@ def main():
                     paused = not paused
                 elif event.key == pygame.K_r:
                     world = _new_world(mode, len(world.predators), init_pop, seed_genome,
-                                       adaptive_traits, learning)
+                                       adaptive_traits, learning, free)
                 elif event.key == pygame.K_UP:
                     speed = min(200, speed + (1 if speed < 10 else 10))
                 elif event.key == pygame.K_DOWN:

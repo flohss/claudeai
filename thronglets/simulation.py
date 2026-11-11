@@ -366,13 +366,71 @@ def _mem_cell_center(cy, cx):
     return np.array([(cx + 0.5) * WIDTH / MEM_COLS, (cy + 0.5) * HEIGHT / MEM_ROWS])
 
 
-class Genome:
-    __slots__ = ("emission_logits", "response_weights", "traits")
+# ---------------------------------------------------------------------------
+# The FREE model - a second way to run the world, chosen at start, that sits
+# beside the classic one instead of replacing it (World(free=True)).
+#
+# In the classic model the creatures' behaviour is written by hand: a priority
+# list decides what state a creature is in (danger, then food, then distress,
+# then mate), and each state has a hand-set urge (run from the hunter, walk to
+# the food). Only the vocabulary evolves.
+#
+# In the free model none of that drives the body. A creature is born with a
+# small neural network in its genome. It is fed what the creature perceives and
+# its outputs ARE the behaviour: where to step and what to call. Nothing tells
+# it that food is good or that a hunter is bad. The world's physics is the only
+# teacher - food in reach restores energy, a hunter in reach kills, energy runs
+# out, and whoever is still alive and well fed leaves children carrying a
+# slightly altered copy of its network. Whatever behaviour appears was found,
+# not written.
+#
+# What is still fixed by hand, and has to be: the senses (what reaches the
+# network) and the physics. Those are the creature's body and its world, not
+# its behaviour.
+FREE_HIDDEN = 8                # hidden units in an inherited brain
+# inputs: food (direction x,y + nearness), hunter (same), nearest creature
+# (same), own energy, each audible call as a direction (2 per token), where it
+# stands on the field (x,y), two random numbers (so it can evolve to explore -
+# no wander is added for it), and a constant
+FREE_INPUTS = 3 * 3 + 1 + 2 * (N_TOKENS - 1) + 2 + 2 + 1
+FREE_OUTPUTS = 2 + N_TOKENS    # a step (x,y) and one score per possible call
+FREE_INIT_SCALE = 0.6          # spread of a founder's random weights
+FREE_MUTATION_RATE = 0.10      # chance an inherited weight is nudged
+FREE_MUTATION_SCALE = 0.30     # how far
+FREE_FLOOR = 14                # below this many alive, newcomers arrive (see _free_immigration)
+FREE_USAGE_DECAY = 0.995       # how fast the "who says what, when" tally forgets
 
-    def __init__(self, emission_logits, response_weights, traits=None):
+
+def _free_brain_random(rng):
+    return (rng.normal(0, FREE_INIT_SCALE, (FREE_HIDDEN, FREE_INPUTS)),
+            rng.normal(0, FREE_INIT_SCALE, (FREE_OUTPUTS, FREE_HIDDEN)))
+
+
+def _free_brain_mutate(brain, rng):
+    for w in brain:
+        mask = rng.random(w.shape) < FREE_MUTATION_RATE
+        w += mask * rng.normal(0, FREE_MUTATION_SCALE, w.shape)
+
+
+def _free_brain_cross(a, b, rng):
+    """A child takes each hidden unit WHOLE from one parent or the other (its
+    incoming and its outgoing weights together). Mixing weight by weight would
+    tear apart whatever a unit had come to do."""
+    take_a = rng.random(FREE_HIDDEN) < 0.5
+    w1 = np.where(take_a[:, None], a[0], b[0]).copy()
+    w2 = np.where(take_a[None, :], a[1], b[1]).copy()
+    return (w1, w2)
+
+
+class Genome:
+    __slots__ = ("emission_logits", "response_weights", "traits", "brain")
+
+    def __init__(self, emission_logits, response_weights, traits=None, brain=None):
         self.emission_logits = emission_logits
         self.response_weights = response_weights
         self.traits = DEFAULT_TRAITS.copy() if traits is None else traits
+        # only in a free world: (input->hidden, hidden->output) weights
+        self.brain = brain
 
     def token_for(self, state):
         return int(np.argmax(self.emission_logits[state]))
@@ -395,11 +453,15 @@ class Genome:
             np.where(mask_r, a.response_weights, b.response_weights).copy(),
             np.where(mask_t, a.traits, b.traits).copy(),
         )
+        if a.brain is not None and b.brain is not None:
+            child.brain = _free_brain_cross(a.brain, b.brain, rng)
         child.mutate(rng)
         return child
 
     def clone(self, rng):
         child = Genome(self.emission_logits.copy(), self.response_weights.copy(), self.traits.copy())
+        if self.brain is not None:
+            child.brain = (self.brain[0].copy(), self.brain[1].copy())
         child.mutate(rng)
         return child
 
@@ -411,6 +473,8 @@ class Genome:
         mask_t = rng.random(self.traits.shape) < MUTATION_RATE
         self.traits += mask_t * rng.normal(0, 1.0, self.traits.shape) * TRAIT_MUTATION_SCALE
         np.clip(self.traits, TRAIT_BOUNDS[:, 0], TRAIT_BOUNDS[:, 1], out=self.traits)
+        if self.brain is not None:
+            _free_brain_mutate(self.brain, rng)
 
     @staticmethod
     def from_lookup(state_to_token, token_to_state):
@@ -947,10 +1011,17 @@ def _edge_push(pos):
 
 class World:
     def __init__(self, init_pop=70, seed=None, manual_food=False, manual_predators=False,
-                 predator_count=None, seed_genome=None, adaptive_traits=False, learning=False):
+                 predator_count=None, seed_genome=None, adaptive_traits=False, learning=False,
+                 free=False):
+        if free and learning:
+            # two different answers to "where does behaviour come from"; a
+            # creature is driven by one or the other, never both
+            raise ValueError("the free model and the learned mind cannot be combined")
         self.rng = np.random.default_rng(seed)
         self.adaptive_traits = adaptive_traits
         self.learning = learning
+        self.free = free
+        self._free_reset()
         # The player's hand in world coordinates (set by the renderer each
         # frame, or None when the cursor is off the field). Only read when
         # learning is on; creatures perceive and react to it.
@@ -961,7 +1032,7 @@ class World:
         self.creatures = []
         if seed_genome is None:
             for _ in range(init_pop):
-                c = Creature(self.rng.uniform([0, 0], [WIDTH, HEIGHT]), INIT_ENERGY, Genome.random(self.rng))
+                c = Creature(self.rng.uniform([0, 0], [WIDTH, HEIGHT]), INIT_ENERGY, self._new_genome())
                 c.mind = self._new_mind()
                 self._register_birth(c, (), 0)
                 self.creatures.append(c)
@@ -973,7 +1044,8 @@ class World:
                 c = Creature(
                     self.rng.uniform([0, 0], [WIDTH, HEIGHT]), INIT_ENERGY,
                     Genome(seed_genome.emission_logits.copy(), seed_genome.response_weights.copy(),
-                           seed_genome.traits.copy()),
+                           seed_genome.traits.copy(),
+                           _free_brain_random(self.rng) if free else None),
                 )
                 c.mind = self._new_mind()
                 self._register_birth(c, (), 0)
@@ -1020,6 +1092,28 @@ class World:
             for _ in range(n):
                 self.predators.append(Predator(self.rng.uniform([0, 0], [WIDTH, HEIGHT])))
 
+    def _free_reset(self):
+        """The free model's own bookkeeping (all idle in a classic world)."""
+        # who has been calling what, in which situation - the situation is the
+        # OBSERVER's label (the classic state), which a free creature never
+        # sees; it only lets the vocabulary panel show what a call goes with
+        self.free_usage = np.zeros((N_STATES, N_TOKENS))
+        # two gauges of behaviour nobody wrote (see free_probe): does a brain
+        # step toward food, and away from a hunter? 0 = makes no difference,
+        # +1 = straight at it / straight away. None until first measured.
+        self.free_seek = None
+        self.free_flee = None
+        self.free_history = deque()   # (seek, flee) sampled with the vocabulary
+        self.immigrants = 0           # newcomers brought in by _free_immigration
+
+    def _new_genome(self):
+        """A founder's genome - the one place they are minted, so a free world
+        never ends up with a creature that has no brain."""
+        g = Genome.random(self.rng)
+        if self.free:
+            g.brain = _free_brain_random(self.rng)
+        return g
+
     def _new_mind(self, parents=None):
         """A fresh (or inherited) Mind when learning is on, else None - the
         single place minds are minted, so every birth path stays consistent."""
@@ -1038,16 +1132,24 @@ class World:
             self._spread_knowledge()
             if self.master_mode:
                 self._master_rebellion()
-        self._move()
+        if self.free:
+            self._move_free()
+        else:
+            self._move()
         self._move_predators()
         self._predator_kills()
         self._eat()
         self._reproduce()
         self._age_and_cull()
+        if self.free:
+            self._free_immigration()
         if not self.manual_food and self.tick % FOOD_SPAWN_INTERVAL == 0 and len(self.food) < MAX_FOOD:
             self._spawn_food_patch()
         if self.tick % VOCAB_HISTORY_INTERVAL == 0:
             self._record_vocab_history()
+            if self.free:
+                self.free_seek, self.free_flee = self.free_probe()
+                self.free_history.append((self.free_seek, self.free_flee))
             if self.adaptive_traits:
                 self._record_trait_history()
             if self.learning:
@@ -1439,7 +1541,9 @@ class World:
         Creature, or None if MAX_POPULATION is already reached."""
         if len(self.creatures) >= MAX_POPULATION:
             return None
-        genome = genome if genome is not None else Genome.random(self.rng)
+        genome = genome if genome is not None else self._new_genome()
+        if self.free and genome.brain is None:
+            genome.brain = _free_brain_random(self.rng)
         pos = np.clip(np.array([x, y]), [0, 0], [WIDTH, HEIGHT])
         creature = Creature(pos, INIT_ENERGY, genome)
         creature.mind = self._new_mind()   # a fresh, unrelated founder starts naive
@@ -1474,6 +1578,19 @@ class World:
         result = {}
         alive = self._alive()
         for state in (IDLE, FOOD, MATE, DANGER, DISTRESS):
+            if getattr(self, "free", False):
+                # no table to read in a free brain: report what has actually
+                # been called in each situation lately
+                counts = self.free_usage[state]
+                total = float(counts.sum())
+                if not alive or total < 1e-9:
+                    result[state] = []
+                    continue
+                result[state] = sorted(
+                    ((int(t), float(counts[t] / total)) for t in range(N_TOKENS) if counts[t] > 0),
+                    key=lambda p: -p[1],
+                )
+                continue
             tokens = [c.genome.token_for(state) for c in alive]
             if not tokens:
                 result[state] = []
@@ -1628,14 +1745,17 @@ class World:
                 c.state = MATE
             else:
                 c.state = IDLE
-            c.token = c.genome.token_for(c.state)
+            if not self.free:
+                c.token = c.genome.token_for(c.state)
+            # (a free creature's call comes out of its brain, in _move_free;
+            # its state above is only the observer's label for the panels)
 
         self._cache = dict(
             alive=alive, positions=positions, food_pos=food_pos,
             nearest_food_d=nearest_food_d, nearest_food_i=nearest_food_i,
             pair_d=pair_d, nearest_mate_d=nearest_mate_d, nearest_mate_i=nearest_mate_i,
             predator_pos=predator_pos, nearest_pred_d=nearest_pred_d, nearest_pred_i=nearest_pred_i,
-            hearing=hearing,
+            hearing=hearing, vision=vision, danger_r=danger_r,
         )
 
     def _move(self):
@@ -1824,6 +1944,149 @@ class World:
                 c.energy -= metabolism
                 if c.token != 0:
                     c.energy -= SIGNAL_COST
+
+    def _move_free(self):
+        """The free model's whole behaviour: perceive, run the inherited brain,
+        do what it says. There is no state, no urge and no wander in here -
+        compare with _move() above, where every one of those is written out."""
+        c_ = self._cache
+        alive = c_["alive"]
+        if not alive:
+            return
+        n = len(alive)
+        positions, pair_d = c_["positions"], c_["pair_d"]
+        vision, hearing, danger_r = c_["vision"], c_["hearing"], c_["danger_r"]
+        x = np.zeros((n, FREE_INPUTS))
+
+        def look(col, target, dist, reach):
+            # a thing in sight: which way it lies (unit vector) and how near
+            # (0 at the edge of sight, 1 on top of it); all zero when unseen
+            seen = dist < reach
+            if not seen.any():
+                return seen, None
+            d = target - positions
+            unit = d / np.maximum(np.linalg.norm(d, axis=1), 1e-6)[:, None]
+            x[:, col:col + 2] = np.where(seen[:, None], unit, 0.0)
+            x[:, col + 2] = np.where(seen, 1.0 - np.where(seen, dist, 0.0) / reach, 0.0)
+            return seen, unit
+
+        sees_food, food_dir = (np.zeros(n, bool), None)
+        if len(c_["food_pos"]):
+            sees_food, food_dir = look(0, c_["food_pos"][c_["nearest_food_i"]],
+                                       c_["nearest_food_d"], vision)
+        sees_pred, pred_dir = (np.zeros(n, bool), None)
+        if len(c_["predator_pos"]):
+            sees_pred, pred_dir = look(3, c_["predator_pos"][c_["nearest_pred_i"]],
+                                       c_["nearest_pred_d"], danger_r)
+        if n > 1:
+            near_i = pair_d.argmin(axis=1)
+            look(6, positions[near_i], pair_d[np.arange(n), near_i], vision)
+        x[:, 9] = np.array([c.energy for c in alive]) / MAX_ENERGY
+
+        # what it hears: last step's calls, each token as the direction the
+        # sound comes from (louder when nearer, several callers add up)
+        tokens = np.array([c.token for c in alive])
+        if n > 1 and tokens.any():
+            diff = positions[None, :, :] - positions[:, None, :]
+            safe = np.where(np.isfinite(pair_d), np.maximum(pair_d, 1e-6), 1.0)
+            loud = np.where(pair_d < hearing[:, None], 1.0 - safe / hearing[:, None], 0.0)
+            pull = diff / safe[:, :, None] * loud[:, :, None]
+            for k in range(1, N_TOKENS):
+                said = tokens == k
+                if said.any():
+                    x[:, 10 + 2 * (k - 1):12 + 2 * (k - 1)] = np.clip(
+                        pull[:, said, :].sum(axis=1), -1.0, 1.0)
+        base = 10 + 2 * (N_TOKENS - 1)
+        x[:, base:base + 2] = positions / _FIELD_HI * 2.0 - 1.0
+        x[:, base + 2:base + 4] = self.rng.normal(0, 1, (n, 2))
+        x[:, base + 4] = 1.0
+
+        for i, c in enumerate(alive):
+            w1, w2 = c.genome.brain
+            out = np.tanh(w2.dot(np.tanh(w1.dot(x[i]))))
+            if self.adaptive_traits:
+                t = c.genome.traits
+                own_speed = t[TRAIT_SPEED]
+                metabolism = t[TRAIT_METABOLISM] + (
+                    SPEED_ENERGY_COST * (own_speed - TRAIT_BOUNDS[TRAIT_SPEED, 0])
+                    + VISION_ENERGY_COST * (t[TRAIT_VISION] - TRAIT_BOUNDS[TRAIT_VISION, 0])
+                    + HEARING_ENERGY_COST * (t[TRAIT_HEARING] - TRAIT_BOUNDS[TRAIT_HEARING, 0])
+                )
+            else:
+                own_speed, metabolism = SPEED, METABOLISM
+            step = out[:2]
+            size = _norm2(step)
+            if size > 1.0:
+                step = step / size
+            c.pos = _in_field(c.pos + step * own_speed)
+            c.token = int(np.argmax(out[2:]))
+            self.free_usage[c.state, c.token] += 1.0
+            c.energy -= metabolism
+            if c.token != 0:
+                c.energy -= SIGNAL_COST
+        self.free_usage *= FREE_USAGE_DECAY
+
+    def free_probe(self):
+        """What have the brains come to do? Asked directly, not inferred from
+        the field: every living brain is shown a piece of food (then a hunter)
+        in each of 8 directions, with nothing else in sight, and we look at
+        which way it steps. Returns (seek, flee), each the flock's average
+        from -1 to +1:
+          seek  +1 = steps straight at food, 0 = food makes no difference
+          flee  +1 = steps straight away from a hunter, 0 = no difference
+        Watching real movement would not do: a hunter ends up BEHIND whatever
+        is moving, so even a brain that is blind to hunters looks like it is
+        running from them. Here the thing is placed all around, which cancels
+        any habit of simply drifting one way.
+        Returns (None, None) when nobody is alive."""
+        alive = self._alive()
+        if not alive or not self.free:
+            return None, None
+        ang = np.arange(8) * (np.pi / 4)
+        dirs = np.stack([np.cos(ang), np.sin(ang)], axis=1)
+        base = np.zeros((8, FREE_INPUTS))
+        base[:, 9] = 0.5                      # half-fed
+        base[:, FREE_INPUTS - 1] = 1.0        # the constant input
+        w1 = np.stack([c.genome.brain[0] for c in alive])
+        w2 = np.stack([c.genome.brain[1] for c in alive])
+        result = []
+        for col in (0, 3):
+            xin = base.copy()
+            xin[:, col:col + 2] = dirs
+            xin[:, col + 2] = 0.5             # halfway into sight
+            hidden = np.tanh(np.einsum("nhi,di->ndh", w1, xin))
+            step = np.tanh(np.einsum("noh,ndh->ndo", w2[:, :2, :], hidden))
+            # the part of the step that follows the thing around, as a share
+            # of full speed (a brain that always walks east scores 0)
+            result.append(float(np.clip((step * dirs[None]).sum(axis=2), -1, 1).mean()))
+        return result[0], -result[1]
+
+    def _free_immigration(self):
+        """Keeps a free world from simply ending. Founders have random brains
+        and most of them are hopeless; a flock can die out before anything
+        worth inheriting has appeared, and then there is nothing left to
+        evolve. So when fewer than FREE_FLOOR are alive, one newcomer arrives
+        per step: a copy of a random survivor (or a brand-new random
+        brain if nobody is left). It is help from outside the world, and it is
+        counted in `immigrants` so it can never pass for the flock's own
+        success."""
+        if not self.allow_reproduction:
+            return
+        alive = self._alive()
+        if len(alive) >= FREE_FLOOR or len(self.creatures) >= MAX_POPULATION:
+            return
+        if alive:
+            # an EXACT copy, not a mutated one: at the floor there is almost no
+            # selection left to weed out bad mutations, so mutated newcomers
+            # steadily erased what the flock had found (measured: two worlds in
+            # eight lost a skill they had already evolved)
+            g = alive[int(self.rng.integers(len(alive)))].genome
+            genome = Genome(g.emission_logits.copy(), g.response_weights.copy(), g.traits.copy(),
+                            (g.brain[0].copy(), g.brain[1].copy()))
+        else:
+            genome = self._new_genome()
+        if self.add_creature(*self.rng.uniform([0, 0], [WIDTH, HEIGHT]), genome=genome) is not None:
+            self.immigrants += 1
 
     def _move_predators(self):
         if not self.predators:
@@ -2024,6 +2287,11 @@ def save_world(world, path):
         "manual_predators": world.manual_predators,
         "adaptive_traits": world.adaptive_traits,
         "learning": world.learning,
+        "free": getattr(world, "free", False),
+        "free_usage": world.free_usage.tolist(),
+        "free_stats": [world.free_seek, world.free_flee],
+        "free_history": [list(h) for h in world.free_history],
+        "immigrants": world.immigrants,
         "master_mode": getattr(world, "master_mode", False),
         "allow_reproduction": getattr(world, "allow_reproduction", True),
         "vocab_history": {state: list(hist) for state, hist in world.vocab_history.items()},
@@ -2046,6 +2314,7 @@ def save_world(world, path):
                 "emission_logits": c.genome.emission_logits.tolist(),
                 "response_weights": c.genome.response_weights.tolist(),
                 "traits": c.genome.traits.tolist(),
+                "brain": [w.tolist() for w in c.genome.brain] if c.genome.brain is not None else None,
                 "mind": {k: v.tolist() for k, v in c.mind.p.items()} if c.mind is not None else None,
                 "mood": [c.mind.valence, c.mind.arousal] if c.mind is not None else None,
                 "memory": c.mind.memory.tolist() if c.mind is not None else None,
@@ -2070,6 +2339,15 @@ def load_world(path, seed=None):
     world.manual_predators = data["manual_predators"]
     world.adaptive_traits = data.get("adaptive_traits", False)
     world.learning = data.get("learning", False)
+    world.free = data.get("free", False)
+    world._free_reset()
+    if world.free:
+        usage = np.array(data.get("free_usage", []), dtype=float)
+        if usage.shape == world.free_usage.shape:
+            world.free_usage = usage
+        world.free_seek, world.free_flee = data.get("free_stats", [None, None])
+        world.free_history = deque(tuple(h) for h in data.get("free_history", []))
+        world.immigrants = int(data.get("immigrants", 0))
     world.dormant_ids = set()   # __init__ sets this; __new__ bypasses it, so restore it
     world.order = None
     world.master_mode = data.get("master_mode", False)
@@ -2109,6 +2387,10 @@ def load_world(path, seed=None):
     for cd in data["creatures"]:
         traits = np.array(cd["traits"]) if "traits" in cd else None
         genome = Genome(np.array(cd["emission_logits"]), np.array(cd["response_weights"]), traits)
+        if world.free:
+            saved = cd.get("brain")
+            genome.brain = ((np.array(saved[0], dtype=float), np.array(saved[1], dtype=float))
+                            if saved else _free_brain_random(world.rng))
         creature = Creature(np.array(cd["pos"], dtype=float), cd["energy"], genome)
         creature.age = cd["age"]
         if cd.get("mind") is not None:

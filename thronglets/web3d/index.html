@@ -52,6 +52,15 @@
     <div class="gauge"><div id="f-dread-fill" class="fill bad"></div></div>
     <div id="f-dread-text" class="small"></div>
   </div>
+  <div id="f-free" class="hidden">
+    <div class="label" data-t="freeSeek"></div>
+    <div class="gauge signed"><div class="mid"></div><div id="f-seek-fill" class="fill"></div></div>
+    <div id="f-seek-text" class="small"></div>
+    <div class="label" data-t="freeFlee"></div>
+    <div class="gauge signed"><div class="mid"></div><div id="f-flee-fill" class="fill"></div></div>
+    <div id="f-flee-text" class="small"></div>
+    <div id="f-imm" class="small dim" style="margin-top:8px"></div>
+  </div>
   <div id="f-nolearning" class="small dim" data-t="noLearning"></div>
   <h3 data-t="vocabTitle"></h3>
   <div id="f-vocab"></div>
@@ -123,6 +132,10 @@
         <option value="manual" data-t="modeManual"></option></select></label>
     <label><span data-t="optPop"></span>
       <input id="o-pop" type="number" min="1" max="220" value="100"></label>
+    <label><span data-t="optModel"></span>
+      <select id="o-model"><option value="classic" data-t="modelClassic"></option>
+        <option value="free" data-t="modelFree"></option></select></label>
+    <p id="o-model-note" class="small"></p>
     <label class="check"><input id="o-learn" type="checkbox" checked><span data-t="optLearn"></span></label>
     <label class="check"><input id="o-traits" type="checkbox" checked><span data-t="optTraits"></span></label>
     <label class="check"><input id="o-ai" type="checkbox"><span data-t="optAi"></span></label>

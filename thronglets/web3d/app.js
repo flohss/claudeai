@@ -87,6 +87,7 @@ function applyStrings() {
   document.querySelectorAll('[data-t]').forEach((el) => { el.textContent = T(el.dataset.t); });
   $('b-fr').classList.toggle('on', lang === 'fr');
   $('b-en').classList.toggle('on', lang === 'en');
+  if (typeof syncModel === 'function') syncModel();
   fillSelect('sel-season', ['spring', 'summer', 'autumn', 'winter'], view.season, 'season_');
   fillSelect('sel-weather', ['clear', 'rain', 'snow'], view.weather, 'weather_');
   fillSelect('sel-quality', ['low', 'medium', 'high'], view.quality, 'quality_');
@@ -648,7 +649,16 @@ function updateUI(s) {
 
   const learning = !!s.disposition;
   $('f-learning').classList.toggle('hidden', !learning);
-  $('f-nolearning').classList.toggle('hidden', learning);
+  $('f-nolearning').classList.toggle('hidden', learning || !!s.free);
+  $('f-free').classList.toggle('hidden', !s.free);
+  if (s.free) {
+    for (const [k, v] of [['seek', s.free.seek], ['flee', s.free.flee]]) {
+      setSigned($('f-' + k + '-fill'), v || 0);
+      $('f-' + k + '-text').textContent = v === null || v === undefined ? T('freeNone')
+        : T('freeScale').replace('{v}', (v >= 0 ? '+' : '') + v.toFixed(2));
+    }
+    $('f-imm').textContent = T('freeImm').replace('{n}', s.free.immigrants);
+  }
   if (learning) {
     const d = s.disposition.value;
     setSigned($('f-disp-fill'), d);
@@ -785,7 +795,16 @@ $('sel-season').onchange = (ev) => { view.season = ev.target.value; paintTerrain
 $('sel-weather').onchange = (ev) => { view.weather = ev.target.value; };
 $('sel-quality').onchange = (ev) => { view.quality = ev.target.value; localStorage.setItem('thr-quality', view.quality);
   buildPipeline(); buildGrass(); };
+function syncModel() {
+  const free = $('o-model').value === 'free';
+  for (const id of ['o-learn', 'o-ai']) {
+    $(id).disabled = free; $(id).parentElement.style.opacity = free ? .4 : 1;
+  }
+  $('o-model-note').textContent = T(free ? 'noteFree' : 'noteClassic');
+}
+$('o-model').onchange = syncModel; syncModel();
 $('o-go').onclick = () => post('start', { mode: $('o-mode').value, init_pop: +$('o-pop').value,
+  model: $('o-model').value,
   adaptive_traits: $('o-traits').checked, learning: $('o-learn').checked, use_ai: $('o-ai').checked });
 $('o-resume').onclick = () => post('start', { resume_save: true });
 addEventListener('keydown', (ev) => {

@@ -35,6 +35,7 @@ SUITES = [
     ("smoke", ["test_smoke.py"], ["test_smoke.py"]),
     ("learning", ["test_learning.py"], ["test_learning.py", "--quick"]),
     ("tuning", ["test_tuning.py"], ["test_tuning.py", "--quick"]),
+    ("free", ["test_free.py"], ["test_free.py", "--quick"]),
 ]
 
 
