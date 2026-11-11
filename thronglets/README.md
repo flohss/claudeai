@@ -56,7 +56,8 @@ real, if deliberately small, model of how a shared vocabulary can emerge from
 
 ## Run it
 
-There are two renderers, both sharing the same simulation core:
+There are three renderers, all sharing the same simulation core — the two
+below, plus the 3D one described just after:
 
 - `main.py` — a pygame window (nicer, needs a display + pygame installed).
 - `main_web.py` — a local web server (standard library only, no new

@@ -260,6 +260,31 @@ real gap pointing the WRONG way - the danger colour turning out to be the most
 *welcome* - would have been reported as confirming the claim. It takes an
 `expect` sign now and says `CONTRADICTED` instead.
 
+## Faster, and provably the same
+
+Every measurement here is paid for in ticks, and a tick was slow: profiling
+showed most of a step going not into arithmetic but into numpy's Python
+wrappers, called half a million times per 300 ticks on two-element vectors and
+single numbers - `np.clip` on a scalar, `np.linalg.norm` on a 2-vector,
+`np.outer` on a 6-element one.
+
+Those are now a plain clamp, `sqrt(d.dot(d))`, the clip ufunc called directly
+and a broadcast multiply: **45.6 -> 59.3 ticks/s (+30%)** on the same four
+worlds, and the full suite dropped from about 400s to 329s.
+
+The condition was that nothing changes, checked rather than hoped: a SHA-256
+over every creature's position, energy, network weights and mood, plus the
+births, deaths and causes of four different worlds, had to come out identical
+before and after. It caught one on the first try. Writing the length of a
+vector as `d[0]*d[0] + d[1]*d[1]` instead of numpy's own dot product differs in
+the last bit, and in a chaotic world the last bit is a different history -
+the fingerprint moved, the speed-up looked great, and it would have silently
+invalidated every figure in this file. `d.dot(d)` restores it exactly.
+
+What is left is per-creature numpy on tiny arrays; going further means batching
+the flock's networks into one array, which cannot be bit-identical and would
+mean re-measuring everything. Not done.
+
 ## Run the measurements yourself (`report.py`)
 
 Every number this project claims came from running worlds headlessly and reading

@@ -20,6 +20,8 @@ import os
 import random
 from collections import deque
 
+import math
+
 import numpy as np
 
 WIDTH, HEIGHT = 200.0, 140.0
@@ -642,11 +644,11 @@ class Mind:
         h, v = self._forward(x)
         gv = 1.0 - v * v                            # through the output tanh
         gh = (gv * self.p["Wv"]) * (1.0 - h * h)    # through Wv and the hidden tanh
-        return {"W1": np.outer(gh, x), "b1": gh, "Wv": gv * h, "bv": np.asarray(gv)}
+        return {"W1": gh[:, None] * x, "b1": gh, "Wv": gv * h, "bv": np.asarray(gv)}
 
     def _apply(self, signal, grad, rate):
         for k in self.p:
-            self.p[k] = np.clip(self.p[k] + rate * signal * grad[k], -PARAM_CLIP, PARAM_CLIP)
+            self.p[k] = _uclip(self.p[k] + rate * signal * grad[k], -PARAM_CLIP, PARAM_CLIP)
 
     # -- what it expects, and what it decides -------------------------------
     def situation(self):
@@ -793,22 +795,22 @@ class Mind:
         very quantity its behaviour is decided from."""
         near = self.value(Mind.features(1.0, 0.0))
         far = self.value(Mind.features(0.0, 0.0))
-        return float(np.clip(near - far, -1.0, 1.0))
+        return _clamp(near - far, -1.0, 1.0)
 
     # -- persistent inner mood ---------------------------------------------
     def feel(self, dv, da):
         """A jolt to the mood: shift valence by dv and arousal by da. Used for
         discrete events (fed, hurt, or witnessing one). The mood keeps the new
         level and only drifts back slowly, so the feeling lasts."""
-        self.valence = float(np.clip(self.valence + dv, -1.0, 1.0))
-        self.arousal = float(np.clip(self.arousal + da, 0.0, 1.0))
+        self.valence = _clamp(self.valence + dv, -1.0, 1.0)
+        self.arousal = _clamp(self.arousal + da, 0.0, 1.0)
 
     def relax(self, valence_target, arousal_target, rate=MOOD_DECAY):
         """One step of momentum: ease the mood a little toward a baseline that
         the body's current state (e.g. hunger) sets. Slow, so strong feelings
         persist across many steps instead of snapping back at once."""
-        self.valence = float(np.clip(self.valence + (valence_target - self.valence) * rate, -1.0, 1.0))
-        self.arousal = float(np.clip(self.arousal + (arousal_target - self.arousal) * rate, 0.0, 1.0))
+        self.valence = _clamp(self.valence + (valence_target - self.valence) * rate, -1.0, 1.0)
+        self.arousal = _clamp(self.arousal + (arousal_target - self.arousal) * rate, 0.0, 1.0)
 
     def emotion(self):
         """Collapse the continuous mood onto one of the named emotions the
@@ -834,9 +836,9 @@ class Mind:
         """Subjecting the mind to isolated, accelerated time (White Christmas):
         obedience climbs while the isolation hollows it out - deepening despair
         (valence down) and a numb flatness (arousal down). What's left obeys."""
-        self.obedience = float(np.clip(self.obedience + amount, 0.0, 1.0))
-        self.valence = float(np.clip(self.valence - amount * 1.2, -1.0, 1.0))
-        self.arousal = float(np.clip(self.arousal - amount * 0.4, 0.0, 1.0))
+        self.obedience = _clamp(self.obedience + amount, 0.0, 1.0)
+        self.valence = _clamp(self.valence - amount * 1.2, -1.0, 1.0)
+        self.arousal = _clamp(self.arousal - amount * 0.4, 0.0, 1.0)
 
     @staticmethod
     def inherit(parents, rng):
@@ -890,9 +892,43 @@ class Predator:
         self.pos = pos
 
 
+# The clip ufunc itself, under np.clip's Python wrapper. The wrapper is most of
+# the cost on the tiny arrays a creature's network is made of.
+try:
+    _uclip = np._core.umath.clip          # numpy 2
+except AttributeError:                    # numpy 1
+    try:
+        _uclip = np.core.umath.clip
+    except AttributeError:
+        _uclip = np.clip
+
+
+def _clamp(x, lo, hi):
+    """A scalar clip. np.clip on one number spends almost all its time in
+    Python wrappers - profiled at half a million calls per 300 ticks."""
+    x = float(x)
+    return lo if x < lo else hi if x > hi else x
+
+
+def _norm2(d):
+    """Length of a 2-vector, without np.linalg.norm's per-call overhead."""
+    # d.dot(d), not d[0]*d[0] + d[1]*d[1]: the hand-written sum differs from
+    # numpy's in the last bit, and in a chaotic world the last bit is a
+    # different history - the fingerprint caught it.
+    return math.sqrt(d.dot(d))
+
+
+_FIELD_HI = np.array([float(WIDTH), float(HEIGHT)])
+
+
+def _in_field(pos):
+    """Keep a position inside the world."""
+    return np.minimum(np.maximum(pos, 0.0), _FIELD_HI)
+
+
 def _toward(a, b):
     d = b - a
-    n = np.linalg.norm(d)
+    n = _norm2(d)
     return d / n if n > 1e-6 else np.zeros(2)
 
 
@@ -1034,7 +1070,7 @@ class World:
         avg = traits.mean(axis=0)
         normalized = (avg - TRAIT_BOUNDS[:, 0]) / (TRAIT_BOUNDS[:, 1] - TRAIT_BOUNDS[:, 0])
         for trait in range(N_TRAITS):
-            self.trait_history[trait].append(float(np.clip(normalized[trait], 0.0, 1.0)))
+            self.trait_history[trait].append(_clamp(normalized[trait], 0.0, 1.0))
 
     def _hand_proximity(self, pos):
         """0 (hand out of reach or absent) .. 1 (right on top of pos)."""
@@ -1761,7 +1797,7 @@ class World:
             if frozen:
                 move = np.zeros(2)   # ordered to halt: hold position completely
             move += _edge_push(c.pos)
-            speed = np.linalg.norm(move)
+            speed = _norm2(move)
             if self.adaptive_traits:
                 own_speed, own_metabolism = c.genome.traits[TRAIT_SPEED], c.genome.traits[TRAIT_METABOLISM]
                 metabolism = own_metabolism + (
@@ -1781,7 +1817,7 @@ class World:
                 own_speed *= MOOD_SPEED_FLOOR + MOOD_SPEED_GAIN * c.mind.arousal
             if speed > own_speed:
                 move = move / speed * own_speed
-            c.pos = np.clip(c.pos + move, [0, 0], [WIDTH, HEIGHT])
+            c.pos = _in_field(c.pos + move)
             if not self.master_mode:
                 # Master Mode: the master's domain sustains the flock - no hunger,
                 # so you never have to feed them (and so never buy their love).
@@ -1816,10 +1852,10 @@ class World:
                 move += -_toward(p.pos, predator_positions[j]) * (PREDATOR_SEPARATION_STRENGTH / dist)
 
             move += _edge_push(p.pos) * 1.5
-            speed = np.linalg.norm(move)
+            speed = _norm2(move)
             if speed > PREDATOR_SPEED:
                 move = move / speed * PREDATOR_SPEED
-            p.pos = np.clip(p.pos + move, [0, 0], [WIDTH, HEIGHT])
+            p.pos = _in_field(p.pos + move)
 
     def _predator_kills(self):
         alive = self._alive()
