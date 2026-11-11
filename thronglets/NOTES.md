@@ -600,5 +600,10 @@ place of it. Decisions worth remembering:
 - **No wander is added.** Two random inputs let a brain evolve exploration if it
   pays; a hand-added wander would be a written instinct.
 - **Not done:** the hand is not an input (there is no reward attached to it in
-  this model, so it would be noise); whether calls carry meaning for listeners
-  is unmeasured; fleeing is not reliable (see README table).
+  this model, so it would be noise); fleeing is not reliable (see README table).
+- **Calls carry nothing yet.** Hearing vs deaf, 12 worlds, 40,000 ticks: flock
+  54.5 +- 18.5 against 55.0 +- 21.6. Reaction to a call: 0.31 hearing, 0.26
+  deaf. Calling stays near 80% (five of the six outputs are non-silent, so a
+  random brain talks most of the time) and its cost has not selected it away.
+  Likely reason: for a call to pay, the caller must tie it to something AND
+  the listener must act on it, and neither half is worth anything alone.

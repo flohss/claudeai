@@ -450,8 +450,19 @@ the average does not clear the bar. It is shown on screen as it is, not claimed.
   a world that has found its feet needs none.
 - *The vocabulary panel.* A no-code creature has no situation labels. The panel
   still sorts calls by situation, but the situation is the observer's label,
-  tallied from what was actually called lately. Whether the calls *mean*
-  anything to the listeners has not been measured yet.
+  tallied from what was actually called lately. It shows what is said, not
+  that anyone understands it (see the measurement just below).
+
+**Do the calls mean anything? Measured: no, not yet.** The same 12 worlds were
+run twice for 40,000 ticks, once normally and once deaf (creatures still call,
+but no call reaches any brain - `python3 measure_free_calls.py`). Flock size
+over the last 15,000 ticks: hearing 54.5 +- 18.5, deaf 55.0 +- 21.6. No
+difference. A second look agrees: brains that hear react to a call about as
+much as brains that never heard one (0.31 against 0.26, spread 0.11), so the
+reactions are leftover random wiring, not something selection kept. And
+creatures call about 80% of the time in both cases, although calling costs
+energy. In this model a language has **not** emerged; the creatures found food
+and (often) flight by themselves, but each one on its own.
 
 The classic model is untouched by all this: its four reference worlds produce
 the same fingerprint as before, bit for bit. `python3 test_free.py` checks the

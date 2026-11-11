@@ -1105,6 +1105,9 @@ class World:
         self.free_flee = None
         self.free_history = deque()   # (seek, flee) sampled with the vocabulary
         self.immigrants = 0           # newcomers brought in by _free_immigration
+        # measurement only: a deaf flock still calls (and pays for it) but no
+        # call reaches any brain - the control that tells whether calls matter
+        self.free_deaf = False
 
     def _new_genome(self):
         """A founder's genome - the one place they are minted, so a free world
@@ -1986,7 +1989,7 @@ class World:
         # what it hears: last step's calls, each token as the direction the
         # sound comes from (louder when nearer, several callers add up)
         tokens = np.array([c.token for c in alive])
-        if n > 1 and tokens.any():
+        if n > 1 and tokens.any() and not self.free_deaf:
             diff = positions[None, :, :] - positions[:, None, :]
             safe = np.where(np.isfinite(pair_d), np.maximum(pair_d, 1e-6), 1.0)
             loud = np.where(pair_d < hearing[:, None], 1.0 - safe / hearing[:, None], 0.0)
