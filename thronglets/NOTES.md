@@ -314,6 +314,32 @@ the last minute - previously it came from worlds completed, which gave no
 figure at all until the first world ended and then counted the world in flight
 as finished.
 
+## The 3D view, rebuilt in the browser
+
+The OpenGL view (`main_gl.py`) drew a flat-lit scene with a text overlay and
+needed `moderngl` installed. Its replacement is a page, `/3d`, served by the
+same `main_web.py` that serves the 2D one.
+
+The simulation did not move. The page polls `/state` and posts to `/control`
+like the 2D page does, so there is one world, one set of rules, and nothing
+about how a flock learns depends on which window you watch it from. The server
+gained only what a 3D client needs: an `id` on every creature (to animate each
+one smoothly between snapshots, the page has to know who is who), a `select`
+action with a `selected` readout - selection rather than hover, because with a
+free camera the cursor is busy orbiting - and an `act` action for stroking,
+feeding, hitting or killing one creature by id, which goes through the same
+`deliver_experience` every other renderer uses.
+
+Checked by driving the real page in headless Chromium, not by reading it:
+click selects the creature under the cursor, the menu feeds it (energy 0.50 ->
+0.75), kill adds one death "by you" and closes the panel, the food and predator
+tools add what they say, a drag orbits without acting, English and French both
+render, and a request for `/3d/../main_web.py` gets a 404. No console errors.
+
+What that check cannot say is how fast it runs on a real graphics card: the
+test machine renders in software, where "high" quality took over thirty seconds
+a frame. The quality selector exists because of that uncertainty.
+
 ## Run the measurements yourself (`report.py`)
 
 Every number this project claims came from running worlds headlessly and reading

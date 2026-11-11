@@ -64,8 +64,23 @@ below, plus the 3D one described just after:
   dependency) with an HTML/canvas page you open in any browser. Works
   anywhere, including Termux.
 
-There's also `main_gl.py`, a *true 3D* proof of concept (optional `moderngl`
-dependency) — see the Bonus section below.
+**The 3D view lives in the browser.** Start `main_web.py` and open
+`http://localhost:8000/3d` (or press the `3D` button on the 2D page). It is the
+same running world as the 2D page - the simulation stays in Python, the page
+only draws what the server reports - rendered with three.js: a physically-based
+sky whose sun really moves and lights the scene, soft shadows, ambient light
+taken from that same sky, filmic tone mapping, bloom on what glows (the call
+each creature is making, a predator's eyes), instanced grass that bends in the
+wind, seasons, rain and snow. Click a creature to read its mind, right-click it
+to stroke, feed, hit or kill it; the dock at the bottom holds the food,
+predator and fire tools, the time of day, the season and the weather. Nothing to
+install and nothing fetched from the internet: three.js is vendored under
+`web3d/vendor/` (MIT licence, included). Three quality levels, chosen in the
+dock; "high" adds ambient occlusion and wants a real graphics card.
+
+`main_gl.py`, the earlier OpenGL proof of concept (optional `moderngl`
+dependency), is still there and still works - see the Bonus section below - but
+the browser view is the one being developed.
 
 ### Desktop (pygame)
 

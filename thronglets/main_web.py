@@ -44,6 +44,7 @@ FEED_RADIUS = 12.0            # world units: who counts as fed by a dropped patc
 BURN_RADIUS = 6.0             # world units: who the fire tool catches
 ACT_IDS = {ACT_APPROACH: "approach", ACT_FLEE: "flee", ACT_IGNORE: "ignore"}
 STEP_INTERVAL = 0.05
+WEB3D_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web3d")
 DEFAULT_INIT_POP = 100
 DEFAULT_LANGUAGE_FILE = "language_model.json"
 DEFAULT_SAVE_FILE = "thronglets_save.json"
@@ -77,6 +78,7 @@ class SimState:
         # the fire tool is armed/disarmed like the pygame one: a left click
         # burns instead of dropping food while it is on
         self.fire_armed = False
+        self.selected_id = None       # the creature the 3D page is inspecting
         self.family_focus_id = None
         self.lock = threading.Lock()
 
@@ -139,7 +141,9 @@ def snapshot(state):
             # "mood" is the creature's own feeling, not its opinion of you -
             # None when learning is off, so the client draws the plain body
             {"x": float(c.pos[0]), "y": float(c.pos[1]), "token": c.token,
-             "mood": c.mind.emotion() if c.mind is not None else None}
+             "mood": c.mind.emotion() if c.mind is not None else None,
+             "id": int(c.id), "state": STATE_IDS.get(c.state, "idle"),
+             "energy": float(c.energy / simulation.MAX_ENERGY)}
             for c in w.creatures if c.alive
         ],
         "learning": bool(getattr(w, "learning", False)),
@@ -169,6 +173,7 @@ def snapshot(state):
         "signal_meanings": _meanings_payload(w),
         "dread": _dread_payload(w),
         "hovered": _hovered_mind_payload(w),
+        "selected": _selected_payload(state),
         "disposition_history": [float(v) for v in getattr(w, "disposition_history", [])],
     }
 
@@ -239,6 +244,37 @@ def _hovered_mind_payload(w):
     near = min(minds, key=lambda c: float(np.linalg.norm(np.asarray(c.pos) - pos)))
     if float(np.linalg.norm(np.asarray(near.pos) - pos)) > HOVER_RADIUS:
         return None
+    return _mind_payload(near)
+
+
+def _selected_payload(state):
+    """The creature the 3D page has clicked on, by id, for as long as it lives.
+    Selection rather than hover there: with a free camera the cursor is busy
+    orbiting, and a creature you picked should stay picked while you look
+    around it."""
+    if state.selected_id is None:
+        return None
+    c = next((c for c in state.world.creatures
+              if c.id == state.selected_id and c.alive), None)
+    if c is None:
+        state.selected_id = None
+        return None
+    out = _mind_payload(c) if c.mind is not None else {"id": int(c.id)}
+    info = state.world.lineage.get(c.id, {})
+    out.update(energy=float(c.energy / simulation.MAX_ENERGY), age=int(c.age),
+               generation=int(info.get("gen", 0)), token=int(c.token),
+               state=STATE_IDS.get(c.state, "idle"))
+    if c.mind is not None:
+        d = c.mind.disposition()
+        out.update(valence=float(c.mind.valence), arousal=float(c.mind.arousal),
+                   disposition=float(d),
+                   disposition_en=disposition_label(d, "en"),
+                   disposition_fr=disposition_label(d, "fr"))
+    return out
+
+
+def _mind_payload(near):
+    """One creature's inner life, as plain numbers and ready-made labels."""
     m = near.mind
     now = m.situation()
     full = max(1e-9, simulation.KNOWLEDGE_FLEE_FULL)
@@ -336,6 +372,8 @@ class Handler(BaseHTTPRequestHandler):
             with self.server.state.lock:
                 data = snapshot(self.server.state)
             self._send(200, "application/json", json.dumps(data).encode(), no_store=True)
+        elif self.path == "/3d" or self.path.startswith("/3d/"):
+            self._send_static(self.path[3:].lstrip("/") or "index.html")
         elif self.path == "/favicon.ico":
             self.send_response(204)
             self.end_headers()
@@ -453,6 +491,28 @@ class Handler(BaseHTTPRequestHandler):
                         for c in state.world.creatures:
                             if c.alive and float(np.hypot(c.pos[0] - x, c.pos[1] - y)) < FEED_RADIUS:
                                 state.world.deliver_experience(c, LEARN_FOOD_REWARD)
+            elif action == "select":
+                sid = body.get("id")
+                state.selected_id = int(sid) if sid is not None else None
+            elif action == "act":
+                # something done to ONE creature, by id - the 3D page's care
+                # and harm menu. Kindness and cruelty go through the same
+                # deliver_experience the other renderers use, so what the
+                # flock learns from it does not depend on which window you
+                # happened to do it in.
+                c = next((c for c in state.world.creatures
+                          if c.alive and c.id == body.get("id")), None)
+                kind = body.get("kind")
+                if c is not None and kind == "feed":
+                    c.energy = min(simulation.MAX_ENERGY, c.energy + simulation.FOOD_VALUE)
+                    state.world.deliver_experience(c, LEARN_FOOD_REWARD)
+                elif c is not None and kind == "pet":
+                    state.world.deliver_experience(c, LEARN_FOOD_REWARD)
+                elif c is not None and kind == "hurt":
+                    state.world.deliver_experience(c, LEARN_PREDATOR_REWARD)
+                elif c is not None and kind == "kill":
+                    state.world.deliver_experience(c, LEARN_PREDATOR_REWARD)
+                    state.world.kill_creature(c)
             elif action == "quick_place":
                 if body.get("kind") == "predator":
                     state.world.add_random_predator()
@@ -494,6 +554,23 @@ class Handler(BaseHTTPRequestHandler):
         error_file = DEFAULT_SAVE_FILE if error_code == "resume_failed" else DEFAULT_LANGUAGE_FILE
         self._send(200, "application/json",
                    json.dumps({"ok": True, "error": error_code, "file": error_file, "family": family_payload}).encode())
+
+    def _send_static(self, rel):
+        """A file of the 3D page, from web3d/ beside this script and nowhere
+        else: the resolved path must stay inside that folder, so a request
+        for ../../anything gets a 404 rather than the file."""
+        root = os.path.realpath(WEB3D_DIR)
+        path = os.path.realpath(os.path.join(root, rel.split("?", 1)[0]))
+        if not (path == root or path.startswith(root + os.sep)) or not os.path.isfile(path):
+            self._send(404, "text/plain", b"not found")
+            return
+        kind = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
+                ".css": "text/css; charset=utf-8", ".json": "application/json",
+                ".png": "image/png", ".svg": "image/svg+xml",
+                ".txt": "text/plain; charset=utf-8"}.get(os.path.splitext(path)[1].lower(),
+                                                          "application/octet-stream")
+        with open(path, "rb") as fh:
+            self._send(200, kind, fh.read(), no_store=True)
 
     def _send(self, code, content_type, body, no_store=False):
         self.send_response(code)
@@ -722,6 +799,7 @@ INDEX_HTML = """<!doctype html>
       <button id="openCompare" data-i18n="compareText"></button>
       <button id="openTranslator" data-i18n="translatorText"></button>
       <button id="openFaq" data-i18n="faqText"></button>
+      <a href="/3d"><button type="button">3D</button></a>
       <button id="openHelp" data-i18n="noticeText"></button>
       <button id="muteSound"></button>
     </div>
@@ -1920,6 +1998,7 @@ def main():
     server = ThreadingHTTPServer(("0.0.0.0", args.port), Handler)
     server.state = state
     print(f"Thronglets running at http://localhost:{args.port}  (Ctrl+C to stop)")
+    print(f"3D view:              http://localhost:{args.port}/3d")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
