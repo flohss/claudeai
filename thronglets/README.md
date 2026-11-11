@@ -393,6 +393,71 @@ not just letting it drift. This section is hidden entirely when adaptive
 traits are off, since there's nothing to show (every creature has the same
 fixed stats).
 
+## Two models, side by side: classic, or no code at all
+
+At the start you choose what kind of creature lives in the world. Neither
+replaces the other.
+
+| | Classic (default) | No code |
+|---|---|---|
+| Where behaviour comes from | Written by hand: a priority list (danger, food, distress, mate) and a hand-set urge for each | Nothing written: an inherited neural network decides the step and the call |
+| What evolves | The vocabulary (and the body, if enabled) | The whole brain (and the body, if enabled) |
+| From the first second | Creatures already flee and forage | Creatures are clumsy; most founders are hopeless |
+| Learned mind, Master Mode, trained language | Available | Not available (they are built on the classic creature) |
+
+How to choose it: in the 2D game, the "Which kind of creature?" screen (`1` /
+`2`); in both browser pages, the "Kind of creature" list on the start card. A
+saved game remembers its model.
+
+**What the no-code creature is.** Its genome carries a small network (25 inputs,
+8 hidden units, 8 outputs). The inputs are only what it perceives: which way the
+nearest food, hunter and neighbour lie and how near, its own energy, each call
+it can hear as a direction, where it stands, two random numbers and a constant.
+The outputs are a step and a score for each possible call. Nothing tells it that
+food is good or a hunter bad. The world does the teaching: food in reach
+restores energy, a hunter in reach kills, and whoever is alive and fed leaves
+children with a slightly altered copy of its network.
+
+What is still fixed by hand, and has to be: the senses and the physics. Those
+are the body and the world, not the behaviour.
+
+**Does anything actually appear?** Measured, not assumed. `World.free_probe()`
+shows every living brain a piece of food (then a hunter) in 8 directions with
+nothing else in sight and looks at which way it steps: 0 means it makes no
+difference, +1 means straight at the food (or straight away from the hunter).
+Watching real movement would not do - a hunter ends up behind whatever is
+moving, so even a brain blind to hunters looks like it is fleeing.
+
+Eight worlds each, 30,000 ticks, founders at 0.00 +- 0.03 on both:
+
+| Setting | To food | Bar (2x spread) | Away from hunters | Bar |
+|---|---|---|---|---|
+| 60 founders, fixed bodies | **+0.75** | 0.42 | +0.36 | 0.54 |
+| 100 founders, evolving bodies | **+0.62** | 0.48 | +0.50 | 0.54 |
+
+So: **walking toward food reliably appears on its own** (it clears the bar in
+both settings). **Fleeing hunters appears in most worlds but not reliably** -
+five or six worlds in eight reach +0.4 to +0.8, the others stay near zero, and
+the average does not clear the bar. It is shown on screen as it is, not claimed.
+
+**Two honest limits.**
+
+- *Newcomers.* Founders have random brains and a flock can die out before
+  anything worth inheriting exists. So below 14 alive, one newcomer arrives per
+  tick - an exact copy of a random survivor. That is help from outside the
+  world; it is counted and displayed ("newcomers") so it never passes for the
+  flock's own success. The first 10,000 ticks typically need 20-180 of them;
+  a world that has found its feet needs none.
+- *The vocabulary panel.* A no-code creature has no situation labels. The panel
+  still sorts calls by situation, but the situation is the observer's label,
+  tallied from what was actually called lately. Whether the calls *mean*
+  anything to the listeners has not been measured yet.
+
+The classic model is untouched by all this: its four reference worlds produce
+the same fingerprint as before, bit for bit. `python3 test_free.py` checks the
+promises above (including the food result over six worlds), and it is part of
+`test_all.py` and of the Checks screen.
+
 ## Comparing seeds: is a result reproducible, or did you just get lucky?
 
 A single playthrough only tells you what happened on *that* run - maybe

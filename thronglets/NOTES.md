@@ -580,3 +580,25 @@ the *effects*: the learned value of a predator agreed to within 0.003, the most
 dreaded call to within 0.004, and all five claims held on both. That is the
 better guarantee, and the reason `report.py` averages over seeds and prints
 spreads instead of quoting single worlds.
+
+## The no-code model: what was tried and what it showed
+
+Added as a second model beside the classic one (`World(free=True)`), not in
+place of it. Decisions worth remembering:
+
+- **The first gauge was wrong by construction.** It measured, on the field, how
+  squarely creatures stepped away from a hunter in sight, and read +0.5 after
+  2,000 ticks. But a hunter chases, so it ends up behind anything that moves:
+  a brain blind to hunters scores positive. Replaced by `free_probe()`, which
+  places the thing in 8 directions and so cancels any habit of drifting.
+- **Mutated newcomers erased what had been found.** With rescue copies mutated,
+  two worlds in eight evolved a skill (+0.37 to food) and then lost it (-0.64):
+  at the population floor there is no selection left to weed out bad mutations.
+  Exact copies fixed it (worst world of eight: +0.26 instead of -0.64).
+- **Crossover takes whole hidden units**, not single weights, so a child does
+  not inherit half of what a unit does from each parent.
+- **No wander is added.** Two random inputs let a brain evolve exploration if it
+  pays; a hand-added wander would be a written instinct.
+- **Not done:** the hand is not an input (there is no reward attached to it in
+  this model, so it would be noise); whether calls carry meaning for listeners
+  is unmeasured; fleeing is not reliable (see README table).
