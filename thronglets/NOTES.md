@@ -285,6 +285,35 @@ What is left is per-creature numpy on tiny arrays; going further means batching
 the flock's networks into one array, which cannot be bit-identical and would
 mean re-measuring everything. Not done.
 
+## A long run no longer loses everything, and says how long it will take
+
+Two defects in the measuring tools, both met the hard way.
+
+**A stopped run kept nothing.** The report was assembled in memory and written
+at the very end, so a run cancelled at 90%, a laptop going to sleep or a crash
+left no trace - ten 8000-tick worlds were lost exactly that way while chasing
+the danger-word question. Each world is now saved as it finishes
+(`<out>.partial.json` from the command line, `thronglets_report.partial.json`
+from the Measure screen), through a temp file and a rename so a power cut
+cannot leave half a file. Asking for the same measurement again picks up where
+it stopped, and the report says how many worlds were resumed.
+
+"The same measurement" is checked, not assumed: the checkpoint carries the tick
+count, every tunable in force, a hash of `simulation.py` and the numpy and
+Python versions, and a mismatch on any of them discards it. Mixing worlds
+measured under two setups into one table would be far worse than re-living
+them. A run stopped mid-way and resumed produces a report identical, line for
+line, to one run straight through.
+
+**The time estimate was wrong by more than half.** The speedometer times a
+young world, and worlds slow down as they fill: it read 50 ticks/s on a machine
+where 8000-tick worlds then ran at 20, and "about 1h30" became 4h. Before a
+run the screen now shows a range, from the optimistic figure to 2.5x it (the
+measured ratio). During a run, time left comes from ticks actually lived over
+the last minute - previously it came from worlds completed, which gave no
+figure at all until the first world ended and then counted the world in flight
+as finished.
+
 ## Run the measurements yourself (`report.py`)
 
 Every number this project claims came from running worlds headlessly and reading

@@ -295,16 +295,19 @@ TEXT = {
         "meas_total": "{tests} tests x {seeds} seeds x {ticks} ticks = {total} ticks to live through",
         "meas_rate_measuring": "measuring this machine's speed... ({n} ticks timed so far)",
         "meas_rate": "this machine: {rate:.0f} ticks/second, measured here just now",
-        "meas_eta": "estimated: {eta}",
-        "meas_eta_warn": "estimated: {eta}   <- that is a long time. Fewer seeds or fewer ticks.",
+        "meas_eta": "estimated: between {lo} and {hi}",
+        "meas_eta_warn": "estimated: between {lo} and {hi}   <- that is a long time. Fewer seeds or fewer ticks.",
+        "meas_eta_why": "(a range, because worlds slow down as they fill up - the run itself will narrow it)",
+        "meas_kept": "already done: {n} world(s), kept from an interrupted run - not re-lived",
+        "meas_pace": "{rate:.0f} ticks/second over the last minute",
         "meas_none": "no test selected - press SPACE on one, or A for all",
         "meas_running": "RUNNING - {done}/{total} worlds   {title}  seed {seed}",
         "meas_elapsed": "elapsed {el}   left about {left}",
-        "meas_cancel": "ESC = stop (nothing is written)",
+        "meas_cancel": "ESC = stop (finished worlds are kept, and the run can be resumed)",
         "meas_stopping": "stopping...",
         "meas_written": "written to {file}",
         "meas_written2": "send me that file",
-        "meas_cancelled": "stopped - nothing written",
+        "meas_cancelled": "stopped - the finished worlds are kept. Run the same test again to pick up where it left off.",
         "meas_failed": "the run failed: {err}",
         "meas_pinned": "your {n} pinned parameter(s) are in force and are recorded in the file",
         "meas_builtin": "no pinned parameters - measuring the game as shipped",
@@ -598,16 +601,19 @@ TEXT = {
         "meas_total": "{tests} tests x {seeds} graines x {ticks} ticks = {total} ticks a vivre",
         "meas_rate_measuring": "mesure de la vitesse de cette machine... ({n} ticks chronometres)",
         "meas_rate": "cette machine : {rate:.0f} ticks/seconde, mesure ici a l'instant",
-        "meas_eta": "estimation : {eta}",
-        "meas_eta_warn": "estimation : {eta}   <- c'est long. Moins de graines ou moins de ticks.",
+        "meas_eta": "estimation : entre {lo} et {hi}",
+        "meas_eta_warn": "estimation : entre {lo} et {hi}   <- c'est long. Moins de graines ou moins de ticks.",
+        "meas_eta_why": "(une fourchette, car les mondes ralentissent en se peuplant - le run l'affinera)",
+        "meas_kept": "deja fait(s) : {n} monde(s), garde(s) d'un run interrompu - pas a revivre",
+        "meas_pace": "{rate:.0f} ticks/seconde sur la derniere minute",
         "meas_none": "aucun test selectionne - ESPACE sur l'un d'eux, ou A pour tout",
         "meas_running": "EN COURS - {done}/{total} mondes   {title}  graine {seed}",
         "meas_elapsed": "ecoule {el}   reste environ {left}",
-        "meas_cancel": "ECHAP = arreter (rien ne sera ecrit)",
+        "meas_cancel": "ECHAP = arreter (les mondes termines sont gardes, le run pourra reprendre)",
         "meas_stopping": "arret en cours...",
         "meas_written": "ecrit dans {file}",
         "meas_written2": "envoie-moi ce fichier",
-        "meas_cancelled": "arrete - rien n'a ete ecrit",
+        "meas_cancelled": "arrete - les mondes termines sont gardes. Relance le meme test pour reprendre ou il en etait.",
         "meas_failed": "le run a echoue : {err}",
         "meas_pinned": "tes {n} parametre(s) epingles sont actifs et sont notes dans le fichier",
         "meas_builtin": "aucun parametre epingle - mesure du jeu tel qu'il est livre",
@@ -2024,6 +2030,17 @@ def scenario_name(title, lang):
     return SCENARIO_FR.get(title, title) if lang == "fr" else title
 
 
+# Finished worlds of an interrupted Measure run live here until the report is
+# complete. One fixed name, so "run the same test again" finds it.
+MEASURE_CHECKPOINT = "thronglets_report.partial.json"
+
+# How much slower a long, full world runs than the young one the speedometer
+# times. Measured, not guessed: the speedometer said 50 ticks/s on a machine
+# where 8000-tick worlds then ran at 20. The estimate is shown as a range from
+# the optimistic figure to this multiple of it.
+ETA_SLOWDOWN = 2.5
+
+
 def _hms(seconds):
     """A duration a person can act on. Hours matter more than seconds once a
     run is long enough to be a decision rather than a wait."""
@@ -2248,6 +2265,7 @@ def show_measure(screen, font, lang):
             + [("head", t["meas_size"]), ("seeds", None), ("ticks", None)])
     cursor = 1
     speedo = _Speedometer()
+    kept, kept_for = 0, None      # worlds already in the checkpoint, and for what
     # ONE clock. A Clock built inside the loop has no previous frame to measure
     # against, so tick() returns instantly and limits nothing - the draw loop
     # would spin flat out and starve the thread doing the actual work.
@@ -2288,7 +2306,15 @@ def show_measure(screen, font, lang):
         speedo.stop()
         stop.clear()
         state.update(done=0, total=len(picked) * seeds, text=None, error=None,
-                     started=time.time(), title="", seed=0)
+                     started=time.time(), title="", seed=0,
+                     lived=0, left=None, ticks=ticks,
+                     pace=collections.deque(maxlen=600))
+
+        def on_ticks(lived, left):
+            # a sliding window of (time, ticks lived): the pace that matters is
+            # the recent one, since a world slows as it fills
+            state["pace"].append((time.time(), lived))
+            state.update(lived=lived, left=left)
 
         def progress(done, total, title, seed):
             state.update(done=done, total=total, title=title, seed=seed)
@@ -2297,9 +2323,13 @@ def show_measure(screen, font, lang):
             try:
                 state["text"] = report.build_report(
                     seeds, ticks, titles=picked,
-                    progress=progress, should_stop=stop.is_set)
+                    progress=progress, should_stop=stop.is_set,
+                    checkpoint=MEASURE_CHECKPOINT, on_ticks=on_ticks)
             except Exception as exc:              # a failed run must not take
                 state["error"] = f"{type(exc).__name__}: {exc}"   # the game down
+            # stopped by the player: say so, and say the work is kept, instead
+            # of dropping back to the menu as if nothing had happened
+            state["stopped"] = state["text"] is None and state["error"] is None
         worker = threading.Thread(target=run, daemon=True)
         worker.start()
 
@@ -2308,7 +2338,8 @@ def show_measure(screen, font, lang):
         screen.fill(BG)
         screen.blit(font.render(t["meas_title"], True, (255, 255, 255)), (20, 16))
 
-        if running or state["text"] is not None or state["error"] is not None:
+        if (running or state["text"] is not None or state["error"] is not None
+                or state.get("stopped")):
             _draw_measure_run(screen, font, t, lang, state, running, stop.is_set())
         else:
             screen.blit(font.render(t["meas_hint"], True, HUD_HINT), (20, 38))
@@ -2339,7 +2370,8 @@ def show_measure(screen, font, lang):
                     screen.blit(font.render(doc, True, HUD_HINT), (320, y))
                 y += 20
 
-            n_tests = sum(1 for x in titles if chosen[x])
+            picked_now = [x for x in titles if chosen[x]]
+            n_tests = len(picked_now)
             total_ticks = n_tests * seeds * ticks
             y += 14
             screen.blit(font.render(t["meas_budget"], True, HUD_ACCENT), (20, y)); y += 22
@@ -2353,13 +2385,23 @@ def show_measure(screen, font, lang):
             else:
                 screen.blit(font.render(t["meas_rate"].format(rate=speedo.rate),
                                         True, HUD_HINT), (20, y)); y += 20
-                eta = total_ticks / speedo.rate
-                long_run = eta > 3600
+                if kept_for != (ticks, tuple(picked_now), seeds):
+                    saved = report.load_checkpoint(MEASURE_CHECKPOINT, ticks)
+                    kept = sum(1 for x in picked_now for i in range(seeds)
+                               if (x, 5 + 4 * i) in saved)
+                    kept_for = (ticks, tuple(picked_now), seeds)
+                lo = (total_ticks - kept * ticks) / speedo.rate
+                hi = lo * ETA_SLOWDOWN
+                long_run = hi > 3600
                 key = "meas_eta_warn" if long_run else "meas_eta"
-                screen.blit(font.render(key and t[key].format(eta=_hms(eta)), True,
+                screen.blit(font.render(t[key].format(lo=_hms(lo), hi=_hms(hi)), True,
                                         (235, 150, 90) if long_run else (150, 220, 140)),
                             (20, y))
                 y += 20
+                screen.blit(font.render(t["meas_eta_why"], True, HUD_HINT), (20, y)); y += 20
+                if kept:
+                    screen.blit(font.render(t["meas_kept"].format(n=kept), True,
+                                            (150, 220, 140)), (20, y)); y += 20
             pinned = len(tuning.load())
             y += 6
             screen.blit(font.render(t["meas_pinned"].format(n=pinned) if pinned
@@ -2384,10 +2426,12 @@ def show_measure(screen, font, lang):
                     return
                 if running:
                     continue
-                if state["text"] is not None or state["error"] is not None:
+                if (state["text"] is not None or state["error"] is not None
+                        or state.get("stopped")):
                     # a finished run: any key clears the result and comes back
-                    state.update(text=None, error=None)
+                    state.update(text=None, error=None, stopped=False)
                     speedo = _Speedometer()
+                    kept_for = None       # the run just changed what is kept
                     continue
                 if event.key == pygame.K_UP:
                     move(-1)
@@ -2426,15 +2470,35 @@ def _draw_measure_run(screen, font, t, lang, state, running, cancelling):
         done, total = state["done"], max(1, state["total"])
         bar_w = min(SCREEN_W - 40, 700)
         pygame.draw.rect(screen, HUD_SEP, (20, y, bar_w, 14), width=1)
+        # worlds already finished, plus the share of the one in flight
+        frac = max(0, done - 1) / total
+        if state.get("left") is not None and state["lived"] + state["left"] > 0:
+            resumed = total - (state["lived"] + state["left"]) / max(1, state["ticks"])
+            frac = (resumed + state["lived"] / max(1, state["ticks"])) / total
         pygame.draw.rect(screen, (120, 210, 100),
-                         (21, y + 1, int((bar_w - 2) * done / total), 12))
+                         (21, y + 1, int((bar_w - 2) * min(1.0, frac)), 12))
         y += 26
         elapsed = time.time() - state["started"]
-        # the first world has no pace to extrapolate from yet
-        left = elapsed / done * (total - done) if done else None
+        # Time left from the ticks actually lived over the last minute, not
+        # from worlds completed: counting worlds gave no figure at all until the
+        # first one finished, and then counted the world in flight as done.
+        pace, left = state.get("pace"), None
+        rate = None
+        if pace and len(pace) >= 2:
+            (t0, n0), (t1, n1) = pace[0], pace[-1]
+            for stamp, n in pace:                      # oldest sample within 60s
+                if t1 - stamp <= 60.0:
+                    t0, n0 = stamp, n
+                    break
+            if t1 > t0 and n1 > n0:
+                rate = (n1 - n0) / (t1 - t0)
+                left = state["left"] / rate
         screen.blit(font.render(t["meas_elapsed"].format(
             el=_hms(elapsed), left=_hms(left) if left is not None else "?"),
             True, HUD_HINT), (20, y))
+        y += 20
+        if rate is not None:
+            screen.blit(font.render(t["meas_pace"].format(rate=rate), True, HUD_HINT), (20, y))
         y += 26
         screen.blit(font.render(t["meas_stopping"] if cancelling else t["meas_cancel"],
                                 True, (235, 150, 90) if cancelling else HUD_HINT), (20, y))

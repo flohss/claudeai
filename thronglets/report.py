@@ -40,6 +40,8 @@ see whether the gap is bigger than the noise.
 
 import argparse
 import datetime
+import hashlib
+import json
 import os
 import platform
 import statistics
@@ -60,7 +62,7 @@ ACT_NAMES = {S.ACT_APPROACH: "approach", S.ACT_FLEE: "flee", S.ACT_IGNORE: "igno
 
 def play(seed, ticks, hand="none", act=None, hunted=True, learning=True,
          adaptive=True, per_step=2, master=False, break_every=0,
-         should_stop=None):
+         should_stop=None, ticked=None):
     """One life, played a particular way.
 
     `hand` is how the cursor behaves: "none" (you never touch the game),
@@ -82,8 +84,11 @@ def play(seed, ticks, hand="none", act=None, hunted=True, learning=True,
         # Every 100 ticks: often enough that stopping feels immediate (about
         # two seconds at the rate an ordinary machine runs), rare enough that
         # the check itself costs nothing across millions of ticks.
-        if should_stop is not None and n % 100 == 0 and should_stop():
-            return None
+        if n % 100 == 0:
+            if should_stop is not None and should_stop():
+                return None
+            if ticked is not None:
+                ticked(n)
         if hand != "none":
             if hand == "wander":
                 pos = np.clip(pos + rng.normal(0, 1.6, 2), [0, 0], [S.WIDTH, S.HEIGHT])
@@ -396,7 +401,53 @@ def stays_within(claim, sides, key, band, band_name):
     return lines
 
 
-def build_report(seed_count, ticks, titles=None, progress=None, should_stop=None):
+def _signature(ticks):
+    """What a checkpointed world was measured UNDER. A saved world is only
+    reusable if the run asking for it would have produced the same one: same
+    tick count, same parameters in force, same simulation code. The source is
+    hashed rather than the commit, because an uncommitted edit changes
+    behaviour just as surely as a committed one."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "simulation.py"), "rb") as fh:
+        code = hashlib.sha256(fh.read()).hexdigest()[:16]
+    params = {n: float(getattr(S, n)) for n in T.tunables()}
+    return {"ticks": int(ticks), "code": code, "params": params,
+            "numpy": np.__version__, "python": platform.python_version()}
+
+
+def load_checkpoint(path, ticks):
+    """The worlds already lived by an interrupted run of the SAME measurement,
+    as {(title, seed): metrics}. Anything else - no file, a damaged file, a
+    different tick count, parameters or code - yields nothing, and the run
+    simply starts over: silently mixing worlds measured under two different
+    setups into one table would be far worse than losing them."""
+    if not path or not os.path.exists(path):
+        return {}
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+        if data.get("signature") != _signature(ticks):
+            return {}
+        return {(w["title"], int(w["seed"])): w["metrics"] for w in data["worlds"]}
+    except (OSError, ValueError, KeyError, TypeError):
+        return {}
+
+
+def _save_checkpoint(path, ticks, worlds):
+    """Written after EVERY world, through a temp file and a rename, so a crash
+    or a power cut mid-write leaves the previous checkpoint intact instead of
+    half a file."""
+    data = {"signature": _signature(ticks),
+            "worlds": [{"title": t, "seed": s, "metrics": m}
+                       for (t, s), m in worlds.items()]}
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(data, fh)
+    os.replace(tmp, path)
+
+
+def build_report(seed_count, ticks, titles=None, progress=None, should_stop=None,
+                 checkpoint=None, on_ticks=None):
     """Run the sweep and return the finished report as one string.
 
     Split out of main() so the in-game Measure screen and the command line run
@@ -407,6 +458,13 @@ def build_report(seed_count, ticks, titles=None, progress=None, should_stop=None
     titles     which scenarios to run, by their SCENARIOS title; None = all.
     progress   called as progress(done, total, title, seed) before each world.
     should_stop() returning True aborts; build_report then returns None.
+    checkpoint a file each finished world is saved to as it finishes. A run that
+               is stopped, crashes or loses power keeps every world it had
+               completed, and asking for the same measurement again picks up
+               where it left off. It is removed once the report is complete.
+    on_ticks   called as on_ticks(lived, left) every 100 ticks, counting only
+               ticks actually lived in this session - resumed worlds cost
+               nothing and must not flatter the pace.
 
     A subset means some claims cannot be checked, because a claim is a
     COMPARISON and needs both its sides. Those are named as skipped rather than
@@ -420,6 +478,13 @@ def build_report(seed_count, ticks, titles=None, progress=None, should_stop=None
     collected = {}
 
     total = len(wanted) * len(seeds)
+    saved = load_checkpoint(checkpoint, ticks)
+    todo = sum(1 for title, _kw in wanted for seed in seeds
+               if (title, seed) not in saved)
+    if saved and todo < total:
+        lines += ["", f"resumed: {total - todo} of {total} worlds came from an "
+                  "interrupted run of this same measurement"]
+    lived = 0                            # ticks lived in THIS session
     done = 0
     for title, kwargs in wanted:
         runs = []
@@ -429,10 +494,23 @@ def build_report(seed_count, ticks, titles=None, progress=None, should_stop=None
             done += 1
             if progress is not None:
                 progress(done, total, title, seed)
-            world = play(seed, ticks, should_stop=should_stop, **kwargs)
+            if (title, seed) in saved:
+                runs.append(saved[(title, seed)])
+                continue
+
+            def ticked(n, base=lived):
+                if on_ticks is not None:
+                    on_ticks(base + n, todo * ticks - (base + n))
+
+            world = play(seed, ticks, should_stop=should_stop, ticked=ticked, **kwargs)
             if world is None:            # abandoned mid-world
                 return None
-            runs.append(measure(world))
+            lived += ticks
+            metrics = {k: float(v) for k, v in measure(world).items()}
+            runs.append(metrics)
+            if checkpoint:
+                saved[(title, seed)] = metrics
+                _save_checkpoint(checkpoint, ticks, saved)
         stats = across(runs)
         collected[title] = stats
         lines += ["", "-" * 78, title.upper(), "-" * 78]
@@ -455,6 +533,8 @@ def build_report(seed_count, ticks, titles=None, progress=None, should_stop=None
     lines += ["", "=" * 78,
               "Send this file along with what you were asking about.",
               "=" * 78]
+    if checkpoint and os.path.exists(checkpoint):
+        os.remove(checkpoint)            # nothing left to resume
     return "\n".join(lines) + "\n"
 
 
@@ -538,7 +618,12 @@ def main():
     def shout(done, total, title, seed):
         print(f"[{done}/{total}] {title}  seed {seed}", file=sys.stderr, flush=True)
 
-    text = build_report(args.seeds, args.ticks, progress=shout)
+    partial = args.out + ".partial.json"
+    kept = len(load_checkpoint(partial, args.ticks))
+    if kept:
+        print(f"resuming: {kept} finished world(s) found in {partial}",
+              file=sys.stderr, flush=True)
+    text = build_report(args.seeds, args.ticks, progress=shout, checkpoint=partial)
     with open(args.out, "w", encoding="utf-8") as fh:
         fh.write(text)
     print(text)
