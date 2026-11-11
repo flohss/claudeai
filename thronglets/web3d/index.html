@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Thronglets 3D</title>
+<link rel="stylesheet" href="/3d/style.css">
+<script type="importmap">
+{ "imports": { "three": "/3d/vendor/three.module.min.js",
+               "three/addons/": "/3d/vendor/jsm/" } }
+</script>
+</head>
+<body>
+<canvas id="scene"></canvas>
+
+<!-- top bar: what is happening, and the clock controls -->
+<header id="topbar" class="glass">
+  <div class="brand">Thronglets <span>3D</span></div>
+  <div class="stats">
+    <div class="stat"><b id="s-pop">–</b><i data-t="pop"></i></div>
+    <div class="stat"><b id="s-births">–</b><i data-t="births"></i></div>
+    <div class="stat"><b id="s-deaths">–</b><i data-t="deaths"></i></div>
+    <div class="stat"><b id="s-tick">–</b><i data-t="tick"></i></div>
+  </div>
+  <div class="spacer"></div>
+  <button id="b-pause" class="btn" data-tip="pauseTip"></button>
+  <div class="seg" data-tip="speedTip">
+    <button id="b-slower" class="btn">−</button>
+    <span id="s-speed">x1</span>
+    <button id="b-faster" class="btn">+</button>
+  </div>
+  <button id="b-save" class="btn" data-t="save"></button>
+  <button id="b-reset" class="btn" data-t="reset"></button>
+  <div class="seg">
+    <button id="b-fr" class="btn small">FR</button>
+    <button id="b-en" class="btn small">EN</button>
+  </div>
+  <a class="btn" href="/" data-t="view2d"></a>
+</header>
+
+<!-- right: what the flock as a whole has become -->
+<aside id="flock" class="glass card">
+  <h2 data-t="flockTitle"></h2>
+  <div id="f-learning">
+    <div class="label" data-t="dispTitle"></div>
+    <div class="gauge signed"><div class="mid"></div><div id="f-disp-fill" class="fill"></div></div>
+    <div id="f-disp-text" class="big"></div>
+    <div class="label" data-t="choiceTitle"></div>
+    <div class="gauge split"><div id="f-ch-a"></div><div id="f-ch-f"></div><div id="f-ch-i"></div></div>
+    <div id="f-ch-text" class="legend"></div>
+    <div class="label" data-t="dreadTitle"></div>
+    <div class="gauge"><div id="f-dread-fill" class="fill bad"></div></div>
+    <div id="f-dread-text" class="small"></div>
+  </div>
+  <div id="f-free" class="hidden">
+    <div class="label" data-t="freeSeek"></div>
+    <div class="gauge signed"><div class="mid"></div><div id="f-seek-fill" class="fill"></div></div>
+    <div id="f-seek-text" class="small"></div>
+    <div class="label" data-t="freeFlee"></div>
+    <div class="gauge signed"><div class="mid"></div><div id="f-flee-fill" class="fill"></div></div>
+    <div id="f-flee-text" class="small"></div>
+    <div id="f-imm" class="small dim" style="margin-top:8px"></div>
+  </div>
+  <div id="f-nolearning" class="small dim" data-t="noLearning"></div>
+  <h3 data-t="vocabTitle"></h3>
+  <div id="f-vocab"></div>
+  <h3 data-t="deathsTitle"></h3>
+  <div id="f-deaths" class="small"></div>
+</aside>
+
+<!-- left: the one you picked -->
+<aside id="mind" class="glass card hidden">
+  <button id="m-close" class="x">×</button>
+  <h2><span id="m-swatch" class="swatch"></span><span id="m-title"></span></h2>
+  <div id="m-meta" class="small dim"></div>
+  <div class="label" data-t="energy"></div>
+  <div class="gauge"><div id="m-energy" class="fill good"></div></div>
+  <div id="m-learned">
+    <div id="m-feeling" class="big"></div>
+    <div id="m-mood" class="small"></div>
+    <div class="label" data-t="expects"></div>
+    <div class="gauge signed"><div class="mid"></div><div id="m-value" class="fill"></div></div>
+    <div id="m-decided" class="small"></div>
+    <div class="label" data-t="hunter"></div>
+    <div class="gauge"><div id="m-dread" class="fill bad"></div></div>
+    <div id="m-dread-text" class="small"></div>
+    <div class="label" data-t="words"></div>
+    <div id="m-words" class="words"></div>
+    <div class="label"><span data-t="dwells"></span> <span id="m-dwells-n" class="dim"></span></div>
+    <table id="m-mem"></table>
+  </div>
+  <div class="actions">
+    <button class="btn good" data-act="pet" data-t="actPet"></button>
+    <button class="btn good" data-act="feed" data-t="actFeed"></button>
+    <button class="btn bad" data-act="hurt" data-t="actHurt"></button>
+    <button class="btn bad" data-act="kill" data-t="actKill"></button>
+    <button id="m-follow" class="btn" data-t="follow"></button>
+  </div>
+</aside>
+
+<!-- bottom: what your hand does, and the sky -->
+<footer id="dock" class="glass">
+  <div class="tools">
+    <button class="tool on" data-tool="look"><span>◎</span><i data-t="toolLook"></i></button>
+    <button class="tool" data-tool="food"><span>✿</span><i data-t="toolFood"></i></button>
+    <button class="tool" data-tool="predator"><span>▲</span><i data-t="toolPred"></i></button>
+    <button class="tool" data-tool="fire"><span>✹</span><i data-t="toolFire"></i></button>
+  </div>
+  <div class="sep"></div>
+  <div class="sky">
+    <button id="b-clock" class="btn small" data-tip="clockTip">▶</button>
+    <input id="r-time" type="range" min="0" max="1" step="0.001" value="0.42">
+    <span id="s-clock">10:00</span>
+  </div>
+  <select id="sel-season"></select>
+  <select id="sel-weather"></select>
+  <select id="sel-quality"></select>
+</footer>
+
+<div id="hint" class="glass small"></div>
+<div id="tooltip" class="glass small hidden"></div>
+<div id="ctx" class="glass hidden"></div>
+<div id="toast" class="glass hidden"></div>
+
+<!-- before a world exists -->
+<div id="start" class="hidden">
+  <div class="glass card startcard">
+    <h1>Thronglets <span>3D</span></h1>
+    <p data-t="startIntro"></p>
+    <label><span data-t="optMode"></span>
+      <select id="o-mode"><option value="auto" data-t="modeAuto"></option>
+        <option value="manual" data-t="modeManual"></option></select></label>
+    <label><span data-t="optPop"></span>
+      <input id="o-pop" type="number" min="1" max="220" value="100"></label>
+    <label><span data-t="optModel"></span>
+      <select id="o-model"><option value="classic" data-t="modelClassic"></option>
+        <option value="free" data-t="modelFree"></option></select></label>
+    <p id="o-model-note" class="small"></p>
+    <label class="check"><input id="o-learn" type="checkbox" checked><span data-t="optLearn"></span></label>
+    <label class="check"><input id="o-traits" type="checkbox" checked><span data-t="optTraits"></span></label>
+    <label class="check"><input id="o-ai" type="checkbox"><span data-t="optAi"></span></label>
+    <div class="row">
+      <button id="o-go" class="btn primary" data-t="startGo"></button>
+      <button id="o-resume" class="btn hidden" data-t="startResume"></button>
+    </div>
+  </div>
+</div>
+
+<div id="fatal" class="hidden"></div>
+<script type="module" src="/3d/app.js"></script>
+</body>
+</html>

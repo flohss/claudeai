@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+*.pt
+language_model.json
+thronglets_save.json
+thronglets_params.json
+thronglets_report*.txt
+*.partial.json
+*.partial.json.tmp
