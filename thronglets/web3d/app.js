@@ -181,10 +181,14 @@ function applySky(dt) {
   const wet = view.weather === 'clear' ? 0 : 1;
 
   skyU.sunPosition.value.copy(sunDir);
-  skyU.turbidity.value = lerp(2.2, 14, wet);
-  skyU.rayleigh.value = lerp(lerp(.25, 1.6, day), .5, wet) + low * day * 1.6;
-  skyU.mieCoefficient.value = lerp(.004, .03, wet);
-  skyU.mieDirectionalG.value = .82;
+  // A low sun shines through far more air: more haze to scatter the red, more
+  // Rayleigh to drain the blue. Without this the sky stayed a pale grey-white
+  // right down to the horizon and sunset was only a slightly dimmer noon.
+  const glow = low * smooth(-.12, .04, sunDir.y) * (1 - wet);      // 1 at the horizon, 0 at noon and at night
+  skyU.turbidity.value = lerp(lerp(2.2, 9, glow), 14, wet);
+  skyU.rayleigh.value = lerp(lerp(.25, 1.6, day), .5, wet) + glow * 2.6;
+  skyU.mieCoefficient.value = lerp(lerp(.004, .013, glow), .03, wet);
+  skyU.mieDirectionalG.value = lerp(.82, .88, glow);
 
   // one light: the sun by day, the moon once it has set
   const useMoon = sunDir.y < -.04;
@@ -199,18 +203,18 @@ function applySky(dt) {
   hemi.groundColor.set(0x1c2436).lerp(tmpSky.set(0x4a5a34), day);
 
   const fogDay = new THREE.Color(wet ? 0x9aa6ad : 0xbcd6e8);
-  const fogDusk = new THREE.Color(0xe7a871), fogNight = new THREE.Color(0x121a30);
-  const fog = fogNight.clone().lerp(fogDay.clone().lerp(fogDusk, low * (1 - wet) * .75), day);
+  const fogDusk = new THREE.Color(0xe8935a), fogNight = new THREE.Color(0x121a30);
+  const fog = fogNight.clone().lerp(fogDay.clone().lerp(fogDusk, glow * .9), day);
   scene.fog.color.copy(fog);
   scene.fog.density = lerp(.0019, .0052, wet) + (view.season === 'winter' ? .0006 : 0);
-  renderer.toneMappingExposure = lerp(.78, .62, day);
+  renderer.toneMappingExposure = lerp(.78, .62, day) * (1 - glow * .28);
 
-  stars.material.opacity = (1 - day) * (1 - wet) * .95;
+  stars.material.opacity = (1 - smooth(-.22, -.05, sunDir.y)) * (1 - wet) * .95;   // only once the sun is well down
   moon.position.copy(moonDir).multiplyScalar(1700);
   moon.visible = moonDir.y > -.05 && !wet;
 
   // re-bake the ambient light only when the sky has visibly moved
-  const stamp = Math.round(t * 240) + (wet ? 1000 : 0);
+  const stamp = Math.round(t * 480) + (wet ? 1000 : 0);
   if (stamp !== envStamp) {
     envStamp = stamp;
     for (const k of ['sunPosition', 'turbidity', 'rayleigh', 'mieCoefficient', 'mieDirectionalG'])
