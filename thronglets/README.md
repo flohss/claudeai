@@ -65,7 +65,7 @@ below, plus the 3D one described just after:
   anywhere, including Termux.
 
 **The 3D view lives in the browser.** Start `main_web.py` and open
-`http://localhost:8000/3d` (or press the `3D` button on the 2D page). It is the
+`http://localhost:8765/3d` (or press the `3D` button on the 2D page). It is the
 same running world as the 2D page - the simulation stays in Python, the page
 only draws what the server reports - rendered with three.js: a physically-based
 sky whose sun really moves and lights the scene, soft shadows, ambient light
