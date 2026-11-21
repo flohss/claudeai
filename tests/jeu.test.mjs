@@ -89,11 +89,144 @@ export default async function testJeu(browser, base){
   R.check('même graine → labyrinthe identique', rejeu.identique);
   R.check('graine différente → labyrinthe différent', rejeu.different);
 
+  const codesGoal = await page.evaluate(() => {
+    let ok = 0, total = 0;
+    for(const g of ['direct','cles'])
+      for(const p of ['classique','salles'])
+        for(const d of ['facile','expert'])
+          for(const s of [0, 42, 16777215]){
+            total++;
+            const r = LAB.parseCode(LAB.makeCode('glace',p,d,s,g));
+            if(r && r.pattern===p && r.diff===d && r.seed===s && r.goal===g) ok++;
+          }
+    return { ok, total };
+  });
+  R.check('aller-retour code ↔ configuration, avec l’objectif', codesGoal.ok === codesGoal.total,
+    '→ ' + codesGoal.ok + '/' + codesGoal.total);
+
+  // Un code fabriqué avec l'ancienne formule (avant l'ajout de l'objectif) doit
+  // encore se décoder correctement, en « direct » implicite : les graines déjà
+  // partagées ne doivent pas se casser avec cette extension.
+  const retroCompat = await page.evaluate(() => {
+    const SEED_MAX = 0x1000000;
+    const p = 2, d = 1, seed = 777777;                   // éparpillé, moyen
+    const packed = (p*4 + d) * SEED_MAX + seed;
+    const r = LAB.parseCode('NEON-' + packed.toString(36).toUpperCase());
+    return r && r.theme==='neon' && r.pattern==='eparpille' && r.diff==='moyen' &&
+           r.seed===seed && r.goal==='direct';
+  });
+  R.check('un code de graine émis avant l’objectif se décode encore en « direct »', retroCompat);
+
   await page.click('#genBackBtn');
   await page.fill('#seedInput', 'NEON-5D5PGS');
   await page.click('#seedBtn');
   R.check('l’interface accepte un code collé',
     (await page.evaluate(() => LAB.state.theme)) === 'neon');
+
+  /* ------------------------------------------------------- objectif « clés » */
+  R.section('Objectif « Clés + sortie »');
+  const k = await openPage(browser, url, { viewport:{ width:412, height:915 } });
+  await k.evaluate(() => { LAB.state.goal='cles'; LAB.state.diff='moyen'; LAB.state.speed='instant'; });
+  await k.click('#startBtn');
+  await k.waitForFunction(() => LAB.builder && LAB.builder.done, null, { timeout:20000 });
+  await k.click('#playBtn');
+  await sleep(300);
+
+  const placement = await k.evaluate(() => {
+    const m = LAB.maze;
+    return {
+      n: m.keys.length,
+      enBornes: m.keys.every(x => x.r>=0 && x.r<m.size && x.c>=0 && x.c<m.size),
+      niDepartNiSortie: m.keys.every(x => !(x.r===0&&x.c===0) && !(x.r===m.exit.r&&x.c===m.exit.c)),
+      uniques: new Set(m.keys.map(x=>x.r+','+x.c)).size === m.keys.length
+    };
+  });
+  R.check('autant de clés que prévu pour la difficulté', placement.n === 3, '→ ' + placement.n);
+  R.check('les clés sont dans la grille, hors départ et sortie',
+    placement.enBornes && placement.niDepartNiSortie);
+  R.check('les clés occupent des cases toutes différentes', placement.uniques);
+
+  const code = await k.evaluate(() => LAB.code);
+  const premieresCles = await k.evaluate(() => LAB.maze.keys.map(x=>x.r+','+x.c).join('|'));
+  await k.click('#pauseBtn'); await sleep(150);
+  await k.click('#ovThird'); await sleep(150);
+  await k.fill('#seedInput', code);
+  await k.click('#seedBtn');
+  await k.evaluate(() => { LAB.state.speed = 'instant'; });
+  await k.click('#startBtn');
+  await k.waitForFunction(() => LAB.builder && LAB.builder.done, null, { timeout:20000 });
+  await k.click('#playBtn');
+  await sleep(300);
+  const secondesCles = await k.evaluate(() => LAB.maze.keys.map(x=>x.r+','+x.c).join('|'));
+  R.check('même graine → mêmes positions de clés', premieresCles === secondesCles,
+    '→ ' + premieresCles + ' / ' + secondesCles);
+
+  R.check('la sortie est éteinte tant qu’il manque des clés',
+    (await k.evaluate(() => LAB.exitActivation)) < 0.05);
+  R.check('le compteur de clés est visible et à zéro',
+    (await k.evaluate(() => document.getElementById('keyCounter').classList.contains('on'))) &&
+    (await k.textContent('#keyCounter')).trim() === '🔑 0/3');
+
+  await k.evaluate(() => LAB.teleportToExit());
+  await sleep(300);
+  R.check('toucher la sortie sans les clés ne fait pas gagner',
+    (await k.evaluate(() => LAB.gameState)) === 'playing');
+
+  const n = await k.evaluate(() => LAB.keysNeeded);
+  for(let i=0;i<n;i++){ await k.evaluate(j => LAB.teleportToKey(j), i); await sleep(250); }
+  R.check('les clés se ramassent une à une et le compteur suit',
+    (await k.evaluate(() => LAB.keysCollected.size)) === n &&
+    (await k.textContent('#keyCounter')).trim() === '🔑 ' + n + '/' + n);
+
+  await sleep(1500);
+  R.check('la sortie s’allume une fois toutes les clés ramassées',
+    (await k.evaluate(() => LAB.exitActivation)) > 0.9);
+
+  await k.evaluate(() => LAB.teleportToExit());
+  await sleep(300);
+  R.check('toucher la sortie avec toutes les clés fait gagner',
+    (await k.evaluate(() => LAB.gameState)) === 'won');
+  R.check('l’écran de victoire mentionne les clés',
+    (await k.textContent('#ovText')).includes('clé'));
+
+  /* --- fil d'Ariane : les cases foulées sont un sous-ensemble des cases vues --- */
+  await k.click('#ovSecondary'); await sleep(300);     // « Refaire celui-ci » : repart du départ
+  await k.keyboard.down('KeyW'); await sleep(900); await k.keyboard.up('KeyW');
+  const trace = await k.evaluate(() => {
+    const N = LAB.maze.N;
+    let walkedN = 0, exploredN = 0, sousEnsemble = true;
+    for(let i=0;i<N*N;i++){
+      if(LAB.walked[i]){ walkedN++; if(!LAB.explored[i]) sousEnsemble = false; }
+      if(LAB.explored[i]) exploredN++;
+    }
+    return { walkedN, exploredN, sousEnsemble, departFoule: LAB.walked[1*N+1] === 1 };
+  });
+  R.check('le fil d’Ariane trace bien le passage du joueur', trace.walkedN > 0, '→ ' + trace.walkedN);
+  R.check('les cases foulées restent un sous-ensemble des cases vues',
+    trace.sousEnsemble && trace.walkedN <= trace.exploredN,
+    '→ ' + trace.walkedN + ' foulées / ' + trace.exploredN + ' vues');
+  R.check('la case de départ fait partie du fil d’Ariane', trace.departFoule);
+
+  /* --- régression : le mode classique (sans objectif) reste intact --- */
+  await k.click('#pauseBtn'); await sleep(150);
+  await k.click('#ovThird'); await sleep(150);          // retour au menu principal
+  await k.evaluate(() => { LAB.state.goal = 'direct'; LAB.state.diff = 'facile'; LAB.state.speed = 'instant'; });
+  await k.click('#startBtn');
+  await k.waitForFunction(() => LAB.builder && LAB.builder.done, null, { timeout:20000 });
+  await k.click('#playBtn');
+  await sleep(300);
+  R.check('sans objectif, aucune clé n’est posée', (await k.evaluate(() => LAB.maze.keys.length)) === 0);
+  R.check('sans objectif, le compteur de clés reste masqué',
+    !(await k.evaluate(() => document.getElementById('keyCounter').classList.contains('on'))));
+  R.check('sans objectif, la sortie est allumée d’emblée',
+    (await k.evaluate(() => LAB.exitActivation)) === 1);
+  await k.evaluate(() => LAB.teleportToExit());
+  await sleep(300);
+  R.check('sans objectif, toucher la sortie fait gagner tout de suite',
+    (await k.evaluate(() => LAB.gameState)) === 'won');
+
+  R.check('aucune erreur JavaScript pendant l’objectif « clés »', k.jsErrors.length === 0, k.jsErrors[0] || '');
+  await k.context().close();
 
   /* ------------------------------------------------------------------- décors */
   R.section('Construction des six décors en 3D');

@@ -33,7 +33,13 @@ rotation du regard et absence de traversée de mur ; pause, reprise et exactitud
 chronomètre par rapport à l'horloge réelle ; carte agrandie en popup — ouverture au
 clic, déplacements bloqués tant qu'elle est affichée, fermeture par clic sur le fond,
 par le bouton ✕, par `Échap` ou par `M`, et mouvement qui reprend une fois refermée ;
-indice au sol et son effacement ; résolution comparée, avec le taux d'échec de la main
+objectif « Clés + sortie » — nombre et position des clés selon la difficulté, aucune
+sur le départ ou la sortie, reproductibilité à graine égale, sortie éteinte et gain
+refusé tant qu'il manque des clés, ramassage un par un avec mise à jour du compteur,
+allumage de la sortie une fois complet, victoire ensuite ; fil d'Ariane, dont les cases
+foulées restent un sous-ensemble des cases vues et incluent le départ ; non-régression
+du mode classique (aucune clé posée, compteur masqué, sortie allumée d'emblée) ; indice
+au sol et son effacement ; résolution comparée, avec le taux d'échec de la main
 gauche mesuré sur 120 tirages ; sonorisation, sa cadence bridée, sa coupure et la
 persistance du réglage.
 

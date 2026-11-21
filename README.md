@@ -124,6 +124,12 @@ dessus, avec le bouton ✕, ou avec `Échap`/`M`.
 Le bouton 💡, en bas à droite, allume au sol le chemin vers la sortie pendant sept
 secondes. Un temps obtenu avec au moins un indice n'est pas enregistré comme record.
 
+Avec l'objectif « Clés + sortie », un compteur 🔑 apparaît sous le chronomètre. La sortie
+reste sombre et muette tant qu'il manque des clés ; s'y présenter avant de les avoir
+toutes ramassées ne fait rien d'autre qu'afficher combien il en reste. Dès la dernière
+clé en poche, le portail s'allume avec un petit son caractéristique — plus la peine de
+deviner si la sortie est prête.
+
 Le meilleur temps est retenu par navigateur pour chaque combinaison motif + difficulté.
 
 ## Réglages
@@ -144,7 +150,21 @@ de génération intéressante à regarder :
 | 🔀 Ouvert | profondeur + tressage | les impasses sont rouvertes : des boucles, plusieurs routes |
 | 🏰 Salles | division récursive | on part d'une grande salle vide qu'on cloisonne |
 
-**4 difficultés** : Facile 8×8 · Moyen 12×12 · Difficile 17×17 · Expert 23×23.
+**4 difficultés** : Facile 8×8 (2 clés) · Moyen 12×12 (3 clés) · Difficile 17×17 (4 clés) ·
+Expert 23×23 (5 clés). Le nombre de clés entre parenthèses ne compte que si l'objectif
+« Clés + sortie » est choisi (voir ci-dessous).
+
+**2 objectifs** :
+
+- 🚪 **Sortie directe** — le classique : la sortie est allumée dès le départ.
+- 🔑 **Clés + sortie** — la sortie reste **éteinte** (aucune lueur, aucune lumière) tant
+  que les clés du labyrinthe n'ont pas toutes été ramassées. Les clés restent invisibles
+  sur la carte tant que leur case n'a pas été explorée, comme la sortie elle-même ; les
+  trouver demande donc de vraiment arpenter le labyrinthe plutôt que de foncer sur la
+  boussole. Un fil d'Ariane doré, sur la carte, distingue les cases **réellement
+  foulées** des cases simplement aperçues au loin — de quoi repérer d'un coup d'œil ce
+  qui reste à explorer. Position des clés dérivée du même tirage que la graine : à code
+  partagé égal, elles tombent toujours au même endroit.
 
 ### Une invariante à observer
 
@@ -174,7 +194,13 @@ au biais de l'algorithme.
   sans dupliquer le code. Les solveurs suivent le même principe.
 - Le tirage passe par un générateur pseudo-aléatoire à graine (mulberry32) plutôt que
   par `Math.random`, ce qui rend chaque labyrinthe reproductible à partir de son code.
-  Seules les textures et les particules gardent un hasard libre.
+  Seules les textures et les particules gardent un hasard libre. Les clés de l'objectif
+  « Clés + sortie » sont tirées à la suite, dans ce même flux : à graine égale, elles
+  tombent toujours au même endroit.
+- Le code de graine encode l'objectif choisi en plus du décor, du motif, de la
+  difficulté et du tirage — mais de façon additive, pour qu'un code généré avant
+  l'existence de cet objectif continue de se décoder exactement pareil (implicitement
+  « sortie directe »).
 - Le chronomètre est lu sur l'horloge réelle, pas sur le delta d'image : ce dernier est
   plafonné à 50 ms pour protéger les collisions, et s'en servir pour compter le temps
   ferait retarder la montre sur tout appareil qui descend sous 20 images par seconde.
@@ -342,6 +368,6 @@ npx playwright install chromium
 npm test
 ```
 
-110 contrôles, dont les propriétés mathématiques vérifiées contre des références
+160 contrôles, dont les propriétés mathématiques vérifiées contre des références
 recalculées dans le test lui-même. Le détail de ce qui est couvert — et surtout **ce qui
 ne l'est pas** — se trouve dans [`tests/README.md`](tests/README.md).

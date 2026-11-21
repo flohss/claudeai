@@ -10,6 +10,6 @@
     "serve": "node -e \"import('./tests/lib.mjs').then(m=>m.serve('.',8080)).then(()=>console.log('http://localhost:8080/labyrinthe3d.html'))\""
   },
   "devDependencies": {
-    "playwright": "^1.56.1"
+    "playwright": "1.63.0"
   }
 }

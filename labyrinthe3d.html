@@ -137,6 +137,11 @@
     transform:translateX(-50%);font-size:1.05rem;font-weight:700;letter-spacing:1px;
     background:rgba(10,10,20,.5);padding:6px 16px;border-radius:20px;
     border:1px solid rgba(255,255,255,.15);z-index:3;}
+  #keyCounter{position:absolute;top:calc(50px + env(safe-area-inset-top));left:50%;
+    transform:translateX(-50%);font-size:.85rem;font-weight:700;letter-spacing:.5px;
+    background:rgba(10,10,20,.5);padding:4px 13px;border-radius:16px;
+    border:1px solid rgba(255,255,255,.15);z-index:3;display:none;}
+  #keyCounter.on{display:block;}
   #minimapWrap{position:absolute;top:calc(64px + env(safe-area-inset-top));
     right:calc(12px + env(safe-area-inset-right));width:132px;height:132px;border-radius:12px;
     overflow:hidden;border:1px solid rgba(255,255,255,.22);background:rgba(5,5,10,.6);
@@ -203,6 +208,7 @@
     <div class="group"><label>Décor</label><div class="options" id="themeOpts"></div></div>
     <div class="group"><label>Motif du labyrinthe</label><div class="options" id="patternOpts"></div></div>
     <div class="group"><label>Difficulté</label><div class="options four" id="diffOpts"></div></div>
+    <div class="group"><label>Objectif</label><div class="options" id="goalOpts"></div></div>
 
     <div class="group">
       <label>Graine — pour rejouer un labyrinthe précis</label>
@@ -301,6 +307,7 @@
   <div class="hudBtn" id="pauseBtn">☰</div>
   <div class="hudBtn" id="soundBtn">🔊</div>
   <div id="timer">00:00</div>
+  <div id="keyCounter">🔑 0/0</div>
   <div class="hudBtn" id="compassBtn">🧭</div>
   <div class="hudBtn" id="mapBtn">🗺</div>
   <div id="minimapWrap"><canvas id="minimap" width="132" height="132"></canvas></div>
@@ -401,10 +408,15 @@ const PATTERNS = {
 };
 
 const DIFFS = {
-  facile:    { name:'Facile',    size:8  },
-  moyen:     { name:'Moyen',     size:12 },
-  difficile: { name:'Difficile', size:17 },
-  expert:    { name:'Expert',    size:23 }
+  facile:    { name:'Facile',    size:8,  keys:2 },
+  moyen:     { name:'Moyen',     size:12, keys:3 },
+  difficile: { name:'Difficile', size:17, keys:4 },
+  expert:    { name:'Expert',    size:23, keys:5 }
+};
+
+const GOALS = {
+  direct: { name:'Sortie directe', icon:'🚪', desc:'fonce droit au but' },
+  cles:   { name:'Clés + sortie',  icon:'🔑', desc:'ramasse-les avant d’ouvrir' }
 };
 
 const SPEEDS = {
@@ -414,7 +426,7 @@ const SPEEDS = {
   instant:   { name:'⚡ Éclair',  mult:40 }
 };
 
-const state = { theme:'antique', pattern:'classique', diff:'moyen', speed:'normal' };
+const state = { theme:'antique', pattern:'classique', diff:'moyen', goal:'direct', speed:'normal' };
 
 /* ----------------------------------------------------------------------------
    Graine : un générateur pseudo-aléatoire reproductible (mulberry32) et un code
@@ -428,15 +440,28 @@ function mulberry32(a){
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
+function shuffleSeeded(arr, rnd){
+  for(let i=arr.length-1;i>0;i--){
+    const j = (rnd() * (i+1)) | 0;
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
 
 const THEME_CODES = { antique:'ANTI', neon:'NEON', foret:'FORE',
                       espace:'ORBI', glace:'GLAC', volcan:'VOLC' };
 const SEED_MAX = 0x1000000;   // 24 bits
+// nombre de combinaisons (motif × difficulté) : 5 × 4 = 20. L'objectif se range
+// comme un multiple ADDITIF de ce cycle, jamais inséré au milieu : un code déjà
+// partagé (objectif implicite « direct », premier de GOALS) retombe exactement
+// sur le même nombre qu'avant, puisque son rang y reste dans [0, 20).
+const PD_CYCLE = Object.keys(PATTERNS).length * 4;
 
-function makeCode(theme, pattern, diff, seed){
+function makeCode(theme, pattern, diff, seed, goal){
   const p = Object.keys(PATTERNS).indexOf(pattern);
   const d = Object.keys(DIFFS).indexOf(diff);
-  const packed = ((p * 4 + d) * SEED_MAX) + (seed % SEED_MAX);
+  const g = Math.max(0, Object.keys(GOALS).indexOf(goal || 'direct'));
+  const packed = ((g * PD_CYCLE) + (p * 4 + d)) * SEED_MAX + (seed % SEED_MAX);
   return THEME_CODES[theme] + '-' + packed.toString(36).toUpperCase();
 }
 
@@ -450,10 +475,13 @@ function parseCode(str){
   if(!isFinite(packed) || packed < 0) return null;
   const seed = packed % SEED_MAX;
   const rest = Math.floor(packed / SEED_MAX);
-  const pattern = Object.keys(PATTERNS)[Math.floor(rest / 4)];
-  const diff = Object.keys(DIFFS)[rest % 4];
-  if(!pattern || !diff) return null;
-  return { theme, pattern, diff, seed };
+  const g = Math.floor(rest / PD_CYCLE);
+  const pd = rest % PD_CYCLE;
+  const pattern = Object.keys(PATTERNS)[Math.floor(pd / 4)];
+  const diff = Object.keys(DIFFS)[pd % 4];
+  const goal = Object.keys(GOALS)[g];
+  if(!pattern || !diff || !goal) return null;
+  return { theme, pattern, diff, seed, goal };
 }
 
 let pendingSeed = null;   // graine imposée pour la prochaine génération
@@ -483,6 +511,7 @@ function refreshMenu(){
   buildOpts('themeOpts',   THEMES,   'theme');
   buildOpts('patternOpts', PATTERNS, 'pattern', d => d.desc);
   buildOpts('diffOpts',    DIFFS,    'diff',    d => d.size + '×' + d.size);
+  buildOpts('goalOpts',    GOALS,    'goal',    d => d.desc);
   buildOpts('speedOpts',   SPEEDS,   'speed');
   buildOpts('solveSpeedOpts', SPEEDS, 'speed');
 }
@@ -1291,7 +1320,7 @@ function startGeneration(){
   cancelAnimationFrame(genRaf);
   const seed = (pendingSeed !== null) ? pendingSeed : ((Math.random() * SEED_MAX) | 0);
   pendingSeed = null;
-  currentCode = makeCode(state.theme, state.pattern, state.diff, seed);
+  currentCode = makeCode(state.theme, state.pattern, state.diff, seed, state.goal);
   $('genCode').textContent = currentCode;
   builder = new MazeBuilder(DIFFS[state.diff].size, state.pattern, seed);
   genIter = builder.run();
@@ -1594,6 +1623,9 @@ const sfx = (() => {
     ready(){ beep(660, 0.12, 'triangle', 0.06); setTimeout(()=>beep(880,0.16,'triangle',0.06), 110); },
     step(){ beep(90 + Math.random()*25, 0.06, 'sine', 0.035); },
     bump(){ beep(70, 0.07, 'sawtooth', 0.03); },
+    key(){ beep(784, 0.08, 'triangle', 0.05); setTimeout(()=>beep(1175,0.13,'triangle',0.05), 85); },
+    unlockExit(){ [660,880,1108].forEach((f,i)=>setTimeout(()=>beep(f,0.22,'triangle',0.065), i*90)); },
+    locked(){ beep(140, 0.1, 'square', 0.028); },
     win(){ [523,659,784,1047].forEach((f,i)=>setTimeout(()=>beep(f,0.35,'triangle',0.08), i*130)); }
   };
 })();
@@ -1852,7 +1884,10 @@ camera.rotation.order = 'YXZ';
 let maze = null;         // { bitmap, N, size, exit, path, shortest }
 let disposables = [];
 let torch = null, exitGroup = null, particles = null, exitWorld = null;
-let explored = null;     // fog of war (par case bitmap)
+let explored = null;     // fog de guerre : cases vues
+let walked = null;       // fil d'Ariane : cases réellement foulées
+let keyMeshes = [], keysCollected = new Set(), keysNeeded = 0;
+let exitActivation = 1;  // 0 = portail éteint (clés manquantes), 1 = pleinement allumé
 
 const player = { x:0, z:0, yaw:0, pitch:0, bob:0, speed:6.4, run:9.6 };
 const keys = {};
@@ -1990,7 +2025,36 @@ function buildWorld(){
   exitLight.position.y = 1.6;
   exitGroup.add(exitLight);
   exitGroup.position.set(exitWorld.x, 0, exitWorld.z);
+  exitGroup.userData.beamMat = beamMat;
+  exitGroup.userData.ringMat = ringMat;
+  exitGroup.userData.light = exitLight;
   scene.add(exitGroup);
+
+  /* --- clés à ramasser (objectif « Clés + sortie ») : tant qu'il en manque,
+     le portail ci-dessus reste éteint — exitActivation à 0, animé dans la
+     boucle principale --- */
+  keyMeshes = []; keysCollected = new Set(); keysNeeded = maze.keys.length;
+  if(keysNeeded){
+    const keyGeo = new THREE.OctahedronGeometry(CELL*0.22, 0);
+    const keyMat = new THREE.MeshStandardMaterial({
+      color: th.accent, emissive: new THREE.Color(th.accent), emissiveIntensity:1.1,
+      metalness:0.3, roughness:0.25 });
+    disposables.push(keyGeo, keyMat);
+    maze.keys.forEach((k, i) => {
+      const grp = new THREE.Group();
+      grp.add(new THREE.Mesh(keyGeo, keyMat));
+      const glow = new THREE.PointLight(th.accent, 1.6, CELL*4, 2);
+      grp.add(glow);
+      grp.position.set((2*k.c+1)*CELL, 1.1, (2*k.r+1)*CELL);
+      grp.userData.baseY = 1.1;
+      grp.userData.index = i;
+      scene.add(grp);
+      keyMeshes.push(grp);
+    });
+  }
+  exitActivation = keysNeeded > 0 ? 0 : 1;
+  $('keyCounter').classList.toggle('on', keysNeeded > 0);
+  updateKeyHud();
 
   /* --- particules d'ambiance --- */
   const pCount = 320;
@@ -2018,6 +2082,7 @@ function buildWorld(){
   camera.rotation.set(0, 0, 0);
 
   explored = new Uint8Array(N*N);
+  walked = new Uint8Array(N*N);
   markExplored();
   visitedCells = 0;
   hintsUsed = 0; hintTimer2 = 0;
@@ -2040,6 +2105,7 @@ function canStand(x, z){
 function markExplored(){
   const c = Math.round(player.x / CELL), r = Math.round(player.z / CELL);
   const N = maze.N;
+  if(r>=0 && r<N && c>=0 && c<N) walked[r*N+c] = 1;   // fil d'Ariane : la case foulée, elle seule
   for(let dr=-1; dr<=1; dr++) for(let dc=-1; dc<=1; dc++){
     const rr = r+dr, cc = c+dc;
     if(rr>=0 && rr<N && cc>=0 && cc<N) explored[rr*N+cc] = 1;
@@ -2096,12 +2162,48 @@ function updatePlayer(dt){
   camera.rotation.x = player.pitch;
 }
 
-let bumpCool = 0;
+let bumpCool = 0, exitDenyCool = 0;
 function sfxBump(){ if(bumpCool <= 0){ sfx.bump(); bumpCool = 0.35; } }
+
+function updateKeyHud(){
+  $('keyCounter').textContent = '🔑 ' + keysCollected.size + '/' + keysNeeded;
+}
+
+function checkKeys(){
+  if(!keyMeshes.length) return;
+  for(const grp of keyMeshes){
+    if(keysCollected.has(grp.userData.index)) continue;
+    const dx = player.x - grp.position.x, dz = player.z - grp.position.z;
+    if(Math.hypot(dx, dz) >= CELL*0.55) continue;
+    keysCollected.add(grp.userData.index);
+    scene.remove(grp);
+    updateKeyHud();
+    $('hint').style.opacity = '1'; hintTimer = 3;
+    if(keysCollected.size >= keysNeeded){
+      sfx.unlockExit();
+      $('hint').textContent = 'La sortie s’est allumée !';
+    } else {
+      sfx.key();
+      const reste = keysNeeded - keysCollected.size;
+      $('hint').textContent = 'Clé ramassée · encore ' + reste + ' clé' + (reste>1?'s':'') + ' 🔑';
+    }
+  }
+}
 
 function checkWin(){
   if(!exitWorld) return;
-  if(Math.hypot(player.x - exitWorld.x, player.z - exitWorld.z) < CELL*0.6) winGame();
+  if(Math.hypot(player.x - exitWorld.x, player.z - exitWorld.z) >= CELL*0.6) return;
+  if(keysCollected.size < keysNeeded){
+    if(exitDenyCool <= 0){
+      sfx.locked();
+      const reste = keysNeeded - keysCollected.size;
+      $('hint').textContent = 'Il manque ' + reste + ' clé' + (reste>1?'s':'') + ' 🔑 pour ouvrir la sortie';
+      $('hint').style.opacity = '1'; hintTimer = 2.2;
+      exitDenyCool = 1.6;
+    }
+    return;
+  }
+  winGame();
 }
 
 /* ============================================================================
@@ -2245,11 +2347,36 @@ function renderMapInto(ctx, w, h){
     ctx.fillStyle = maze.bitmap[r*N+c] === 1 ? 'rgba(190,180,255,0.75)' : 'rgba(255,255,255,0.10)';
     ctx.fillRect(c*s, r*s, s+0.7, s+0.7);
   }
+  // fil d'Ariane : les cases réellement foulées, distinctes de la simple zone vue
+  if(walked){
+    ctx.fillStyle = 'rgba(255,207,92,0.38)';
+    for(let r=0;r<N;r++) for(let c=0;c<N;c++){
+      if(!walked[r*N+c]) continue;
+      if(mapMode !== 2 && !explored[r*N+c]) continue;
+      const pad = s*0.3;
+      ctx.fillRect(c*s+pad, r*s+pad, s-2*pad+0.7, s-2*pad+0.7);
+    }
+  }
   // sortie (visible seulement si explorée, ou en mode carte complète)
   const er = 2*maze.exit.r + 1, ec = 2*maze.exit.c + 1;
   if(mapMode === 2 || explored[er*N+ec]){
     ctx.fillStyle = hexToCss(th.accent);
     ctx.beginPath(); ctx.arc(ec*s + s/2, er*s + s/2, Math.max(2.5, s*0.9), 0, 6.3); ctx.fill();
+  }
+  // clés restantes : un losange doré, révélé au même titre que la sortie
+  if(maze.keys && maze.keys.length){
+    const mkSize = Math.max(2.6, s*0.55);
+    maze.keys.forEach((k, i) => {
+      if(keysCollected.has(i)) return;
+      const kr = 2*k.r+1, kc = 2*k.c+1;
+      if(mapMode !== 2 && !explored[kr*N+kc]) return;
+      const x = kc*s + s/2, y = kr*s + s/2;
+      ctx.save();
+      ctx.translate(x,y); ctx.rotate(Math.PI/4);
+      ctx.fillStyle = '#ffd166';
+      ctx.fillRect(-mkSize/2, -mkSize/2, mkSize, mkSize);
+      ctx.restore();
+    });
   }
   // joueur : taille du repère proportionnelle à la case, pour rester lisible
   // aussi bien sur la petite vignette que sur la carte zoomée
@@ -2342,8 +2469,10 @@ function animate(){
 
   if(gameState === 'playing' && !mapPopupOpen){
     updatePlayer(dt);
+    checkKeys();
     checkWin();
     bumpCool -= rawDt;
+    exitDenyCool -= rawDt;
     $('timer').textContent = fmt(elapsedSec());
     drawMinimap();
     drawCompass();
@@ -2363,6 +2492,20 @@ function animate(){
       exitGroup.children.forEach((ch,i) => {
         if(ch.userData.baseY !== undefined)
           ch.position.y = ch.userData.baseY + Math.sin(t*1.6 + i) * 0.25;
+      });
+      // portail éteint tant que des clés manquent ; transition douce à l'allumage
+      const targetAct = keysCollected.size >= keysNeeded ? 1 : 0;
+      exitActivation += (targetAct - exitActivation) * Math.min(1, dt*2.2);
+      const ud = exitGroup.userData;
+      if(ud.beamMat) ud.beamMat.opacity = 0.4 * exitActivation;
+      if(ud.ringMat) ud.ringMat.opacity = 0.9 * exitActivation;
+      if(ud.light) ud.light.intensity = 2.4 * exitActivation;
+    }
+    if(keyMeshes.length){
+      const t = performance.now() / 1000;
+      keyMeshes.forEach((grp,i) => {
+        grp.position.y = grp.userData.baseY + Math.sin(t*2.1 + i) * 0.14;
+        grp.rotation.y += dt * 1.4;
       });
     }
     if(particles){
@@ -2402,11 +2545,11 @@ function applyCode(str, quiet){
     if(!quiet){ msg.textContent = 'Code non reconnu. Format attendu : NEON-5D5PGS'; msg.className = 'err'; }
     return false;
   }
-  state.theme = cfg.theme; state.pattern = cfg.pattern; state.diff = cfg.diff;
+  state.theme = cfg.theme; state.pattern = cfg.pattern; state.diff = cfg.diff; state.goal = cfg.goal;
   pendingSeed = cfg.seed;
   refreshMenu();
   msg.textContent = 'Graine chargée : ' + THEMES[cfg.theme].name + ' · ' +
-    PATTERNS[cfg.pattern].name + ' · ' + DIFFS[cfg.diff].name;
+    PATTERNS[cfg.pattern].name + ' · ' + DIFFS[cfg.diff].name + ' · ' + GOALS[cfg.goal].name;
   msg.className = 'ok';
   return true;
 }
@@ -2457,8 +2600,11 @@ $('playBtn').onclick = () => {
   if(genRunning) return;
   maze = {
     bitmap: builder.bitmap, N: builder.N, size: builder.size,
-    exit: builder.exit, path: builder.path,
-    shortest: builder.dist[builder.ci(builder.exit.r, builder.exit.c)]
+    exit: builder.exit, path: builder.path, dist: builder.dist,
+    shortest: builder.dist[builder.ci(builder.exit.r, builder.exit.c)],
+    keys: state.goal === 'cles'
+      ? placeKeys(builder.size, builder.dist, builder.exit, builder.rnd, DIFFS[state.diff].keys)
+      : []
   };
   cancelAnimationFrame(genRaf);
   buildWorld();
@@ -2466,9 +2612,10 @@ $('playBtn').onclick = () => {
   resetTimer();
   show('play');
   $('hint').style.opacity = '1';
-  $('hint').textContent = isTouch
+  $('hint').textContent = (isTouch
     ? 'Joystick à gauche pour marcher · glisse à droite pour regarder'
-    : 'ZQSD/WASD pour marcher · souris pour regarder · Maj pour courir';
+    : 'ZQSD/WASD pour marcher · souris pour regarder · Maj pour courir') +
+    (maze.keys.length ? ' · ramasse les clés 🔑 avant la sortie' : '');
   hintTimer = 6;
   mapMode = 1; $('minimapWrap').classList.add('on');
   if(!isTouch) lockHint.classList.add('on');
@@ -2512,6 +2659,7 @@ function pauseGame(){
   $('ovTitle').textContent = 'Pause';
   $('ovText').innerHTML = 'Temps écoulé : <b>' + fmt(banked) + '</b><br>' +
     THEMES[state.theme].name + ' · ' + PATTERNS[state.pattern].name + ' · ' + DIFFS[state.diff].name +
+    (keysNeeded ? ' · 🔑 ' + keysCollected.size + '/' + keysNeeded : '') +
     '<br><span style="opacity:.7">Graine ' + currentCode + '</span>';
   $('ovPrimary').textContent = '▶ Reprendre';
   $('ovSecondary').textContent = '🔄 Nouveau labyrinthe';
@@ -2554,6 +2702,7 @@ function winGame(){
     'Temps : <b>' + fmt(total) + '</b>' +
     (best ? ' · Meilleur : <b>' + fmt(best) + '</b>' : '') + '<br>' +
     'Chemin le plus court : ' + maze.shortest + ' cases' +
+    (keysNeeded ? ' · ' + keysNeeded + ' clé' + (keysNeeded>1?'s':'') + ' 🔑' : '') +
     (hintsUsed ? ' · ' + hintsUsed + ' indice' + (hintsUsed>1?'s':'') + ' utilisé' + (hintsUsed>1?'s':'') : '') +
     '<br><span style="opacity:.7">' + THEMES[state.theme].name + ' · ' +
     PATTERNS[state.pattern].name + ' · ' + DIFFS[state.diff].name + '</span>' +
@@ -2624,6 +2773,41 @@ $('solveBackBtn').onclick = () => {
 
 /* --- indice : le chemin vers la sortie s'allume au sol --- */
 let hintGroup = null, hintTimer2 = 0, hintsUsed = 0;
+
+/* --- objectif « clés » : où les poser dans le labyrinthe qui vient d'être
+   creusé. Dérivé du même flux aléatoire que la génération (builder.rnd) : à
+   graine égale, les clés tombent toujours au même endroit. --- */
+function placeKeys(size, dist, exit, rnd, count){
+  if(count <= 0) return [];
+  const exitIdx = exit.r*size + exit.c;
+  const maxDist = Math.max(1, ...dist);
+  let pool = [];
+  for(let r=0;r<size;r++) for(let c=0;c<size;c++){
+    const idx = r*size+c;
+    if(idx === 0 || idx === exitIdx) continue;              // ni le départ, ni la sortie
+    if(dist[idx] < maxDist*0.2) continue;                     // pas juste à côté du départ
+    pool.push({ r, c });
+  }
+  if(pool.length < count){                                   // filet de sécurité sur un très petit labyrinthe
+    pool = [];
+    for(let r=0;r<size;r++) for(let c=0;c<size;c++){
+      const idx = r*size+c;
+      if(idx !== 0 && idx !== exitIdx) pool.push({ r, c });
+    }
+  }
+  shuffleSeeded(pool, rnd);
+  const chosen = [];
+  // on vise des clés bien séparées ; si la place manque, on relâche la contrainte
+  for(const sep of [Math.max(2, Math.floor(size/(count+1))), 2, 1, 0]){
+    for(const cell of pool){
+      if(chosen.length >= count) break;
+      if(chosen.some(k => k.r===cell.r && k.c===cell.c)) continue;
+      if(chosen.every(k => Math.abs(k.r-cell.r)+Math.abs(k.c-cell.c) >= sep)) chosen.push(cell);
+    }
+    if(chosen.length >= count) break;
+  }
+  return chosen;
+}
 
 function currentCellRC(){
   let br = Math.round(player.z / CELL), bc = Math.round(player.x / CELL);
@@ -2725,8 +2909,15 @@ window.LAB = {
   get solver(){ return solver; }, get code(){ return currentCode; },
   get hintsUsed(){ return hintsUsed; }, get hintGroup(){ return hintGroup; },
   get exitWorld(){ return exitWorld; }, get mapPopupOpen(){ return mapPopupOpen; },
-  makeCode, parseCode,
-  teleportToExit(){ player.x = exitWorld.x; player.z = exitWorld.z; }
+  get walked(){ return walked; }, get explored(){ return explored; },
+  get keysCollected(){ return keysCollected; }, get keysNeeded(){ return keysNeeded; },
+  get exitActivation(){ return exitActivation; },
+  makeCode, parseCode, placeKeys,
+  teleportToExit(){ player.x = exitWorld.x; player.z = exitWorld.z; },
+  teleportToKey(i){
+    const k = maze.keys[i];
+    player.x = (2*k.c+1)*CELL; player.z = (2*k.r+1)*CELL;
+  }
 };
 } /* fin de boot() */
 
