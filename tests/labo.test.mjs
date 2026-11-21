@@ -11,8 +11,8 @@ export default async function testLabo(browser, base){
   const page = await openPage(browser, url);
   R.check('les quatre onglets sont présents',
     (await page.evaluate(() => document.querySelectorAll('[data-tab]').length)) === 4);
-  R.check('les neuf algorithmes sont déclarés',
-    (await page.evaluate(() => Object.keys(LABO.ALGOS).length)) === 9);
+  R.check('les dix algorithmes sont déclarés',
+    (await page.evaluate(() => Object.keys(LABO.ALGOS).length)) === 10);
 
   /* ------------------------------------------------- couverture des croisements */
   R.section('Couverture terrain × algorithme');
@@ -167,6 +167,76 @@ export default async function testLabo(browser, base){
     tendance.labPetit < 1.2 && tendance.labGrand < 1.2,
     '→ ' + tendance.labPetit.toFixed(2) + '× puis ' + tendance.labGrand.toFixed(2) + '×');
 
+  /* --------------------------------------------- Bellman-Ford et les poids négatifs */
+  R.section('Bellman-Ford : poids négatifs et cycle négatif');
+  const bf = await page.evaluate(() => {
+    const N = 30;
+    let aucunCycle = 0, cycleDetecte = 0, comparables = 0, accord = 0;
+    for(let i=0;i<N;i++){
+      const s = (2000+i*7919)>>>0;
+      const sans = new LABO.Run('flux','bellman',9,s,{negCycle:false}); sans.finish();
+      if(!sans.st.negativeCycle) aucunCycle++;
+      const avec = new LABO.Run('flux','bellman',9,(s^0x5bd1e995)>>>0,{negCycle:true}); avec.finish();
+      if(avec.st.negativeCycle) cycleDetecte++;
+      if(!sans.st.negativeCycle){
+        comparables++;
+        const dj = new LABO.Run('flux','dijkstra',9,s,{negCycle:false}); dj.finish();
+        if(Math.abs(sans.st.dist[sans.target] - dj.st.dist[dj.target]) < 1e-9) accord++;
+      }
+    }
+    return { N, aucunCycle, cycleDetecte, comparables, accord, desaccord: comparables - accord };
+  });
+  R.check('sans cycle demandé, aucun n’est trouvé',
+    bf.aucunCycle === bf.N, '→ ' + bf.aucunCycle + '/' + bf.N);
+  R.check('avec cycle négatif forcé, il est détecté à chaque fois',
+    bf.cycleDetecte === bf.N, '→ ' + bf.cycleDetecte + '/' + bf.N);
+  R.check('Dijkstra se trompe au moins une fois face à un poids négatif découvert tard',
+    bf.desaccord > 0, '→ ' + bf.desaccord + '/' + bf.comparables + ' désaccords');
+
+  const bfIndep = await page.evaluate(() => {
+    // référence : Bellman-Ford « manuel », recalculé ici indépendamment de la page
+    const refBF = (g, start) => {
+      const dist = new Array(g.n).fill(Infinity); dist[start] = 0;
+      for(let i=0;i<g.n-1;i++)
+        for(const e of g.edges)
+          if(dist[e.a] !== Infinity && dist[e.a]+e.w < dist[e.b]-1e-9) dist[e.b] = dist[e.a]+e.w;
+      let neg = false;
+      for(const e of g.edges)
+        if(dist[e.a] !== Infinity && dist[e.a]+e.w < dist[e.b]-1e-9) neg = true;
+      return { dist, neg };
+    };
+    const N = 15; let distOk = 0, cycleOk = 0, formeOk = 0, formeTotal = 0;
+    for(let i=0;i<N;i++){
+      const s = (4000+i*7919)>>>0;
+      const r = new LABO.Run('flux','bellman',9,s,{negCycle:false}); r.finish();
+      const ref = refBF(r.g, r.start);
+      if(ref.neg === !!r.st.negativeCycle){
+        cycleOk++;
+        if(!ref.neg && Math.abs(ref.dist[r.target] - r.st.dist[r.target]) < 1e-9) distOk++;
+      }
+      const r2 = new LABO.Run('flux','bellman',9,(s^0x9e3779b9)>>>0,{negCycle:true}); r2.finish();
+      const ref2 = refBF(r2.g, r2.start);
+      if(ref2.neg === !!r2.st.negativeCycle) cycleOk++;
+      const c = r2.st.negativeCycle;
+      if(c && c.length > 1){
+        formeTotal++;
+        let valide = true;
+        for(let k=0;k<c.length;k++){
+          const a = c[(k+1)%c.length], b = c[k];
+          if(!r2.g.edges.some(e => e.a===a && e.b===b)){ valide = false; break; }
+        }
+        if(valide) formeOk++;
+      }
+    }
+    return { N, distOk, cycleOk, total: N*2, formeOk, formeTotal };
+  });
+  R.check('distances conformes à une référence Bellman-Ford indépendante',
+    bfIndep.distOk === bfIndep.N, '→ ' + bfIndep.distOk + '/' + bfIndep.N);
+  R.check('détection de cycle négatif conforme à la référence',
+    bfIndep.cycleOk === bfIndep.total, '→ ' + bfIndep.cycleOk + '/' + bfIndep.total);
+  R.check('le cycle négatif signalé est un vrai cycle du graphe',
+    bfIndep.formeOk === bfIndep.formeTotal, '→ ' + bfIndep.formeOk + '/' + bfIndep.formeTotal);
+
   /* ------------------------------------ régression : le départ ne doit pas être muré */
   R.section('Grille à obstacles : départ et arrivée toujours reliés');
   const ends = await page.evaluate(() => {
@@ -285,7 +355,7 @@ export default async function testLabo(browser, base){
   R.section('Écrans explicatifs');
   await page.click('[data-tab="comprendre"]');
   const algos = await page.evaluate(() => Object.keys(LABO.DOC));
-  R.check('une fiche par algorithme', algos.length === 9, '→ ' + algos.length);
+  R.check('une fiche par algorithme', algos.length === 10, '→ ' + algos.length);
   for(const k of algos){
     await page.evaluate(x => { LABO.docKey = x; }, k);
     await sleep(120);
@@ -378,7 +448,7 @@ export default async function testLabo(browser, base){
                                         ['kruskal','nuage',80], ['bfs','grille',14],
                                         ['dijkstra','grille',14], ['astar','grille',14],
                                         ['mur','grille',12], ['wilson','grille',12],
-                                        ['division','plan',14]]){
+                                        ['division','plan',14], ['bellman','flux',9]]){
     await son.evaluate(([a,t,s]) => { LABO.ui.algo=a; LABO.ui.terrain=t; LABO.ui.size=s;
       LABO.ui.speed='normal'; window.__notes=[]; LABO.resetRun(); }, [algo,terrain,taille]);
     await son.click('#runBtn');

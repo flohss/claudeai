@@ -149,7 +149,7 @@
 
   <h1>LABORATOIRE D'ALGORITHMES</h1>
   <div class="sub">Observer, comparer et mesurer les algorithmes de graphe,<br>
-    sur des terrains variés : grille, nuage de points, image, plan à découper.</div>
+    sur des terrains variés : grille, nuage de points, image, plan à découper, flux orienté.</div>
 
   <div class="tabs">
     <div class="opt sel" data-tab="observer">🔬 Observer</div>
@@ -176,6 +176,17 @@
         <div class="opt" id="modeOpen">🗺 Grille ouverte<small>pondérée : mille chemins</small></div>
         <div class="opt" id="loopOpt">➰ Ajouter des boucles<small>casse la règle de la main au mur</small></div>
       </div>
+    </div>
+
+    <div id="fluxWrap" class="hidden">
+      <label class="fld">Graphe de flux</label>
+      <div class="opts">
+        <div class="opt" id="negCycleOpt">♾ Cycle négatif<small>aucun plus court chemin : Bellman-Ford le prouve</small></div>
+      </div>
+      <div class="note" style="margin-top:8px">Les arêtes orientées portent un coût qui peut
+      être <b>négatif</b> — un gain plutôt qu'un coût. Sans cycle négatif, Bellman-Ford trouve
+      le même plus court chemin que Dijkstra <i>devrait</i> trouver — sauf que Dijkstra, lui,
+      fige un sommet trop vite et se trompe dès qu'un coût négatif apparaît plus loin.</div>
     </div>
 
     <div id="imgWrap" class="hidden">
@@ -436,10 +447,13 @@ const sfx = (() => {
 /* ============================================================================
    1. TERRAINS — chacun produit un graphe { nodes, edges, adj }
    ============================================================================ */
-function makeGraph(nodes, edges){
+function makeGraph(nodes, edges, directed){
   const adj = nodes.map(() => []);
-  edges.forEach((e,i) => { adj[e.a].push({to:e.b, e:i}); adj[e.b].push({to:e.a, e:i}); });
-  return { nodes, edges, adj, n: nodes.length };
+  edges.forEach((e,i) => {
+    adj[e.a].push({to:e.b, e:i});
+    if(!directed) adj[e.b].push({to:e.a, e:i});
+  });
+  return { nodes, edges, adj, n: nodes.length, directed: !!directed };
 }
 
 /* --- Grille : sommets = cases, arêtes = murs franchissables, poids au hasard.
@@ -593,11 +607,77 @@ function terrainPlan(size){
   return g;
 }
 
+/* --- Flux : graphe ORIENTÉ dont les coûts peuvent être négatifs (un gain plutôt
+   qu'une dépense — le montage classique de l'arbitrage sur un taux de change).
+   Un squelette d'abord, qui part toujours du sommet 0 et atteint tout le monde
+   avec des coûts ordinaires ; des raccourcis ensuite, orientés au hasard, dont
+   le signe est tout l'intérêt. --- */
+function fluxSquelette(count, rnd){
+  const nodes = [];
+  for(let i=0;i<count;i++) nodes.push({ x:0.06 + rnd()*0.88, y:0.06 + rnd()*0.88 });
+  const order = shuffle([...Array(count).keys()], rnd);
+  order.splice(order.indexOf(0), 1); order.unshift(0);
+  const edges = [];
+  for(let k=1;k<order.length;k++){
+    const v = order[k];
+    let best = -1, bd = Infinity;
+    for(let j=0;j<k;j++){
+      const u = order[j];
+      const d = Math.hypot(nodes[v].x-nodes[u].x, nodes[v].y-nodes[u].y);
+      if(d < bd){ bd = d; best = u; }
+    }
+    edges.push({ a:best, b:v, w: 1 + ((rnd()*4)|0) });    // squelette : toujours positif
+  }
+  const extra = Math.max(2, Math.round(count * 0.7));
+  for(let k=0;k<extra;k++){
+    const a = (rnd()*count)|0;
+    let b = (rnd()*count)|0;
+    if(b === a) b = (b+1) % count;
+    edges.push({ a, b, w: ((rnd()*10)|0) - 3 });          // raccourci : -3..6, le signe compte
+  }
+  return makeGraph(nodes, edges, true);
+}
+
+/* Bellman-Ford « à blanc », pour savoir si le tirage contient déjà un cycle
+   négatif accessible depuis 0 — avant même de construire le Run animé. */
+function bellmanCheck(g, start){
+  const dist = new Float64Array(g.n).fill(Infinity); dist[start] = 0;
+  for(let i=0;i<g.n-1;i++){
+    let change = false;
+    for(const e of g.edges)
+      if(dist[e.a] !== Infinity && dist[e.a] + e.w < dist[e.b] - 1e-9){ dist[e.b] = dist[e.a] + e.w; change = true; }
+    if(!change) break;
+  }
+  for(const e of g.edges)
+    if(dist[e.a] !== Infinity && dist[e.a] + e.w < dist[e.b] - 1e-9) return true;
+  return false;
+}
+
+function terrainFlux(count, rnd, opts){
+  opts = opts || {};
+  const veut = !!opts.negCycle;
+  let g = fluxSquelette(count, rnd);
+  for(let essai=0; essai<8 && bellmanCheck(g,0) !== veut; essai++) g = fluxSquelette(count, rnd);
+  if(veut && !bellmanCheck(g,0)){
+    // de guerre lasse : un triangle franchement négatif, sur des sommets déjà accessibles
+    const nb = Math.min(1, count-1), nc = Math.min(2, count-1);
+    g.edges.push({ a:nb, b:nc, w:-6 }, { a:nc, b:0, w:-6 }, { a:0, b:nb, w:4 });
+    g = makeGraph(g.nodes, g.edges, true);
+  } else if(!veut && bellmanCheck(g,0)){
+    // de guerre lasse dans l'autre sens : plus aucun coût négatif, donc plus de cycle possible
+    g.edges.forEach(e => { if(e.w < 0) e.w = 0; });
+    g = makeGraph(g.nodes, g.edges, true);
+  }
+  g.kind = 'flux';
+  return g;
+}
+
 const TERRAINS = {
   grille: { name:'Grille',  icon:'▦', desc:'le labyrinthe', min:6,  max:22,  def:12 },
   nuage:  { name:'Nuage',   icon:'✳', desc:'points et distances', min:30, max:220, def:90 },
   image:  { name:'Image',   icon:'🖼', desc:'pixels et couleurs', min:32, max:80, def:56 },
-  plan:   { name:'Plan',    icon:'▭', desc:'espace à découper', min:8, max:26, def:16 }
+  plan:   { name:'Plan',    icon:'▭', desc:'espace à découper', min:8, max:26, def:16 },
+  flux:   { name:'Flux',    icon:'↯', desc:'coûts positifs et négatifs', min:5, max:14, def:9 }
 };
 
 /* ============================================================================
@@ -625,7 +705,7 @@ const ALGOS = {
            "court en nombre d'arêtes. Sur une image, la même boucle devient un remplissage " +
            "par diffusion (le pot de peinture)." },
   dijkstra: { name:'Dijkstra', icon:'⚖', kind:'chemin', struct:'tas',
-    terrains:['grille','nuage'],
+    terrains:['grille','nuage','flux'],
     lesson:"Dijkstra est un parcours en largeur où la file devient un tas : il traite " +
            "toujours le sommet le moins coûteux. Il explore dans toutes les directions, " +
            "car sans indice il ne sait pas où est l'arrivée." },
@@ -655,7 +735,15 @@ const ALGOS = {
     terrains:['grille','plan'],
     lesson:"Seul algorithme à travailler par le haut : il ne relie pas, il sépare. " +
            "C'est le principe des arbres BSP et des quadtrees, utilisé pour découper " +
-           "un donjon ou indexer l'espace." }
+           "un donjon ou indexer l'espace." },
+
+  bellman: { name:'Bellman-Ford', icon:'⚡', kind:'chemin', struct:'liste',
+    terrains:['flux'],
+    lesson:"Dijkstra fige un sommet et n'y revient jamais : avec un coût négatif découvert " +
+           "plus loin, cette certitude est fausse. Bellman-Ford ne fige rien — il relâche " +
+           "TOUTE arête, dans l'ordre, jusqu'à n−1 fois. Une n-ième passe qui relâche encore " +
+           "quelque chose ne prouve pas une erreur : elle prouve un cycle négatif, où le coût " +
+           "peut baisser indéfiniment." }
 };
 
 /* --- État partagé, lu par les afficheurs --- */
@@ -666,7 +754,7 @@ function newState(g){
     candidates: [], current: -1, target: -1,
     dist: new Float64Array(g.n).fill(Infinity),
     parent: new Int32Array(g.n).fill(-1),
-    comp: null, rooms: [], region: null, path: [],
+    comp: null, rooms: [], region: null, path: [], negativeCycle: null,
     struct: { kind:'aucune' },
     tone: null,                          // son de l'étape en cours
     counters: { examines:0, aretes:0, retenues:0, retours:0 },
@@ -1125,9 +1213,72 @@ function* algoDivision(run){
                : st.counters.retenues + ' passages conservés.', 'k3');
 }
 
+/* ---------- Bellman-Ford : relâche toutes les arêtes, encore et encore ----------
+   Pas de frontière, pas de tri, aucun sommet jamais figé : juste reprendre la
+   liste des arêtes depuis le début, n−1 fois. C'est ce qui lui permet d'avaler
+   un coût négatif découvert tard — et, avec une n-ième passe de contrôle, de
+   PROUVER qu'un cycle négatif existe plutôt que de tourner dedans indéfiniment. */
+function* algoBellman(run){
+  const { g, st } = run;
+  const n = g.n;
+  st.dist[run.start] = 0; st.nodeState[run.start] = 2;
+  st.struct = { kind:'liste', edges:g.edges, index:-1, pass:0, passes:Math.max(0, n-1) };
+  st.phase = 'Bellman-Ford';
+  st.note('Je relâche toutes les arêtes, dans l’ordre, jusqu’à ' + Math.max(0,n-1) + ' fois.', 'k1');
+
+  let pass = 0, changed = true;
+  for(; pass < n-1 && changed; pass++){
+    changed = false;
+    for(let i=0;i<g.edges.length;i++){
+      const e = g.edges[i];
+      st.struct.index = i; st.struct.pass = pass + 1;
+      st.current = e.a; st.candidates = [i];
+      st.counters.aretes++;
+      st.progress = Math.min(0.92, (pass + i/g.edges.length) / Math.max(1,n-1));
+      st.tone = { k:'edge', v:(i % 12) / 12 };
+      yield;
+      if(st.dist[e.a] !== Infinity && st.dist[e.a] + e.w < st.dist[e.b] - 1e-9){
+        st.dist[e.b] = st.dist[e.a] + e.w;
+        st.parent[e.b] = e.a;
+        if(st.nodeState[e.b] !== 2) st.nodeState[e.b] = 1;
+        st.counters.retenues++; changed = true;
+        st.note('Passe ' + (pass+1) + ' : ' + e.a + '→' + e.b + ' relâchée à ' +
+                st.dist[e.b].toFixed(1) + '.', 'k2');
+      }
+    }
+    st.counters.examines = pass + 1;
+  }
+  st.candidates = []; st.current = -1; st.struct.index = -1;
+
+  let cycleEdge = -1;
+  for(let i=0;i<g.edges.length;i++){
+    const e = g.edges[i];
+    if(st.dist[e.a] !== Infinity && st.dist[e.a] + e.w < st.dist[e.b] - 1e-9){ cycleEdge = i; break; }
+  }
+  if(cycleEdge >= 0){
+    const seen = new Map(), chain = [];
+    let v = g.edges[cycleEdge].b, guard = n + 5;
+    while(guard-- > 0 && !seen.has(v)){
+      seen.set(v, chain.length); chain.push(v);
+      v = st.parent[v];
+      if(v === -1) break;
+    }
+    st.negativeCycle = seen.has(v) ? chain.slice(seen.get(v)) : chain;
+    for(const node of st.negativeCycle) st.nodeState[node] = 2;
+    st.phase = 'Bellman-Ford — cycle négatif détecté';
+    st.note('Une arête se relâche encore à la passe ' + n + ' : il existe un cycle négatif, ' +
+            'aucun plus court chemin n’est possible.', 'k4');
+  } else {
+    rebuildPath(run);
+    st.note('Plus aucune arête ne se relâche : le plus court chemin est garanti, malgré ' +
+            'les coûts négatifs.', 'k3');
+  }
+  st.progress = 1;
+}
+
 const RUNNERS = { dfs:algoDFS, prim:algoPrim, kruskal:algoKruskal, bfs:algoBFS,
                   dijkstra:algoDijkstra, astar:algoAstar, mur:algoMur,
-                  wilson:algoWilson, division:algoDivision };
+                  wilson:algoWilson, division:algoDivision, bellman:algoBellman };
 
 /* ============================================================================
    3. UNE EXÉCUTION
@@ -1139,6 +1290,7 @@ class Run {
     this.seed = seed >>> 0; this.rnd = mulberry32(this.seed);
     this.threshold = opts.threshold != null ? opts.threshold : 28;
     this.loops = !!opts.loops;
+    this.negCycle = !!opts.negCycle;
 
     this.gridMode = opts.gridMode || 'maze';
     const openGrid = terrain === 'grille' && ALGOS[algoKey].kind === 'chemin'
@@ -1147,6 +1299,7 @@ class Run {
     if(terrain === 'grille') g = terrainGrille(size, this.rnd, openGrid);
     else if(terrain === 'nuage') g = terrainNuage(size, this.rnd);
     else if(terrain === 'image') g = terrainImage(size, this.rnd);
+    else if(terrain === 'flux') g = terrainFlux(size, this.rnd, { negCycle:this.negCycle });
     else g = terrainPlan(size);
 
     const algo = ALGOS[algoKey];
@@ -1301,6 +1454,7 @@ function drawRun(cv, run, compact){
   if(g.kind === 'grille') drawGrille(ctx, W, H, run, compact);
   else if(g.kind === 'nuage') drawNuage(ctx, W, H, run, compact);
   else if(g.kind === 'image') drawImageTerrain(ctx, W, H, run);
+  else if(g.kind === 'flux') drawFlux(ctx, W, H, run, compact);
   else drawPlan(ctx, W, H, run);
 }
 
@@ -1493,12 +1647,86 @@ function drawPlan(ctx, W, H, run){
   ctx.strokeRect(ox+0.5, oy+0.5, S-1, S-1);
 }
 
+/* --- Flux : graphe orienté. Chaque arête porte une flèche et son poids ; le
+   cycle négatif, une fois détecté, est tracé en rouge pour qu'on puisse le
+   suivre du doigt. --- */
+function drawFlux(ctx, W, H, run, compact){
+  const g = run.g, st = run.st;
+  const S = Math.min(W,H), ox = (W-S)/2, oy = (H-S)/2;
+  const X = n => ox + n.x*S, Y = n => oy + n.y*S;
+  const R = Math.max(4, S / (Math.sqrt(g.n) * 7));
+  const cyc = st.negativeCycle;
+  const cycPairs = new Set();
+  if(cyc && cyc.length > 1)
+    for(let k=0;k<cyc.length;k++) cycPairs.add(cyc[(k+1)%cyc.length] + '_' + cyc[k]);
+
+  const arrow = (a, b, color, width) => {
+    const x1=X(a), y1=Y(a), x2=X(b), y2=Y(b);
+    const ang = Math.atan2(y2-y1, x2-x1);
+    const ex = x2 - Math.cos(ang)*R*1.3, ey = y2 - Math.sin(ang)*R*1.3;
+    ctx.strokeStyle = color; ctx.lineWidth = width;
+    ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(ex,ey); ctx.stroke();
+    const ah = Math.max(4, width*2.6);
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(ex, ey);
+    ctx.lineTo(ex - Math.cos(ang-0.42)*ah, ey - Math.sin(ang-0.42)*ah);
+    ctx.lineTo(ex - Math.cos(ang+0.42)*ah, ey - Math.sin(ang+0.42)*ah);
+    ctx.closePath(); ctx.fill();
+    return { mx:(x1+ex)/2, my:(y1+ey)/2 };
+  };
+
+  for(let i=0;i<g.edges.length;i++){
+    const e = g.edges[i];
+    const inCycle = cycPairs.has(e.a + '_' + e.b);
+    const base = e.w < 0 ? 'rgba(255,123,166,0.4)' : 'rgba(150,130,255,0.22)';
+    const col = inCycle ? '#ff3c6e' : base;
+    const m = arrow(g.nodes[e.a], g.nodes[e.b], col, inCycle ? 3 : (e.w<0 ? 1.6 : 1));
+    if(!compact){
+      ctx.font = '10px ui-monospace,monospace';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = inCycle ? '#ff3c6e' : (e.w < 0 ? '#ff8fae' : '#8f87c9');
+      ctx.fillText((e.w>0?'+':'')+e.w, m.mx, m.my - 7);
+    }
+  }
+  if(st.path.length > 1){
+    ctx.strokeStyle = COL.path; ctx.lineWidth = 3; ctx.beginPath();
+    st.path.forEach((v,k) => { const nd=g.nodes[v]; k?ctx.lineTo(X(nd),Y(nd)):ctx.moveTo(X(nd),Y(nd)); });
+    ctx.stroke();
+  }
+  for(const ei of st.candidates){
+    const e = g.edges[ei]; if(!e) continue;
+    arrow(g.nodes[e.a], g.nodes[e.b], '#ffffff', 2.4);
+  }
+  for(let i=0;i<g.n;i++){
+    const s = st.nodeState[i];
+    const inCycle = cyc && cyc.indexOf(i) >= 0;
+    ctx.fillStyle = inCycle ? '#ff3c6e' : s===2 ? '#a89bff' : s===1 ? '#ffb04d' : 'rgba(180,170,230,0.35)';
+    ctx.beginPath(); ctx.arc(X(g.nodes[i]),Y(g.nodes[i]),R,0,6.3); ctx.fill();
+    if(!compact && st.dist[i] !== Infinity && i !== run.start){
+      ctx.fillStyle = '#eae6ff'; ctx.font = '9px ui-monospace,monospace';
+      ctx.textAlign = 'center'; ctx.fillText(st.dist[i].toFixed(0), X(g.nodes[i]), Y(g.nodes[i])+R+9);
+    }
+  }
+  if(st.current >= 0){
+    ctx.fillStyle = COL.cur;
+    ctx.beginPath(); ctx.arc(X(g.nodes[st.current]),Y(g.nodes[st.current]),R*1.5,0,6.3); ctx.fill();
+  }
+  if(!compact){
+    ctx.fillStyle='#6cff8f'; ctx.beginPath(); ctx.arc(X(g.nodes[run.start]),Y(g.nodes[run.start]),R*1.3,0,6.3); ctx.fill();
+    if(run.target >= 0 && !st.negativeCycle){
+      ctx.fillStyle='#ffcf5c';
+      ctx.beginPath(); ctx.arc(X(g.nodes[run.target]),Y(g.nodes[run.target]),R*1.3,0,6.3); ctx.fill();
+    }
+  }
+}
+
 /* ============================================================================
    5. AFFICHAGE DE LA STRUCTURE VIVANTE
    ============================================================================ */
 const STRUCT_NAME = { pile:'La pile', file:'La file', tas:'Le tas de priorité',
                       uf:'Union-find', zones:'Zones en attente', marche:'La marche en cours',
-                      aucune:'Structure' };
+                      liste:'La liste des arêtes', aucune:'Structure' };
 const STRUCT_HINT = {
   pile:"Dernier entré, premier sorti. C'est elle qui force l'algorithme à s'enfoncer " +
        "avant d'explorer ailleurs.",
@@ -1511,6 +1739,9 @@ const STRUCT_HINT = {
   marche:"Le chemin parcouru depuis le dernier sommet isolé. Il s'allonge à chaque pas " +
      "et se raccourcit d'un coup dès qu'il se referme sur lui-même : c'est cet effacement " +
      "qui rend le tirage uniforme.",
+  liste:"Aucune frontière, aucune file : je reprends la liste depuis le début, jusqu'à " +
+     "n−1 fois. C'est ce balayage répété qui finit par propager une amélioration jusqu'au " +
+     "bout du graphe, même un coût négatif découvert tard.",
   aucune:"Aucune structure, aucune mémoire : c'est tout l'intérêt de la méthode."
 };
 
@@ -1620,6 +1851,30 @@ function drawStruct(cv, st){
     ctx.font='10px ui-monospace,monospace'; ctx.fillStyle='#9d94c8';
     ctx.fillText('zones à découper', W/2, H/2+16);
   }
+  else if(s.kind === 'liste'){
+    const edges = s.edges || [];
+    const idx = s.index != null ? s.index : -1;
+    const half = 6;
+    const startI = Math.max(0, Math.min(edges.length - 13, idx - half));
+    const show = [];
+    for(let k = Math.max(0,startI); k < Math.min(edges.length, startI + 13); k++) show.push(k);
+    const bw = Math.min(42, (W - 20) / Math.max(1, show.length));
+    show.forEach((k, pos) => {
+      const e = edges[k];
+      ctx.fillStyle = k === idx ? '#7bd9ff' : (e.w < 0 ? 'rgba(255,123,166,0.45)' : 'rgba(150,130,255,0.4)');
+      ctx.fillRect(10 + pos*bw, H/2 - 15, bw - 2, 30);
+      ctx.textAlign = 'center';
+      ctx.fillStyle = k === idx ? '#05050a' : '#eae6ff';
+      ctx.font = '9px ui-monospace,monospace';
+      ctx.fillText(e.a + '→' + e.b, 10 + pos*bw + bw/2 - 1, H/2 - 6);
+      ctx.fillStyle = k === idx ? '#05050a' : (e.w < 0 ? '#ff8fae' : '#c9c2ea');
+      ctx.fillText((e.w>0?'+':'')+e.w, 10 + pos*bw + bw/2 - 1, H/2 + 7);
+    });
+    ctx.fillStyle = '#9d94c8'; ctx.textAlign = 'left';
+    ctx.fillText('passe ' + (s.pass||0) + '/' + (s.passes||0), 10, H/2 - 28);
+    ctx.textAlign = 'right';
+    ctx.fillText(edges.length + ' arêtes', W - 10, H/2 + 30);
+  }
   else {
     ctx.fillStyle='#6f679b'; ctx.textAlign='center';
     ctx.fillText('— aucune structure —', W/2, H/2);
@@ -1634,7 +1889,7 @@ const SPEEDS = { lent:{name:'🐢 Lent',mult:0.25}, normal:{name:'▶ Normal',mu
 
 const ui = { tab:'observer', terrain:'grille', algo:'dfs', size:12, speed:'normal',
              seed:(Math.random()*0xffffff)|0, loops:false, threshold:28, gridMode:'maze',
-             race:['dfs','prim','kruskal'], stats:['dfs','prim','kruskal'] };
+             negCycle:false, race:['dfs','prim','kruskal'], stats:['dfs','prim','kruskal'] };
 
 let run = null, raf = 0, running = false, paused = false;
 
@@ -1696,6 +1951,7 @@ function buildOptions(){
   $('modeMaze').className = 'opt' + (ui.gridMode === 'maze' ? ' sel' : '');
   $('modeOpen').className = 'opt' + (ui.gridMode === 'open' ? ' sel' : '') +
                             (ui.algo === 'mur' ? ' dis' : '');
+  $('negCycleOpt').className = 'opt' + (ui.negCycle ? ' sel' : '');
 }
 
 function syncFields(){
@@ -1703,8 +1959,10 @@ function syncFields(){
   $('sizeRange').min = t.min; $('sizeRange').max = t.max; $('sizeRange').value = ui.size;
   $('sizeLabel').textContent = ui.terrain === 'nuage' ? 'Nombre de points : ' + ui.size
                              : ui.terrain === 'image' ? 'Résolution : ' + ui.size + '×' + ui.size
+                             : ui.terrain === 'flux' ? 'Nombre de comptes : ' + ui.size
                              : 'Taille : ' + ui.size + '×' + ui.size;
   $('imgWrap').className = ui.terrain === 'image' ? '' : 'hidden';
+  $('fluxWrap').className = ui.terrain === 'flux' ? '' : 'hidden';
   $('loopWrap').className = (ui.terrain === 'grille' && ALGOS[ui.algo].kind === 'chemin') ? '' : 'hidden';
   $('seedInput').value = seedCode();
   $('lesson').innerHTML = '<b>' + ALGOS[ui.algo].name + '.</b> ' + ALGOS[ui.algo].lesson;
@@ -1734,7 +1992,8 @@ function applyCode(str){
    ============================================================================ */
 function resetRun(){
   cancelAnimationFrame(raf); running = false; paused = false;
-  run = new Run(ui.terrain, ui.algo, ui.size, ui.seed, { loops:ui.loops, threshold:ui.threshold, gridMode:ui.gridMode });
+  run = new Run(ui.terrain, ui.algo, ui.size, ui.seed,
+               { loops:ui.loops, threshold:ui.threshold, gridMode:ui.gridMode, negCycle:ui.negCycle });
   $('runBtn').textContent = '▶ Lancer';
   $('pauseBtn').disabled = $('stepBtn').disabled = $('endBtn').disabled = true;
   paint();
@@ -1759,6 +2018,7 @@ function paint(){
   // pour une recherche de chemin, des itérations principales pour un arbre — chez
   // Prim et Kruskal, une itération est un retrait du tas ou une arête testée.
   const libelle = ui.algo === 'mur' ? 'pas effectués'
+                : ui.algo === 'bellman' ? 'passes effectuées'
                 : ALGOS[ui.algo].kind === 'chemin' ? 'sommets figés' : 'étapes';
   const boxes = [[libelle, c.examines], ['arêtes testées', c.aretes],
                  ['arêtes retenues', c.retenues], ['retours', c.retours]];
@@ -1831,7 +2091,7 @@ let racers = [], raceRaf = 0, raceRunning = false, racePaused = false;
 
 function buildRace(){
   racers = ui.race.map(k => new Run(ui.terrain, k, ui.size, ui.seed,
-                                    { loops:ui.loops, threshold:ui.threshold, gridMode:ui.gridMode }));
+                                    { loops:ui.loops, threshold:ui.threshold, gridMode:ui.gridMode, negCycle:ui.negCycle }));
   const grid = $('raceGrid'); grid.innerHTML = '';
   racers.forEach((r,i) => {
     const cell = document.createElement('div');
@@ -1993,7 +2253,8 @@ $('statsRunBtn').onclick = () => {
       const seed = (ui.seed + i*2654435761) >>> 0;
       const faits = {};
       for(const k of keys){
-        const r = new Run(ui.terrain, k, ui.size, seed, { loops:ui.loops, threshold:ui.threshold, gridMode:ui.gridMode });
+        const r = new Run(ui.terrain, k, ui.size, seed,
+                         { loops:ui.loops, threshold:ui.threshold, gridMode:ui.gridMode, negCycle:ui.negCycle });
         r.finish();
         data[k].push(measure(r));
         faits[k] = r;
@@ -2172,6 +2433,19 @@ $('checkBtn').onclick = () => {
     }
     res.push({ label:'Main au mur sur domaine à boucles : échecs attendus',
                ok:true, detail: fails + ' échecs sur ' + SEEDS + ' — comportement normal, pas un bug' });
+
+    let cycleOk = true, cycleDetail = '';
+    for(let i=0;i<SEEDS;i++){
+      const seed = (1000+i*7919)>>>0;
+      const sans = new Run('flux','bellman',9,seed,{negCycle:false}); sans.finish();
+      const avec = new Run('flux','bellman',9,(seed^0x5bd1e995)>>>0,{negCycle:true}); avec.finish();
+      if(sans.st.negativeCycle || !avec.st.negativeCycle){
+        cycleOk = false; cycleDetail = 'sans cycle : ' + !!sans.st.negativeCycle +
+          ' · avec cycle forcé : ' + !!avec.st.negativeCycle; break;
+      }
+    }
+    res.push({ label:'Bellman-Ford détecte un cycle négatif si et seulement s’il y en a un',
+               ok:cycleOk, detail:cycleDetail });
 
     $('checkOut').innerHTML = '<div class="note">' + res.map(r =>
       (r.ok ? '<span class="ok">✔</span> ' : '<span class="ko">✘</span> ') + r.label +
@@ -2666,6 +2940,74 @@ division: {
         'Relier une à une ou séparer par moitiés : le compte final est le même, ' +
         'parce que la propriété d’arbre, elle, ne dépend pas du chemin suivi.';
     }}
+},
+
+bellman: {
+  demo:{ terrain:'flux', size:9, negCycle:false },
+  idee:"Dijkstra fige un sommet et n'y revient jamais : avec un coût négatif découvert " +
+       "plus loin, cette certitude s'effondre. Bellman-Ford ne fige rien — il relâche " +
+       "toutes les arêtes, encore et encore, jusqu'à ce que plus rien ne bouge.",
+  pseudo:
+"distance[départ] ← 0, le reste à l'infini\n" +
+"<b>répéter</b> n−1 fois :\n" +
+"    <b>pour chaque</b> arête (u,v,w) du graphe :\n" +
+"        <b>si</b> distance[u] + w < distance[v] :\n" +
+"            distance[v] ← distance[u] + w ; parent[v] ← u\n" +
+"\n" +
+"<i>// une n-ième passe de contrôle :</i>\n" +
+"<b>pour chaque</b> arête (u,v,w) :\n" +
+"    <b>si</b> distance[u] + w < distance[v] :\n" +
+"        <i>// encore une amélioration possible : cycle négatif</i>",
+  structure:"<b>La liste des arêtes, parcourue en boucle.</b> Aucune frontière, aucune " +
+    "file : juste tout reprendre depuis le début, n−1 fois. C'est ce balayage répété qui " +
+    "finit par propager une amélioration jusqu'au bout du graphe, même un coût négatif " +
+    "caché loin du départ.",
+  garanties:[
+    "Plus court chemin correct même avec des <b>coûts négatifs</b>, s'il n'existe aucun " +
+      "cycle négatif accessible depuis le départ.",
+    "Détecte à coup sûr un cycle négatif accessible : une n-ième passe qui relâche encore " +
+      "une arête <b>prouve</b> son existence.",
+    "Avec un cycle négatif, aucun plus court chemin n'existe : son coût peut baisser " +
+      "indéfiniment en tournant dans le cycle."],
+  cout:{ temps:"O(n·m)<br><span style='font-size:.62rem;opacity:.75'>n−1 passes sur " +
+         "toutes les arêtes</span>", memoire:"O(n)" },
+  usages:[
+    "Détection d'arbitrage : sur un graphe de taux de change, un cycle négatif est un " +
+      "gain garanti.",
+    "Protocoles de routage à vecteur de distance (RIP), où chaque nœud ne connaît que " +
+      "ses voisins.",
+    "Tout graphe à coûts négatifs légitimes — remises, bonus, dénivelé — là où Dijkstra " +
+      "ne peut pas s'aventurer."],
+  compare:['dijkstra','astar'],
+  verif:{
+    claim:"Sans cycle négatif, Bellman-Ford devrait s'accorder avec Dijkstra — sauf que " +
+      "Dijkstra se trompe dès qu'un coût négatif apparaît après un sommet déjà figé. Avec " +
+      "un cycle négatif, lui seul le détecte.",
+    run(){
+      const N = 20; let accord = 0, comparables = 0;
+      for(let i=0;i<N;i++){
+        const s = (31+i*7919) >>> 0;
+        const bf = new Run('flux','bellman',9,s,{negCycle:false}); bf.finish();
+        if(bf.st.negativeCycle) continue;
+        comparables++;
+        const dj = new Run('flux','dijkstra',9,s,{negCycle:false}); dj.finish();
+        if(Math.abs(bf.st.dist[bf.target] - dj.st.dist[dj.target]) < 1e-9) accord++;
+      }
+      let cyc = 0;
+      for(let i=0;i<N;i++){
+        const s = (3100+i*7919) >>> 0;
+        const bf = new Run('flux','bellman',9,s,{negCycle:true}); bf.finish();
+        if(bf.st.negativeCycle) cyc++;
+      }
+      const faux = comparables - accord;
+      return 'Sur ' + comparables + ' graphes à coûts mêlés mais sans cycle négatif : ' +
+        'Bellman-Ford et Dijkstra tombent d’accord <b>' + accord + '/' + comparables + '</b> ' +
+        'fois' + (faux ? ', avec <b>' + faux + ' désaccord' + (faux>1?'s':'') + '</b> où ' +
+        'Dijkstra fige un sommet trop vite.' : ' — ce tirage n’a pas forcé Dijkstra en faute, ' +
+        'mais la garantie qu’il ne se trompe JAMAIS n’existe plus dès qu’un coût est négatif.') +
+        '<br>Avec un cycle négatif forcé, Bellman-Ford le détecte <b>' + cyc + '/' + N + '</b> ' +
+        'fois : c’est la n-ième passe, celle que Dijkstra n’a pas, qui le prouve.';
+    }}
 }
 };
 
@@ -2750,6 +3092,7 @@ function renderDoc(){
     ui.size = TERRAINS[ui.terrain].def;
     if(dem.mode) ui.gridMode = dem.mode;
     if(dem.loops) ui.loops = true;
+    if(dem.negCycle) ui.negCycle = true;
     document.querySelector('[data-tab="observer"]').click();
     buildOptions(); syncFields(); resetRun();
     window.scrollTo({ top:0, behavior:'smooth' });
@@ -2760,7 +3103,7 @@ function renderDoc(){
 function startExplainDemo(){
   const dem = DOC[docKey].demo;
   exRun = new Run(dem.terrain, docKey, dem.size, exSeed,
-                  { gridMode: dem.mode || 'maze', loops: !!dem.loops });
+                  { gridMode: dem.mode || 'maze', loops: !!dem.loops, negCycle: !!dem.negCycle });
   exWait = 0;
   const nm = $('exStructName');
   if(nm) nm.textContent = STRUCT_NAME[exRun.st.struct.kind] || 'Structure';
@@ -2801,6 +3144,7 @@ $('loopOpt').onclick = () => {
   if(ui.gridMode === 'open') return;
   ui.loops = !ui.loops; buildOptions(); resetRun();
 };
+$('negCycleOpt').onclick = () => { ui.negCycle = !ui.negCycle; buildOptions(); resetRun(); };
 function majBoutonSon(){
   const on = sfx.actif();
   $('soundBtn').textContent = on ? '🔊' : '🔇';

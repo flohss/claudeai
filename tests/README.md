@@ -43,13 +43,17 @@ au sol et son effacement ; résolution comparée, avec le taux d'échec de la ma
 gauche mesuré sur 120 tirages ; sonorisation, sa cadence bridée, sa coupure et la
 persistance du réglage.
 
-**Le laboratoire** — les dix-huit croisements terrain × algorithme aboutissent ;
-n−1 arêtes et connexité pour les trois algorithmes d'arbre sur deux terrains ; Prim et
-Kruskal au même poids ; A* jamais plus coûteux que Dijkstra et toujours au même coût
-optimal, sur trois terrains ; aucune configuration dégénérée sur grille à obstacles ;
-diamètre de l'arbre vérifié contre une référence recalculée dans le test ; la main au
-mur qui sort toujours d'un labyrinthe parfait et échoue parfois avec des boucles ;
-segmentation dont le nombre de régions décroît avec le seuil ; les huit fiches
+**Le laboratoire** — les vingt-et-un croisements terrain × algorithme aboutissent ; n−1 arêtes
+et connexité pour les trois algorithmes d'arbre sur deux terrains ; Prim et Kruskal au
+même poids ; A* jamais plus coûteux que Dijkstra et toujours au même coût optimal, sur
+trois terrains ; aucune configuration dégénérée sur grille à obstacles ; diamètre de
+l'arbre vérifié contre une référence recalculée dans le test ; la main au mur qui sort
+toujours d'un labyrinthe parfait et échoue parfois avec des boucles ; segmentation dont
+le nombre de régions décroît avec le seuil ; Bellman-Ford sur un graphe orienté à coûts
+positifs et négatifs — nombre de cycles négatifs détectés exactement quand il y en a,
+distances et détection conformes à une référence Bellman-Ford recalculée dans le test,
+forme du cycle signalé vérifiée arête par arête, et au moins un désaccord mesuré avec
+Dijkstra, qui fige un sommet trop vite face à un coût négatif ; les dix fiches
 explicatives, chacune avec ses sept sections, sa démonstration animée et sa
 vérification chiffrée ; l'onglet Mesurer, son tableau, son histogramme et son bouton
 d'invariantes.

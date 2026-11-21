@@ -221,16 +221,17 @@ révéler un autre usage du même raisonnement.
 
 ## La matrice terrain × algorithme
 
-| | Grille | Nuage de points | Image | Plan |
-|---|---|---|---|---|
-| **Profondeur** | labyrinthe à longs couloirs | arbre d'exploration | | |
-| **Prim** | labyrinthe ramifié | réseau de câblage minimal | | |
-| **Kruskal** | labyrinthe par îlots | réseau de câblage minimal | segmentation | |
-| **Wilson** | labyrinthe sans biais | arbre couvrant uniforme | | |
-| **Largeur** | plus court chemin | plus court chemin | remplissage par diffusion | |
-| **Dijkstra / A\*** | chemin pondéré | chemin pondéré | | |
-| **Main au mur** | navigation sans mémoire | | | |
-| **Division récursive** | labyrinthe en salles | | | découpage en pièces (BSP) |
+| | Grille | Nuage de points | Image | Plan | Flux orienté |
+|---|---|---|---|---|---|
+| **Profondeur** | labyrinthe à longs couloirs | arbre d'exploration | | | |
+| **Prim** | labyrinthe ramifié | réseau de câblage minimal | | | |
+| **Kruskal** | labyrinthe par îlots | réseau de câblage minimal | segmentation | | |
+| **Wilson** | labyrinthe sans biais | arbre couvrant uniforme | | | |
+| **Largeur** | plus court chemin | plus court chemin | remplissage par diffusion | | |
+| **Dijkstra / A\*** | chemin pondéré | chemin pondéré | | | se trompe sur un coût négatif (Dijkstra seul) |
+| **Main au mur** | navigation sans mémoire | | | | |
+| **Division récursive** | labyrinthe en salles | | | découpage en pièces (BSP) | |
+| **Bellman-Ford** | | | | | plus court chemin à coûts négatifs, détection de cycle négatif |
 
 Sur une grille aux poids tirés au hasard, l'arbre couvrant minimal **est** un labyrinthe
 parfait : c'est le pont entre les deux mondes.
@@ -251,7 +252,7 @@ synchronisés, avec les compteurs en vis-à-vis et un verdict chiffré.
 d'étendues, et trace les distributions. C'est ce qui fait passer de « je sens la
 différence » à « je la mesure ».
 
-**Comprendre** — une fiche par algorithme (neuf en tout) : l'idée en une phrase, une démonstration
+**Comprendre** — une fiche par algorithme (dix en tout) : l'idée en une phrase, une démonstration
 animée en boucle sur le terrain qui lui va le mieux, le pseudo-code, la structure de
 données et pourquoi c'est elle qui décide du comportement, ce qu'il garantit **et ce
 qu'il ne garantit pas**, le coût en temps et en mémoire, ses usages réels, et des liens
@@ -269,8 +270,9 @@ nom :
 - les **algorithmes d'arbre** — profondeur, Prim, Kruskal, division récursive — ne
   cherchent aucun itinéraire. Ils relient *tout* le graphe, et la question « comment
   aller de D à A » ne se pose pas pendant leur exécution ;
-- les **algorithmes de chemin** — largeur, Dijkstra, A\*, main sur le mur — partent d'un
-  départ et visent une arrivée. Eux seuls affichent un tracé pendant leur travail.
+- les **algorithmes de chemin** — largeur, Dijkstra, A\*, main sur le mur, Bellman-Ford —
+  partent d'un départ et visent une arrivée. Eux seuls affichent un tracé pendant leur
+  travail.
 
 Une fois un algorithme d'arbre terminé, le laboratoire éclaire malgré tout le chemin de
 D à A. Ce n'est pas un résultat de l'algorithme, c'est une propriété de l'objet qu'il a
@@ -331,6 +333,15 @@ sonorisé : quatre pistes simultanées seraient inaudibles.
   avant de commencer — le tableau le signale.
 - **Sur l'image synthétique, qui contient 7 régions, Kruskal en retrouve exactement 7**
   au seuil par défaut.
+- **Dijkstra se trompe dès qu'un coût négatif apparaît derrière un sommet déjà figé.**
+  Sur un terrain de flux orienté à coûts mêlés, Bellman-Ford et Dijkstra tombent
+  d'accord 28 fois sur 30 — et les 2 fois où Dijkstra diverge, c'est lui qui a tort :
+  il avait figé un sommet trop tôt, avant qu'un raccourci négatif ne le rende
+  meilleur. Bellman-Ford, qui ne fige jamais rien, ne se trompe pas.
+- **Un cycle négatif n'a pas de plus court chemin, et Bellman-Ford le prouve plutôt que
+  de tourner dedans** : sur un même terrain avec un cycle négatif forcé, sa n-ième passe
+  de contrôle — celle que Dijkstra n'a pas — relâche encore une arête à chaque fois,
+  30 fois sur 30.
 
 ## Vérification automatique
 
@@ -340,7 +351,8 @@ Le bouton « Vérifier les invariantes » contrôle sur une douzaine de graines 
 - Prim et Kruskal donnent le même poids total ;
 - A\* n'examine jamais plus de sommets que Dijkstra, pour un chemin de même coût ;
 - la main sur le mur échoue bel et bien sur un domaine à boucles — comportement attendu
-  et annoncé, pas un défaut masqué.
+  et annoncé, pas un défaut masqué ;
+- Bellman-Ford détecte un cycle négatif si et seulement s'il y en a bien un.
 
 ## Notes de conception
 
@@ -368,6 +380,6 @@ npx playwright install chromium
 npm test
 ```
 
-160 contrôles, dont les propriétés mathématiques vérifiées contre des références
+168 contrôles, dont les propriétés mathématiques vérifiées contre des références
 recalculées dans le test lui-même. Le détail de ce qui est couvert — et surtout **ce qui
 ne l'est pas** — se trouve dans [`tests/README.md`](tests/README.md).
